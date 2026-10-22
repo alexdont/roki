@@ -780,14 +780,19 @@ defmodule RokiWeb.TitleLive do
             do: "Unmark season",
             else: "Mark season watched"}
         </button>
-        <form :if={length(@title.seasons) > 1} phx-change="select_season" id="season-form">
-          <select name="season" class="select select-sm select-bordered">
-            <option :for={s <- @title.seasons} value={s.number} selected={s.number == @season}>
-              {s.name || "Season #{s.number}"}
-            </option>
-          </select>
-        </form>
       </div>
+
+      <form :if={length(@title.seasons) > 1} phx-change="select_season" id="season-form">
+        <select
+          name="season"
+          aria-label="Season"
+          class="select select-bordered select-primary h-14 w-full text-lg font-semibold sm:w-auto sm:min-w-[18rem]"
+        >
+          <option :for={s <- @title.seasons} value={s.number} selected={s.number == @season}>
+            {s.name || "Season #{s.number}"}
+          </option>
+        </select>
+      </form>
 
       <div :if={@episodes == nil} class="space-y-2" aria-busy="true">
         <div :for={_ <- 1..4} class="skeleton h-20 w-full rounded-box"></div>
