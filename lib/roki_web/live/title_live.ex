@@ -1651,7 +1651,7 @@ defmodule RokiWeb.TitleLive do
       <%!-- The row is a size container: the poster is sized in its units (two thirds of its height,
             but never more than 62% of its width), so it never depends on its own content — a
             percentage height plus an aspect ratio collapses to nothing in Safari. --%>
-      <div class="flex min-h-0 flex-1 gap-3 [container-type:size]">
+      <div class="flex min-h-0 flex-1 gap-3 px-2 [container-type:size]">
         <div class="relative aspect-[2/3] w-[min(66.6667cqh,62cqw)] shrink-0 overflow-hidden rounded-box bg-base-300 shadow-lg">
           <img
             :if={@title.poster}
@@ -1663,7 +1663,7 @@ defmodule RokiWeb.TitleLive do
 
         <%!-- Icons only: saved, on hold, watched — three tiles sharing the height and the width left of
               the poster, the icon centred in each. The state is the colour; the label is the tooltip. --%>
-        <div :if={@linked?} class="flex min-w-0 flex-1 flex-col justify-evenly gap-2">
+        <div :if={@linked?} class="flex min-w-0 flex-1 flex-col gap-2">
           <.round_btn
             event="toggle_saved"
             on={@lib.saved?}
@@ -1739,7 +1739,7 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-14 w-full rounded-box px-0", @on && @on_class]}
+      class={["btn h-auto min-h-0 w-full flex-1 rounded-box px-0", @on && @on_class]}
       title={@label}
       aria-label={@label}
     >
@@ -1878,7 +1878,7 @@ defmodule RokiWeb.TitleLive do
     ~H"""
     <button
       phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-      class="btn h-16 w-full flex-col gap-0 rounded-box px-0 leading-tight"
+      class="btn h-auto min-h-0 w-full flex-1 flex-col gap-0 rounded-box px-0 leading-tight"
       title="Rate it on TMDB"
       aria-label="Rate it on TMDB"
     >
