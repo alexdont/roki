@@ -923,8 +923,8 @@ defmodule RokiWeb.TitleLive do
 
   defp hero(assigns) do
     ~H"""
-    <section class="flex flex-col gap-6 sm:flex-row">
-      <div class="w-48 shrink-0 space-y-4 sm:w-56">
+    <section class="flex gap-4 sm:gap-6">
+      <div class="w-[8.5rem] shrink-0 space-y-3 sm:w-56 sm:space-y-4">
         <img
           :if={@title.poster}
           src={@title.poster}
@@ -939,14 +939,19 @@ defmodule RokiWeb.TitleLive do
 
       <div class="min-w-0 flex-1 space-y-3">
         <div>
-          <h1 class="text-2xl font-bold tracking-tight sm:text-4xl">{@title.title}</h1>
+          <h1 class="text-xl font-bold leading-tight tracking-tight sm:text-4xl">{@title.title}</h1>
           <p class="text-sm text-base-content/60">
             {meta(@title)}
           </p>
           <p :if={@title.tagline} class="mt-1 italic text-base-content/60">{@title.tagline}</p>
         </div>
 
-        <p :if={@title.overview} class="max-w-3xl text-base-content/80">{@title.overview}</p>
+        <p
+          :if={@title.overview}
+          class="line-clamp-6 max-w-3xl text-sm text-base-content/80 sm:line-clamp-none sm:text-base"
+        >
+          {@title.overview}
+        </p>
 
         <div class="space-y-3 pt-2">
           <%!-- Where it plays, then the button: one decision above the other. --%>
@@ -955,7 +960,7 @@ defmodule RokiWeb.TitleLive do
           <div class="flex flex-wrap items-center gap-3">
             <button
               phx-click="play"
-              class="btn btn-primary btn-lg h-14 min-w-[15rem] gap-2 px-10 text-xl shadow-md"
+              class="btn btn-primary btn-lg h-12 w-full gap-2 px-4 text-lg shadow-md sm:h-14 sm:w-auto sm:min-w-[15rem] sm:px-10 sm:text-xl"
               disabled={match?({:working, _}, @phase) or (@title.type == "tv" and @season == nil)}
             >
               <.icon name="hero-play-solid" class="h-6 w-6" />
@@ -982,15 +987,18 @@ defmodule RokiWeb.TitleLive do
   # What the terminal app has on a title: watched (and back), saved for later, on hold.
   defp library_buttons(assigns) do
     ~H"""
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-2 sm:gap-3">
       <button
         phx-click="toggle_saved"
-        class={["btn h-12 w-full justify-start gap-2.5 px-4 text-sm", @lib.saved? && "btn-primary"]}
+        class={[
+          "btn h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-left text-xs leading-tight sm:h-12 sm:gap-2.5 sm:px-4 sm:text-sm",
+          @lib.saved? && "btn-primary"
+        ]}
         title={if @lib.saved?, do: "Click to remove it from saved", else: "Keep it for later"}
       >
         <.icon
           name={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
-          class="h-4 w-4"
+          class="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
         />
         {if @lib.saved?, do: "Saved for later", else: "Save for later"}
       </button>
@@ -998,14 +1006,17 @@ defmodule RokiWeb.TitleLive do
       <button
         :if={not @title.anime?}
         phx-click="toggle_hold"
-        class={["btn h-12 w-full justify-start gap-2.5 px-4 text-sm", @lib.held? && "btn-warning"]}
+        class={[
+          "btn h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-left text-xs leading-tight sm:h-12 sm:gap-2.5 sm:px-4 sm:text-sm",
+          @lib.held? && "btn-warning"
+        ]}
         title={
           if @lib.held?, do: "Click to take it off hold", else: "Put it down without finishing it"
         }
       >
         <.icon
           name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
-          class="h-4 w-4"
+          class="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
         />
         {if @lib.held?, do: "On hold", else: "Put on hold"}
       </button>
@@ -1017,7 +1028,7 @@ defmodule RokiWeb.TitleLive do
         phx-click="toggle_watched"
         disabled={@busy}
         class={[
-          "btn h-12 w-full justify-start gap-2.5 px-4 text-sm",
+          "btn h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-left text-xs leading-tight sm:h-12 sm:gap-2.5 sm:px-4 sm:text-sm",
           watched_state?(@title, @lib) && "btn-success"
         ]}
         title={
@@ -1032,7 +1043,7 @@ defmodule RokiWeb.TitleLive do
           name={
             if watched_state?(@title, @lib), do: "hero-check-circle-solid", else: "hero-check-circle"
           }
-          class="h-4 w-4"
+          class="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
         />
         {watched_label(@title, @lib)}
       </button>
@@ -1329,24 +1340,24 @@ defmodule RokiWeb.TitleLive do
   defp mode_switch(assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2 text-sm">
-      <span class="text-base-content/60">Play in</span>
+      <span class="hidden text-base-content/60 sm:inline">Play in</span>
       <div class="join">
         <button
           phx-click="set_mode"
           phx-value-mode="browser"
-          class={["btn btn-sm join-item", @mode == :browser && "btn-primary"]}
+          class={["btn btn-xs join-item sm:btn-sm", @mode == :browser && "btn-primary"]}
         >
           Browser
         </button>
         <button
           phx-click="set_mode"
           phx-value-mode="external"
-          class={["btn btn-sm join-item", @mode == :external && "btn-primary"]}
+          class={["btn btn-xs join-item sm:btn-sm", @mode == :external && "btn-primary"]}
         >
           External player
         </button>
       </div>
-      <span :if={@mode == :external} class="text-base-content/60">
+      <span :if={@mode == :external} class="hidden text-base-content/60 sm:inline">
         full quality, 4K included; nothing is converted on the server
       </span>
     </div>
