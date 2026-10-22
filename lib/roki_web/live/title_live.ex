@@ -44,6 +44,7 @@ defmodule RokiWeb.TitleLive do
         external: nil,
         cache_info: nil,
         cache_key: nil,
+        variant: nil,
         cached: MapSet.new(),
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         lib_busy: false,
@@ -110,7 +111,8 @@ defmodule RokiWeb.TitleLive do
     socket =
       assign(socket,
         req_season: to_int(params["s"]),
-        req_episode: to_int(params["e"])
+        req_episode: to_int(params["e"]),
+        variant: if(params["v"] in ~w(a b c current), do: params["v"])
       )
 
     {:noreply, select(socket)}
@@ -169,7 +171,10 @@ defmodule RokiWeb.TitleLive do
   def handle_event("select_season", %{"season" => s}, socket),
     do:
       {:noreply,
-       push_patch(socket, to: ~p"/title/#{socket.assigns.type}/#{socket.assigns.id}?#{[s: s]}")}
+       push_patch(socket,
+         to:
+           ~p"/title/#{socket.assigns.type}/#{socket.assigns.id}?#{Enum.reject([s: s, v: socket.assigns.variant], fn {_k, v} -> is_nil(v) end)}"
+       )}
 
   # The user chose from the list: that is a stronger statement than a setting, so the
   # next episode of this show starts at the same resolution (laev's rule).
@@ -345,7 +350,9 @@ defmodule RokiWeb.TitleLive do
   defp suggested_episode(_), do: 1
 
   defp patch(socket, season, episode) do
-    query = Enum.reject([s: season, e: episode], fn {_k, v} -> is_nil(v) end)
+    query =
+      Enum.reject([s: season, e: episode, v: socket.assigns.variant], fn {_k, v} -> is_nil(v) end)
+
     push_patch(socket, to: ~p"/title/#{socket.assigns.type}/#{socket.assigns.id}?#{query}")
   end
 
@@ -847,7 +854,24 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div :if={@title} class="space-y-8">
+        <.layout_switcher :if={@variant} variant={@variant} type={@type} id={@id} />
+
+        <.proto_hero
+          :if={@variant in ~w(a b c)}
+          variant={@variant}
+          title={@title}
+          resume={@resume}
+          phase={@phase}
+          season={@season}
+          mode={@mode}
+          linked?={@linked?}
+          lib={@lib}
+          lib_busy={@lib_busy}
+          cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
+        />
+
         <.hero
+          variant={@variant}
           title={@title}
           resume={@resume}
           phase={@phase}
@@ -920,10 +944,11 @@ defmodule RokiWeb.TitleLive do
   attr :linked?, :boolean, default: false
   attr :lib, :map, required: true
   attr :lib_busy, :boolean, default: false
+  attr :variant, :string, default: nil
 
   defp hero(assigns) do
     ~H"""
-    <section class="flex gap-4 sm:gap-6">
+    <section class={["flex gap-4 sm:gap-6", @variant in ~w(a b c) && "hidden sm:flex"]}>
       <div class="w-[8.5rem] shrink-0 space-y-3 sm:w-56 sm:space-y-4">
         <img
           :if={@title.poster}
@@ -1518,5 +1543,281 @@ defmodule RokiWeb.TitleLive do
   defp season_all_watched?(episodes, watched) do
     out = for e <- episodes, e.aired?, do: e.number
     out != [] and Enum.all?(out, &MapSet.member?(watched, &1))
+  end
+
+  # ── phone layout prototypes (?v=a|b|c) ─────────────────────────────
+
+  attr :variant, :string, required: true
+  attr :type, :string, required: true
+  attr :id, :integer, required: true
+
+  # Flip between them on the phone itself; not shown on a desktop.
+  defp layout_switcher(assigns) do
+    ~H"""
+    <div class="flex items-center justify-center gap-2 text-xs sm:hidden">
+      <span class="text-base-content/50">Phone layout</span>
+      <.link
+        :for={{v, label} <- [{"current", "current"}, {"a", "A"}, {"b", "B"}, {"c", "C"}]}
+        patch={~p"/title/#{@type}/#{@id}?#{[v: v]}"}
+        class={["btn btn-xs", @variant == v && "btn-primary"]}
+      >
+        {label}
+      </.link>
+    </div>
+    """
+  end
+
+  attr :variant, :string, required: true
+  attr :title, :map, required: true
+  attr :resume, :any, default: nil
+  attr :phase, :any, required: true
+  attr :season, :any, default: nil
+  attr :mode, :atom, required: true
+  attr :linked?, :boolean, default: false
+  attr :lib, :map, required: true
+  attr :lib_busy, :boolean, default: false
+  attr :cached?, :boolean, default: false
+
+  # Three ways to lay a title out on a phone, all sized to fit one screen with Play pinned to the
+  # bottom of it. A: big poster, buttons beside it. B: poster and synopsis side by side, the
+  # buttons as a row of tiles. C: a blurred-poster card with round icon buttons.
+  defp proto_hero(assigns) do
+    assigns = assign(assigns, :busy?, match?({:working, _}, assigns.phase))
+
+    ~H"""
+    <section class="-mt-4 flex min-h-[calc(100svh-10.75rem)] flex-col gap-4 sm:hidden">
+      <%= case @variant do %>
+        <% "a" -> %>
+          <div class="flex gap-3">
+            <img
+              :if={@title.poster}
+              src={@title.poster}
+              alt={@title.title}
+              class="aspect-[2/3] w-[46%] shrink-0 rounded-box bg-base-300 object-cover shadow-lg"
+            />
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
+              <div>
+                <h1 class="text-lg font-bold leading-tight">{@title.title}</h1>
+                <p class="text-xs text-base-content/60">{meta(@title)}</p>
+              </div>
+              <div :if={@linked?} class="mt-auto flex flex-col gap-2">
+                <.p_btn
+                  event="toggle_saved"
+                  on={@lib.saved?}
+                  icon="bookmark"
+                  on_label="Saved"
+                  off_label="Save for later"
+                  on_class="btn-primary"
+                />
+                <.p_btn
+                  :if={not @title.anime?}
+                  event="toggle_hold"
+                  on={@lib.held?}
+                  icon="pause-circle"
+                  on_label="On hold"
+                  off_label="Put on hold"
+                  on_class="btn-warning"
+                />
+                <.p_btn
+                  :if={@title.type == "movie" or not @title.anime?}
+                  event="toggle_watched"
+                  on={watched_state?(@title, @lib)}
+                  icon="check-circle"
+                  on_label={watched_label(@title, @lib)}
+                  off_label={watched_label(@title, @lib)}
+                  on_class="btn-success"
+                  busy={@lib_busy}
+                />
+              </div>
+            </div>
+          </div>
+          <p :if={@title.overview} class="line-clamp-5 text-sm text-base-content/80">
+            {@title.overview}
+          </p>
+        <% "b" -> %>
+          <div>
+            <h1 class="text-xl font-bold leading-tight">{@title.title}</h1>
+            <p class="text-xs text-base-content/60">{meta(@title)}</p>
+          </div>
+          <div class="flex gap-3">
+            <img
+              :if={@title.poster}
+              src={@title.poster}
+              alt={@title.title}
+              class="aspect-[2/3] w-[38%] shrink-0 self-start rounded-box bg-base-300 object-cover shadow-lg"
+            />
+            <p
+              :if={@title.overview}
+              class="line-clamp-[11] min-w-0 flex-1 text-sm text-base-content/80"
+            >
+              {@title.overview}
+            </p>
+          </div>
+          <div :if={@linked?} class="grid grid-cols-3 gap-2">
+            <.p_tile
+              event="toggle_saved"
+              on={@lib.saved?}
+              icon="bookmark"
+              on_label="Saved"
+              off_label="Save"
+              on_class="btn-primary"
+            />
+            <.p_tile
+              :if={not @title.anime?}
+              event="toggle_hold"
+              on={@lib.held?}
+              icon="pause-circle"
+              on_label="On hold"
+              off_label="Hold"
+              on_class="btn-warning"
+            />
+            <.p_tile
+              :if={@title.type == "movie" or not @title.anime?}
+              event="toggle_watched"
+              on={watched_state?(@title, @lib)}
+              icon="check-circle"
+              on_label="Watched"
+              off_label={if @title.type == "movie", do: "Watched?", else: "All watched?"}
+              on_class="btn-success"
+              busy={@lib_busy}
+            />
+          </div>
+        <% _ -> %>
+          <div class="relative overflow-hidden rounded-box border border-base-300 p-3">
+            <div
+              :if={@title.poster}
+              class="absolute inset-0 -z-10 scale-125 bg-cover bg-center opacity-25 blur-2xl"
+              style={"background-image: url('#{@title.poster}')"}
+            >
+            </div>
+            <div class="flex gap-3">
+              <img
+                :if={@title.poster}
+                src={@title.poster}
+                alt={@title.title}
+                class="aspect-[2/3] w-[40%] shrink-0 self-start rounded-lg bg-base-300 object-cover shadow-lg"
+              />
+              <div class="flex min-w-0 flex-1 flex-col gap-2">
+                <div>
+                  <h1 class="text-lg font-bold leading-tight">{@title.title}</h1>
+                  <p class="text-xs text-base-content/60">{meta(@title)}</p>
+                </div>
+                <p
+                  :if={@title.overview}
+                  class="line-clamp-6 text-xs leading-relaxed text-base-content/80"
+                >
+                  {@title.overview}
+                </p>
+                <div :if={@linked?} class="mt-auto flex gap-3 pt-1">
+                  <.p_round
+                    event="toggle_saved"
+                    on={@lib.saved?}
+                    icon="bookmark"
+                    label="Save for later"
+                    on_class="btn-primary"
+                  />
+                  <.p_round
+                    :if={not @title.anime?}
+                    event="toggle_hold"
+                    on={@lib.held?}
+                    icon="pause-circle"
+                    label="Put on hold"
+                    on_class="btn-warning"
+                  />
+                  <.p_round
+                    :if={@title.type == "movie" or not @title.anime?}
+                    event="toggle_watched"
+                    on={watched_state?(@title, @lib)}
+                    icon="check-circle"
+                    label={watched_label(@title, @lib)}
+                    on_class="btn-success"
+                    busy={@lib_busy}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+      <% end %>
+
+      <%!-- Pinned to the bottom of the screen: where it plays, then Play. --%>
+      <div class="sticky bottom-0 z-20 -mx-4 mt-auto space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+        <div :if={@linked?} class="flex justify-center"><.mode_switch mode={@mode} /></div>
+        <button
+          phx-click="play"
+          class="btn btn-primary btn-lg h-14 w-full gap-2 text-xl shadow-md"
+          disabled={@busy? or (@title.type == "tv" and @season == nil)}
+        >
+          <.icon name="hero-play-solid" class="h-6 w-6" />
+          {if @title.type == "movie", do: play_label(@resume), else: play_label_tv(@resume)}
+        </button>
+      </div>
+    </section>
+    """
+  end
+
+  attr :event, :string, required: true
+  attr :on, :boolean, required: true
+  attr :icon, :string, required: true
+  attr :on_label, :string, required: true
+  attr :off_label, :string, required: true
+  attr :on_class, :string, required: true
+  attr :busy, :boolean, default: false
+
+  # A wide button with an icon and a label (variant A).
+  defp p_btn(assigns) do
+    ~H"""
+    <button
+      phx-click={@event}
+      disabled={@busy}
+      class={["btn h-11 w-full justify-start gap-2 px-3 text-sm", @on && @on_class]}
+    >
+      <.icon name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-5 w-5 shrink-0" />
+      <span class="truncate">{if @on, do: @on_label, else: @off_label}</span>
+    </button>
+    """
+  end
+
+  attr :event, :string, required: true
+  attr :on, :boolean, required: true
+  attr :icon, :string, required: true
+  attr :on_label, :string, required: true
+  attr :off_label, :string, required: true
+  attr :on_class, :string, required: true
+  attr :busy, :boolean, default: false
+
+  # A tile with the icon above a short label (variant B).
+  defp p_tile(assigns) do
+    ~H"""
+    <button
+      phx-click={@event}
+      disabled={@busy}
+      class={["btn h-16 flex-col gap-1 px-1 text-xs", @on && @on_class]}
+    >
+      <.icon name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-6 w-6" />
+      {if @on, do: @on_label, else: @off_label}
+    </button>
+    """
+  end
+
+  attr :event, :string, required: true
+  attr :on, :boolean, required: true
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+  attr :on_class, :string, required: true
+  attr :busy, :boolean, default: false
+
+  # A round icon-only button (variant C).
+  defp p_round(assigns) do
+    ~H"""
+    <button
+      phx-click={@event}
+      disabled={@busy}
+      class={["btn btn-circle h-12 w-12", @on && @on_class]}
+      title={@label}
+      aria-label={@label}
+    >
+      <.icon name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-6 w-6" />
+    </button>
+    """
   end
 end
