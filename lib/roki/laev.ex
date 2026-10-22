@@ -15,7 +15,7 @@ defmodule Roki.Laev do
   called from a task (`start_async`), never from a process shared between users.
   """
 
-  alias Laev.{Resume, Settings, Shelf, Sync, Watchlist}
+  alias Laev.{MAL, Resume, Settings, Shelf, Sync, Watchlist}
 
   @doc "Where laev keeps state for accounts. `/root/laev-users` in the container — `data/` on the host."
   def base_dir do
@@ -222,6 +222,120 @@ defmodule Roki.Laev do
 
   @doc "Change one setting (`:ok` | `{:error, reason}`). Laev checks the key and the value."
   def put_setting(uuid, key, value), do: run(uuid, fn -> Settings.put(key, value) end)
+
+  # ── MyAnimeList ────────────────────────────────────────────────────
+
+  @doc """
+  The MyAnimeList connection of this user: `%{configured?, connected?, username}`. The login is
+  laev's own (`mal.json` in the user's data directory), the one the terminal app uses.
+  """
+  def mal_status(uuid) do
+    run(uuid, fn ->
+      connected? = MAL.authenticated?()
+
+      %{
+        configured?: MAL.configured?(),
+        connected?: connected?,
+        username: if(connected?, do: MAL.username())
+      }
+    end)
+  end
+
+  @pending_ttl 15 * 60
+
+  @doc """
+  Start a login: remember a fresh state and PKCE verifier, and return the address to approve at.
+  The terminal app waits for MyAnimeList's redirect on `localhost`; a site cannot, so the
+  redirect is left to fail in the browser and its address is pasted back (`mal_finish/2`).
+  """
+  def mal_begin(uuid) do
+    run(uuid, fn ->
+      if MAL.configured?() do
+        verifier = MAL.new_verifier()
+        state = Base.url_encode64(:crypto.strong_rand_bytes(12), padding: false)
+
+        File.write!(
+          pending_path(),
+          Jason.encode!(%{state: state, verifier: verifier, at: System.os_time(:second)})
+        )
+
+        {:ok, MAL.authorize_url(state, verifier)}
+      else
+        {:error, "Add your MyAnimeList client ID under Connections first."}
+      end
+    end)
+  end
+
+  @doc """
+  Finish it with what was pasted: the address the browser ended up on
+  (`http://localhost:8723/callback?code=…&state=…`), or just the code. `{:ok, username}` or
+  `{:error, why}`.
+  """
+  def mal_finish(uuid, pasted) do
+    run(uuid, fn ->
+      with {:ok, pending} <- read_pending(),
+           {:ok, code} <- pasted_code(pasted, pending["state"]),
+           {:ok, _tokens} <- MAL.exchange_code(code, pending["verifier"]) do
+        File.rm(pending_path())
+        {:ok, MAL.username() || "your account"}
+      else
+        {:error, {:mal, _status, _body}} ->
+          {:error,
+           "MyAnimeList did not accept that code. Codes work once and expire fast; start again."}
+
+        {:error, why} when is_binary(why) ->
+          {:error, why}
+
+        _ ->
+          {:error, "Could not connect. Start again."}
+      end
+    end)
+  end
+
+  @doc "Forget the MyAnimeList login."
+  def mal_logout(uuid), do: run(uuid, fn -> MAL.logout() end)
+
+  defp pending_path, do: Path.join(Laev.Scope.dir(), "mal-pending.json")
+
+  defp read_pending do
+    with {:ok, body} <- File.read(pending_path()),
+         {:ok, %{"at" => at} = pending} <- Jason.decode(body),
+         true <- System.os_time(:second) - at < @pending_ttl do
+      {:ok, pending}
+    else
+      _ -> {:error, "That login attempt has expired. Press Connect again."}
+    end
+  end
+
+  defp pasted_code(pasted, state) do
+    text = pasted |> to_string() |> String.trim()
+
+    query =
+      case String.split(text, "?", parts: 2) do
+        [_, q] -> URI.decode_query(q)
+        _ -> %{}
+      end
+
+    cond do
+      text == "" ->
+        {:error, "Paste the address from the browser first."}
+
+      query["error"] ->
+        {:error, "MyAnimeList said: #{query["error"]}."}
+
+      is_binary(query["code"]) and query["state"] not in [nil, state] ->
+        {:error, "That address belongs to a different attempt. Press Connect again."}
+
+      is_binary(query["code"]) ->
+        {:ok, query["code"]}
+
+      not String.contains?(text, ["?", "/", " "]) ->
+        {:ok, text}
+
+      true ->
+        {:error, "No code found in that. Copy the whole address, it contains code=…"}
+    end
+  end
 
   @doc "Ask the service whether the key this user has saved still works."
   def check_key(uuid, key) do

@@ -101,6 +101,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:editing, MapSet.new())
           |> assign(:results, %{})
           |> assign(:sync, nil)
+          |> assign(:mal, %{status: :loading, url: nil, error: nil, busy: false})
           |> assign(:carrying?, false)
           |> assign(:server, nil)
           |> assign(:busy, nil)
@@ -124,6 +125,7 @@ defmodule RokiWeb.SettingsLive do
     end)
     |> start_async(:sync_status, fn -> Laev.sync_status(uuid) end)
     |> start_async(:web, fn -> Laev.web_settings(uuid) end)
+    |> start_async(:mal, fn -> Laev.mal_status(uuid) end)
   end
 
   # ── events ─────────────────────────────────────────────────────────
@@ -225,6 +227,49 @@ defmodule RokiWeb.SettingsLive do
      |> start_async(:sync_op, fn -> Laev.sync(uuid) end)}
   end
 
+  # MyAnimeList: begin (an address to approve at), finish (the address pasted back), forget.
+  def handle_event("mal_start", _params, socket) do
+    uuid = socket.assigns.uuid
+
+    case RateLimit.check(:mal_connect, {:user, uuid}, 10, 60_000) do
+      :ok ->
+        case Laev.mal_begin(uuid) do
+          {:ok, url} -> {:noreply, update(socket, :mal, &%{&1 | url: url, error: nil})}
+          {:error, why} -> {:noreply, update(socket, :mal, &%{&1 | error: why})}
+        end
+
+      {:error, {:rate_limited, secs}} ->
+        {:noreply, update(socket, :mal, &%{&1 | error: "Slow down, try again in #{secs}s."})}
+    end
+  end
+
+  def handle_event("mal_finish", %{"pasted" => pasted}, socket) do
+    uuid = socket.assigns.uuid
+
+    case RateLimit.check(:mal_connect, {:user, uuid}, 10, 60_000) do
+      :ok ->
+        {:noreply,
+         socket
+         |> update(:mal, &%{&1 | error: nil, busy: true})
+         |> start_async(:mal_finish, fn -> Laev.mal_finish(uuid, pasted) end)}
+
+      {:error, {:rate_limited, secs}} ->
+        {:noreply, update(socket, :mal, &%{&1 | error: "Slow down, try again in #{secs}s."})}
+    end
+  end
+
+  def handle_event("mal_logout", _params, socket) do
+    Laev.mal_logout(socket.assigns.uuid)
+
+    {:noreply,
+     assign(socket, :mal, %{
+       status: %{configured?: true, connected?: false, username: nil},
+       url: nil,
+       error: nil,
+       busy: false
+     })}
+  end
+
   def handle_event("disconnect", _params, socket) do
     :ok = Laev.disconnect(socket.assigns.uuid)
     {:noreply, push_navigate(socket, to: ~p"/#{socket.assigns.username}/home")}
@@ -292,6 +337,24 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_async(:auto_sync, {:exit, _}, socket),
     do: {:noreply, assign(socket, auto_sync: :failed)}
+
+  def handle_async(:mal, {:ok, status}, socket),
+    do: {:noreply, update(socket, :mal, &%{&1 | status: status})}
+
+  def handle_async(:mal, {:exit, _}, socket), do: {:noreply, socket}
+
+  def handle_async(:mal_finish, {:ok, {:ok, name}}, socket) do
+    status = %{configured?: true, connected?: true, username: name}
+    {:noreply, assign(socket, :mal, %{status: status, url: nil, error: nil, busy: false})}
+  end
+
+  def handle_async(:mal_finish, {:ok, {:error, why}}, socket),
+    do: {:noreply, update(socket, :mal, &%{&1 | error: why, busy: false})}
+
+  def handle_async(:mal_finish, {:exit, _}, socket),
+    do:
+      {:noreply,
+       update(socket, :mal, &%{&1 | error: "Something went wrong. Try again.", busy: false})}
 
   def handle_async(:web, {:ok, web}, socket), do: {:noreply, assign(socket, :web, web)}
   def handle_async(:web, {:exit, _}, socket), do: {:noreply, socket}
@@ -448,6 +511,8 @@ defmodule RokiWeb.SettingsLive do
             />
           </div>
         </section>
+
+        <.mal_section :if={@state == :ready} mal={@mal} />
 
         <section :if={@state == :ready} class="space-y-3">
           <h2 class="text-xl font-semibold">Sync</h2>
@@ -735,6 +800,88 @@ defmodule RokiWeb.SettingsLive do
       <p :if={match?({:ok, _}, @result)} class="text-sm text-success">✓ {elem(@result, 1)}</p>
       <p :if={match?({:error, _}, @result)} class="text-sm text-error">✗ {elem(@result, 1)}</p>
     </div>
+    """
+  end
+
+  attr :mal, :map, required: true
+
+  # MyAnimeList: what anime ratings and watch progress go to once it is connected.
+  defp mal_section(assigns) do
+    ~H"""
+    <section class="space-y-3">
+      <h2 class="text-xl font-semibold">MyAnimeList</h2>
+
+      <p :if={@mal.status == :loading} class="text-sm text-base-content/60">Checking…</p>
+
+      <div :if={is_map(@mal.status) and @mal.status.connected?} class="space-y-2">
+        <p>
+          <span class="text-success">✓ Connected</span>
+          <span :if={@mal.status.username}> as <strong>{@mal.status.username}</strong></span>
+        </p>
+        <p class="text-sm text-base-content/60">
+          Anime you finish here is counted on your list, and anime is rated there instead of on TMDB.
+        </p>
+        <button
+          phx-click="mal_logout"
+          data-confirm="Disconnect MyAnimeList from this site?"
+          class="btn btn-sm btn-ghost text-error"
+        >
+          Disconnect
+        </button>
+      </div>
+
+      <div :if={is_map(@mal.status) and not @mal.status.connected?} class="space-y-3">
+        <p :if={not @mal.status.configured?} class="text-sm text-base-content/70">
+          Add your MyAnimeList client ID under Connections first.
+        </p>
+
+        <div :if={@mal.status.configured?} class="space-y-3">
+          <p class="text-sm text-base-content/60">
+            Not connected. Connecting lets this site count the anime you finish on your list and rate
+            on MyAnimeList.
+          </p>
+
+          <button :if={@mal.url == nil} phx-click="mal_start" class="btn btn-primary btn-sm">
+            Connect MyAnimeList
+          </button>
+
+          <ol :if={@mal.url} class="space-y-3 text-sm">
+            <li class="space-y-1">
+              <div>
+                <span class="font-semibold">1.</span> Open MyAnimeList and press Allow.
+              </div>
+              <a href={@mal.url} target="_blank" rel="noopener" class="btn btn-sm btn-primary">
+                Open MyAnimeList
+              </a>
+            </li>
+            <li>
+              <span class="font-semibold">2.</span>
+              Your browser then tries to open an address starting with <code>localhost:8723</code>
+              and shows an error page. That is expected. Copy the whole address from the address bar.
+            </li>
+            <li class="space-y-1">
+              <div><span class="font-semibold">3.</span> Paste it here.</div>
+              <form id="mal-finish" phx-submit="mal_finish" class="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  name="pasted"
+                  placeholder="http://localhost:8723/callback?code=…"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  class="input input-bordered input-sm min-w-0 flex-1 font-mono"
+                />
+                <button type="submit" class="btn btn-sm btn-primary" disabled={@mal.busy}>
+                  <span :if={@mal.busy} class="loading loading-spinner loading-xs"></span> Connect
+                </button>
+              </form>
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      <p :if={@mal.error} class="text-sm text-error">{@mal.error}</p>
+    </section>
     """
   end
 
