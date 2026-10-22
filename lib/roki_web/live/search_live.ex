@@ -179,29 +179,28 @@ defmodule RokiWeb.SearchLive do
         <h2 class="text-xl font-semibold">
           Results for “{@q}”
         </h2>
-        <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+        <%!-- The same grid as Movies, Shows and Anime: larger posters, whole rows while there is
+              more, and "Load more" under it. --%>
+        <ul
+          id="grid"
+          phx-hook="FillGrid"
+          data-more={to_string(@shelf.more?)}
+          class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+        >
           <li :for={i <- @shelf.items} class="space-y-1">
             <.poster
               item={i}
               seen={MapSet.member?(@seen, {i.type, i.id})}
               cached_titles={@cached_titles}
+              compact
             />
           </li>
-          <li :if={@shelf.more?}>
-            <button
-              phx-click="more"
-              disabled={@shelf.loading?}
-              aria-label="Load more results"
-              class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed border-base-300 text-base-content/60 transition hover:border-primary hover:text-primary disabled:cursor-wait"
-            >
-              <span :if={@shelf.loading?} class="loading loading-spinner"></span>
-              <.icon :if={!@shelf.loading?} name="hero-ellipsis-horizontal" class="h-8 w-8" />
-              <span class="text-sm font-medium">
-                {if @shelf.loading?, do: "Loading…", else: "Load more"}
-              </span>
-            </button>
-          </li>
         </ul>
+        <div :if={@shelf.more?} class="flex justify-center pt-4">
+          <button phx-click="more" class="btn btn-wide" disabled={@shelf.loading?}>
+            <span :if={@shelf.loading?} class="loading loading-spinner loading-sm"></span> Load more
+          </button>
+        </div>
       </section>
     </Layouts.app>
     """
