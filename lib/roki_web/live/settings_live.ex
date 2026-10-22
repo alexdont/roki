@@ -30,10 +30,15 @@ defmodule RokiWeb.SettingsLive do
   # The resolution ceiling is two settings: laev's own (external player and terminal app, any
   # value) and the site's (the browser player, nothing above 1080p), shown one under the other.
   @web_hints %{
+    "external_app" =>
+      "What Play opens when this device uses an external player. It starts by itself; if your device asks, allow it. The download option gives you an .m3u file to open yourself.",
     "browser_max_resolution" =>
       "For the browser player, up to 1080p: a browser cannot decode HEVC, so more would mean the server re-encoding the release. Set the 4K you want under the external player."
   }
-  @web_labels %{"browser_max_resolution" => "Resolution ceiling — browser player"}
+  @web_labels %{
+    "browser_max_resolution" => "Resolution ceiling — browser player",
+    "external_app" => "External player app"
+  }
   @labels %{"LAEV_MAX_RESOLUTION" => "Resolution ceiling — external player & terminal app"}
 
   @hints %{
@@ -388,6 +393,17 @@ defmodule RokiWeb.SettingsLive do
             </p>
             <div class="divide-y divide-base-300">
               <.device_row :if={group == :playback} value={@device_player} saved={@saved} />
+              <.web_row
+                :for={
+                  {key, spec} <- if(group == :playback, do: external_app_spec(@web_specs), else: [])
+                }
+                key={key}
+                spec={spec}
+                value={@web[key] || spec.default}
+                label={@web_labels[key]}
+                hint={@web_hints[key]}
+                saved={@saved}
+              />
               <%= for s <- @by_group[group] || [] do %>
                 <.setting_row s={s} saved={@saved} locked={group == :cli} label={@labels[s.key]} />
                 <.web_row
@@ -496,6 +512,8 @@ defmodule RokiWeb.SettingsLive do
     """
   end
 
+  defp external_app_spec(specs), do: Enum.filter(specs, &(elem(&1, 0) == "external_app"))
+
   attr :value, :string, required: true
   attr :saved, :any, default: nil
 
@@ -513,7 +531,7 @@ defmodule RokiWeb.SettingsLive do
       <div class="flex items-center gap-2 sm:w-1/2">
         <select id="d-player" name="d[player]" class="select select-bordered w-full">
           <option value="external" selected={@value == "external"}>
-            VLC / external player (default)
+            External player (default)
           </option>
           <option value="browser" selected={@value == "browser"}>Browser</option>
         </select>
@@ -540,7 +558,7 @@ defmodule RokiWeb.SettingsLive do
       <div class="flex items-center gap-2 sm:w-1/2">
         <select id={"w-" <> @key} name={"w[#{@key}]"} class="select select-bordered w-full">
           <option :for={o <- @spec.allowed} value={o} selected={@value == o}>
-            {o}{if o == @spec.default, do: " (default)"}
+            {(@spec[:labels] || %{})[o] || o}{if o == @spec.default, do: " (default)"}
           </option>
         </select>
         <span :if={@saved == @key} class="shrink-0 text-sm text-success">Saved</span>

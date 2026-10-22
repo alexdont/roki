@@ -388,22 +388,32 @@ defmodule RokiWeb.TitleLive do
   # A release for the user's own player: the direct link and the ways to open it.
   defp hand_over(socket, {source, stream} = pair) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
+    app = Roki.Laev.web_settings(uuid)["external_app"]
     external = Watch.external(uuid, ctx, source, stream)
-    assign(socket, current: pair, player: nil, external: external, phase: :external)
+    name = external.filename || socket.assigns.title.title
+    launch = launch_url(app, socket.assigns.platform, external.url, name)
+
+    socket
+    |> assign(
+      current: pair,
+      player: nil,
+      external: Map.merge(external, %{app: app, launch: launch}),
+      phase: :external
+    )
+    |> then(&if(launch, do: push_event(&1, "roki:launch", %{url: launch}), else: &1))
   end
 
   # The pipeline found what plays: play the best (laev's rule) or show the list.
   defp after_probe(socket, %{ctx: ctx, playable: playable, rest: rest, cap: cap}) do
     socket = assign(socket, ctx: ctx, playable: playable, rest: rest)
-    auto? = Watch.auto_source?(socket.assigns.uuid)
     external? = socket.assigns.mode == :external
 
+    # Play means play: the best release is chosen and started, whatever the terminal app's
+    # "auto-pick" setting says (the list below is for switching to another one).
     choice =
-      cond do
-        not auto? -> nil
-        external? -> Watch.auto_choice_external(playable, cap)
-        true -> Watch.auto_choice(playable, cap)
-      end
+      if external?,
+        do: Watch.auto_choice_external(playable, cap),
+        else: Watch.auto_choice(playable, cap)
 
     case choice do
       {:play, pair} when external? -> hand_over(socket, pair)
@@ -854,7 +864,7 @@ defmodule RokiWeb.TitleLive do
             phx-value-idx={i}
             phx-value-via="external"
             class="btn btn-sm btn-ghost"
-            title="Open in VLC or another player on this device"
+            title="Open this release in your external player"
             disabled={match?({:working, _}, @phase)}
           >
             External
@@ -974,7 +984,7 @@ defmodule RokiWeb.TitleLive do
           phx-value-mode="external"
           class={["btn btn-sm join-item", @mode == :external && "btn-primary"]}
         >
-          VLC / external player
+          External player
         </button>
       </div>
       <span :if={@mode == :external} class="text-base-content/60">
@@ -1015,7 +1025,7 @@ defmodule RokiWeb.TitleLive do
     >
       <div>
         <h2 class="text-lg font-semibold">
-          Ready for your player{now_playing(@title, @season, @episode, nil)}
+          Opening in {app_label(@external.app)}{now_playing(@title, @season, @episode, nil)}
         </h2>
         <p class="break-all text-sm text-base-content/60">
           {@external.name}{if @external.resolution, do: " · #{label(@external.resolution)}"}
@@ -1023,12 +1033,8 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <a :if={@platform == :ios} href={@links.vlc_ios} class="btn btn-primary">Open in VLC</a>
-        <a :if={@platform == :android} href={@links.vlc_android} class="btn btn-primary">
-          Open in VLC
-        </a>
-        <a :if={@platform == :desktop} href={@links.vlc_desktop} class="btn btn-primary">
-          Open in VLC
+        <a :if={@external.launch} href={@external.launch} class="btn btn-primary">
+          Open in {app_label(@external.app)}
         </a>
         <a href={@m3u} download={@m3u_name} class="btn">Download .m3u</a>
         <button
@@ -1066,6 +1072,25 @@ defmodule RokiWeb.TitleLive do
       </p>
     </section>
     """
+  end
+
+  defp app_label(app),
+    do: Roki.Laev.web_setting_specs()["external_app"].labels[app] || "your player"
+
+  # Where the chosen app is opened on this device; `nil` for the .m3u download, which is a
+  # file the user opens themselves.
+  defp launch_url("m3u", _platform, _url, _name), do: nil
+
+  defp launch_url(app, platform, url, name) do
+    links = external_links(url, name)
+
+    case {app, platform} do
+      {"infuse", _} -> links.infuse
+      {"mpv", _} -> links.mpv
+      {_, :ios} -> links.vlc_ios
+      {_, :android} -> links.vlc_android
+      {_, _} -> links.vlc_desktop
+    end
   end
 
   # `vlc://` is registered by VLC on iOS and macOS; Android takes an intent; mpv needs the

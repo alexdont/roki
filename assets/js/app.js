@@ -50,6 +50,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
 window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "smooth", block: "center"}))
 
+// Play on an external player: the server found the release and says where to open it.
+window.addEventListener("phx:roki:launch", e => { window.location.href = e.detail.url })
+
 window.addEventListener("phx:roki:player", e => {
   try { localStorage.setItem("roki:player", e.detail.mode) } catch {}
 })

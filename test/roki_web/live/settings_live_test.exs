@@ -158,7 +158,7 @@ defmodule RokiWeb.SettingsLiveTest do
     {:ok, view, _} = live(conn, "/settingstest/settings")
     render_async(view, 3000)
 
-    assert has_element?(view, "#d-player option[selected]", "VLC / external player")
+    assert has_element?(view, "#d-player option[selected]", "External player")
 
     view
     |> form("#settings-form")
@@ -193,6 +193,31 @@ defmodule RokiWeb.SettingsLiveTest do
     send(view.pid, :auto_sync)
     render_async(view, 3000)
     assert render(view) =~ "Couldn&#39;t reach the sync server"
+  end
+
+  test "the external player app can be chosen, from a fixed list", %{conn: conn, user: user} do
+    connect!(user)
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    render_async(view, 3000)
+
+    assert has_element?(view, "#w-external_app option[selected]", "VLC")
+
+    for app <- ~w(infuse mpv m3u vlc) do
+      render_hook(view, "change", %{
+        "_target" => ["w", "external_app"],
+        "w" => %{"external_app" => app}
+      })
+
+      assert Roki.Laev.web_settings(user.uuid)["external_app"] == app
+    end
+
+    html =
+      render_hook(view, "change", %{
+        "_target" => ["w", "external_app"],
+        "w" => %{"external_app" => "quicktime"}
+      })
+
+    assert html =~ "not one of"
   end
 
   test "a value laev refuses is explained, not saved", %{conn: conn, user: user} do

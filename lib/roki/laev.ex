@@ -154,7 +154,18 @@ defmodule Roki.Laev do
   # Settings that exist only on this site (laev has no such thing), kept beside the account's
   # laev state. Disconnecting laev removes them with the rest of the directory.
   @web_settings %{
-    "browser_max_resolution" => %{default: "1080p", allowed: ~w(480p 720p 1080p)}
+    "browser_max_resolution" => %{default: "1080p", allowed: ~w(480p 720p 1080p)},
+    # The app Play opens when the device uses an external player.
+    "external_app" => %{
+      default: "vlc",
+      allowed: ~w(vlc infuse mpv m3u),
+      labels: %{
+        "vlc" => "VLC",
+        "infuse" => "Infuse",
+        "mpv" => "mpv",
+        "m3u" => "Download .m3u file"
+      }
+    }
   }
 
   @doc "The site-only settings, defaults filled in: `%{\"browser_max_resolution\" => \"1080p\"}`."

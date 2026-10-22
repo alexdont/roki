@@ -6,9 +6,14 @@ const results = []; const check = (n, ok, x = "") => { results.push(!!ok); conso
   await ctx.addCookies([{ name: "_roki_key", value: fs.readFileSync("/tmp/e2e-cookie.txt", "utf8"), domain: "roki.ee", path: "/", secure: true, httpOnly: true, sameSite: "Lax" }]);
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(String(e)));
   await p.goto("https://roki.ee/title/movie/10331"); await p.waitForSelector("[data-phx-main].phx-connected"); await p.waitForSelector("h1");
-  check("a phone defaults to the external player", (await p.locator("button.btn-primary:has-text('VLC / external player')").count()) === 1);
+  check("a phone defaults to the external player", (await p.locator("button.btn-primary:has-text('External player')").count()) === 1);
+  await p.addInitScript(() => { window.__launched = []; window.addEventListener("phx:roki:launch", ev => window.__launched.push(ev.detail.url)); });
+  await p.reload(); await p.waitForSelector("[data-phx-main].phx-connected"); await p.waitForSelector("h1");
   await p.click("button:has-text('Play')");
-  await p.waitForSelector("text=Ready for your player", { timeout: 120000 });
+  await p.waitForSelector("text=/Opening in VLC/", { timeout: 120000 });
+  await p.waitForTimeout(500);
+  const launched = await p.evaluate(() => window.__launched);
+  check("one click on Play launches the player by itself", launched.length === 1 && launched[0].startsWith("vlc-x-callback://"), String(launched[0]).slice(0, 60));
   const vlc = await p.getAttribute("a:has-text('Open in VLC')", "href");
   check("iOS gets the VLC x-callback link with a debrid URL", /^vlc-x-callback:\/\/x-callback-url\/stream\?url=https%3A%2F%2F/.test(vlc), vlc.slice(0, 90));
   check("no video element on the page, no server conversion", (await p.locator("#study-video").count()) === 0);

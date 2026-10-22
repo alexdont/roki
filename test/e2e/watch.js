@@ -7,6 +7,7 @@ const check = (n, ok, x = "") => { results.push(!!ok); console.log((ok ? "PASS "
   const ctx = await b.newContext({ viewport: { width: 1280, height: 1000 } });
   await ctx.addCookies([{ name: "_roki_key", value: fs.readFileSync("/tmp/e2e-cookie.txt", "utf8"), domain: "roki.ee", path: "/", secure: true, httpOnly: true, sameSite: "Lax" }]);
   const p = await ctx.newPage();
+  await p.addInitScript(() => localStorage.setItem("roki:player", "browser"));
   const errs = [];
   p.on("pageerror", e => errs.push("PAGEERROR " + (e.stack||e)));
   p.on("console", m => { if (m.type() === "error" && !/favicon|404/.test(m.text())) errs.push("CONSOLE " + m.text() + " @ " + JSON.stringify(m.location())); });

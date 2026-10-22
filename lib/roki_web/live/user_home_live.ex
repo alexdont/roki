@@ -348,7 +348,7 @@ defmodule RokiWeb.UserHomeLive do
             </span>
             <span :if={@data}>
               <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
-              finished
+              series &amp; anime finished
             </span>
             <.sk :if={!@data} class="w-[5.5rem]" />
             <.sk :if={!@data} class="w-[4.5rem]" />
@@ -358,11 +358,11 @@ defmodule RokiWeb.UserHomeLive do
                 <span>
                   <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
                 </span>
-                <span class="hidden sm:inline">
-                  <b class="text-base-content">{@stats.totals.films}</b> films
+                <span>
+                  <b class="text-base-content">{thousands(@stats.totals.films)}</b> films watched
                 </span>
                 <span class="hidden sm:inline">
-                  <b class="text-base-content">{@stats.totals.episodes}</b> episodes
+                  <b class="text-base-content">{thousands(@stats.totals.episodes)}</b> episodes
                 </span>
               <% match?({:error, _}, @stats) -> %>
                 <span class="text-base-content/40">time watched unavailable</span>
@@ -471,27 +471,21 @@ defmodule RokiWeb.UserHomeLive do
         <span :if={@count} class="text-sm font-normal text-base-content/60">{@count}</span>
       </h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- @items} class="group space-y-1">
-          <div class="aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
-            <img
-              :if={i.poster}
-              src={i.poster}
-              alt={i.title}
-              loading="lazy"
-              class="h-full w-full object-cover transition group-hover:scale-105"
-            />
-            <div
-              :if={!i.poster}
-              class="flex h-full items-center justify-center p-2 text-center text-xs"
-            >
-              {i.title}
-            </div>
-          </div>
-          <div class="truncate text-sm font-medium" title={i.title}>{i.title}</div>
-          <div class="text-xs text-base-content/60">{subtitle(i)}</div>
+        <li :for={i <- @items} class="space-y-1">
+          <.poster item={i} />
         </li>
       </ul>
     </section>
     """
   end
+
+  defp thousands(n) when is_integer(n) do
+    n
+    |> Integer.to_string()
+    |> String.reverse()
+    |> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
+    |> String.reverse()
+  end
+
+  defp thousands(n), do: to_string(n)
 end
