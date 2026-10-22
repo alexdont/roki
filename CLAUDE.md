@@ -211,3 +211,15 @@ the host): the compose file pins `elixir-19-otp-28-dev:latest`, and `:latest`
 moves on this host. Check `docker inspect -f '{{.Image}}' roki-ee` against
 `docker images` first — a silent runtime upgrade forces a full recompile while
 the app is serving. `forksight-dev` hit exactly this.
+
+## Laev (optional per-user connection)
+
+`laev` (hex, 0.1.40) is a dependency; it declares Elixir `~> 1.20` but compiles on this
+image's 1.19.6 with only a warning. `Roki.Laev` runs everything inside a per-user
+`Laev.Scope` rooted at `<home>/laev-users/<user uuid>` (`/root/laev-users` = `data/roki-ee/root/`
+on the host). An account starts **not connected**; the home page (`RokiWeb.HomeLive`) lets a user
+paste their own laev key, which laev saves in that directory (`config`, mode 600) — there is no
+table and no copy of the key anywhere else. Accounts are never linked to each other or to a
+key without that user pasting it. Sync carries history and, only if the user ticks "bring my
+API keys", their encrypted API keys; **preferences (player, language) do not sync**.
+Scope is process-bound: call `Roki.Laev` from `start_async`, never from a shared process.

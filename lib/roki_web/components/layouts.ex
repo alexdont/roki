@@ -31,39 +31,41 @@ defmodule RokiWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
 
+  attr :phoenix_kit_current_scope, :any,
+    default: nil,
+    doc: "PhoenixKit's scope for the signed-in user (nil for a visitor)"
+
+  attr :current_path, :string, default: "/"
+  attr :wide, :boolean, default: false, doc: "full-width content, for the home page"
+
   slot :inner_block, required: true
 
   def app(assigns) do
+    assigns = assign(assigns, :scope, assigns.phoenix_kit_current_scope || assigns.current_scope)
+
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
+    <header class="navbar mx-auto max-w-6xl gap-2 px-4 sm:px-6 lg:px-8">
       <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
+        <a href={~p"/"} class="flex w-fit items-center gap-2 text-lg font-bold tracking-tight">
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
+            <.icon name="hero-play-solid" class="h-4 w-4" />
+          </span>
+          roki
         </a>
       </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
+      <div class="flex flex-none items-center gap-3">
+        <.theme_toggle />
+        <%!-- PhoenixKit's own account menu: avatar, settings, admin, log out; or
+              log in / register for a visitor. --%>
+        <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown
+          scope={@scope}
+          current_path={@current_path}
+        />
       </div>
     </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+    <main class="px-4 py-8 sm:px-6 lg:px-8">
+      <div class={["mx-auto space-y-4", if(@wide, do: "max-w-6xl", else: "max-w-2xl")]}>
         {render_slot(@inner_block)}
       </div>
     </main>

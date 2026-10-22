@@ -17,10 +17,13 @@ defmodule RokiWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", RokiWeb do
-    pipe_through :browser
+  live_session :site,
+    on_mount: [{PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope}] do
+    scope "/", RokiWeb do
+      pipe_through :browser
 
-    get "/", PageController, :home
+      live "/", HomeLive, :index
+    end
   end
 
   # Other scopes may use custom stacks.
