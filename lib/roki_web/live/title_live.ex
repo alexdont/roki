@@ -948,7 +948,7 @@ defmodule RokiWeb.TitleLive do
 
   defp hero(assigns) do
     ~H"""
-    <section class={["flex gap-4 sm:gap-6", @variant in ~w(a b c) && "hidden sm:flex"]}>
+    <section class={["flex gap-4 sm:gap-6", @variant in ~w(a b c) && "hidden"]}>
       <div class="w-[8.5rem] shrink-0 space-y-3 sm:w-56 sm:space-y-4">
         <img
           :if={@title.poster}
@@ -1554,7 +1554,7 @@ defmodule RokiWeb.TitleLive do
   # Flip between them on the phone itself; not shown on a desktop.
   defp layout_switcher(assigns) do
     ~H"""
-    <div class="flex items-center justify-center gap-2 text-xs sm:hidden">
+    <div class="flex items-center justify-center gap-2 text-xs">
       <span class="text-base-content/50">Phone layout</span>
       <.link
         :for={{v, label} <- [{"current", "current"}, {"a", "A"}, {"b", "B"}, {"c", "C"}]}
@@ -1585,7 +1585,9 @@ defmodule RokiWeb.TitleLive do
     assigns = assign(assigns, :busy?, match?({:working, _}, assigns.phase))
 
     ~H"""
-    <section class="-mt-4 flex min-h-[calc(100svh-10.75rem)] flex-col gap-4 sm:hidden">
+    <%!-- On a phone this is the page; on a bigger screen it is shown at phone width so it can be
+          looked at there too. --%>
+    <section class="-mt-4 mx-auto flex min-h-[calc(100svh-10.75rem)] w-full max-w-sm flex-col gap-4 sm:min-h-[40rem] sm:rounded-box sm:border sm:border-base-300 sm:p-4">
       <%= case @variant do %>
         <% "a" -> %>
           <div class="flex gap-3">
@@ -1740,7 +1742,7 @@ defmodule RokiWeb.TitleLive do
       <% end %>
 
       <%!-- Pinned to the bottom of the screen: where it plays, then Play. --%>
-      <div class="sticky bottom-0 z-20 -mx-4 mt-auto space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <div class="sticky bottom-0 z-20 -mx-4 mt-auto space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-4 sm:rounded-b-box">
         <div :if={@linked?} class="flex justify-center"><.mode_switch mode={@mode} /></div>
         <button
           phx-click="play"
