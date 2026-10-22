@@ -829,6 +829,17 @@ defmodule RokiWeb.TitleLive do
 
   @impl true
   def render(assigns) do
+    # A film's page on a phone, before anything has been started, is exactly one screen: it does
+    # not scroll. Once Play is pressed there is more (progress, releases, the player) and it does.
+    assigns =
+      assign(
+        assigns,
+        :locked?,
+        assigns.type == "movie" and assigns.title != nil and assigns.linked? and
+          assigns.phase == :idle and assigns.player == nil and assigns.external == nil and
+          assigns.playable == [] and assigns.title_error == nil
+      )
+
     ~H"""
     <Layouts.app
       flash={@flash}
@@ -857,6 +868,7 @@ defmodule RokiWeb.TitleLive do
           linked?={@linked?}
           lib={@lib}
           lib_busy={@lib_busy}
+          locked?={@locked?}
         />
 
         <.hero
@@ -920,7 +932,7 @@ defmodule RokiWeb.TitleLive do
         />
 
         <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
-        <div class="h-36 sm:hidden" aria-hidden="true"></div>
+        <div :if={!@locked?} class="h-36 sm:hidden" aria-hidden="true"></div>
       </div>
     </Layouts.app>
     """
@@ -1545,6 +1557,7 @@ defmodule RokiWeb.TitleLive do
   attr :linked?, :boolean, default: false
   attr :lib, :map, required: true
   attr :lib_busy, :boolean, default: false
+  attr :locked?, :boolean, default: false
 
   # One screen on a phone: the title and its details on top, a large poster with the three icon
   # buttons beside it, the synopsis (tap for the full text and more facts), and Play pinned to
@@ -1553,7 +1566,10 @@ defmodule RokiWeb.TitleLive do
     assigns = assign(assigns, :busy?, match?({:working, _}, assigns.phase))
 
     ~H"""
-    <section class="-mt-4 flex h-[calc(100svh-4.5rem)] flex-col gap-3 pb-[calc(8.75rem+env(safe-area-inset-bottom))] sm:hidden">
+    <section class={[
+      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(8.75rem+env(safe-area-inset-bottom))] sm:hidden",
+      @locked? && "-mb-9"
+    ]}>
       <div class="shrink-0">
         <h1 class="text-xl font-bold leading-tight">{@title.title}</h1>
         <p class="text-xs text-base-content/60">{meta(@title)}</p>
@@ -1562,13 +1578,17 @@ defmodule RokiWeb.TitleLive do
       <%!-- The poster takes all the height there is between the title and the synopsis; the
             three buttons are a strip against the right edge of the screen. --%>
       <div class="flex min-h-0 flex-1 justify-between gap-2">
-        <div class="relative aspect-[3/4] h-full max-w-[calc(100%-3.75rem)] overflow-hidden rounded-box bg-base-300 shadow-lg">
-          <img
-            :if={@title.poster}
-            src={@title.poster}
-            alt={@title.title}
-            class="absolute inset-0 h-full w-full object-cover object-[50%_65%]"
-          />
+        <%!-- The whole poster, never cropped: the biggest 2:3 that fits the height, against the left
+              edge of the screen. --%>
+        <div class="-ml-4 flex min-w-0 flex-1 justify-start">
+          <div class="relative aspect-[2/3] h-full max-w-full overflow-hidden rounded-l-none rounded-r-box bg-base-300 shadow-lg">
+            <img
+              :if={@title.poster}
+              src={@title.poster}
+              alt={@title.title}
+              class="absolute inset-0 h-full w-full object-cover"
+            />
+          </div>
         </div>
 
         <%!-- Icons only: saved, on hold, watched. Their state is the colour; the label is the tooltip. --%>
@@ -1647,12 +1667,12 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-16 w-14 rounded-l-2xl rounded-r-none border-r-0 px-0", @on && @on_class]}
+      class={["btn h-20 w-[4.5rem] rounded-l-2xl rounded-r-none border-r-0 px-0", @on && @on_class]}
       title={@label}
       aria-label={@label}
     >
       <span :if={@busy} class="loading loading-spinner"></span>
-      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-7 w-7" />
+      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-9 w-9" />
     </button>
     """
   end
