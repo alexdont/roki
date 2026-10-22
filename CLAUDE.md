@@ -287,3 +287,4 @@ The logo links to `/home` (the featured page), not `/`.
 The header carries only Featured and (signed in) Shelf / Stats / Calendar. **Lists is not a header link**: it is a section at the bottom of `/home` (`FeaturedLive`), shown once the shelves above have settled. `/lists` itself still exists.
 
 **Shows excludes anime** (`Roki.Featured`): a trending-TV title is dropped when `Laev.AnimeMap.anime?/2` (MyAnimeList has an entry) is true, except ids in `@keep_as_shows` (Cyberpunk: Edgerunners). Bump `@version` when what a cached page contains changes.
+Shows pages are exactly 20 (`Roki.Featured.shows_slice/3`): the anime-free stream is cut into pages and topped up from the next TMDB page; raw TMDB pages are memoised separately (`{:tv_raw, p}`); overlapping pages are de-duplicated by id.

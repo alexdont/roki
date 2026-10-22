@@ -18,7 +18,15 @@ defmodule Roki.Featured do
 
   # Bumped when what a cached page *contains* changes, so old answers are ignored
   # rather than served for up to 12 hours.
-  @version 2
+  @version 3
+
+  # Every shelf is this many titles a page, so Shows is as tall as Movies even though
+  # the anime taken out of TMDB's trending list leaves a TMDB page 15-17 short.
+  @page_size 20
+
+  # The most TMDB pages one Shows page will read to find its twenty (a list that is
+  # mostly anime would otherwise walk on forever).
+  @max_raw_pages 8
 
   # Titles MyAnimeList lists but that read as shows here: Cyberpunk: Edgerunners is
   # an animation from a Western game, not what anyone means by anime. TMDB ids.
@@ -28,35 +36,37 @@ defmodule Roki.Featured do
 
   @doc "`{:ok, items, more?}` for page `n` of a shelf, or `{:error, reason}`."
   def page(kind, n \\ 1, uuid \\ nil) when kind in @kinds and is_integer(n) and n >= 1 do
-    case cached(kind, n) do
-      {:fresh, result} -> result
-      {:stale, old} -> refresh(kind, n, old, uuid)
-    end
+    memo({kind, n}, fn -> fetch(kind, n, uuid) end)
   end
 
   def configured?, do: Application.get_env(:laev, :tmdb_key) not in [nil, ""]
 
-  defp key(kind, n), do: {__MODULE__, @version, kind, n}
+  # Remembered for @ttl_s under `key`, one computation at a time: a cold cache under a
+  # burst of visitors would otherwise be a burst of identical TMDB requests.
+  defp memo(key, fun) do
+    case cached(key) do
+      {:fresh, result} -> result
+      {:stale, old} -> refresh(key, old, fun)
+    end
+  end
 
-  defp cached(kind, n) do
-    case :persistent_term.get(key(kind, n), nil) do
+  defp cached(key) do
+    case :persistent_term.get({__MODULE__, @version, key}, nil) do
       {at, result} -> if now() - at < @ttl_s, do: {:fresh, result}, else: {:stale, result}
       nil -> {:stale, nil}
     end
   end
 
-  # One refresh per page at a time: a cold cache under a burst of visitors would
-  # otherwise be a burst of identical TMDB requests.
-  defp refresh(kind, n, old, uuid) do
-    :global.trans({{__MODULE__, @version, kind, n}, self()}, fn ->
-      case cached(kind, n) do
+  defp refresh(key, old, fun) do
+    :global.trans({{__MODULE__, @version, key}, self()}, fn ->
+      case cached(key) do
         {:fresh, result} ->
           result
 
         _ ->
-          case fetch(kind, n, uuid) do
+          case fun.() do
             {:ok, _items, _more?} = ok ->
-              :persistent_term.put(key(kind, n), {now(), ok})
+              :persistent_term.put({__MODULE__, @version, key}, {now(), ok})
               ok
 
             {:error, _} = error ->
@@ -73,20 +83,45 @@ defmodule Roki.Featured do
   defp fetch(kind, n, uuid), do: Roki.Laev.public(uuid, fn -> call(kind, n) end)
 
   defp call(:movies, n), do: Laev.Tmdb.trending("movie", n)
+  defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)
   # TMDB's "trending TV" includes anime (One Piece, Bleach …), which has its own shelf.
   # Anime is what MyAnimeList has an entry for — laev's own definition, the one it
   # splits your stats by — so those come out of Shows. Live-action One Piece is a
   # different TMDB id and stays.
   defp call(:shows, n) do
-    with {:ok, items, more?} <- Laev.Tmdb.trending("tv", n),
-         {:ok, _count} <- Laev.AnimeMap.ensure() do
-      {:ok, without_anime(items, &Laev.AnimeMap.anime?("tv", &1)), more?}
-    else
-      {:error, _} = error -> error
+    with {:ok, _count} <- Laev.AnimeMap.ensure() do
+      shows_slice(n, &raw_tv/1, &Laev.AnimeMap.anime?("tv", &1))
     end
   end
 
-  defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)
+  # TMDB's own trending-TV pages, cached on their own so page 2 of Shows reuses the
+  # TMDB pages page 1 already read.
+  defp raw_tv(p), do: memo({:tv_raw, p}, fn -> Laev.Tmdb.trending("tv", p) end)
+
+  @doc """
+  Page `n` of Shows: the anime-free stream of trending TV, cut into pages of exactly
+  `@page_size`. Takes the raw pages from `fetch_raw` (`{:ok, items, more?}`) as far as
+  it needs to, so a TMDB page that lost its anime is topped up from the next.
+  """
+  def shows_slice(n, fetch_raw, anime?) do
+    to = n * @page_size
+
+    with {:ok, shows, more?} <- collect(1, [], to, fetch_raw, anime?) do
+      {:ok, Enum.slice(shows, (n - 1) * @page_size, @page_size), more? or length(shows) > to}
+    end
+  end
+
+  defp collect(p, acc, want, fetch_raw, anime?) do
+    with {:ok, raw, more?} <- fetch_raw.(p) do
+      # TMDB's trending pages are fetched at different moments while the ranking shifts,
+      # so a title can sit on two of them; it is one title in the stream.
+      acc = Enum.uniq_by(acc ++ without_anime(raw, anime?), & &1.id)
+
+      if length(acc) >= want or not more? or p >= @max_raw_pages,
+        do: {:ok, acc, more?},
+        else: collect(p + 1, acc, want, fetch_raw, anime?)
+    end
+  end
 
   @doc false
   def without_anime(items, anime?) do
