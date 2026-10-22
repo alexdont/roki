@@ -27,6 +27,7 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:shelves, shelves)
       |> assign(:error, nil)
       |> assign(:seen, MapSet.new())
+      |> assign(:upcoming, %{})
       |> assign(:uuid, uuid(socket))
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
 
@@ -78,10 +79,12 @@ defmodule RokiWeb.FeaturedLive do
     shelf = socket.assigns.shelves[kind]
     known = MapSet.new(shelf.items, & &1.id)
     fresh = Enum.reject(items, &MapSet.member?(known, &1.id))
+    uuid = socket.assigns.uuid
 
     {:noreply,
      socket
      |> assign(:seen, MapSet.union(socket.assigns.seen, seen))
+     |> start_async({:dates, kind, page}, fn -> Roki.Watch.upcoming(uuid, fresh) end)
      |> put_shelf(kind, %{
        shelf
        | items: shelf.items ++ fresh,
@@ -93,6 +96,12 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async({:page, kind}, {:ok, {_page, {:error, reason}, _seen}}, socket),
     do: {:noreply, failed(socket, kind, reason)}
+
+  # Dates of what is not out yet arrive after the posters, and only add a mark to them.
+  def handle_async({:dates, _kind, _page}, {:ok, found}, socket),
+    do: {:noreply, update(socket, :upcoming, &Map.merge(&1, found))}
+
+  def handle_async({:dates, _kind, _page}, _other, socket), do: {:noreply, socket}
 
   def handle_async(:progress, {:ok, lists}, socket), do: {:noreply, assign(socket, :lists, lists)}
   def handle_async(:progress, {:exit, _reason}, socket), do: {:noreply, socket}
@@ -166,6 +175,7 @@ defmodule RokiWeb.FeaturedLive do
           title={@titles[kind]}
           shelf={@shelves[kind]}
           seen={@seen}
+          upcoming={@upcoming}
           cached_titles={@cached_titles}
         />
 
@@ -191,6 +201,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :title, :string, required: true
   attr :shelf, :map, required: true
   attr :seen, :any, required: true
+  attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
 
   defp shelf(assigns) do
@@ -203,6 +214,7 @@ defmodule RokiWeb.FeaturedLive do
             item={i}
             seen={MapSet.member?(@seen, {i.type, i.id})}
             cached_titles={@cached_titles}
+            upcoming={@upcoming}
             compact
           />
         </li>

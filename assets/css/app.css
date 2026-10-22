@@ -182,3 +182,4 @@
 .peek-muted { margin-top: 0.4rem; font-size: 0.75rem; opacity: 0.5; }
 .peek-progress { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 500; }
 .peek-cached { margin-top: 0.35rem; font-size: 0.7rem; color: var(--color-success); }
+.peek-due { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--color-error); }

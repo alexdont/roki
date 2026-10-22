@@ -17,6 +17,10 @@ defmodule RokiWeb.PosterComponents do
     default: nil,
     doc: "MapSet of {type, id} with cached sources: those posters say so"
 
+  attr :upcoming, :any,
+    default: nil,
+    doc: "map of {type, id} => release date for titles that are not out yet: a red mark"
+
   attr :compact, :boolean,
     default: false,
     doc: "no caption under the poster: progress sits on the poster, the rest on hover"
@@ -33,6 +37,10 @@ defmodule RokiWeb.PosterComponents do
       assign(assigns,
         href: href(assigns.item),
         prog: progress_of(assigns.item),
+        due:
+          if(is_map(assigns.upcoming),
+            do: assigns.upcoming[{assigns.item[:type], assigns.item[:id]}]
+          ),
         cached?:
           match?(%MapSet{}, assigns.cached_titles) and
             MapSet.member?(assigns.cached_titles, {assigns.item[:type], assigns.item[:id]})
@@ -47,6 +55,7 @@ defmodule RokiWeb.PosterComponents do
         data-peek-progress={@prog && progress_text(@prog, @item)}
         data-peek-resume={@item[:resume_at] && resume_title(@item)}
         data-peek-cached={@cached? && "true"}
+        data-peek-due={@due && "Not out yet: #{due_text(@due)}"}
       >
         <img
           :if={@item.poster}
@@ -89,6 +98,16 @@ defmodule RokiWeb.PosterComponents do
           class="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[0.65rem] font-medium leading-none text-white"
         >
           ★ {rating(@item)}
+        </span>
+        <span
+          :if={@due}
+          class={[
+            "absolute right-1.5 flex h-[1.1rem] w-[1.1rem] items-center justify-center rounded-full bg-error/90 text-error-content shadow-sm",
+            if(@item[:badge], do: "top-8", else: "top-1.5")
+          ]}
+          title={"Not out yet: #{due_text(@due)}"}
+        >
+          <.icon_clock />
         </span>
         <%!-- A small dot, not a label: the hover card and the title page say what it means. --%>
         <span
@@ -183,6 +202,20 @@ defmodule RokiWeb.PosterComponents do
     do: progress(%{resume_at: at, runtime: rt})
 
   defp bar(_prog, _item), do: 0
+
+  defp due_text(%Date{} = d), do: Calendar.strftime(d, "%-d %b %Y")
+
+  defp icon_clock(assigns) do
+    ~H"""
+    <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true">
+      <path
+        fill-rule="evenodd"
+        d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-12.25a.75.75 0 0 0-1.5 0V10c0 .2.08.39.22.53l2.5 2.5a.75.75 0 1 0 1.06-1.06l-2.28-2.28V5.75Z"
+        clip-rule="evenodd"
+      />
+    </svg>
+    """
+  end
 
   defp rating(%{vote: v}) when is_number(v) and v > 0, do: Float.round(v * 1.0, 1)
   defp rating(_item), do: nil

@@ -102,4 +102,21 @@ defmodule RokiWeb.PosterCachedTest do
     assert html =~ "width: 36%"
     assert html =~ ~s(data-peek-progress="1 of 3 seasons watched · 8 of 22 episodes")
   end
+
+  test "a title that is not out yet gets a red mark with its date" do
+    html =
+      render_component(&RokiWeb.PosterComponents.poster/1,
+        item: @item,
+        upcoming: %{{"movie", 7} => ~D[2026-12-18]}
+      )
+
+    assert html =~ "bg-error"
+    assert html =~ "Not out yet: 18 Dec 2026"
+    assert html =~ ~s(data-peek-due="Not out yet: 18 Dec 2026")
+
+    refute render_component(&RokiWeb.PosterComponents.poster/1,
+             item: @item,
+             upcoming: %{{"movie", 8} => ~D[2026-12-18]}
+           ) =~ "bg-error"
+  end
 end

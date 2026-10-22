@@ -47,6 +47,7 @@ function render(el, info) {
 
   if (el.dataset.peekProgress) c.appendChild(line("peek-progress", el.dataset.peekProgress))
   if (el.dataset.peekResume) c.appendChild(line("peek-progress", el.dataset.peekResume))
+  if (el.dataset.peekDue) c.appendChild(line("peek-due", el.dataset.peekDue))
   if (el.dataset.peekCached) c.appendChild(line("peek-cached", "⚡ sources cached — plays right away"))
 
   place(el)

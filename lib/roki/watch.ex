@@ -425,6 +425,36 @@ defmodule Roki.Watch do
   defp at_most_cap(cap),
     do: if(Sources.resolution_at_most?(@transcode_cap, cap), do: @transcode_cap, else: cap)
 
+  @doc """
+  Which of these titles are not out yet: `%{{type, id} => ~D[2026-12-18]}`. Only titles dated this
+  year or later are looked up (the date is in the title details, which are cached for twelve
+  hours and shared with the title page and the hover card), a few at a time. A title whose
+  date is unknown is left out rather than flagged.
+  """
+  def upcoming(uuid, items, today \\ Date.utc_today()) do
+    year = Integer.to_string(today.year)
+
+    items
+    |> Enum.filter(&(is_binary(&1[:year]) and &1.year >= year and &1[:type] in ["movie", "tv"]))
+    |> Task.async_stream(&{&1, title(&1.type, &1.id, uuid)},
+      max_concurrency: 4,
+      timeout: 15_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.reduce(%{}, fn
+      {:ok, {item, {:ok, %{date: date}}}}, acc when is_binary(date) ->
+        with {:ok, d} <- Date.from_iso8601(date),
+             :gt <- Date.compare(d, today) do
+          Map.put(acc, {item.type, item.id}, d)
+        else
+          _ -> acc
+        end
+
+      _other, acc ->
+        acc
+    end)
+  end
+
   @doc "Whether playing this release means re-encoding it here (its video is not h264)."
   def heavy?({source, _stream}), do: heavy?(source)
   def heavy?(%{codec: codec}) when codec in ["h265", "av1"], do: true
