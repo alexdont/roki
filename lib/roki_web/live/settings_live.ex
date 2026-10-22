@@ -30,6 +30,8 @@ defmodule RokiWeb.SettingsLive do
   # The resolution ceiling is two settings: laev's own (external player and terminal app, any
   # value) and the site's (the browser player, nothing above 1080p), shown one under the other.
   @web_hints %{
+    "sources_cache" =>
+      "Releases already found and checked are kept this long, so Play starts at once instead of searching again. Retry on a title looks for new ones.",
     "external_app" =>
       "What Play opens when this device uses an external player. It starts by itself; if your device asks, allow it. The download option gives you an .m3u file to open yourself.",
     "browser_max_resolution" =>
@@ -37,7 +39,8 @@ defmodule RokiWeb.SettingsLive do
   }
   @web_labels %{
     "browser_max_resolution" => "Resolution ceiling — browser player",
-    "external_app" => "External player app"
+    "external_app" => "External player app",
+    "sources_cache" => "Keep found sources"
   }
   @labels %{"LAEV_MAX_RESOLUTION" => "Resolution ceiling — external player & terminal app"}
 
@@ -512,7 +515,8 @@ defmodule RokiWeb.SettingsLive do
     """
   end
 
-  defp external_app_spec(specs), do: Enum.filter(specs, &(elem(&1, 0) == "external_app"))
+  defp external_app_spec(specs),
+    do: Enum.filter(specs, &(elem(&1, 0) in ["external_app", "sources_cache"]))
 
   attr :value, :string, required: true
   attr :saved, :any, default: nil

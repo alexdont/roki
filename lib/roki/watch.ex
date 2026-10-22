@@ -223,7 +223,10 @@ defmodule Roki.Watch do
   `{:ok, %{query:, sources:}}` — releases for a film or an episode, ranked best first.
   Shared and cached ten minutes: nothing in it is about the user.
   """
-  def sources(title, season, episode, uuid \\ nil) do
+  def sources(title, season, episode, uuid \\ nil, fresh? \\ false) do
+    # Retry: the shared ten-minute list would just hand back what was already seen.
+    if fresh?, do: TTLCache.delete({:sources, title.type, title.id, season, episode})
+
     TTLCache.fetch({:sources, title.type, title.id, season, episode}, @sources_ttl, fn ->
       Roki.Laev.public(uuid, fn -> search_sources(title, season, episode) end)
     end)

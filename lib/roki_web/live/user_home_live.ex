@@ -185,6 +185,7 @@ defmodule RokiWeb.UserHomeLive do
         stats={@stats}
         pulse={@pulse}
         username={@username}
+        cached_titles={@cached_titles}
       />
     </Layouts.app>
     """
@@ -330,6 +331,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :stats, :any, default: nil
   attr :pulse, :any, default: nil
   attr :username, :string, required: true
+  attr :cached_titles, :any, default: nil
 
   defp shelf(assigns) do
     ~H"""
@@ -410,17 +412,40 @@ defmodule RokiWeb.UserHomeLive do
         title="Watchlist"
         count={length(@data.watchlist.behind)}
         items={@data.watchlist.behind}
+        cached_titles={@cached_titles}
       />
-      <.fold :if={@data} id="saved" title="Saved" items={@data.saved} open={@open} />
+      <.fold
+        :if={@data}
+        id="saved"
+        title="Saved"
+        items={@data.saved}
+        open={@open}
+        cached_titles={@cached_titles}
+      />
       <.fold
         :if={@data}
         id="caught_up"
         title="Caught up"
         items={@data.watchlist.caught_up}
         open={@open}
+        cached_titles={@cached_titles}
       />
-      <.fold :if={@data} id="on_hold" title="On hold" items={@data.watchlist.on_hold} open={@open} />
-      <.fold :if={@data} id="history" title="History" items={@data.continue} open={@open} />
+      <.fold
+        :if={@data}
+        id="on_hold"
+        title="On hold"
+        items={@data.watchlist.on_hold}
+        open={@open}
+        cached_titles={@cached_titles}
+      />
+      <.fold
+        :if={@data}
+        id="history"
+        title="History"
+        items={@data.continue}
+        open={@open}
+        cached_titles={@cached_titles}
+      />
     </div>
     """
   end
@@ -431,6 +456,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :title, :string, required: true
   attr :items, :list, required: true
   attr :open, :any, required: true
+  attr :cached_titles, :any, default: nil
 
   defp fold(assigns) do
     assigns = assign(assigns, :shown, MapSet.member?(assigns.open, assigns.id))
@@ -452,7 +478,7 @@ defmodule RokiWeb.UserHomeLive do
       </button>
       <ul :if={@shown} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} />
+          <.poster item={i} cached_titles={@cached_titles} />
         </li>
       </ul>
     </section>
@@ -461,6 +487,7 @@ defmodule RokiWeb.UserHomeLive do
 
   attr :title, :string, required: true
   attr :count, :integer, default: nil
+  attr :cached_titles, :any, default: nil
   attr :items, :list, required: true
 
   defp poster_row(assigns) do
@@ -472,7 +499,7 @@ defmodule RokiWeb.UserHomeLive do
       </h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} />
+          <.poster item={i} cached_titles={@cached_titles} />
         </li>
       </ul>
     </section>

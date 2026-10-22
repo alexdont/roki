@@ -197,7 +197,11 @@ defmodule RokiWeb.FeaturedLive do
       <h2 class="text-xl font-semibold">{@title}</h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @shelf.items} class="space-y-1">
-          <.poster item={i} seen={MapSet.member?(@seen, {i.type, i.id})} />
+          <.poster
+            item={i}
+            seen={MapSet.member?(@seen, {i.type, i.id})}
+            cached_titles={@cached_titles}
+          />
         </li>
         <%!-- Poster-sized, and the next cell in the grid: more of the same shelf. --%>
         <li :if={@shelf.more?}>

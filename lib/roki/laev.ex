@@ -155,6 +155,12 @@ defmodule Roki.Laev do
   # laev state. Disconnecting laev removes them with the rest of the directory.
   @web_settings %{
     "browser_max_resolution" => %{default: "1080p", allowed: ~w(480p 720p 1080p)},
+    # How long found sources are kept so the next Play skips the search.
+    "sources_cache" => %{
+      default: "12",
+      allowed: ~w(off 6 12 24),
+      labels: %{"off" => "Off", "6" => "6 hours", "12" => "12 hours", "24" => "24 hours"}
+    },
     # The app Play opens when the device uses an external player.
     "external_app" => %{
       default: "vlc",

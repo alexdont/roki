@@ -13,6 +13,10 @@ defmodule RokiWeb.PosterComponents do
 
   attr :seen, :boolean, default: nil, doc: "watched? Falls back to the item's own :seen"
 
+  attr :cached_titles, :any,
+    default: nil,
+    doc: "MapSet of {type, id} with cached sources: those posters say so"
+
   def poster(assigns) do
     assigns =
       assign(
@@ -21,7 +25,13 @@ defmodule RokiWeb.PosterComponents do
         assigns.seen || (assigns.seen == nil && assigns.item[:seen] == true)
       )
 
-    assigns = assign(assigns, :href, href(assigns.item))
+    assigns =
+      assign(assigns,
+        href: href(assigns.item),
+        cached?:
+          match?(%MapSet{}, assigns.cached_titles) and
+            MapSet.member?(assigns.cached_titles, {assigns.item[:type], assigns.item[:id]})
+      )
 
     ~H"""
     <.card href={@href} class={["group block space-y-1", @watched? && "opacity-50"]}>
@@ -41,6 +51,13 @@ defmodule RokiWeb.PosterComponents do
           class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow"
         >
           {@item[:badge]}
+        </span>
+        <span
+          :if={@cached?}
+          class="badge badge-success badge-sm absolute bottom-1.5 left-1.5 gap-1 shadow"
+          title="Sources are cached: plays right away"
+        >
+          ⚡ cached
         </span>
         <span
           :if={@watched?}

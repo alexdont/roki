@@ -1,0 +1,31 @@
+const { chromium, devices } = require("playwright"); const fs = require("fs");
+const results = []; const check = (n, ok, x = "") => { results.push(!!ok); console.log((ok ? "PASS " : "FAIL ") + n + (x ? "  — " + x : "")); };
+(async () => {
+  const b = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  const ctx = await b.newContext({ ...devices["iPhone 13"] });
+  await ctx.addCookies([{ name: "_roki_key", value: fs.readFileSync("/tmp/e2e-cookie.txt", "utf8"), domain: "roki.ee", path: "/", secure: true, httpOnly: true, sameSite: "Lax" }]);
+  const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(String(e)));
+  await p.addInitScript(() => { window.__launched = []; window.addEventListener("phx:roki:launch", ev => window.__launched.push(ev.detail.url)); });
+  const open = async () => { await p.goto("https://roki.ee/title/movie/10331"); await p.waitForSelector("[data-phx-main].phx-connected"); await p.waitForSelector("h1"); await p.waitForTimeout(1500); };
+  await open();
+  check("nothing cached at first", (await p.locator("text=⚡ cached").count()) === 0);
+  let t0 = Date.now(); await p.click("button:has-text('Play')"); await p.waitForSelector("text=/Opening in/", { timeout: 120000 });
+  const first = Date.now() - t0; console.log("first Play took", first, "ms");
+  check("first Play searched and checked", first > 3000);
+  await open();
+  check("the title now says it has cached sources", (await p.locator("text=⚡ cached").count()) >= 1);
+  t0 = Date.now(); await p.click("button:has-text('Play')"); await p.waitForSelector("text=/Opening in/", { timeout: 30000 });
+  const second = Date.now() - t0; console.log("second Play took", second, "ms");
+  check("second Play is near-instant", second < 3000, second + "ms");
+  check("the page says the sources are cached, with Retry", (await p.locator("text=cached sources").count()) >= 1 && (await p.locator("button:has-text('Retry')").count()) === 1);
+  check("it still opened the player", (await p.evaluate(() => window.__launched.length)) >= 1);
+  t0 = Date.now(); await p.click("button:has-text('Retry')"); await p.waitForSelector("text=/Opening in/", { timeout: 120000 }); await p.waitForTimeout(500);
+  console.log("retry took", Date.now() - t0, "ms");
+  check("Retry searched again (slower than cached)", Date.now() - t0 > second);
+  // poster tag on the featured/search page
+  await p.goto("https://roki.ee/search?q=night+of+the+living+dead"); await p.waitForSelector("[data-phx-main].phx-connected"); await p.waitForTimeout(6000);
+  check("the poster in search carries the tag", (await p.locator("text=⚡ cached").count()) >= 1);
+  check("no page errors", errs.length === 0, errs.join("|"));
+  console.log(`${results.filter(Boolean).length}/${results.length} passed`);
+  await b.close(); process.exit(results.every(Boolean) ? 0 : 1);
+})();

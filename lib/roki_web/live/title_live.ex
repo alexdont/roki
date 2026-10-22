@@ -17,6 +17,7 @@ defmodule RokiWeb.TitleLive do
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
+  alias Roki.Watch.SourceCache
 
   # ── mount & params ─────────────────────────────────────────────────
 
@@ -41,6 +42,9 @@ defmodule RokiWeb.TitleLive do
         mode: mode_param(socket),
         platform: platform_param(socket),
         external: nil,
+        cache_info: nil,
+        cache_key: nil,
+        cached: MapSet.new(),
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -83,13 +87,18 @@ defmodule RokiWeb.TitleLive do
     if connected?(socket), do: (get_connect_params(socket) || %{})[key]
   end
 
+  defp cached_keys(uuid) do
+    hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
+    SourceCache.keys(uuid, hours)
+  end
+
   defp load_title(type, id, uuid) do
     with {:ok, title} <- Watch.title(type, id, uuid) do
-      resume =
-        if uuid && Roki.Laev.connected?(uuid),
-          do: Roki.Laev.run(uuid, fn -> Laev.Resume.get(type, id) end)
+      linked? = uuid && Roki.Laev.connected?(uuid)
+      resume = if linked?, do: Roki.Laev.run(uuid, fn -> Laev.Resume.get(type, id) end)
+      cached = if linked?, do: cached_keys(uuid), else: MapSet.new()
 
-      {:ok, title, resume}
+      {:ok, title, resume, cached}
     end
   end
 
@@ -176,6 +185,12 @@ defmodule RokiWeb.TitleLive do
   end
 
   # Which player this device uses; remembered in the browser, not on the server.
+  # Look for sources again, ignoring the cached ones (they may be stale or new ones may exist).
+  def handle_event("retry", _params, socket) do
+    %{season: season, episode: episode} = socket.assigns
+    {:noreply, begin(socket, season, episode, true)}
+  end
+
   def handle_event("set_mode", %{"mode" => mode}, socket) when mode in ["browser", "external"] do
     {:noreply,
      socket
@@ -261,8 +276,9 @@ defmodule RokiWeb.TitleLive do
   defp begin(%{assigns: %{uuid: nil}} = socket, _s, _e, _m), do: socket
   defp begin(%{assigns: %{linked?: false}} = socket, _s, _e, _m), do: socket
 
-  defp begin(socket, season, episode, manual?) do
+  defp begin(socket, season, episode, force?) do
     token = socket.assigns.token + 1
+    key = {socket.assigns.type, socket.assigns.id, season, episode}
     %{uuid: uuid, title: title, mode: mode} = socket.assigns
     parent = self()
 
@@ -280,29 +296,79 @@ defmodule RokiWeb.TitleLive do
       current: nil,
       player: nil,
       external: nil,
+      cache_info: nil,
+      cache_key: key,
       up_next: nil,
       ctx: nil
     )
     |> start_async(:pipeline, fn ->
-      pipeline(parent, token, uuid, title, season, episode, manual?, mode)
+      pipeline(parent, token, uuid, title, season, episode, force?, mode, key)
     end)
   end
 
   # Runs in a task. Everything slow happens here; progress goes to the page as messages.
-  defp pipeline(parent, token, uuid, title, season, episode, _manual?, mode) do
-    say = fn msg -> send(parent, {:status, token, msg}) end
+  # Sources found earlier (and still fresh) are used as they are: no search, no probing.
+  # `force?` (the Retry button) skips them and looks again.
+  defp pipeline(parent, token, uuid, title, season, episode, force?, mode, key) do
+    web = Roki.Laev.web_settings(uuid)
+    hours = SourceCache.hours(web)
+    cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours)
 
     with :ok <- Watch.subscription(uuid),
          ctx = Watch.ctx(uuid, title, season, episode),
-         _ = say.("Searching for releases…"),
-         {:ok, %{query: query, sources: found}} <- Watch.sources(title, season, episode, uuid),
-         sources = Watch.with_library(uuid, query, found),
-         cap = Watch.ceiling(uuid, ctx, mode, Roki.Laev.web_settings(uuid)),
-         {:ok, sources} <- within_ceiling(uuid, sources, cap),
-         {:ok, playable, rest} <- probe_until_playable(parent, token, uuid, ctx, sources, []) do
-      {:ok, %{token: token, ctx: ctx, playable: playable, rest: rest, cap: cap}}
+         cap = Watch.ceiling(uuid, ctx, mode, web),
+         {:ok, res} <-
+           from_cache(token, ctx, cap, key, cached)
+           |> fresh_if_none(fn ->
+             search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?)
+           end) do
+      {:ok, res}
     else
       {:error, reason} -> {:error, token, reason}
+    end
+  end
+
+  defp from_cache(_token, _ctx, _cap, _key, nil), do: nil
+
+  defp from_cache(token, ctx, cap, key, entry) do
+    {:ok,
+     %{
+       token: token,
+       ctx: ctx,
+       playable: entry.playable,
+       rest: entry.rest,
+       cap: cap,
+       key: key,
+       cached_at: entry.at,
+       good: entry.good
+     }}
+  end
+
+  defp fresh_if_none(nil, fun), do: fun.()
+  defp fresh_if_none(hit, _fun), do: hit
+
+  defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?) do
+    say = fn msg -> send(parent, {:status, token, msg}) end
+    say.("Searching for releases…")
+
+    with {:ok, %{query: query, sources: found}} <-
+           Watch.sources(title, season, episode, uuid, force?),
+         sources = Watch.with_library(uuid, query, found),
+         {:ok, sources} <- within_ceiling(uuid, sources, cap),
+         {:ok, playable, rest} <- probe_until_playable(parent, token, uuid, ctx, sources, []) do
+      if hours > 0, do: SourceCache.put(uuid, key, playable, rest)
+
+      {:ok,
+       %{
+         token: token,
+         ctx: ctx,
+         playable: playable,
+         rest: rest,
+         cap: cap,
+         key: key,
+         cached_at: nil,
+         good: nil
+       }}
     end
   end
 
@@ -390,6 +456,10 @@ defmodule RokiWeb.TitleLive do
     %{uuid: uuid, ctx: ctx} = socket.assigns
     app = Roki.Laev.web_settings(uuid)["external_app"]
     external = Watch.external(uuid, ctx, source, stream)
+
+    if socket.assigns.cache_key,
+      do: SourceCache.mark_good(uuid, socket.assigns.cache_key, source.hash)
+
     name = external.filename || socket.assigns.title.title
     launch = launch_url(app, socket.assigns.platform, external.url, name)
 
@@ -404,16 +474,32 @@ defmodule RokiWeb.TitleLive do
   end
 
   # The pipeline found what plays: play the best (laev's rule) or show the list.
-  defp after_probe(socket, %{ctx: ctx, playable: playable, rest: rest, cap: cap}) do
-    socket = assign(socket, ctx: ctx, playable: playable, rest: rest)
+  defp after_probe(socket, %{ctx: ctx, playable: playable, rest: rest, cap: cap} = res) do
+    socket =
+      assign(socket,
+        ctx: ctx,
+        playable: playable,
+        rest: rest,
+        cache_info: res.cached_at && %{at: res.cached_at},
+        cache_key: res.key
+      )
+
+    socket =
+      if res.cached_at,
+        do: socket,
+        else: update(socket, :cached, &MapSet.put(&1, res.key))
+
     external? = socket.assigns.mode == :external
 
     # Play means play: the best release is chosen and started, whatever the terminal app's
     # "auto-pick" setting says (the list below is for switching to another one).
+    # The release that started last time goes first: it is known to work.
     choice =
-      if external?,
-        do: Watch.auto_choice_external(playable, cap),
-        else: Watch.auto_choice(playable, cap)
+      case Enum.find(playable, fn {source, _} -> res.good && source.hash == res.good end) do
+        nil when external? -> Watch.auto_choice_external(playable, cap)
+        nil -> Watch.auto_choice(playable, cap)
+        pair -> {:play, pair}
+      end
 
     case choice do
       {:play, pair} when external? -> hand_over(socket, pair)
@@ -426,8 +512,10 @@ defmodule RokiWeb.TitleLive do
   # ── what comes back from the tasks ─────────────────────────────────
 
   @impl true
-  def handle_async(:title, {:ok, {:ok, title, resume}}, socket) do
-    socket = assign(socket, title: title, resume: resume, page_title: title.title)
+  def handle_async(:title, {:ok, {:ok, title, resume, cached}}, socket) do
+    socket =
+      assign(socket, title: title, resume: resume, cached: cached, page_title: title.title)
+
     {:noreply, select(socket)}
   end
 
@@ -471,7 +559,7 @@ defmodule RokiWeb.TitleLive do
         {:ok, {:ok, token, playable, rest}},
         %{assigns: %{token: token}} = socket
       ),
-      do: {:noreply, assign(socket, playable: playable, rest: rest, phase: {:choose, nil})}
+      do: {:noreply, more_checked(socket, playable, rest)}
 
   def handle_async(:more, _other, socket), do: {:noreply, assign(socket, phase: {:choose, nil})}
 
@@ -490,6 +578,7 @@ defmodule RokiWeb.TitleLive do
     }
 
     socket = assign(socket, player: data, phase: :playing)
+    mark_good(socket)
 
     # The release did not carry a subtitle in their language: fetch one if they have a provider.
     socket =
@@ -508,7 +597,7 @@ defmodule RokiWeb.TitleLive do
         {:ok, {:error, token, reason}},
         %{assigns: %{token: token}} = socket
       ),
-      do: {:noreply, assign(socket, phase: {:failed, failure(reason)})}
+      do: {:noreply, playback_failed(socket, reason)}
 
   def handle_async(:playback, _other, socket), do: {:noreply, socket}
 
@@ -576,6 +665,30 @@ defmodule RokiWeb.TitleLive do
     end
   end
 
+  # The release started: remember it for the next Play, in the cache and on the page.
+  defp mark_good(%{assigns: %{cache_key: key, uuid: uuid, current: {source, _}}}) when key != nil,
+    do: SourceCache.mark_good(uuid, key, source.hash)
+
+  defp mark_good(_socket), do: :ok
+
+  # Sources from the cache that no longer play (a link expired) are not worth a second try:
+  # forget them and search again, once, without the user having to do anything.
+  defp playback_failed(%{assigns: %{cache_info: %{}, cache_key: key}} = socket, _reason) do
+    SourceCache.delete(socket.assigns.uuid, key)
+    %{season: season, episode: episode} = socket.assigns
+    begin(socket, season, episode, true)
+  end
+
+  defp playback_failed(socket, reason), do: assign(socket, phase: {:failed, failure(reason)})
+
+  defp more_checked(socket, playable, rest) do
+    with %{uuid: uuid, cache_key: key} when key != nil <- socket.assigns do
+      SourceCache.put(uuid, key, playable, rest)
+    end
+
+    assign(socket, playable: playable, rest: rest, phase: {:choose, nil})
+  end
+
   # What to tell the user when it did not work.
   defp failure(:no_provider),
     do: "No debrid account is connected. Add a Real-Debrid or TorBox key in Settings."
@@ -630,11 +743,19 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div :if={@title} class="space-y-8">
-        <.hero title={@title} resume={@resume} phase={@phase} season={@season} />
+        <.hero
+          title={@title}
+          resume={@resume}
+          phase={@phase}
+          season={@season}
+          cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
+        />
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
         <.mode_switch :if={@linked?} mode={@mode} />
+
+        <.cache_note :if={@cache_info} at={@cache_info.at} busy={match?({:working, _}, @phase)} />
 
         <.status :if={@phase != :idle} phase={@phase} probe={@probe} />
 
@@ -675,6 +796,8 @@ defmodule RokiWeb.TitleLive do
           episode={@episode}
           episodes={@episodes}
           watched={@watched}
+          cached={@cached}
+          title_id={@id}
           can_play?={@linked?}
         />
       </div>
@@ -682,6 +805,7 @@ defmodule RokiWeb.TitleLive do
     """
   end
 
+  attr :cached?, :boolean, default: false
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :phase, :any, required: true
@@ -728,6 +852,13 @@ defmodule RokiWeb.TitleLive do
           >
             <.icon name="hero-play-solid" class="h-5 w-5" /> {play_label_tv(@resume)}
           </button>
+          <span
+            :if={@cached?}
+            class="badge badge-success badge-outline gap-1"
+            title="Sources are cached: plays right away"
+          >
+            ⚡ cached
+          </span>
         </div>
       </div>
     </section>
@@ -906,6 +1037,8 @@ defmodule RokiWeb.TitleLive do
   attr :episode, :any, default: nil
   attr :episodes, :any, default: nil
   attr :watched, :any, required: true
+  attr :cached, :any, required: true
+  attr :title_id, :integer, required: true
   attr :can_play?, :boolean, default: false
 
   defp episodes(assigns) do
@@ -939,6 +1072,12 @@ defmodule RokiWeb.TitleLive do
             <div class="flex items-center gap-2">
               <span class="font-medium">{e.number}. {e.name}</span>
               <span :if={MapSet.member?(@watched, e.number)} class="badge badge-sm badge-success">Watched</span>
+              <span
+                :if={MapSet.member?(@cached, {"tv", @title_id, @season, e.number})}
+                class="badge badge-sm badge-success badge-outline"
+              >
+                ⚡ cached
+              </span>
             </div>
             <div class="text-xs text-base-content/60">
               {[e.air_date, e.minutes && "#{e.minutes} min"] |> Enum.filter(& &1) |> Enum.join(" · ")}
@@ -1120,4 +1259,28 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp pad(n), do: n |> Integer.to_string() |> String.pad_leading(2, "0")
+
+  attr :at, :integer, required: true
+  attr :busy, :boolean, default: false
+
+  defp cache_note(assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-2 text-sm text-base-content/70">
+      <span class="badge badge-success badge-outline gap-1">⚡ cached sources</span>
+      <span>found {ago(@at)}, nothing to check.</span>
+      <button phx-click="retry" class="btn btn-xs" disabled={@busy}>Retry</button>
+      <span class="text-base-content/50">looks for new ones</span>
+    </div>
+    """
+  end
+
+  defp ago(at) do
+    secs = max(System.os_time(:second) - at, 0)
+
+    cond do
+      secs < 90 -> "just now"
+      secs < 3600 -> "#{div(secs, 60)} min ago"
+      true -> "#{div(secs, 3600)} h ago"
+    end
+  end
 end
