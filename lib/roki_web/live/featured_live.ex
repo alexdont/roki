@@ -118,7 +118,9 @@ defmodule RokiWeb.FeaturedLive do
     >
       <section :if={@visitor?} class="py-10 text-center">
         <div class="mx-auto max-w-xl space-y-4">
-          <h1 class="text-4xl font-bold tracking-tight">Everything you watch, in one place.</h1>
+          <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">
+            Everything you watch, in one place.
+          </h1>
           <p class="text-base-content/70">
             Films, shows and anime — your watchlist and where you stopped, following you from the
             terminal to the browser.
@@ -130,7 +132,7 @@ defmodule RokiWeb.FeaturedLive do
         </div>
       </section>
 
-      <h1 :if={!@visitor?} class="text-3xl font-bold tracking-tight">Featured</h1>
+      <h1 :if={!@visitor?} class="text-2xl font-bold tracking-tight sm:text-3xl">Featured</h1>
 
       <div
         :if={@loading? and @error == nil}

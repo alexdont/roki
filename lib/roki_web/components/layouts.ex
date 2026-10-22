@@ -85,20 +85,37 @@ defmodule RokiWeb.Layouts do
       <div class="flex-1 sm:hidden"></div>
       <.link
         navigate={~p"/search"}
-        class="btn btn-ghost btn-sm btn-square sm:hidden"
+        class="btn btn-ghost btn-square sm:hidden"
         aria-label="Search"
       >
         <.icon name="hero-magnifying-glass" class="h-5 w-5" />
       </.link>
-      <nav class="flex flex-none items-center gap-1">
+      <%!-- Wide screens: the links sit in the bar. On a phone they fold into the menu
+            next to the avatar, so nothing is wider than the screen. --%>
+      <nav class="hidden flex-none items-center gap-1 md:flex">
         <.link navigate={~p"/home"} class="btn btn-ghost btn-sm">Featured</.link>
         <.link navigate={~p"/lists"} class="btn btn-ghost btn-sm">Lists</.link>
         <.link :if={@username} navigate={~p"/#{@username}/home"} class="btn btn-ghost btn-sm">
           My shelf
         </.link>
       </nav>
+      <div class="dropdown dropdown-end md:hidden">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Menu">
+          <.icon name="hero-bars-3" class="h-6 w-6" />
+        </div>
+        <ul
+          tabindex="0"
+          class="menu dropdown-content z-[60] mt-3 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+        >
+          <li><.link navigate={~p"/home"}>Featured</.link></li>
+          <li><.link navigate={~p"/lists"}>Lists</.link></li>
+          <li :if={@username}><.link navigate={~p"/#{@username}/home"}>My shelf</.link></li>
+          <li class="menu-title mt-1">Theme</li>
+          <li class="px-2 py-1"><.theme_toggle /></li>
+        </ul>
+      </div>
       <div class="flex flex-none items-center gap-3">
-        <.theme_toggle />
+        <div class="hidden md:block"><.theme_toggle /></div>
         <%!-- PhoenixKit's own account menu: avatar, settings, admin, log out; or
               log in / register for a visitor. --%>
         <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown

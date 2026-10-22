@@ -135,13 +135,13 @@ defmodule RokiWeb.ListLive do
           <.link navigate={~p"/lists"} class="text-sm text-base-content/60 hover:text-primary">
             ← All lists
           </.link>
-          <h1 class="text-3xl font-bold tracking-tight">🎬 {@franchise.name}</h1>
+          <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">🎬 {@franchise.name}</h1>
           <p class="text-base-content/70">
             {@entry_count} titles, in release order{summary_tail(@left)}
           </p>
         </div>
 
-        <div :if={@tabs != []} class="tabs tabs-box w-fit" role="tablist">
+        <div :if={@tabs != []} class="tabs tabs-box w-fit max-w-full overflow-x-auto" role="tablist">
           <.link
             :for={t <- @tabs}
             patch={tab_path(@slug, t.key)}

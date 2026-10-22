@@ -43,7 +43,7 @@ defmodule RokiWeb.ListsLive do
     >
       <div class="space-y-6">
         <div class="space-y-1">
-          <h1 class="text-3xl font-bold tracking-tight">Lists</h1>
+          <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Lists</h1>
           <p class="text-base-content/70">
             Curated franchises and collections, start to finish, in release order. Searching any
             title also offers the series it belongs to.

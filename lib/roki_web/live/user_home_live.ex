@@ -181,7 +181,7 @@ defmodule RokiWeb.UserHomeLive do
     ~H"""
     <section class="mx-auto max-w-xl space-y-5 py-10">
       <div class="space-y-2 text-center">
-        <h1 class="text-3xl font-bold">Connect laev</h1>
+        <h1 class="text-2xl font-bold sm:text-3xl">Connect laev</h1>
         <p class="text-base-content/70">
           Already use the <code>laev</code> terminal app? Paste your laev key and your watchlist,
           history and settings are pulled in here. It's optional — your account works without it.
@@ -207,7 +207,7 @@ defmodule RokiWeb.UserHomeLive do
 
         <label class="flex cursor-pointer items-start gap-3">
           <input type="hidden" name="laev[carry]" value="false" />
-          <input type="checkbox" name="laev[carry]" value="true" class="checkbox checkbox-sm mt-1" />
+          <input type="checkbox" name="laev[carry]" value="true" class="checkbox mt-0.5" />
           <span class="text-sm">
             <span class="font-medium">Also bring my API keys</span>
             (Real-Debrid / TorBox / TMDB).
@@ -249,7 +249,7 @@ defmodule RokiWeb.UserHomeLive do
     ~H"""
     <div class="space-y-10">
       <div class="flex flex-wrap items-center gap-3">
-        <h1 class="mr-auto text-3xl font-bold tracking-tight">Your shelf</h1>
+        <h1 class="mr-auto text-2xl font-bold tracking-tight sm:text-3xl">Your shelf</h1>
         <span :if={@busy} class="flex items-center gap-2 text-sm text-base-content/60">
           <span class="loading loading-spinner loading-sm"></span> {@busy}
         </span>
@@ -267,32 +267,36 @@ defmodule RokiWeb.UserHomeLive do
 
       <p :if={@error} class="alert alert-error text-sm">{@error}</p>
 
-      <div class="stats stats-vertical sm:stats-horizontal w-full bg-base-200 shadow-sm">
-        <div class="stat">
-          <div class="stat-title">Time watched</div>
-          <div class="stat-value text-2xl">{Roki.Laev.duration(@data.stats.seconds)}</div>
-          <div class="stat-desc">
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-box bg-base-200 p-4">
+          <div class="text-sm text-base-content/60">Time watched</div>
+          <div class="text-2xl font-bold">{Roki.Laev.duration(@data.stats.seconds)}</div>
+          <div class="text-xs text-base-content/60">
             films &amp; tv {Roki.Laev.duration(@data.stats.other.seconds)} · anime {Roki.Laev.duration(
               @data.stats.anime.seconds
             )}
           </div>
         </div>
-        <div class="stat">
-          <div class="stat-title">Films</div>
-          <div class="stat-value text-2xl">{@data.stats.films}</div>
-          <div class="stat-desc">{@data.stats.episodes} episodes from {@data.stats.shows} shows</div>
+        <div class="rounded-box bg-base-200 p-4">
+          <div class="text-sm text-base-content/60">Films</div>
+          <div class="text-2xl font-bold">{@data.stats.films}</div>
+          <div class="text-xs text-base-content/60">
+            {@data.stats.episodes} episodes from {@data.stats.shows} shows
+          </div>
         </div>
-        <div class="stat">
-          <div class="stat-title">In progress</div>
-          <div class="stat-value text-2xl">{@data.tally.behind}</div>
-          <div class="stat-desc">{@data.tally.caught_up} caught up · {@data.tally.held} on hold</div>
+        <div class="rounded-box bg-base-200 p-4">
+          <div class="text-sm text-base-content/60">In progress</div>
+          <div class="text-2xl font-bold">{@data.tally.behind}</div>
+          <div class="text-xs text-base-content/60">
+            {@data.tally.caught_up} caught up · {@data.tally.held} on hold
+          </div>
         </div>
-        <div class="stat">
-          <div class="stat-title">Finished</div>
-          <div class="stat-value text-2xl">
+        <div class="rounded-box bg-base-200 p-4">
+          <div class="text-sm text-base-content/60">Finished</div>
+          <div class="text-2xl font-bold">
             {@data.tally.series_finished + @data.tally.anime_finished}
           </div>
-          <div class="stat-desc">
+          <div class="text-xs text-base-content/60">
             {@data.tally.series_finished} series · {@data.tally.anime_finished} anime
           </div>
         </div>
