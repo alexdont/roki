@@ -92,6 +92,7 @@ defmodule RokiWeb.Layouts do
       </.link>
       <nav class="flex flex-none items-center gap-1">
         <.link navigate={~p"/home"} class="btn btn-ghost btn-sm">Featured</.link>
+        <.link navigate={~p"/lists"} class="btn btn-ghost btn-sm">Lists</.link>
         <.link :if={@username} navigate={~p"/#{@username}/home"} class="btn btn-ghost btn-sm">
           My shelf
         </.link>

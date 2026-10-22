@@ -25,6 +25,8 @@ defmodule RokiWeb.Router do
       live "/", RootLive, :index
       live "/home", FeaturedLive, :index
       live "/search", SearchLive, :index
+      live "/lists", ListsLive, :index
+      live "/lists/:slug", ListLive, :show
       live "/:username/home", UserHomeLive, :index
     end
   end

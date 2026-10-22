@@ -1,12 +1,16 @@
 defmodule RokiWeb.SearchLive do
   @moduledoc """
   `/search?q=` — find a movie or show. Public. Results are a poster grid ending
-  in a poster-sized "More" tile that loads the next TMDB page. A signed-in user
-  who has connected laev searches with their own TMDB key and sees what they
-  have already watched greyed out.
+  in a poster-sized "More" tile that loads the next TMDB page; above the first
+  page sit any franchise lists the results belong to (a curated laev list or a
+  TMDB collection). A signed-in user who has connected laev searches with their
+  own TMDB key and sees what they have already watched greyed out.
+
+  Searching is throttled — see `Roki.Search`.
   """
   use RokiWeb, :live_view
 
+  import RokiWeb.ListComponents
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
@@ -20,8 +24,10 @@ defmodule RokiWeb.SearchLive do
      socket
      |> assign(:page_title, "Search")
      |> assign(:uuid, uuid)
+     |> assign(:client, RokiWeb.Client.key(socket, uuid))
      |> assign(:q, "")
      |> assign(:shelf, empty())
+     |> assign(:franchises, [])
      |> assign(:seen, MapSet.new())
      |> assign(:error, nil)}
   end
@@ -30,22 +36,24 @@ defmodule RokiWeb.SearchLive do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    q = params |> Map.get("q", "") |> to_string() |> String.trim() |> String.slice(0, 120)
+    q = params |> Map.get("q", "") |> Roki.Search.clean()
 
     cond do
       q == socket.assigns.q ->
         {:noreply, socket}
 
       String.length(q) < 2 ->
-        {:noreply, assign(socket, q: q, shelf: empty(), seen: MapSet.new(), error: nil)}
+        {:noreply,
+         assign(socket, q: q, shelf: empty(), franchises: [], seen: MapSet.new(), error: nil)}
 
       true ->
-        {:noreply, socket |> assign(q: q, seen: MapSet.new(), error: nil) |> fetch(1, true)}
+        {:noreply,
+         socket |> assign(q: q, franchises: [], seen: MapSet.new(), error: nil) |> fetch(1, true)}
     end
   end
 
   defp fetch(socket, page, fresh?) do
-    %{q: q, uuid: uuid} = socket.assigns
+    %{q: q, uuid: uuid, client: client} = socket.assigns
 
     shelf =
       if fresh?,
@@ -54,7 +62,7 @@ defmodule RokiWeb.SearchLive do
 
     socket
     |> assign(:shelf, shelf)
-    |> start_async(:search, fn -> {q, page, Roki.Search.search(uuid, q, page)} end)
+    |> start_async(:search, fn -> {q, page, Roki.Search.search(client, uuid, q, page)} end)
   end
 
   @impl true
@@ -71,7 +79,7 @@ defmodule RokiWeb.SearchLive do
   @impl true
   def handle_async(
         :search,
-        {:ok, {q, page, {:ok, items, more?, seen}}},
+        {:ok, {q, page, {:ok, items, more?, franchises, seen}}},
         %{assigns: %{q: q}} = socket
       ) do
     shelf = socket.assigns.shelf
@@ -81,6 +89,7 @@ defmodule RokiWeb.SearchLive do
     {:noreply,
      socket
      |> assign(:seen, MapSet.union(socket.assigns.seen, seen))
+     |> assign(:franchises, if(page == 1, do: franchises, else: socket.assigns.franchises))
      |> assign(:shelf, %{
        shelf
        | items: shelf.items ++ fresh,
@@ -118,6 +127,7 @@ defmodule RokiWeb.SearchLive do
           placeholder="Search movies and shows — or paste an IMDb id"
           autocomplete="off"
           autofocus
+          maxlength="120"
           class="input input-bordered w-full"
         />
         <button type="submit" class="btn btn-primary">Search</button>
@@ -141,7 +151,13 @@ defmodule RokiWeb.SearchLive do
         Search needs a TMDB key — set <code>TMDB_API_KEY</code>
         on the server, or connect laev and carry your keys.
       </p>
-      <p :if={@error not in [nil, :no_tmdb_key]} class="alert alert-error text-sm">
+      <p :if={match?({:rate_limited, _}, @error)} class="alert alert-warning text-sm">
+        You're searching a little fast — try again in {elem(@error, 1)}s.
+      </p>
+      <p
+        :if={@error not in [nil, :no_tmdb_key] and not match?({:rate_limited, _}, @error)}
+        class="alert alert-error text-sm"
+      >
         Couldn't reach TMDB just now. Try again in a minute.
       </p>
 
@@ -151,6 +167,13 @@ defmodule RokiWeb.SearchLive do
       >
         Nothing on TMDB matches “{@q}”.
       </p>
+
+      <section :if={@franchises != []} class="space-y-3">
+        <h2 class="text-xl font-semibold">Lists</h2>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <.list_card :for={l <- @franchises} list={l} />
+        </div>
+      </section>
 
       <section :if={@shelf.items != []} class="space-y-3">
         <h2 class="text-xl font-semibold">

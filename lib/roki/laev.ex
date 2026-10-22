@@ -38,12 +38,18 @@ defmodule Roki.Laev do
   def connected?(uuid), do: File.exists?(Path.join(dir(uuid), "config"))
 
   @doc """
-  Run `fun` as the user when they are connected, else in the site's shared scope.
-  A connected user searches with their own TMDB key and has their own marks to
-  grey titles by; a visitor gets neither.
+  Run `fun` in the scope that should talk to TMDB for public data: the site's own
+  when it has a server-wide key, else the connected user's (their carried key),
+  else the site's — which will say it has no key. Results here are the same for
+  everyone, so the scope only decides whose key pays.
   """
-  def run_as(nil, fun), do: shared(fun)
-  def run_as(uuid, fun), do: if(connected?(uuid), do: run(uuid, fun), else: shared(fun))
+  def public(uuid, fun) do
+    cond do
+      Roki.Featured.configured?() -> shared(fun)
+      uuid && connected?(uuid) -> run(uuid, fun)
+      true -> shared(fun)
+    end
+  end
 
   @doc """
   Which of these titles has this user seen — `{type, id}` pairs. Laev's own rule:

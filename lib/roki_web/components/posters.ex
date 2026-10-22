@@ -30,6 +30,12 @@ defmodule RokiWeb.PosterComponents do
           ]}
         />
         <span
+          :if={@item[:badge]}
+          class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow"
+        >
+          {@item[:badge]}
+        </span>
+        <span
           :if={@watched?}
           class="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-success text-success-content shadow"
           title="Watched"

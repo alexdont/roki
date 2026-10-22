@@ -239,3 +239,21 @@ marks), else in the shared `_featured` scope (server key). **Watched** = laev's 
 `Laev.Shelf.seen?/1` (a film played through or marked; a series only when marked; an anime when every
 MAL entry is) — `Roki.Laev.seen_keys/1,2` — and the poster component greys it with a tick. Only for a
 connected user; visitors never get marks.
+
+## Search throttling, spelling, lists
+
+`Roki.Search` ports laev's private search logic: spelling variants (gray/grey, color/colour, theater/
+theatre, harbor, armor, honor), the year hint (`heat 1995`, +-1 soft), exact-title-first ranking, IMDb
+ids. **Throttle:** results are cached 10 min in `Roki.TTLCache` (ETS, single-flight, hard cap 2000
+entries, only `{:ok, _}` kept); a cache *miss* spends from `Roki.RateLimit` (Hammer ETS) — 20/min per
+client (`RokiWeb.Client`: user uuid, else the `X-Forwarded-For` IP, needing `:peer_data`/`:x_headers`
+in the endpoint `connect_info`) and 300/min site-wide. List posters have their own budget (6/min per
+client, 60/min site-wide, only when cards are missing). Counters are per-node, reset on restart.
+Changing the supervisor or `connect_info` needs `docker restart roki-ee`.
+
+**Lists** (`/lists`, `/lists/:slug`, `Roki.Lists`) — laev's 11 curated franchises (`Laev.Franchises`)
+plus TMDB *collections* (slug `collection-<id>`, found from search results). **Not** TMDB's
+user-made lists, which laev does not know about. A list opens complete from the curated file; posters
+come from laev's card cache (per scope dir — the shared `_featured` scope when a server key is set, so one
+cache serves everyone). Some lists carry their own tier keyed `all` (Marvel) — `tabs/1` in `ListLive`
+handles that. Search offers matching lists above the first page of results.

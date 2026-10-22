@@ -13,6 +13,10 @@ defmodule Roki.Application do
       Roki.Repo,
       {DNSCluster, query: Application.get_env(:roki, :dns_cluster_query) || :ignore},
       PhoenixKit.Supervisor,
+      # Keeps one client from spending the TMDB quota: per-client / site-wide
+      # request budgets, and a short cache in front of them (see Roki.Search).
+      {Roki.RateLimit, clean_period: :timer.minutes(10)},
+      Roki.TTLCache,
       {Phoenix.PubSub, name: Roki.PubSub},
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)
