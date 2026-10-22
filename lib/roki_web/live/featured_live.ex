@@ -2,43 +2,97 @@ defmodule RokiWeb.FeaturedLive do
   @moduledoc """
   `/home` — what is popular right now: movies, shows and anime. Public; the
   same page for a visitor and a signed-in user, with the pitch on top only for
-  a visitor.
+  a visitor. Each shelf ends in a poster-sized "More" tile that loads the next
+  TMDB page, like laev's Featured screen.
   """
   use RokiWeb, :live_view
 
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
+  alias Roki.Featured
+
+  @titles %{movies: "Trending movies", shows: "Trending shows", anime: "Anime airing now"}
 
   @impl true
   def mount(_params, _session, socket) do
+    shelves =
+      Map.new(Featured.kinds(), &{&1, %{items: [], page: 0, more?: false, loading?: true}})
+
     socket =
       socket
       |> assign(:page_title, "Featured")
-      |> assign(:state, :loading)
-      |> assign(:data, nil)
+      |> assign(:shelves, shelves)
+      |> assign(:error, nil)
 
     {:ok,
      if(connected?(socket),
-       do: start_async(socket, :featured, &Roki.Featured.get/0),
+       do: Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1)),
        else: socket
      )}
   end
 
+  defp fetch(socket, kind, page) do
+    start_async(socket, {:page, kind}, fn -> {page, Featured.page(kind, page)} end)
+  end
+
   @impl true
-  def handle_async(:featured, {:ok, {:ok, data}}, socket),
-    do: {:noreply, assign(socket, state: :ready, data: data)}
+  def handle_event("more", %{"kind" => kind}, socket) do
+    # Match the string against the known shelves — never turn client input into an atom.
+    with kind when kind != nil <- Enum.find(Featured.kinds(), &(Atom.to_string(&1) == kind)),
+         %{more?: true, loading?: false} = shelf <- socket.assigns.shelves[kind] do
+      {:noreply,
+       socket |> put_shelf(kind, %{shelf | loading?: true}) |> fetch(kind, shelf.page + 1)}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
 
-  def handle_async(:featured, {:ok, {:error, reason}}, socket),
-    do: {:noreply, assign(socket, state: {:error, reason})}
+  @impl true
+  def handle_async({:page, kind}, {:ok, {page, {:ok, items, more?}}}, socket) do
+    shelf = socket.assigns.shelves[kind]
+    seen = MapSet.new(shelf.items, & &1.id)
+    fresh = Enum.reject(items, &MapSet.member?(seen, &1.id))
 
-  def handle_async(:featured, {:exit, reason}, socket),
-    do: {:noreply, assign(socket, state: {:error, reason})}
+    {:noreply,
+     put_shelf(socket, kind, %{
+       shelf
+       | items: shelf.items ++ fresh,
+         page: page,
+         more?: more?,
+         loading?: false
+     })}
+  end
+
+  def handle_async({:page, kind}, {:ok, {_page, {:error, reason}}}, socket),
+    do:
+      {:noreply,
+       socket
+       |> put_shelf(kind, %{socket.assigns.shelves[kind] | loading?: false})
+       |> assign(:error, reason)}
+
+  def handle_async({:page, kind}, {:exit, reason}, socket),
+    do:
+      {:noreply,
+       socket
+       |> put_shelf(kind, %{socket.assigns.shelves[kind] | loading?: false})
+       |> assign(:error, reason)}
+
+  defp put_shelf(socket, kind, shelf),
+    do: assign(socket, :shelves, Map.put(socket.assigns.shelves, kind, shelf))
 
   @impl true
   def render(assigns) do
     scope = assigns[:phoenix_kit_current_scope]
-    assigns = assign(assigns, :visitor?, !(scope && Scope.authenticated?(scope)))
+
+    assigns =
+      assigns
+      |> assign(:visitor?, !(scope && Scope.authenticated?(scope)))
+      |> assign(:titles, @titles)
+      |> assign(
+        :loading?,
+        Enum.any?(assigns.shelves, fn {_k, s} -> s.loading? and s.items == [] end)
+      )
 
     ~H"""
     <Layouts.app
@@ -64,38 +118,56 @@ defmodule RokiWeb.FeaturedLive do
       <h1 :if={!@visitor?} class="text-3xl font-bold tracking-tight">Featured</h1>
 
       <div
-        :if={@state == :loading}
+        :if={@loading? and @error == nil}
         class="flex items-center justify-center gap-3 py-24 text-base-content/60"
       >
         <span class="loading loading-spinner"></span> Loading what's popular…
       </div>
 
-      <p :if={match?({:error, :no_tmdb_key}, @state)} class="alert text-sm">
+      <p :if={@error == :no_tmdb_key} class="alert text-sm">
         Featured needs a TMDB key — set <code>TMDB_API_KEY</code> on the server.
       </p>
-      <p :if={match?({:error, r} when r != :no_tmdb_key, @state)} class="alert alert-error text-sm">
+      <p :if={@error not in [nil, :no_tmdb_key]} class="alert alert-error text-sm">
         Couldn't reach TMDB just now. Try again in a minute.
       </p>
 
-      <div :if={@state == :ready} class="space-y-10">
-        <.shelf title="Trending movies" items={@data.movies} />
-        <.shelf title="Trending shows" items={@data.shows} />
-        <.shelf title="Anime airing now" items={@data.anime} />
+      <div class="space-y-10">
+        <.shelf
+          :for={kind <- [:movies, :shows, :anime]}
+          kind={kind}
+          title={@titles[kind]}
+          shelf={@shelves[kind]}
+        />
       </div>
     </Layouts.app>
     """
   end
 
+  attr :kind, :atom, required: true
   attr :title, :string, required: true
-  attr :items, :list, required: true
+  attr :shelf, :map, required: true
 
   defp shelf(assigns) do
     ~H"""
-    <section :if={@items != []} class="space-y-3">
+    <section :if={@shelf.items != []} class="space-y-3">
       <h2 class="text-xl font-semibold">{@title}</h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- Enum.take(@items, 16)} class="space-y-1">
+        <li :for={i <- @shelf.items} class="space-y-1">
           <.poster item={i} />
+        </li>
+        <%!-- Poster-sized, and the next cell in the grid: more of the same shelf. --%>
+        <li :if={@shelf.more?}>
+          <button
+            phx-click="more"
+            phx-value-kind={@kind}
+            disabled={@shelf.loading?}
+            aria-label={"More #{String.downcase(@title)}"}
+            class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed border-base-300 text-base-content/60 transition hover:border-primary hover:text-primary disabled:cursor-wait"
+          >
+            <span :if={@shelf.loading?} class="loading loading-spinner"></span>
+            <.icon :if={!@shelf.loading?} name="hero-plus" class="h-8 w-8" />
+            <span class="text-sm font-medium">{if @shelf.loading?, do: "Loading…", else: "More"}</span>
+          </button>
         </li>
       </ul>
     </section>
