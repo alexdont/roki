@@ -53,6 +53,7 @@ defmodule RokiWeb.TitleLive do
         title: nil,
         title_error: nil,
         resume: nil,
+        resume_secs: nil,
         req_season: nil,
         season: nil,
         episodes: nil,
@@ -83,6 +84,17 @@ defmodule RokiWeb.TitleLive do
   defp rating_state(:no_account), do: %{state: :no_account, value: nil}
   defp rating_state(_), do: %{state: :loading, value: nil}
 
+  # Where a film was stopped (seconds), when it is past the beginning — the same position
+  # laev resumes from. Series are resumed by episode (the resume record), not by time.
+  defp left_at(uuid, %{type: "movie", id: id}) do
+    case Roki.Laev.run(uuid, fn -> Laev.Position.saved_position(%{type: "movie", tmdb_id: id}) end) do
+      secs when is_integer(secs) and secs >= 30 -> secs
+      _ -> nil
+    end
+  end
+
+  defp left_at(_uuid, _title), do: nil
+
   defp load_title(type, id, uuid) do
     with {:ok, title} <- Watch.title(type, id, uuid) do
       linked? = uuid && Roki.Laev.connected?(uuid)
@@ -91,7 +103,9 @@ defmodule RokiWeb.TitleLive do
       lib = if linked?, do: Watch.library(uuid, title)
       rating = if linked?, do: Watch.my_rating(uuid, title)
 
-      {:ok, title, resume, cached, lib, rating}
+      secs = if linked?, do: left_at(uuid, title)
+
+      {:ok, title, resume, cached, lib, rating, secs}
     end
   end
 
@@ -262,11 +276,12 @@ defmodule RokiWeb.TitleLive do
   # ── what comes back from the tasks ─────────────────────────────────
 
   @impl true
-  def handle_async(:title, {:ok, {:ok, title, resume, cached, lib, rating}}, socket) do
+  def handle_async(:title, {:ok, {:ok, title, resume, cached, lib, rating, secs}}, socket) do
     socket =
       assign(socket,
         title: title,
         resume: resume,
+        resume_secs: secs,
         cached: cached,
         lib: lib || socket.assigns.lib,
         rating: rating_state(rating),
@@ -355,6 +370,7 @@ defmodule RokiWeb.TitleLive do
         <.phone_hero
           title={@title}
           resume={@resume}
+          resume_secs={@resume_secs}
           phase={@phase}
           season={@season}
           mode={@mode}
@@ -371,6 +387,7 @@ defmodule RokiWeb.TitleLive do
           rating={@rating}
           title={@title}
           resume={@resume}
+          resume_secs={@resume_secs}
           phase={@phase}
           season={@season}
           mode={@mode}
@@ -445,6 +462,7 @@ defmodule RokiWeb.TitleLive do
   attr :cached?, :boolean, default: false
   attr :title, :map, required: true
   attr :resume, :any, default: nil
+  attr :resume_secs, :any, default: nil
   attr :phase, :any, required: true
   attr :season, :any, default: nil
   attr :mode, :atom, required: true
@@ -487,7 +505,10 @@ defmodule RokiWeb.TitleLive do
 
         <div class="space-y-3 pt-2">
           <%!-- Where it plays, then the button: one decision above the other. --%>
-          <.mode_switch :if={@linked?} mode={@mode} />
+          <div :if={@linked?} class="flex flex-wrap items-center justify-around gap-3">
+            <.sources_link title={@title} />
+            <.mode_switch mode={@mode} />
+          </div>
 
           <div class="flex flex-wrap items-center gap-3">
             <button
@@ -496,7 +517,7 @@ defmodule RokiWeb.TitleLive do
               disabled={match?({:working, _}, @phase)}
             >
               <.icon name="hero-play-solid" class="h-6 w-6" />
-              {if @title.type == "movie", do: play_label(@resume), else: play_label_tv(@resume)}
+              {if @title.type == "movie", do: play_label(@resume_secs), else: play_label_tv(@resume)}
             </button>
             <span
               :if={@cached?}
@@ -629,13 +650,22 @@ defmodule RokiWeb.TitleLive do
     |> Enum.join(" · ")
   end
 
-  defp play_label(%{"updated_at" => _}), do: "Play"
-  defp play_label(_), do: "Play"
+  # "Start" for a film not begun, "Continue 59:39" once there is a position.
+  defp play_label(secs) when is_integer(secs), do: "Continue #{clock(secs)}"
+  defp play_label(_), do: "Start"
+
+  defp clock(secs) do
+    h = div(secs, 3600)
+    m = div(rem(secs, 3600), 60)
+    s = rem(secs, 60)
+    pad = &(&1 |> Integer.to_string() |> String.pad_leading(2, "0"))
+    if h > 0, do: "#{h}:#{pad.(m)}:#{pad.(s)}", else: "#{pad.(m)}:#{pad.(s)}"
+  end
 
   defp play_label_tv(%{"season" => s, "episode" => e}) when is_integer(s) and is_integer(e),
     do: "Continue S#{s} · E#{e}"
 
-  defp play_label_tv(_), do: "Play"
+  defp play_label_tv(_), do: "Start"
 
   attr :uuid, :any, default: nil
   attr :linked?, :boolean, default: false
@@ -768,6 +798,7 @@ defmodule RokiWeb.TitleLive do
 
   attr :title, :map, required: true
   attr :resume, :any, default: nil
+  attr :resume_secs, :any, default: nil
   attr :phase, :any, required: true
   attr :season, :any, default: nil
   attr :mode, :atom, required: true
@@ -899,14 +930,17 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
       <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <div :if={@linked?} class="flex justify-center"><.mode_switch mode={@mode} /></div>
+        <div :if={@linked?} class="flex items-center justify-around gap-2">
+          <.sources_link title={@title} />
+          <.mode_switch mode={@mode} />
+        </div>
         <button
           phx-click="play"
           class="btn btn-primary btn-lg h-14 w-full gap-2 text-xl shadow-md"
           disabled={@busy?}
         >
           <.icon name="hero-play-solid" class="h-6 w-6" />
-          {if @title.type == "movie", do: play_label(@resume), else: play_label_tv(@resume)}
+          {if @title.type == "movie", do: play_label(@resume_secs), else: play_label_tv(@resume)}
         </button>
       </div>
 
@@ -1170,6 +1204,25 @@ defmodule RokiWeb.TitleLive do
         <p :if={@error} class="mt-3 text-sm text-error">{@error}</p>
       </div>
     </div>
+    """
+  end
+
+  attr :title, :map, required: true
+
+  # Straight to the sources (a film) or the episodes (a series), without starting anything.
+  defp sources_link(assigns) do
+    ~H"""
+    <.link
+      navigate={
+        if @title.type == "movie",
+          do: ~p"/sources/movie/#{@title.id}",
+          else: ~p"/title/tv/#{@title.id}/episodes"
+      }
+      class="btn btn-xs sm:btn-sm"
+    >
+      <.icon name="hero-queue-list" class="h-4 w-4" />
+      {if @title.type == "movie", do: "Sources", else: "Episodes"}
+    </.link>
     """
   end
 end
