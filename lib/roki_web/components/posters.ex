@@ -4,19 +4,44 @@ defmodule RokiWeb.PosterComponents do
 
   attr :item, :map,
     required: true,
-    doc: "a title: %{title, poster, type, year?, note?, season?, episode?, vote?}"
+    doc: "a title: %{title, poster, type, year?, note?, season?, episode?, vote?, seen?}"
+
+  attr :seen, :boolean, default: nil, doc: "watched? Falls back to the item's own :seen"
 
   def poster(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :watched?,
+        assigns.seen || (assigns.seen == nil && assigns.item[:seen] == true)
+      )
+
     ~H"""
-    <div class="group space-y-1">
-      <div class="aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
+    <div class={["group space-y-1", @watched? && "opacity-50"]}>
+      <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
         <img
           :if={@item.poster}
           src={@item.poster}
           alt={@item.title}
           loading="lazy"
-          class="h-full w-full object-cover transition group-hover:scale-105"
+          class={[
+            "h-full w-full object-cover transition group-hover:scale-105",
+            @watched? && "grayscale"
+          ]}
         />
+        <span
+          :if={@watched?}
+          class="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-success text-success-content shadow"
+          title="Watched"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+            <path
+              fill-rule="evenodd"
+              d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.8 3.8 6.8-6.8a1 1 0 0 1 1.4 0Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </span>
         <div
           :if={!@item.poster}
           class="flex h-full items-center justify-center p-2 text-center text-xs"
@@ -25,7 +50,9 @@ defmodule RokiWeb.PosterComponents do
         </div>
       </div>
       <div class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
-      <div class="text-xs text-base-content/60">{subtitle(@item)}</div>
+      <div class="text-xs text-base-content/60">
+        {if @watched?, do: "Watched · ", else: ""}{subtitle(@item)}
+      </div>
     </div>
     """
   end

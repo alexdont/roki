@@ -56,7 +56,7 @@ defmodule RokiWeb.Layouts do
 
     ~H"""
     <header class="navbar mx-auto max-w-6xl gap-2 px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
+      <div class="flex-none">
         <a href={~p"/"} class="flex w-fit items-center gap-2 text-lg font-bold tracking-tight">
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
             <.icon name="hero-play-solid" class="h-4 w-4" />
@@ -64,6 +64,32 @@ defmodule RokiWeb.Layouts do
           roki
         </a>
       </div>
+      <%!-- Search: the box on wider screens, an icon on a phone. --%>
+      <form
+        action={~p"/search"}
+        method="get"
+        role="search"
+        class="hidden flex-1 justify-center px-4 sm:flex"
+      >
+        <label class="input input-bordered input-sm flex w-full max-w-md items-center gap-2">
+          <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-60" />
+          <input
+            type="search"
+            name="q"
+            placeholder="Search movies and shows"
+            autocomplete="off"
+            class="grow"
+          />
+        </label>
+      </form>
+      <div class="flex-1 sm:hidden"></div>
+      <.link
+        navigate={~p"/search"}
+        class="btn btn-ghost btn-sm btn-square sm:hidden"
+        aria-label="Search"
+      >
+        <.icon name="hero-magnifying-glass" class="h-5 w-5" />
+      </.link>
       <nav class="flex flex-none items-center gap-1">
         <.link navigate={~p"/home"} class="btn btn-ghost btn-sm">Featured</.link>
         <.link :if={@username} navigate={~p"/#{@username}/home"} class="btn btn-ghost btn-sm">

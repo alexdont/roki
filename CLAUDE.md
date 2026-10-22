@@ -232,3 +232,10 @@ which `config/runtime.exs` hands to laev as `config :laev, tmdb_key:`). `/:usern
 that signed-in user's own shelf (`UserHomeLive`); anyone else is sent to `/home`, a visitor to
 the login. These live in the `:site` live_session ahead of `phoenix_kit_routes()` so they win
 over PhoenixKit's own `/:group` catch-alls. A `runtime.exs` change needs `docker restart roki-ee`.
+
+`/search?q=` (`SearchLive`, `Roki.Search`) — TMDB title search with a year hint (`heat 1995`) and IMDb ids.
+It runs in the signed-in user's laev scope when they have connected (their own TMDB key, their own
+marks), else in the shared `_featured` scope (server key). **Watched** = laev's own rule via
+`Laev.Shelf.seen?/1` (a film played through or marked; a series only when marked; an anime when every
+MAL entry is) — `Roki.Laev.seen_keys/1,2` — and the poster component greys it with a tick. Only for a
+connected user; visitors never get marks.

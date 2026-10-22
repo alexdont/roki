@@ -70,10 +70,7 @@ defmodule Roki.Featured do
   defp call(:shows, n), do: Laev.Tmdb.trending("tv", n)
   defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)
 
-  # Laev wants a scope (a directory for its caches) even when nobody owns it.
-  defp run(fun) do
-    Path.join(Roki.Laev.base_dir(), "_featured") |> Laev.Scope.load() |> Laev.Scope.run(fun)
-  end
+  defp run(fun), do: Roki.Laev.shared(fun)
 
   defp now, do: System.system_time(:second)
 end

@@ -3,7 +3,8 @@ defmodule RokiWeb.FeaturedLive do
   `/home` — what is popular right now: movies, shows and anime. Public; the
   same page for a visitor and a signed-in user, with the pitch on top only for
   a visitor. Each shelf ends in a poster-sized "More" tile that loads the next
-  TMDB page, like laev's Featured screen.
+  TMDB page, like laev's Featured screen. A signed-in user who has connected
+  laev sees what they have already watched greyed out.
   """
   use RokiWeb, :live_view
 
@@ -24,6 +25,8 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:page_title, "Featured")
       |> assign(:shelves, shelves)
       |> assign(:error, nil)
+      |> assign(:seen, MapSet.new())
+      |> assign(:uuid, uuid(socket))
 
     {:ok,
      if(connected?(socket),
@@ -32,8 +35,22 @@ defmodule RokiWeb.FeaturedLive do
      )}
   end
 
+  defp uuid(socket) do
+    scope = socket.assigns[:phoenix_kit_current_scope]
+    if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
+  end
+
+  # What this user has already seen is worked out alongside the page of titles,
+  # so a watched poster arrives greyed rather than flashing in full colour.
   defp fetch(socket, kind, page) do
-    start_async(socket, {:page, kind}, fn -> {page, Featured.page(kind, page)} end)
+    uuid = socket.assigns.uuid
+
+    start_async(socket, {:page, kind}, fn ->
+      case Featured.page(kind, page) do
+        {:ok, items, _more?} = ok -> {page, ok, Roki.Laev.seen_keys(uuid, items)}
+        error -> {page, error, MapSet.new()}
+      end
+    end)
   end
 
   @impl true
@@ -49,13 +66,15 @@ defmodule RokiWeb.FeaturedLive do
   end
 
   @impl true
-  def handle_async({:page, kind}, {:ok, {page, {:ok, items, more?}}}, socket) do
+  def handle_async({:page, kind}, {:ok, {page, {:ok, items, more?}, seen}}, socket) do
     shelf = socket.assigns.shelves[kind]
-    seen = MapSet.new(shelf.items, & &1.id)
-    fresh = Enum.reject(items, &MapSet.member?(seen, &1.id))
+    known = MapSet.new(shelf.items, & &1.id)
+    fresh = Enum.reject(items, &MapSet.member?(known, &1.id))
 
     {:noreply,
-     put_shelf(socket, kind, %{
+     socket
+     |> assign(:seen, MapSet.union(socket.assigns.seen, seen))
+     |> put_shelf(kind, %{
        shelf
        | items: shelf.items ++ fresh,
          page: page,
@@ -64,30 +83,26 @@ defmodule RokiWeb.FeaturedLive do
      })}
   end
 
-  def handle_async({:page, kind}, {:ok, {_page, {:error, reason}}}, socket),
-    do:
-      {:noreply,
-       socket
-       |> put_shelf(kind, %{socket.assigns.shelves[kind] | loading?: false})
-       |> assign(:error, reason)}
+  def handle_async({:page, kind}, {:ok, {_page, {:error, reason}, _seen}}, socket),
+    do: {:noreply, failed(socket, kind, reason)}
 
   def handle_async({:page, kind}, {:exit, reason}, socket),
-    do:
-      {:noreply,
-       socket
-       |> put_shelf(kind, %{socket.assigns.shelves[kind] | loading?: false})
-       |> assign(:error, reason)}
+    do: {:noreply, failed(socket, kind, reason)}
+
+  defp failed(socket, kind, reason) do
+    socket
+    |> put_shelf(kind, %{socket.assigns.shelves[kind] | loading?: false})
+    |> assign(:error, reason)
+  end
 
   defp put_shelf(socket, kind, shelf),
     do: assign(socket, :shelves, Map.put(socket.assigns.shelves, kind, shelf))
 
   @impl true
   def render(assigns) do
-    scope = assigns[:phoenix_kit_current_scope]
-
     assigns =
       assigns
-      |> assign(:visitor?, !(scope && Scope.authenticated?(scope)))
+      |> assign(:visitor?, assigns.uuid == nil)
       |> assign(:titles, @titles)
       |> assign(
         :loading?,
@@ -137,6 +152,7 @@ defmodule RokiWeb.FeaturedLive do
           kind={kind}
           title={@titles[kind]}
           shelf={@shelves[kind]}
+          seen={@seen}
         />
       </div>
     </Layouts.app>
@@ -146,6 +162,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :kind, :atom, required: true
   attr :title, :string, required: true
   attr :shelf, :map, required: true
+  attr :seen, :any, required: true
 
   defp shelf(assigns) do
     ~H"""
@@ -153,7 +170,7 @@ defmodule RokiWeb.FeaturedLive do
       <h2 class="text-xl font-semibold">{@title}</h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @shelf.items} class="space-y-1">
-          <.poster item={i} />
+          <.poster item={i} seen={MapSet.member?(@seen, {i.type, i.id})} />
         </li>
         <%!-- Poster-sized, and the next cell in the grid: more of the same shelf. --%>
         <li :if={@shelf.more?}>

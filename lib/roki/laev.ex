@@ -30,6 +30,41 @@ defmodule Roki.Laev do
 
   def run(uuid, fun), do: uuid |> dir() |> Laev.Scope.load() |> Laev.Scope.run(fun)
 
+  @doc "Run inside the site's own scope — no user, only the server-wide TMDB key."
+  def shared(fun),
+    do: Path.join(base_dir(), "_featured") |> Laev.Scope.load() |> Laev.Scope.run(fun)
+
+  @doc "Has this account chosen to connect laev? (Nothing is created on disk to find out.)"
+  def connected?(uuid), do: File.exists?(Path.join(dir(uuid), "config"))
+
+  @doc """
+  Run `fun` as the user when they are connected, else in the site's shared scope.
+  A connected user searches with their own TMDB key and has their own marks to
+  grey titles by; a visitor gets neither.
+  """
+  def run_as(nil, fun), do: shared(fun)
+  def run_as(uuid, fun), do: if(connected?(uuid), do: run(uuid, fun), else: shared(fun))
+
+  @doc """
+  Which of these titles has this user seen — `{type, id}` pairs. Laev's own rule:
+  a film once it is played through (or marked), a series only when marked
+  watched, an anime when every MAL entry for it is. Empty for anyone not
+  connected. Call from inside the scope when you already have one.
+  """
+  def seen_keys(items) do
+    for i <- items, seen?(i), into: MapSet.new(), do: {i.type, i.id}
+  end
+
+  def seen_keys(uuid, items) do
+    if uuid && connected?(uuid), do: run(uuid, fn -> seen_keys(items) end), else: MapSet.new()
+  end
+
+  defp seen?(item) do
+    Shelf.seen?(item)
+  rescue
+    _ -> false
+  end
+
   @doc """
   Everything the home page draws, in one pass — `:not_connected` when the user
   has never connected (and nothing is created on disk for them).
@@ -46,10 +81,10 @@ defmodule Roki.Laev do
           {:ok,
            %{
              tally: Shelf.tally(),
-             watchlist: watchlist(),
+             watchlist: watchlist() |> Map.new(fn {k, v} -> {k, mark_seen(v)} end),
              stats: Stats.all_time(),
-             continue: continue_watching(),
-             saved: saved(),
+             continue: mark_seen(continue_watching()),
+             saved: mark_seen(saved()),
              keys: keys(),
              keys_carried?: Sync.keys_enabled?(),
              server: Sync.url()
@@ -134,10 +169,17 @@ defmodule Roki.Laev do
     Map.new(sections, fn {k, v} -> {k, Enum.reverse(v)} end)
   end
 
+  # `seen: true` greys a title out — laev's own "watched" rule, from the synced marks.
+  defp mark_seen(items) do
+    seen = seen_keys(items)
+    Enum.map(items, &Map.put(&1, :seen, MapSet.member?(seen, {&1.type, &1.id})))
+  end
+
   defp watch_item(row) do
     %{
       type: row.type,
       id: row.id,
+      mal_id: row[:mal_id],
       title: row.title || "Untitled",
       year: row[:year],
       poster: row[:poster],
@@ -161,6 +203,7 @@ defmodule Roki.Laev do
         season: e["season"],
         episode: e["episode"],
         anime: e["anime"] == true,
+        mal_id: e["mal_id"],
         at: e["updated_at"]
       }
     end)
