@@ -34,6 +34,7 @@ defmodule RokiWeb.CategoryLive do
        page_title: @titles[kind],
        uuid: uuid,
        sort: :popular,
+       season: nil,
        size: stored_size(socket),
        items: [],
        page: 0,
@@ -54,9 +55,15 @@ defmodule RokiWeb.CategoryLive do
   def handle_params(params, _uri, socket) do
     sort = Browse.sort(params["sort"])
     size = if params["size"] in @sizes, do: params["size"], else: socket.assigns.size
-    changed? = sort != socket.assigns.sort or socket.assigns.page == 0
 
-    socket = assign(socket, sort: sort, size: size)
+    # Anime can be browsed by quarter (`?season=summer&year=2026`), as in the terminal app.
+    season =
+      if socket.assigns.kind == :anime, do: Browse.season(params["season"], params["year"])
+
+    changed? =
+      sort != socket.assigns.sort or season != socket.assigns.season or socket.assigns.page == 0
+
+    socket = assign(socket, sort: sort, season: season, size: size)
 
     {:noreply,
      if(connected?(socket) and changed?,
@@ -69,10 +76,10 @@ defmodule RokiWeb.CategoryLive do
   end
 
   defp fetch(socket, n) do
-    %{kind: kind, sort: sort, uuid: uuid} = socket.assigns
+    %{kind: kind, sort: sort, season: season, uuid: uuid} = socket.assigns
 
-    start_async(socket, {:page, sort, n}, fn ->
-      case Browse.page(kind, sort, n, uuid) do
+    start_async(socket, {:page, {sort, season}, n}, fn ->
+      case Browse.page(kind, sort, n, uuid, season) do
         {:ok, items, more?} -> {:ok, n, items, more?, Roki.Laev.seen_keys(uuid, items)}
         error -> error
       end
@@ -89,26 +96,46 @@ defmodule RokiWeb.CategoryLive do
   def handle_event("sort", %{"sort" => sort}, socket),
     do: {:noreply, push_patch(socket, to: view_path(socket, sort: Browse.sort(sort)))}
 
+  # Anime: a quarter and a year (or "any season" for the plain lists). Choosing a season without
+  # a year means this year.
+  def handle_event("season", params, socket) do
+    year = params["year"] || Integer.to_string(Date.utc_today().year)
+
+    case Browse.season(params["season"], year) do
+      nil -> {:noreply, push_patch(socket, to: view_path(socket, season: nil))}
+      season -> {:noreply, push_patch(socket, to: view_path(socket, season: season))}
+    end
+  end
+
   def handle_event("size", %{"size" => size}, socket) when size in @sizes do
     {:noreply, socket |> assign(:size, size) |> push_event("roki:grid", %{size: size})}
   end
 
   defp view_path(socket, overrides) do
     query =
-      [sort: socket.assigns.sort]
+      [sort: socket.assigns.sort, season: socket.assigns.season]
       |> Keyword.merge(overrides)
-      |> Enum.reject(fn {_, v} -> v == :popular end)
+      |> Enum.flat_map(fn
+        {:sort, :popular} -> []
+        {:season, nil} -> []
+        {:season, {year, season}} -> [season: season, year: year]
+        other -> [other]
+      end)
 
     base = "/#{socket.assigns.kind}"
     if query == [], do: base, else: base <> "?" <> URI.encode_query(query)
   end
 
+  # This year's and later quarters can have titles that are not out yet.
+  defp upcoming_season?({year, _season}), do: year >= Date.utc_today().year
+  defp upcoming_season?(_), do: false
+
   @impl true
-  def handle_async({:page, sort, _n}, _result, %{assigns: %{sort: current}} = socket)
-      when sort != current,
+  def handle_async({:page, view, _n}, _result, %{assigns: %{sort: sort, season: season}} = socket)
+      when view != {sort, season},
       do: {:noreply, socket}
 
-  def handle_async({:page, _sort, _n}, {:ok, {:ok, n, items, more?, seen}}, socket) do
+  def handle_async({:page, _view, _n}, {:ok, {:ok, n, items, more?, seen}}, socket) do
     known = MapSet.new(socket.assigns.items, & &1.id)
     fresh = Enum.reject(items, &MapSet.member?(known, &1.id))
     uuid = socket.assigns.uuid
@@ -124,17 +151,17 @@ defmodule RokiWeb.CategoryLive do
 
     # What is not out yet is marked, as on Featured; the other orders only list what is out.
     socket =
-      if socket.assigns.sort == :popular,
+      if socket.assigns.sort == :popular or upcoming_season?(socket.assigns.season),
         do: start_async(socket, {:dates, n}, fn -> Roki.Watch.upcoming(uuid, fresh) end),
         else: socket
 
     {:noreply, socket}
   end
 
-  def handle_async({:page, _sort, _n}, {:ok, {:error, reason}}, socket),
+  def handle_async({:page, _view, _n}, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, loading?: false, error: reason)}
 
-  def handle_async({:page, _sort, _n}, {:exit, reason}, socket),
+  def handle_async({:page, _view, _n}, {:exit, reason}, socket),
     do: {:noreply, assign(socket, loading?: false, error: reason)}
 
   def handle_async({:dates, _n}, {:ok, found}, socket),
@@ -148,7 +175,11 @@ defmodule RokiWeb.CategoryLive do
       assign(assigns,
         grid: @grids[assigns.size],
         title: @titles[assigns.kind],
-        sorts: Browse.sorts()
+        sorts: Browse.sorts(),
+        years: Browse.years(),
+        now: Laev.Season.current(),
+        season_names:
+          for(s <- Laev.Season.all(), do: {s, s |> Atom.to_string() |> String.capitalize()})
       )
 
     ~H"""
@@ -161,7 +192,28 @@ defmodule RokiWeb.CategoryLive do
       <div class="flex flex-wrap items-center gap-3">
         <h1 class="flex-1 text-2xl font-bold tracking-tight sm:text-3xl">{@title}</h1>
 
-        <form id="sort-form" phx-change="sort" class="contents">
+        <form :if={@kind == :anime} id="season-form" phx-change="season" class="contents">
+          <select name="season" class="select select-sm select-bordered w-auto" aria-label="Season">
+            <option value="" selected={@season == nil}>Any season</option>
+            <option
+              :for={{key, name} <- @season_names}
+              value={key}
+              selected={@season != nil and elem(@season, 1) == key}
+            >
+              {name}{if elem(@now, 1) == key, do: " (now)"}
+            </option>
+          </select>
+          <select
+            :if={@season}
+            name="year"
+            class="select select-sm select-bordered w-auto"
+            aria-label="Year"
+          >
+            <option :for={y <- @years} value={y} selected={elem(@season, 0) == y}>{y}</option>
+          </select>
+        </form>
+
+        <form :if={@season == nil} id="sort-form" phx-change="sort" class="contents">
           <select name="sort" class="select select-sm select-bordered w-auto" aria-label="Order">
             <option :for={{key, label} <- @sorts} value={key} selected={@sort == key}>
               {label}
