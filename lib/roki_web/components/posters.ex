@@ -67,6 +67,13 @@ defmodule RokiWeb.PosterComponents do
             @watched? && "grayscale"
           ]}
         />
+        <%!-- Started but not finished: how much of it you have watched, top left. --%>
+        <span
+          :if={@item[:partial] && !@watched?}
+          class="absolute left-1.5 top-1.5 rounded-md bg-success/90 px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none text-success-content shadow-sm"
+        >
+          ✓ {@item[:partial]}
+        </span>
         <span
           :if={@item[:badge]}
           class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow"

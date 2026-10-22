@@ -65,6 +65,52 @@ defmodule Roki.Laev do
     if uuid && connected?(uuid), do: run(uuid, fn -> seen_keys(items) end), else: MapSet.new()
   end
 
+  @doc """
+  Titles with what this user has watched of them, for the posters: `partial: "2 seasons watched"`
+  on the ones started but not finished (anime by MyAnimeList entry — a season is an entry
+  whose episodes are all marked; a show by its marked episodes). A copy per user: the lists
+  themselves are shared and never touched.
+  """
+  def annotate(uuid, items) do
+    if uuid && connected?(uuid), do: run(uuid, fn -> partial(items) end), else: items
+  end
+
+  defp partial(items) do
+    anime = Laev.Position.anime_marks()
+    shows = Laev.Position.episode_marks()
+
+    Enum.map(items, fn item ->
+      case partial_text(item, anime, shows) do
+        nil -> item
+        text -> Map.put(item, :partial, text)
+      end
+    end)
+  rescue
+    _ -> items
+  end
+
+  defp partial_text(%{type: "tv", id: id}, anime, shows) when is_integer(id) do
+    case Laev.AnimeMap.mal_ids("tv", id) do
+      [] ->
+        shows |> Map.get({"tv", id}, %{}) |> Map.values() |> Enum.sum() |> episodes_text()
+
+      mals ->
+        done = Enum.count(mals, &(Laev.Position.mark_state(%{mal_id: &1}) == :watched))
+        eps = mals |> Enum.map(&Map.get(anime, &1, 0)) |> Enum.sum()
+
+        cond do
+          done == length(mals) -> nil
+          done > 0 -> "#{done} season#{if done > 1, do: "s"} watched"
+          true -> episodes_text(eps)
+        end
+    end
+  end
+
+  defp partial_text(_item, _anime, _shows), do: nil
+
+  defp episodes_text(n) when n > 0, do: "#{n} ep#{if n > 1, do: "s"} watched"
+  defp episodes_text(_), do: nil
+
   defp seen?(item) do
     Shelf.seen?(item)
   rescue

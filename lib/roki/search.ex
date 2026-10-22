@@ -62,7 +62,7 @@ defmodule Roki.Search do
              TTLCache.fetch({:search, canonical(q), page}, @cache_ttl, fn ->
                upstream(client, uuid, q, page)
              end) do
-        {:ok, items, more?, Lists.with_progress(uuid, franchises),
+        {:ok, Roki.Laev.annotate(uuid, items), more?, Lists.with_progress(uuid, franchises),
          Roki.Laev.seen_keys(uuid, items)}
       end
     end

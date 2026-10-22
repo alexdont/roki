@@ -35,6 +35,8 @@ defmodule RokiWeb.CategoryLive do
        uuid: uuid,
        sort: :popular,
        season: nil,
+       season_count: 12,
+       season_error: nil,
        size: stored_size(socket),
        items: [],
        page: 0,
@@ -80,8 +82,11 @@ defmodule RokiWeb.CategoryLive do
 
     start_async(socket, {:page, {sort, season}, n}, fn ->
       case Browse.page(kind, sort, n, uuid, season) do
-        {:ok, items, more?} -> {:ok, n, items, more?, Roki.Laev.seen_keys(uuid, items)}
-        error -> error
+        {:ok, items, more?} ->
+          {:ok, n, Roki.Laev.annotate(uuid, items), more?, Roki.Laev.seen_keys(uuid, items)}
+
+        error ->
+          error
       end
     end)
   end
@@ -96,19 +101,74 @@ defmodule RokiWeb.CategoryLive do
   def handle_event("sort", %{"sort" => sort}, socket),
     do: {:noreply, push_patch(socket, to: view_path(socket, sort: Browse.sort(sort)))}
 
-  # Anime: a quarter and a year (or "any season" for the plain lists). Choosing a season without
-  # a year means this year.
-  def handle_event("season", params, socket) do
-    year = params["year"] || Integer.to_string(Date.utc_today().year)
+  # Anime seasons: further back in the list, or one typed by name ("summer 2015", "2015 fall").
+  def handle_event("more_seasons", _params, socket),
+    do: {:noreply, update(socket, :season_count, &(&1 + 12))}
 
-    case Browse.season(params["season"], year) do
-      nil -> {:noreply, push_patch(socket, to: view_path(socket, season: nil))}
-      season -> {:noreply, push_patch(socket, to: view_path(socket, season: season))}
+  def handle_event("season_search", %{"q" => q}, socket) do
+    case parse_season(q) do
+      {:season, season} ->
+        {:noreply,
+         socket
+         |> assign(:season_error, nil)
+         |> push_event("roki:hide", %{id: "season-picker-panel"})
+         |> push_patch(to: view_path(socket, season: season))}
+
+      {:year, year} ->
+        # Just a year: open the list far enough back to include it, and scroll there.
+        count = max(socket.assigns.season_count, season_distance(year) + 4)
+
+        {:noreply,
+         socket
+         |> assign(season_count: count, season_error: nil)
+         |> push_event("roki:scrollto", %{id: "s-#{year}-fall", within: "season-list"})}
+
+      :error ->
+        {:noreply, assign(socket, :season_error, "Try something like summer 2015.")}
     end
   end
 
   def handle_event("size", %{"size" => size}, socket) when size in @sizes do
     {:noreply, socket |> assign(:size, size) |> push_event("roki:grid", %{size: size})}
+  end
+
+  @names %{
+    "winter" => :winter,
+    "spring" => :spring,
+    "summer" => :summer,
+    "fall" => :fall,
+    "autumn" => :fall
+  }
+
+  # "summer 2015", "2015 summer", "sum 15"-style prefixes of the name, or a bare year.
+  defp parse_season(q) do
+    text = q |> to_string() |> String.downcase() |> String.trim()
+
+    year =
+      with [y] <- Regex.run(~r/\b((?:19|20)\d{2})\b/, text, capture: :all_but_first),
+           do: String.to_integer(y)
+
+    word = text |> String.replace(~r/[^a-z]+/, " ") |> String.trim()
+
+    name =
+      if word != "",
+        do:
+          Enum.find_value(@names, fn {full, atom} -> String.starts_with?(full, word) && atom end)
+
+    cond do
+      is_integer(year) and year > 2100 -> :error
+      is_integer(year) and name -> {:season, {year, name}}
+      is_integer(year) and word == "" -> {:year, year}
+      name -> {:season, {Date.utc_today().year, name}}
+      true -> :error
+    end
+  end
+
+  # How many quarters back from now a year's fall is.
+  defp season_distance(year) do
+    {now_year, now_season} = Laev.Season.current()
+    idx = Enum.find_index(Laev.Season.all(), &(&1 == now_season))
+    (now_year - year) * 4 + idx + 1
   end
 
   defp view_path(socket, overrides) do
@@ -176,10 +236,7 @@ defmodule RokiWeb.CategoryLive do
         grid: @grids[assigns.size],
         title: @titles[assigns.kind],
         sorts: Browse.sorts(),
-        years: Browse.years(),
-        now: Laev.Season.current(),
-        season_names:
-          for(s <- Laev.Season.all(), do: {s, s |> Atom.to_string() |> String.capitalize()})
+        now: Laev.Season.current()
       )
 
     ~H"""
@@ -189,49 +246,54 @@ defmodule RokiWeb.CategoryLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@kind}"}
     >
-      <div class="flex flex-wrap items-center gap-3">
-        <h1 class="flex-1 text-2xl font-bold tracking-tight sm:text-3xl">{@title}</h1>
+      <%!-- The title on the left; on the right what is listed (a season for anime, the order) and
+            the poster size — one row, one height. The panels open under the group. --%>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 class="min-w-[6rem] flex-1 text-2xl font-bold tracking-tight sm:text-3xl">{@title}</h1>
 
-        <form :if={@kind == :anime} id="season-form" phx-change="season" class="contents">
-          <select name="season" class="select select-sm select-bordered w-auto" aria-label="Season">
-            <option value="" selected={@season == nil}>Any season</option>
-            <option
-              :for={{key, name} <- @season_names}
-              value={key}
-              selected={@season != nil and elem(@season, 1) == key}
+        <div class="relative ml-auto flex items-center gap-2">
+          <.picker
+            :if={@kind == :anime}
+            id="season-picker"
+            label="Season"
+            value={season_text(@season)}
+          >
+            <.season_panel season={@season} count={@season_count} now={@now} error={@season_error} />
+          </.picker>
+
+          <.picker
+            :if={@season == nil}
+            id="order-picker"
+            label="Order"
+            value={sort_text(@sorts, @sort)}
+          >
+            <div class="p-1">
+              <button
+                :for={{key, label} <- @sorts}
+                phx-click={JS.push("sort", value: %{sort: key}) |> JS.hide(to: "#order-picker-panel")}
+                class={[
+                  "flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-base font-medium hover:bg-base-200",
+                  @sort == key && "bg-base-200 text-primary"
+                ]}
+              >
+                {label}
+                <.icon :if={@sort == key} name="hero-check-micro" class="h-5 w-5" />
+              </button>
+            </div>
+          </.picker>
+
+          <div class="join" role="group" aria-label="Grid size">
+            <button
+              :for={{size, label} <- [{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}]}
+              phx-click="size"
+              phx-value-size={size}
+              title={"#{label} posters"}
+              aria-label={"#{label} posters"}
+              class={["btn btn-square join-item h-12 w-12", @size == size && "btn-active"]}
             >
-              {name}{if elem(@now, 1) == key, do: " (now)"}
-            </option>
-          </select>
-          <select
-            :if={@season}
-            name="year"
-            class="select select-sm select-bordered w-auto"
-            aria-label="Year"
-          >
-            <option :for={y <- @years} value={y} selected={elem(@season, 0) == y}>{y}</option>
-          </select>
-        </form>
-
-        <form :if={@season == nil} id="sort-form" phx-change="sort" class="contents">
-          <select name="sort" class="select select-sm select-bordered w-auto" aria-label="Order">
-            <option :for={{key, label} <- @sorts} value={key} selected={@sort == key}>
-              {label}
-            </option>
-          </select>
-        </form>
-
-        <div class="join" role="group" aria-label="Grid size">
-          <button
-            :for={{size, label} <- [{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}]}
-            phx-click="size"
-            phx-value-size={size}
-            title={"#{label} posters"}
-            aria-label={"#{label} posters"}
-            class={["btn btn-sm btn-square join-item", @size == size && "btn-active"]}
-          >
-            <.size_icon size={size} />
-          </button>
+              <.size_icon size={size} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -283,6 +345,112 @@ defmodule RokiWeb.CategoryLive do
     </Layouts.app>
     """
   end
+
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :value, :string, required: true
+  slot :inner_block, required: true
+
+  # A big button that says what is chosen and opens a panel under it.
+  defp picker(assigns) do
+    ~H"""
+    <div id={@id} class="min-w-0">
+      <button
+        type="button"
+        phx-click={JS.toggle(to: "##{@id}-panel", display: "block")}
+        class="btn h-12 min-h-0 w-full justify-between gap-2 border-2 border-primary/40 bg-base-100 px-3 text-left font-semibold hover:border-primary"
+        aria-haspopup="listbox"
+      >
+        <span class="min-w-0">
+          <span class="block text-[0.6rem] font-medium uppercase leading-none tracking-wide text-base-content/50">
+            {@label}
+          </span>
+          <span class="block truncate text-base leading-tight text-primary">{@value}</span>
+        </span>
+        <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 text-primary" />
+      </button>
+      <div
+        id={"#{@id}-panel"}
+        class="absolute right-0 top-full z-40 mt-1 hidden w-80 max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 shadow-xl"
+        phx-click-away={JS.hide(to: "##{@id}-panel")}
+        phx-window-keydown={JS.hide(to: "##{@id}-panel")}
+        phx-key="escape"
+      >
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
+
+  attr :season, :any, default: nil
+  attr :count, :integer, required: true
+  attr :now, :any, required: true
+  attr :error, :string, default: nil
+
+  # Every season, newest first, as far back as you scroll; "Load more" goes further, and a search
+  # box takes "summer 2015" when you know what you want.
+  defp season_panel(assigns) do
+    assigns = assign(assigns, :seasons, Laev.Season.recent(assigns.count))
+    assigns = assign(assigns, :oldest, assigns.seasons |> List.last() |> elem(0))
+
+    ~H"""
+    <form phx-submit="season_search" class="flex gap-2 border-b border-base-300 p-2">
+      <input
+        type="text"
+        name="q"
+        placeholder="Search: summer 2015"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        class="input input-bordered input-sm min-w-0 flex-1"
+      />
+      <button type="submit" class="btn btn-sm btn-primary">Go</button>
+    </form>
+    <p :if={@error} class="px-3 pt-2 text-sm text-error">{@error}</p>
+
+    <div id="season-list" class="max-h-80 overflow-y-auto p-1">
+      <.link
+        patch={~p"/anime"}
+        phx-click={JS.hide(to: "#season-picker-panel")}
+        class={[
+          "flex items-center justify-between rounded-lg px-3 py-3 text-base font-medium hover:bg-base-200",
+          @season == nil && "bg-base-200 text-primary"
+        ]}
+      >
+        All anime <.icon :if={@season == nil} name="hero-check-micro" class="h-5 w-5" />
+      </.link>
+
+      <.link
+        :for={{year, name} = s <- @seasons}
+        id={"s-#{year}-#{name}"}
+        patch={~p"/anime?#{[season: name, year: year]}"}
+        phx-click={JS.hide(to: "#season-picker-panel")}
+        class={[
+          "flex items-center justify-between rounded-lg px-3 py-3 text-base font-medium hover:bg-base-200",
+          @season == s && "bg-base-200 text-primary"
+        ]}
+      >
+        <span>{Laev.Season.label(s)}</span>
+        <span :if={s == @now} class="badge badge-primary badge-sm">now</span>
+        <.icon :if={@season == s and s != @now} name="hero-check-micro" class="h-5 w-5" />
+      </.link>
+
+      <button
+        :if={@oldest > 1960}
+        type="button"
+        phx-click="more_seasons"
+        class="mt-1 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-3 text-base font-medium text-primary hover:bg-base-200"
+      >
+        <.icon name="hero-arrow-down-micro" class="h-5 w-5" /> Load more seasons
+      </button>
+    </div>
+    """
+  end
+
+  defp season_text(nil), do: "All anime"
+  defp season_text(season), do: Laev.Season.label(season)
+
+  defp sort_text(sorts, sort), do: Keyword.get(sorts, sort, "Popular")
 
   attr :size, :string, required: true
 

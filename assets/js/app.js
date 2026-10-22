@@ -69,6 +69,19 @@ window.addEventListener("phx:roki:player", e => {
   document.documentElement.dataset.player = e.detail.mode
 })
 
+// Close a panel the server is done with (a search that found its season).
+window.addEventListener("phx:roki:hide", e => {
+  const el = document.getElementById(e.detail.id)
+  if (el) el.style.display = "none"
+})
+
+// Scroll something inside a panel into view (the season list jumps to a year).
+window.addEventListener("phx:roki:scrollto", e => {
+  const el = document.getElementById(e.detail.id)
+  const box = e.detail.within && document.getElementById(e.detail.within)
+  if (el && box) box.scrollTop = el.offsetTop - box.offsetTop - 8
+})
+
 setupPeek()
 
 // Show progress bar on live navigation and form submits
