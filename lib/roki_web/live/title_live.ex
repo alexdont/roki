@@ -47,7 +47,7 @@ defmodule RokiWeb.TitleLive do
         cached: MapSet.new(),
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         lib_busy: false,
-        rating: %{state: :loading, value: nil},
+        rating: %{state: :loading, value: nil, provider: :tmdb},
         rating_error: nil,
         page_title: "Watch",
         title: nil,
@@ -80,9 +80,12 @@ defmodule RokiWeb.TitleLive do
     SourceCache.keys(uuid, hours)
   end
 
-  defp rating_state({:ok, value}), do: %{state: :ok, value: value}
-  defp rating_state(:no_account), do: %{state: :no_account, value: nil}
-  defp rating_state(_), do: %{state: :loading, value: nil}
+  defp rating_state({provider, {:ok, value}}), do: %{state: :ok, value: value, provider: provider}
+
+  defp rating_state({provider, :no_account}),
+    do: %{state: :no_account, value: nil, provider: provider}
+
+  defp rating_state(_), do: %{state: :loading, value: nil, provider: :tmdb}
 
   # Where a film was stopped (seconds), when it is past the beginning — the same position
   # laev resumes from. Series are resumed by episode (the resume record), not by time.
@@ -298,13 +301,22 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :title_error, reason)}
 
   def handle_async(:rating, {:ok, {:rate, {:ok, value}}}, socket),
-    do: {:noreply, assign(socket, rating: %{state: :ok, value: value}, rating_error: nil)}
+    do:
+      {:noreply,
+       assign(socket, rating: %{socket.assigns.rating | value: value}, rating_error: nil)}
 
   def handle_async(:rating, {:ok, {:clear, :ok}}, socket),
-    do: {:noreply, assign(socket, rating: %{state: :ok, value: nil}, rating_error: nil)}
+    do:
+      {:noreply, assign(socket, rating: %{socket.assigns.rating | value: nil}, rating_error: nil)}
 
   def handle_async(:rating, _other, socket),
-    do: {:noreply, assign(socket, :rating_error, "TMDB did not take that. Try again.")}
+    do:
+      {:noreply,
+       assign(
+         socket,
+         :rating_error,
+         "#{provider_name(socket.assigns.rating.provider)} did not take that. Try again."
+       )}
 
   def handle_async(:bulk, {:ok, {new, lib}}, socket) do
     socket = assign(socket, lib: lib, lib_busy: false)
@@ -505,20 +517,22 @@ defmodule RokiWeb.TitleLive do
 
         <div class="space-y-3 pt-2">
           <%!-- Where it plays, then the button: one decision above the other. --%>
-          <div :if={@linked?} class="flex flex-wrap items-center justify-around gap-3">
-            <.sources_link title={@title} />
+          <div
+            :if={@linked?}
+            class="flex flex-wrap items-center justify-around gap-3 [&>*:only-child]:mx-auto"
+          >
+            <.sources_link :if={@title.type == "movie"} title={@title} />
             <.mode_switch mode={@mode} />
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
-            <button
-              phx-click="play"
-              class="btn btn-primary btn-lg h-12 w-full gap-2 px-4 text-lg shadow-md sm:h-14 sm:w-auto sm:min-w-[15rem] sm:px-10 sm:text-xl"
-              disabled={match?({:working, _}, @phase)}
-            >
-              <.icon name="hero-play-solid" class="h-6 w-6" />
-              {if @title.type == "movie", do: play_label(@resume_secs), else: play_label_tv(@resume)}
-            </button>
+            <.play_button
+              title={@title}
+              resume={@resume}
+              resume_secs={@resume_secs}
+              busy?={match?({:working, _}, @phase)}
+              class="h-12 w-full text-lg sm:h-14 sm:w-auto sm:min-w-[15rem] sm:text-xl"
+            />
             <span
               :if={@cached?}
               class="badge badge-success badge-outline gap-1"
@@ -623,6 +637,9 @@ defmodule RokiWeb.TitleLive do
   defp avg_text(_), do: "–"
 
   # 8.0 → "8", 8.5 → "8.5"
+  defp provider_name(:mal), do: "MyAnimeList"
+  defp provider_name(_), do: "TMDB"
+
   defp fmt_rating(v) when is_number(v) do
     if v == trunc(v),
       do: Integer.to_string(trunc(v)),
@@ -662,10 +679,67 @@ defmodule RokiWeb.TitleLive do
     if h > 0, do: "#{h}:#{pad.(m)}:#{pad.(s)}", else: "#{pad.(m)}:#{pad.(s)}"
   end
 
-  defp play_label_tv(%{"season" => s, "episode" => e}) when is_integer(s) and is_integer(e),
-    do: "Continue S#{s} · E#{e}"
+  # The episode Play goes to: where you left off, else the very first one.
+  defp play_target(%{seasons: seasons}, resume) do
+    case resume do
+      %{"season" => s, "episode" => e} when is_integer(s) and is_integer(e) ->
+        {s, e, true}
 
-  defp play_label_tv(_), do: "Start"
+      _ ->
+        first =
+          seasons |> Enum.map(& &1.number) |> Enum.filter(&(&1 > 0)) |> Enum.min(fn -> 1 end)
+
+        {first, 1, false}
+    end
+  end
+
+  attr :title, :map, required: true
+  attr :resume, :any, default: nil
+  attr :resume_secs, :any, default: nil
+  attr :busy?, :boolean, default: false
+  attr :class, :string, default: nil
+
+  # The big button. A film: one button, Start / Continue mm:ss. A series: two halves — the left
+  # picks a season and episode, the right goes straight to the sources of S1.E1 (or wherever you
+  # were) and starts the best one.
+  defp play_button(%{title: %{type: "movie"}} = assigns) do
+    ~H"""
+    <button
+      phx-click="play"
+      class={["btn btn-primary btn-lg gap-2 px-4 shadow-md sm:px-10", @class]}
+      disabled={@busy?}
+    >
+      <.icon name="hero-play-solid" class="h-6 w-6" />
+      {play_label(@resume_secs)}
+    </button>
+    """
+  end
+
+  defp play_button(assigns) do
+    {season, episode, continue?} = play_target(assigns.title, assigns.resume)
+    assigns = assign(assigns, season: season, episode: episode, continue?: continue?)
+
+    ~H"""
+    <div class={["join shadow-md", @class]}>
+      <.link
+        navigate={~p"/title/tv/#{@title.id}/episodes"}
+        class="btn btn-primary btn-lg join-item h-full min-h-0 flex-[2] gap-2 border-r border-primary-content/30 px-3 text-[length:inherit]"
+      >
+        <.icon name="hero-queue-list" class="h-6 w-6" /> Episodes
+      </.link>
+      <.link
+        navigate={~p"/sources/tv/#{@title.id}/#{@season}/#{@episode}?#{[auto: 1]}"}
+        class={[
+          "btn btn-primary btn-lg join-item h-full min-h-0 flex-[3] gap-2 px-3 text-[length:inherit]",
+          @busy? && "btn-disabled"
+        ]}
+      >
+        <.icon name="hero-play-solid" class="h-6 w-6" />
+        {if @continue?, do: "Continue", else: "Start"} S{@season}.E{@episode}
+      </.link>
+    </div>
+    """
+  end
 
   attr :uuid, :any, default: nil
   attr :linked?, :boolean, default: false
@@ -723,39 +797,62 @@ defmodule RokiWeb.TitleLive do
       <ul :if={is_list(@episodes)} class="divide-y divide-base-300 rounded-box border border-base-300">
         <li
           :for={e <- @episodes}
-          class={["flex gap-3 p-3", false]}
+          class={[
+            "relative flex items-center gap-3 p-3",
+            MapSet.member?(@watched, e.number) && "bg-base-200"
+          ]}
         >
-          <div class="hidden h-[4.5rem] w-32 shrink-0 overflow-hidden rounded bg-base-300 sm:block">
-            <img :if={e.still} src={e.still} alt="" loading="lazy" class="h-full w-full object-cover" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="font-medium">{e.number}. {e.name}</span>
-              <span :if={MapSet.member?(@watched, e.number)} class="badge badge-sm badge-success">Watched</span>
-              <span
-                :if={MapSet.member?(@cached, {"tv", @title_id, @season, e.number})}
-                class="badge badge-sm badge-success badge-outline"
-              >
-                ⚡ cached
-              </span>
+          <%!-- The whole row is one link to this episode's sources (a stretched link under the two
+                buttons), so there is nowhere on it that does nothing. --%>
+          <div class={[
+            "flex min-w-0 flex-1 gap-3",
+            MapSet.member?(@watched, e.number) && "opacity-45 grayscale"
+          ]}>
+            <div class="hidden h-[4.5rem] w-32 shrink-0 overflow-hidden rounded bg-base-300 sm:block">
+              <img
+                :if={e.still}
+                src={e.still}
+                alt=""
+                loading="lazy"
+                class="h-full w-full object-cover"
+              />
             </div>
-            <div class="text-xs text-base-content/60">
-              {[e.air_date, e.minutes && "#{e.minutes} min"] |> Enum.filter(& &1) |> Enum.join(" · ")}
-              <span :if={not e.aired?}> · not out yet</span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <.link
+                  :if={@can_play? and e.aired?}
+                  navigate={~p"/sources/tv/#{@title_id}/#{@season}/#{e.number}"}
+                  class="font-medium after:absolute after:inset-0"
+                >
+                  {e.number}. {e.name}
+                </.link>
+                <span :if={not (@can_play? and e.aired?)} class="font-medium">{e.number}. {e.name}</span>
+                <span
+                  :if={MapSet.member?(@cached, {"tv", @title_id, @season, e.number})}
+                  class="badge badge-sm badge-success badge-outline"
+                >
+                  ⚡ cached
+                </span>
+              </div>
+              <div class="text-xs text-base-content/60">
+                {[e.air_date, e.minutes && "#{e.minutes} min"]
+                |> Enum.filter(& &1)
+                |> Enum.join(" · ")}
+                <span :if={not e.aired?}> · not out yet</span>
+              </div>
+              <p :if={e.overview} class="mt-1 line-clamp-2 text-sm text-base-content/70">
+                {e.overview}
+              </p>
             </div>
-            <p :if={e.overview} class="mt-1 line-clamp-2 text-sm text-base-content/70">
-              {e.overview}
-            </p>
           </div>
-          <div class="flex shrink-0 items-center gap-1 self-center">
+          <div :if={@can_play? and e.aired?} class="relative z-10 flex shrink-0 items-center gap-2">
             <button
-              :if={@can_play? and e.aired?}
               phx-click="toggle_episode"
               phx-value-season={@season}
               phx-value-episode={e.number}
               class={[
-                "btn btn-sm btn-ghost btn-square",
-                MapSet.member?(@watched, e.number) && "text-success"
+                "btn btn-square h-14 w-14",
+                MapSet.member?(@watched, e.number) && "btn-success"
               ]}
               title={
                 if MapSet.member?(@watched, e.number),
@@ -772,15 +869,16 @@ defmodule RokiWeb.TitleLive do
                     do: "hero-check-circle-solid",
                     else: "hero-check-circle"
                 }
-                class="h-5 w-5"
+                class="h-8 w-8"
               />
             </button>
             <.link
-              :if={@can_play? and e.aired?}
               navigate={~p"/sources/tv/#{@title_id}/#{@season}/#{e.number}?#{[auto: 1]}"}
-              class="btn btn-sm btn-primary"
+              class="btn btn-primary h-14 w-14 px-0 text-base sm:w-auto sm:px-6"
+              aria-label="Play"
             >
-              <.icon name="hero-play-solid" class="h-4 w-4" /> Play
+              <.icon name="hero-play-solid" class="h-7 w-7" />
+              <span class="hidden sm:inline">Play</span>
             </.link>
           </div>
         </li>
@@ -930,18 +1028,17 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
       <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <div :if={@linked?} class="flex items-center justify-around gap-2">
-          <.sources_link title={@title} />
+        <div :if={@linked?} class="flex items-center justify-around gap-2 [&>*:only-child]:mx-auto">
+          <.sources_link :if={@title.type == "movie"} title={@title} />
           <.mode_switch mode={@mode} />
         </div>
-        <button
-          phx-click="play"
-          class="btn btn-primary btn-lg h-14 w-full gap-2 text-xl shadow-md"
-          disabled={@busy?}
-        >
-          <.icon name="hero-play-solid" class="h-6 w-6" />
-          {if @title.type == "movie", do: play_label(@resume_secs), else: play_label_tv(@resume)}
-        </button>
+        <.play_button
+          title={@title}
+          resume={@resume}
+          resume_secs={@resume_secs}
+          busy?={@busy?}
+          class="h-14 w-full text-xl"
+        />
       </div>
 
       <.about_sheet title={@title} />
@@ -1145,7 +1242,7 @@ defmodule RokiWeb.TitleLive do
               <span class="font-semibold text-warning">★ {avg_text(@title)}</span>
               on TMDB<span :if={@title.vote_count && @title.vote_count > 0}> · {thousands(
                 @title.vote_count
-              )} votes</span>
+              )} votes</span><span :if={@rating.provider == :mal}> · your score goes to MyAnimeList</span>
             </p>
           </div>
           <button
@@ -1176,9 +1273,9 @@ defmodule RokiWeb.TitleLive do
           <input
             type="range"
             name="value"
-            min="0.5"
+            min={if @rating.provider == :mal, do: "1", else: "0.5"}
             max="10"
-            step="0.5"
+            step={if @rating.provider == :mal, do: "1", else: "0.5"}
             value={@rating.value || 7}
             oninput="document.getElementById('rate-out').textContent = Number(this.value) % 1 === 0 ? String(Number(this.value)) : Number(this.value).toFixed(1)"
             class="range range-info w-full"

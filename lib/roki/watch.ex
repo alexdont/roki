@@ -212,38 +212,92 @@ defmodule Roki.Watch do
   end
 
   @doc """
-  Your own TMDB rating of a title: `{:ok, 8.5 | nil}`, or `:no_account` when the user has not
-  linked a TMDB account in laev (ratings are sent with a TMDB session, which laev holds).
+  Where a title is rated. Anime goes to MyAnimeList while an account is connected (the entry
+  is the title's first season, or the film itself) and to TMDB otherwise; everything else is
+  TMDB's. Call inside `Roki.Laev.run/2`: the answer depends on the user's own keys.
+
+  `{:mal, mal_id}` or `:tmdb`.
+  """
+  def rating_target(title) do
+    mal =
+      if title.anime? and Laev.MAL.authenticated?() do
+        case title.type do
+          "movie" ->
+            Laev.AnimeMap.mal_id("movie", title.id, nil)
+
+          _ ->
+            Laev.AnimeMap.mal_id("tv", title.id, 1) ||
+              List.first(Laev.AnimeMap.mal_ids("tv", title.id))
+        end
+      end
+
+    if is_integer(mal), do: {:mal, mal}, else: :tmdb
+  end
+
+  @doc """
+  Your own rating of a title: `{provider, {:ok, 8.5 | nil}}` with `provider` `:tmdb` or `:mal`
+  (MyAnimeList scores are whole numbers), or `{:tmdb, :no_account}` when no TMDB account is
+  linked in laev (ratings are sent with a TMDB session, which laev holds).
   """
   def my_rating(uuid, title) do
     Roki.Laev.run(uuid, fn ->
-      if Laev.Tmdb.account?() do
-        {:ok,
-         if(title.type == "movie",
-           do: Laev.Tmdb.movie_rating(title.id),
-           else: Laev.Tmdb.tv_rating(title.id)
-         )}
-      else
-        :no_account
+      case rating_target(title) do
+        {:mal, mal} ->
+          case Laev.MAL.list_status(mal) do
+            %{score: n} when is_integer(n) and n > 0 -> {:mal, {:ok, n * 1.0}}
+            _ -> {:mal, {:ok, nil}}
+          end
+
+        :tmdb ->
+          if Laev.Tmdb.account?() do
+            {:tmdb,
+             {:ok,
+              if(title.type == "movie",
+                do: Laev.Tmdb.movie_rating(title.id),
+                else: Laev.Tmdb.tv_rating(title.id)
+              )}}
+          else
+            {:tmdb, :no_account}
+          end
       end
     end)
   end
 
-  @doc "Rate a film or a series on TMDB, 0.5–10 in half steps: `{:ok, rating}` or `{:error, why}`."
+  @doc "Rate a title (TMDB: 0.5–10 in half steps; MyAnimeList: 1–10): `{:ok, rating}` or `{:error, why}`."
   def rate(uuid, title, value) do
     Roki.Laev.run(uuid, fn ->
-      if title.type == "movie",
-        do: Laev.Tmdb.rate_movie(title.id, value),
-        else: Laev.Tmdb.rate_tv(title.id, value)
+      case rating_target(title) do
+        {:mal, mal} ->
+          score = value |> round() |> max(1) |> min(10)
+
+          case Laev.MAL.rate(mal, score) do
+            :ok -> {:ok, score * 1.0}
+            other -> {:error, other}
+          end
+
+        :tmdb ->
+          if title.type == "movie",
+            do: Laev.Tmdb.rate_movie(title.id, value),
+            else: Laev.Tmdb.rate_tv(title.id, value)
+      end
     end)
   end
 
-  @doc "Take your TMDB rating back: `:ok` or `{:error, why}`."
+  @doc "Take your rating back: `:ok` or `{:error, why}`."
   def clear_rating(uuid, title) do
     Roki.Laev.run(uuid, fn ->
-      if title.type == "movie",
-        do: Laev.Tmdb.clear_movie_rating(title.id),
-        else: Laev.Tmdb.clear_tv_rating(title.id)
+      case rating_target(title) do
+        {:mal, mal} ->
+          case Laev.MAL.rate(mal, 0) do
+            :ok -> :ok
+            other -> {:error, other}
+          end
+
+        :tmdb ->
+          if title.type == "movie",
+            do: Laev.Tmdb.clear_movie_rating(title.id),
+            else: Laev.Tmdb.clear_tv_rating(title.id)
+      end
     end)
   end
 
