@@ -849,7 +849,12 @@ defmodule RokiWeb.TitleLive do
 
         <%!-- Icons only: saved, watched, rating — three tiles sharing the poster's height, the icon
               centred in each. The state is the colour; the label is the tooltip. --%>
-        <div :if={@linked?} class="flex min-w-0 flex-1 flex-col gap-2">
+        <%!-- As tall as the poster, never taller: the poster's height is 1.5 x its width, which on a
+              narrow screen is the width cap and not the row's height. --%>
+        <div
+          :if={@linked?}
+          class="flex h-[min(100cqh,114cqw)] min-w-0 flex-1 flex-col gap-2 self-start"
+        >
           <.round_btn
             event="toggle_saved"
             on={@lib.saved?}
