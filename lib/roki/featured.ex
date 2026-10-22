@@ -4,7 +4,7 @@ defmodule Roki.Featured do
   has: trending movies, trending shows, and anime airing now — a TMDB page at
   a time, so a shelf can grow with a "More" button the way laev's does.
 
-  One answer for the whole site per (shelf, page), kept for 30 minutes: a busy
+  One answer for the whole site per (shelf, page), kept for 12 hours: a busy
   home page is a handful of TMDB requests per half hour rather than a handful
   per visitor. It needs a TMDB key, which laev reads from the application
   environment for anything that runs outside a user's scope (`config :laev,
@@ -13,7 +13,7 @@ defmodule Roki.Featured do
   with neither, this returns `{:error, :no_tmdb_key}` and the page says so.
   """
 
-  @ttl_s 30 * 60
+  @ttl_s 12 * 60 * 60
   @kinds [:movies, :shows, :anime]
 
   def kinds, do: @kinds

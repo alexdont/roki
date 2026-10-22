@@ -227,7 +227,7 @@ Scope is process-bound: call `Roki.Laev` from `start_async`, never from a shared
 ## Routes
 
 `/` → redirects (own `/:username/home` when signed in, else `/home`). `/home` — public Featured
-page (`FeaturedLive`, cached 30 min by `Roki.Featured`; needs `TMDB_API_KEY` in the stack `.env`,
+page (`FeaturedLive`, cached 12 h by `Roki.Featured`; needs `TMDB_API_KEY` in the stack `.env`,
 which `config/runtime.exs` hands to laev as `config :laev, tmdb_key:`). `/:username/home` —
 that signed-in user's own shelf (`UserHomeLive`); anyone else is sent to `/home`, a visitor to
 the login. These live in the `:site` live_session ahead of `phoenix_kit_routes()` so they win
