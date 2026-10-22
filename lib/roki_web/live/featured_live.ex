@@ -203,6 +203,7 @@ defmodule RokiWeb.FeaturedLive do
             item={i}
             seen={MapSet.member?(@seen, {i.type, i.id})}
             cached_titles={@cached_titles}
+            compact
           />
         </li>
         <%!-- Poster-sized, and the next cell in the grid: more of the same shelf. --%>

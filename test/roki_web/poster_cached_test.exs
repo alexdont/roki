@@ -67,4 +67,26 @@ defmodule RokiWeb.PosterCachedTest do
     html = render_component(&RokiWeb.PosterComponents.poster/1, item: @item)
     assert html =~ "2020"
   end
+
+  test "a compact poster with no progress shows its rating on the poster instead of a caption" do
+    html =
+      render_component(&RokiWeb.PosterComponents.poster/1,
+        item: Map.put(@item, :vote, 7.46),
+        compact: true
+      )
+
+    assert html =~ "★ 7.5"
+    refute html =~ "2020"
+  end
+
+  test "the cached mark is a small dot with a tooltip, not a label" do
+    html =
+      render_component(&RokiWeb.PosterComponents.poster/1,
+        item: @item,
+        cached_titles: MapSet.new([{"movie", 7}])
+      )
+
+    refute html =~ "⚡ cached"
+    assert html =~ ~s(title="Sources cached)
+  end
 end

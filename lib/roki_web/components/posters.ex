@@ -85,14 +85,21 @@ defmodule RokiWeb.PosterComponents do
           </div>
         </div>
         <span
+          :if={@compact && !@prog && !@item[:resume_at] && rating(@item)}
+          class="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[0.65rem] font-medium leading-none text-white"
+        >
+          ★ {rating(@item)}
+        </span>
+        <%!-- A small dot, not a label: the hover card and the title page say what it means. --%>
+        <span
           :if={@cached?}
           class={[
-            "badge badge-success badge-sm absolute right-1.5 gap-1 shadow",
+            "absolute right-1.5 flex h-[1.1rem] w-[1.1rem] items-center justify-center rounded-full bg-success/90 text-[0.6rem] leading-none text-success-content shadow-sm",
             if(@item[:badge], do: "top-8", else: "top-1.5")
           ]}
-          title="Sources are cached: plays right away"
+          title="Sources cached: plays right away"
         >
-          ⚡ cached
+          ⚡
         </span>
         <span
           :if={@watched?}
@@ -163,6 +170,9 @@ defmodule RokiWeb.PosterComponents do
     do: progress(%{resume_at: at, runtime: rt})
 
   defp bar(_prog, _item), do: 0
+
+  defp rating(%{vote: v}) when is_number(v) and v > 0, do: Float.round(v * 1.0, 1)
+  defp rating(_item), do: nil
 
   defp peek_key(%{type: type, id: id}) when type in ["movie", "tv", "anime"] and is_integer(id),
     do: "#{if type == "movie", do: "movie", else: "tv"}/#{id}"
