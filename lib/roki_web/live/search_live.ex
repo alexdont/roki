@@ -191,7 +191,7 @@ defmodule RokiWeb.SearchLive do
               class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed border-base-300 text-base-content/60 transition hover:border-primary hover:text-primary disabled:cursor-wait"
             >
               <span :if={@shelf.loading?} class="loading loading-spinner"></span>
-              <.icon :if={!@shelf.loading?} name="hero-plus" class="h-8 w-8" />
+              <.icon :if={!@shelf.loading?} name="hero-ellipsis-horizontal" class="h-8 w-8" />
               <span class="text-sm font-medium">
                 {if @shelf.loading?, do: "Loading…", else: "Load more"}
               </span>
