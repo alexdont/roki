@@ -56,7 +56,7 @@ defmodule RokiWeb.TitleLive do
         season: nil,
         sections: [],
         section: nil,
-        play: %{season: 1, episode: 1, continue?: false, label: "S1.E1"},
+        play: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"},
         episodes: nil,
         watched: MapSet.new(),
         season_counts: %{},
@@ -111,7 +111,12 @@ defmodule RokiWeb.TitleLive do
       secs = if linked?, do: left_at(uuid, title)
       sections = if title.type == "tv", do: Watch.sections(uuid, title), else: []
 
-      {:ok, title, resume, cached, lib, rating, secs, sections}
+      play =
+        if title.type == "tv" and linked?,
+          do: Watch.play_for(uuid, title, sections, resume),
+          else: Watch.play_info(sections, resume)
+
+      {:ok, title, resume, cached, lib, rating, secs, sections, play}
     end
   end
 
@@ -315,14 +320,14 @@ defmodule RokiWeb.TitleLive do
   @impl true
   def handle_async(
         :title,
-        {:ok, {:ok, title, resume, cached, lib, rating, secs, sections}},
+        {:ok, {:ok, title, resume, cached, lib, rating, secs, sections, play}},
         socket
       ) do
     socket =
       assign(socket,
         title: title,
         sections: sections,
-        play: Watch.play_info(sections, resume),
+        play: play,
         resume: resume,
         resume_secs: secs,
         cached: cached,
@@ -508,7 +513,7 @@ defmodule RokiWeb.TitleLive do
         navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
         class="btn btn-primary"
       >
-        <.icon name="hero-play-solid" class="h-5 w-5" /> Continue {@play.label}
+        <.icon name="hero-play-solid" class="h-5 w-5" /> {@play.verb} {@play.label}
       </.link>
     </div>
     """
@@ -518,7 +523,10 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
-  attr :play, :map, default: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
+
+  attr :play, :map,
+    default: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
+
   attr :phase, :any, required: true
   attr :season, :any, default: nil
   attr :mode, :atom, required: true
@@ -722,7 +730,10 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
-  attr :play, :map, default: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
+
+  attr :play, :map,
+    default: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
+
   attr :busy?, :boolean, default: false
   attr :split?, :boolean, default: false
   attr :class, :string, default: nil
@@ -781,7 +792,7 @@ defmodule RokiWeb.TitleLive do
         ]}
       >
         <.icon name="hero-play-solid" class="h-6 w-6" />
-        {if @play.continue?, do: "Continue", else: "Start"} {@play.label}
+        {@play.verb} {@play.label}
       </.link>
     </div>
     """
@@ -994,7 +1005,10 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
-  attr :play, :map, default: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
+
+  attr :play, :map,
+    default: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
+
   attr :phase, :any, required: true
   attr :season, :any, default: nil
   attr :mode, :atom, required: true

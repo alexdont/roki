@@ -1028,7 +1028,13 @@ defmodule Roki.Watch do
     with %{"season" => s, "episode" => e} = r when is_integer(s) and is_integer(e) <- resume,
          tmdb = r["tmdb_episode"] || e,
          {sec, local} <- locate_section(sections, s, tmdb) do
-      %{season: s, episode: tmdb, continue?: true, label: "#{sec.short}.E#{local}"}
+      %{
+        season: s,
+        episode: tmdb,
+        continue?: true,
+        verb: "Continue",
+        label: "#{sec.short}.E#{local}"
+      }
     else
       _ ->
         if first,
@@ -1036,10 +1042,104 @@ defmodule Roki.Watch do
             season: first.season,
             episode: first.from + 1,
             continue?: false,
+            verb: "Start",
             label: "#{first.short}.E1"
           },
-          else: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
+          else: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
     end
+  end
+
+  @doc """
+  What Play should offer for a series, from what is actually watched rather than only from the
+  last thing played: an episode left half-way is "Continue"; otherwise "Next" is the first
+  unwatched episode after the last one you finished (the next season's first, when a season is
+  done); with nothing watched it is "Start", and with everything watched "Watch again".
+  Anything skipped earlier is only offered when nothing lies ahead.
+  """
+  def play_for(uuid, title, sections, resume) do
+    base = play_info(sections, resume)
+
+    if sections == [] do
+      base
+    else
+      counts = section_counts(uuid, title, sections)
+      started? = Enum.any?(counts, fn {_key, n} -> n > 0 end)
+
+      cond do
+        base.continue? and not episode_done?(uuid, title, base.season, base.episode) ->
+          base
+
+        not started? and not base.continue? ->
+          base
+
+        true ->
+          case next_unseen(uuid, title, sections, counts) do
+            {sec, tmdb_ep} ->
+              %{
+                season: sec.season,
+                episode: tmdb_ep,
+                continue?: true,
+                verb: "Next",
+                label: "#{sec.short}.E#{tmdb_ep - sec.from}"
+              }
+
+            nil ->
+              %{play_info(sections, nil) | verb: "Watch again"}
+          end
+      end
+    end
+  end
+
+  defp episode_done?(uuid, title, season, episode),
+    do: MapSet.member?(watched_episodes(uuid, title, season, [%{number: episode}]), episode)
+
+  # The first unwatched, aired episode after the last section with anything watched in it (after
+  # its furthest watched episode there); failing that, a gap further back.
+  defp next_unseen(uuid, title, sections, counts) do
+    real = Enum.filter(sections, &(&1.season > 0))
+
+    last =
+      real
+      |> Enum.map(&(Map.get(counts, &1.key, 0) > 0))
+      |> Enum.reverse()
+      |> Enum.find_index(& &1)
+
+    from_idx = if last, do: length(real) - 1 - last, else: 0
+    {behind, ahead} = Enum.split(real, from_idx)
+
+    unwatched_in(uuid, title, ahead, counts, true) ||
+      unwatched_in(uuid, title, behind, counts, false)
+  end
+
+  defp unwatched_in(uuid, title, sections, counts, after_furthest?) do
+    sections
+    |> Enum.with_index()
+    |> Enum.find_value(fn {sec, i} ->
+      done? = sec.total > 0 and Map.get(counts, sec.key, 0) >= sec.total
+
+      with false <- done?,
+           {:ok, all} <- episodes(title.id, sec.season, uuid) do
+        eps =
+          for e <- all,
+              e.number > sec.from and (sec.count == nil or e.number <= sec.from + sec.count),
+              do: e
+
+        watched = watched_episodes(uuid, title, sec.season, eps)
+
+        floor =
+          if after_furthest? and i == 0, do: Enum.max(MapSet.to_list(watched) ++ [0]), else: 0
+
+        case Enum.find(
+               eps,
+               &(&1.aired? and &1.number > floor and not MapSet.member?(watched, &1.number))
+             ) do
+          nil -> nil
+          e -> {sec, e.number}
+        end
+      else
+        _ -> nil
+      end
+    end)
   end
 
   @doc "How many episodes of each section are marked watched: `%{key => count}`."
