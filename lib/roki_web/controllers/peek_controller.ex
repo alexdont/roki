@@ -16,7 +16,7 @@ defmodule RokiWeb.PeekController do
          :ok <- Roki.RateLimit.check(:peek, {:user, uuid}, 90, 60_000),
          {:ok, t} <- Roki.Watch.title(type, n, uuid) do
       conn
-      |> put_resp_header("cache-control", "private, max-age=3600")
+      |> put_resp_header("cache-control", "private, max-age=300")
       |> json(%{
         title: t.title,
         year: t.year,

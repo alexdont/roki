@@ -86,7 +86,7 @@ function place(el) {
 async function load(key) {
   if (cache.has(key)) return cache.get(key)
   try {
-    const res = await fetch(`/peek/${key}`, {credentials: "same-origin"})
+    const res = await fetch(`/peek/${key}?v=2`, {credentials: "same-origin"})
     const info = res.ok ? await res.json() : null
     cache.set(key, info)
     return info
