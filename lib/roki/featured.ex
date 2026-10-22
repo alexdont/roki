@@ -2,7 +2,7 @@ defmodule Roki.Featured do
   @moduledoc """
   What is popular right now — the same three shelves laev's Featured screen
   has: trending movies, trending shows, and anime airing now — a TMDB page at
-  a time, so a shelf can grow with a "More" button the way laev's does.
+  a time, so a shelf can grow with a "Load more" button the way laev's does.
 
   One answer for the whole site per (shelf, page), kept for 12 hours: a busy
   home page is a handful of TMDB requests per half day rather than a handful

@@ -1,7 +1,7 @@
 defmodule RokiWeb.SearchLive do
   @moduledoc """
   `/search?q=` — find a movie or show. Public. Results are a poster grid ending
-  in a poster-sized "More" tile that loads the next TMDB page; above the first
+  in a poster-sized "Load more" tile that loads the next TMDB page; above the first
   page sit any franchise lists the results belong to (a curated laev list or a
   TMDB collection). A signed-in user who has connected laev searches with their
   own TMDB key and sees what they have already watched greyed out.
@@ -187,13 +187,13 @@ defmodule RokiWeb.SearchLive do
             <button
               phx-click="more"
               disabled={@shelf.loading?}
-              aria-label="More results"
+              aria-label="Load more results"
               class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed border-base-300 text-base-content/60 transition hover:border-primary hover:text-primary disabled:cursor-wait"
             >
               <span :if={@shelf.loading?} class="loading loading-spinner"></span>
               <.icon :if={!@shelf.loading?} name="hero-plus" class="h-8 w-8" />
               <span class="text-sm font-medium">
-                {if @shelf.loading?, do: "Loading…", else: "More"}
+                {if @shelf.loading?, do: "Loading…", else: "Load more"}
               </span>
             </button>
           </li>

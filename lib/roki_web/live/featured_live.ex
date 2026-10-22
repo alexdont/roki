@@ -2,7 +2,7 @@ defmodule RokiWeb.FeaturedLive do
   @moduledoc """
   `/home` — what is popular right now: movies, shows and anime. Public; the
   same page for a visitor and a signed-in user, with the pitch on top only for
-  a visitor. Each shelf ends in a poster-sized "More" tile that loads the next
+  a visitor. Each shelf ends in a poster-sized "Load more" tile that loads the next
   TMDB page, like laev's Featured screen. A signed-in user who has connected
   laev sees what they have already watched greyed out.
   """
@@ -205,12 +205,12 @@ defmodule RokiWeb.FeaturedLive do
             phx-click="more"
             phx-value-kind={@kind}
             disabled={@shelf.loading?}
-            aria-label={"More #{String.downcase(@title)}"}
+            aria-label={"Load more #{String.downcase(@title)}"}
             class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed border-base-300 text-base-content/60 transition hover:border-primary hover:text-primary disabled:cursor-wait"
           >
             <span :if={@shelf.loading?} class="loading loading-spinner"></span>
             <.icon :if={!@shelf.loading?} name="hero-plus" class="h-8 w-8" />
-            <span class="text-sm font-medium">{if @shelf.loading?, do: "Loading…", else: "More"}</span>
+            <span class="text-sm font-medium">{if @shelf.loading?, do: "Loading…", else: "Load more"}</span>
           </button>
         </li>
       </ul>
