@@ -223,3 +223,12 @@ table and no copy of the key anywhere else. Accounts are never linked to each ot
 key without that user pasting it. Sync carries history and, only if the user ticks "bring my
 API keys", their encrypted API keys; **preferences (player, language) do not sync**.
 Scope is process-bound: call `Roki.Laev` from `start_async`, never from a shared process.
+
+## Routes
+
+`/` → redirects (own `/:username/home` when signed in, else `/home`). `/home` — public Featured
+page (`FeaturedLive`, cached 30 min by `Roki.Featured`; needs `TMDB_API_KEY` in the stack `.env`,
+which `config/runtime.exs` hands to laev as `config :laev, tmdb_key:`). `/:username/home` —
+that signed-in user's own shelf (`UserHomeLive`); anyone else is sent to `/home`, a visitor to
+the login. These live in the `:site` live_session ahead of `phoenix_kit_routes()` so they win
+over PhoenixKit's own `/:group` catch-alls. A `runtime.exs` change needs `docker restart roki-ee`.

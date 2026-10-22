@@ -41,7 +41,18 @@ defmodule RokiWeb.Layouts do
   slot :inner_block, required: true
 
   def app(assigns) do
-    assigns = assign(assigns, :scope, assigns.phoenix_kit_current_scope || assigns.current_scope)
+    scope = assigns.phoenix_kit_current_scope || assigns.current_scope
+
+    username =
+      with true <- scope != nil and PhoenixKit.Users.Auth.Scope.authenticated?(scope),
+           name when is_binary(name) and name != "" <-
+             PhoenixKit.Users.Auth.Scope.user(scope).username do
+        name
+      else
+        _ -> nil
+      end
+
+    assigns = assigns |> assign(:scope, scope) |> assign(:username, username)
 
     ~H"""
     <header class="navbar mx-auto max-w-6xl gap-2 px-4 sm:px-6 lg:px-8">
@@ -53,6 +64,12 @@ defmodule RokiWeb.Layouts do
           roki
         </a>
       </div>
+      <nav class="flex flex-none items-center gap-1">
+        <.link navigate={~p"/home"} class="btn btn-ghost btn-sm">Featured</.link>
+        <.link :if={@username} navigate={~p"/#{@username}/home"} class="btn btn-ghost btn-sm">
+          My shelf
+        </.link>
+      </nav>
       <div class="flex flex-none items-center gap-3">
         <.theme_toggle />
         <%!-- PhoenixKit's own account menu: avatar, settings, admin, log out; or

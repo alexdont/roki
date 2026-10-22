@@ -193,6 +193,13 @@ if config_env() == :dev do
     ]
 end
 
+# Laev: one TMDB key for everything that runs outside a user's scope — the public
+# Featured page. A user who has carried their own key keeps using it; this is only
+# the fallback laev documents for a server. Optional: without it /home says so.
+if (tmdb = System.get_env("TMDB_API_KEY")) not in [nil, ""] do
+  config :laev, tmdb_key: tmdb
+end
+
 # ============================================
 # Test
 # ============================================

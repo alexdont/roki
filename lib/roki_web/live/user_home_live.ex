@@ -1,36 +1,54 @@
-defmodule RokiWeb.HomeLive do
+defmodule RokiWeb.UserHomeLive do
   @moduledoc """
-  The home page of a watching site.
+  `/:username/home` — one user's own shelf.
 
-  A visitor sees the pitch and the PhoenixKit menu (log in / register). A
-  signed-in user sees their own shelf — but only once they have *chosen* to
-  connect laev: pasting their laev key pulls their watchlist, resume points,
-  history and settings in from wherever that key syncs. Nothing about laev
-  happens at sign-up, and accounts are never linked to each other.
+  Only that signed-in user sees it: anyone else is sent to the featured page,
+  and a visitor to the login. The shelf appears once they have *chosen* to
+  connect laev — pasting their laev key pulls their watchlist, resume points
+  and history in from wherever that key syncs. Nothing about laev happens at
+  sign-up, and accounts are never linked to each other.
   """
   use RokiWeb, :live_view
+
+  import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Laev
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(%{"username" => username}, _session, socket) do
     scope = socket.assigns[:phoenix_kit_current_scope]
-    uuid = if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
 
-    socket =
-      socket
-      |> assign(:page_title, "Home")
-      |> assign(:uuid, uuid)
-      |> assign(:state, if(uuid, do: :loading, else: :visitor))
-      |> assign(:data, nil)
-      |> assign(:busy, nil)
-      |> assign(:error, nil)
-      |> assign(:open, MapSet.new())
-      |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
+    cond do
+      !(scope && Scope.authenticated?(scope)) ->
+        {:ok, push_navigate(socket, to: "/phoenix_kit/users/log-in")}
 
-    {:ok, if(connected?(socket) && uuid, do: load(socket), else: socket)}
+      !same_user?(Scope.user(scope).username, username) ->
+        {:ok, push_navigate(socket, to: ~p"/home")}
+
+      true ->
+        uuid = Scope.user_uuid(scope)
+
+        socket =
+          socket
+          |> assign(:page_title, "Home")
+          |> assign(:username, username)
+          |> assign(:uuid, uuid)
+          |> assign(:state, :loading)
+          |> assign(:data, nil)
+          |> assign(:busy, nil)
+          |> assign(:error, nil)
+          |> assign(:open, MapSet.new())
+          |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
+
+        {:ok, if(connected?(socket), do: load(socket), else: socket)}
+    end
   end
+
+  defp same_user?(mine, requested) when is_binary(mine),
+    do: String.downcase(mine) == String.downcase(requested)
+
+  defp same_user?(_, _), do: false
 
   defp load(socket) do
     uuid = socket.assigns.uuid
@@ -133,10 +151,8 @@ defmodule RokiWeb.HomeLive do
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path="/"
+      current_path={"/#{@username}/home"}
     >
-      <.visitor :if={@state == :visitor} />
-
       <div
         :if={@state == :loading}
         class="flex items-center gap-3 py-24 justify-center text-base-content/60"
@@ -154,26 +170,6 @@ defmodule RokiWeb.HomeLive do
         open={@open}
       />
     </Layouts.app>
-    """
-  end
-
-  defp visitor(assigns) do
-    ~H"""
-    <section class="hero py-16">
-      <div class="hero-content text-center">
-        <div class="max-w-xl space-y-5">
-          <h1 class="text-5xl font-bold tracking-tight">Everything you watch, in one place.</h1>
-          <p class="text-lg text-base-content/70">
-            Films, shows and anime — your watchlist, where you stopped and how much you have seen,
-            following you from the terminal to the browser.
-          </p>
-          <div class="flex justify-center gap-3">
-            <a href="/phoenix_kit/users/register" class="btn btn-primary">Create an account</a>
-            <a href="/phoenix_kit/users/log-in" class="btn btn-ghost">Log in</a>
-          </div>
-        </div>
-      </div>
-    </section>
     """
   end
 
@@ -377,32 +373,6 @@ defmodule RokiWeb.HomeLive do
     """
   end
 
-  attr :item, :map, required: true
-
-  defp poster(assigns) do
-    ~H"""
-    <div class="group space-y-1">
-      <div class="aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
-        <img
-          :if={@item.poster}
-          src={@item.poster}
-          alt={@item.title}
-          loading="lazy"
-          class="h-full w-full object-cover transition group-hover:scale-105"
-        />
-        <div
-          :if={!@item.poster}
-          class="flex h-full items-center justify-center p-2 text-center text-xs"
-        >
-          {@item.title}
-        </div>
-      </div>
-      <div class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
-      <div class="text-xs text-base-content/60">{subtitle(@item)}</div>
-    </div>
-    """
-  end
-
   attr :title, :string, required: true
   attr :count, :integer, default: nil
   attr :items, :list, required: true
@@ -438,16 +408,4 @@ defmodule RokiWeb.HomeLive do
     </section>
     """
   end
-
-  defp subtitle(%{note: n}) when is_binary(n) and n != "",
-    do: n |> String.trim() |> String.trim_leading("·") |> String.trim()
-
-  defp subtitle(%{season: s, episode: e}) when is_integer(s) and is_integer(e),
-    do: "S#{s} · E#{e}"
-
-  defp subtitle(%{episode: e}) when is_integer(e), do: "Episode #{e}"
-  defp subtitle(%{year: y}) when is_binary(y) and y != "", do: y
-  defp subtitle(%{type: "movie"}), do: "Film"
-  defp subtitle(%{type: "tv"}), do: "Series"
-  defp subtitle(_), do: ""
 end

@@ -22,7 +22,9 @@ defmodule RokiWeb.Router do
     scope "/", RokiWeb do
       pipe_through :browser
 
-      live "/", HomeLive, :index
+      live "/", RootLive, :index
+      live "/home", FeaturedLive, :index
+      live "/:username/home", UserHomeLive, :index
     end
   end
 
