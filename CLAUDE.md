@@ -288,3 +288,15 @@ The header carries only Featured and (signed in) Shelf / Stats / Calendar. **Lis
 
 **Shows excludes anime** (`Roki.Featured`): a trending-TV title is dropped when `Laev.AnimeMap.anime?/2` (MyAnimeList has an entry) is true, except ids in `@keep_as_shows` (Cyberpunk: Edgerunners). Bump `@version` when what a cached page contains changes.
 Shows pages are exactly 20 (`Roki.Featured.shows_slice/3`): the anime-free stream is cut into pages and topped up from the next TMDB page; raw TMDB pages are memoised separately (`{:tv_raw, p}`); overlapping pages are de-duplicated by id.
+
+## Settings
+
+`/:username/settings` (`SettingsLive`) is a form over `Laev.Settings` — laev describes every setting as
+data (`all/1`), checks each change (`put/2`) and can ask the real service whether a key works
+(`validate/2`). Choices and text save on change; **a key is saved only after `validate/2` passes**
+(RD / TorBox / TMDB; the rest are saved as pasted) and is only ever shown masked. The player list
+keeps a value this server cannot offer (a terminal `mpv`), since the account may legitimately hold it.
+Settings reach the terminal app only when API keys are carried (they travel in the same encrypted
+blob); the page says so. The shelf no longer has a Connections section — sync, carry-keys and
+disconnect live here. The header link is "Settings"; PhoenixKit's own account settings stay in the
+avatar menu. The test config lifts PhoenixKit's registration rate limit (tests register users).

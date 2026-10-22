@@ -89,10 +89,7 @@ defmodule Roki.Laev do
              tally: Shelf.tally(),
              watchlist: watchlist() |> Map.new(fn {k, v} -> {k, mark_seen(v)} end),
              continue: mark_seen(continue_watching()),
-             saved: mark_seen(saved()),
-             keys: keys(),
-             keys_carried?: Sync.keys_enabled?(),
-             server: Sync.url()
+             saved: mark_seen(saved())
            }}
         else
           :not_connected
@@ -152,11 +149,68 @@ defmodule Roki.Laev do
     end)
   end
 
+  # ── settings ───────────────────────────────────────────────────────
+
+  @doc "Every laev setting with this user's value; secrets come back masked, never in full."
+  def settings(uuid), do: run(uuid, fn -> Settings.all(:browser) end)
+
+  @doc "Change one setting (`:ok` | `{:error, reason}`). Laev checks the key and the value."
+  def put_setting(uuid, key, value), do: run(uuid, fn -> Settings.put(key, value) end)
+
+  @doc "Ask the service whether the key this user has saved still works."
+  def check_key(uuid, key) do
+    run(uuid, fn ->
+      case Settings.get(key) do
+        v when v in [nil, ""] -> {:error, "not set"}
+        value -> Settings.validate(key, value)
+      end
+    end)
+  end
+
+  @doc """
+  Save a key only if the service accepts it. `{:ok, detail}` with what the service
+  said about the account (plan, days left), or `{:error, why}` with nothing saved.
+  """
+  def replace_key(uuid, key, value) do
+    value = String.trim(value)
+
+    run(uuid, fn ->
+      with true <- value != "" or {:error, "paste the key first"},
+           {:ok, detail} <- Settings.validate(key, value),
+           :ok <- Settings.put(key, value) do
+        Roki.Stats.forget(uuid)
+        {:ok, detail}
+      else
+        {:error, reason} -> {:error, reason}
+        other -> other
+      end
+    end)
+  end
+
+  @doc "Forget a saved key."
+  def remove_key(uuid, key) do
+    Roki.Stats.forget(uuid)
+    put_setting(uuid, key, "")
+  end
+
+  @doc "What the sync server holds for this user: `{:ok, %{watchlist: 38, …}}` or why not."
+  def sync_status(uuid), do: run(uuid, &Sync.check/0)
+
+  @doc "Whether this user carries their API keys in the laev key."
+  def carrying_keys?(uuid), do: run(uuid, &Sync.keys_enabled?/0)
+
+  @doc "The server the laev key syncs with."
+  def sync_server(uuid), do: run(uuid, &Sync.url/0)
+
   @doc "A short, human reason for a failed connect."
   def explain({:bad_key, why}), do: why
   def explain({:bad_url, url}), do: "#{url} is not a usable server address"
   def explain({:http, 401}), do: "the server did not accept that key"
   def explain({:http, status}), do: "the server answered #{status}"
+  def explain({:must_be_one_of, _key, allowed}), do: "must be one of: #{Enum.join(allowed, ", ")}"
+  def explain({:must_be_text, _key}), do: "must be text"
+  def explain({:unknown_setting, key}), do: "#{key} is not a setting"
+  def explain(reason) when is_binary(reason), do: reason
   def explain(other), do: "could not sync (#{inspect(other)})"
 
   def duration(seconds), do: Laev.Stats.duration(seconds)
@@ -235,14 +289,6 @@ defmodule Roki.Laev do
         poster: e["poster"]
       }
     end)
-  end
-
-  # Which services are connected — never the values; laev masks them and the
-  # page has no use for them.
-  defp keys do
-    for {:keys, entries} <- Settings.groups(), e <- entries do
-      %{label: e.label, key: e.key, set?: e.set?}
-    end
   end
 
   defp poster(nil), do: nil

@@ -108,21 +108,6 @@ defmodule RokiWeb.UserHomeLive do
      |> start_async(:sync, fn -> Laev.sync(uuid) end)}
   end
 
-  def handle_event("toggle_keys", _params, socket) do
-    uuid = socket.assigns.uuid
-    on? = not socket.assigns.data.keys_carried?
-
-    {:noreply,
-     socket
-     |> assign(error: nil, busy: "Updating…")
-     |> start_async(:sync, fn -> Laev.set_carry_keys(uuid, on?) end)}
-  end
-
-  def handle_event("disconnect", _params, socket) do
-    :ok = Laev.disconnect(socket.assigns.uuid)
-    {:noreply, assign(socket, state: :not_connected, data: nil, error: nil, busy: nil)}
-  end
-
   # ── async results ──────────────────────────────────────────────────
 
   @impl true
@@ -436,41 +421,6 @@ defmodule RokiWeb.UserHomeLive do
       />
       <.fold :if={@data} id="on_hold" title="On hold" items={@data.watchlist.on_hold} open={@open} />
       <.fold :if={@data} id="history" title="History" items={@data.continue} open={@open} />
-
-      <section :if={@data} class="space-y-3">
-        <h2 class="text-xl font-semibold">Connections</h2>
-        <div class="card bg-base-200 p-4">
-          <dl class="grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            <div :for={e <- @data.keys} class="flex justify-between gap-4">
-              <dt class="text-base-content/70">{e.label}</dt>
-              <dd class={["font-mono", !e.set? && "text-base-content/40"]}>
-                {if e.set?, do: "connected", else: "not set"}
-              </dd>
-            </div>
-          </dl>
-        </div>
-        <p class="text-sm text-base-content/60">
-          A laev key carries your history and, if you choose, your API keys. Preferences such as the
-          player or audio language stay on each device, so they are not shown here.
-        </p>
-
-        <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/70">
-          <span>
-            Syncing with <code>{@data.server}</code>.
-            API keys are {if @data.keys_carried?, do: "carried to this account", else: "not carried"}.
-          </span>
-          <button phx-click="toggle_keys" class="btn btn-xs" disabled={@busy != nil}>
-            {if @data.keys_carried?, do: "Stop carrying keys", else: "Bring my API keys"}
-          </button>
-          <button
-            phx-click="disconnect"
-            data-confirm="Disconnect laev and delete everything pulled for this account? Your laev key's server keeps its copy."
-            class="btn btn-xs btn-ghost text-error"
-          >
-            Disconnect laev
-          </button>
-        </div>
-      </section>
     </div>
     """
   end

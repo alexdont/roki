@@ -30,6 +30,7 @@ defmodule RokiWeb.Router do
       live "/:username/home", UserHomeLive, :index
       live "/:username/stats", StatsLive, :index
       live "/:username/calendar", CalendarLive, :index
+      live "/:username/settings", SettingsLive, :index
     end
   end
 

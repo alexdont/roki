@@ -58,7 +58,8 @@ defmodule RokiWeb.Layouts do
           do: [
             {"Shelf", ~p"/#{username}/home"},
             {"Stats", ~p"/#{username}/stats"},
-            {"Calendar", ~p"/#{username}/calendar"}
+            {"Calendar", ~p"/#{username}/calendar"},
+            {"Settings", ~p"/#{username}/settings"}
           ],
           else: []
 
