@@ -1638,7 +1638,7 @@ defmodule RokiWeb.TitleLive do
 
     ~H"""
     <section class={[
-      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(8.75rem+env(safe-area-inset-bottom))] sm:hidden",
+      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(6.5rem+max(0.75rem,env(safe-area-inset-bottom)))] sm:hidden",
       @locked? && "-mb-9"
     ]}>
       <div class="relative flex shrink-0 items-start gap-2">
@@ -1690,8 +1690,8 @@ defmodule RokiWeb.TitleLive do
       <%!-- The row is a size container: the poster is sized in its units (two thirds of its height,
             but never more than 62% of its width), so it never depends on its own content — a
             percentage height plus an aspect ratio collapses to nothing in Safari. --%>
-      <div class="flex min-h-0 flex-1 gap-3 px-2 [container-type:size]">
-        <div class="relative aspect-[2/3] w-[min(66.6667cqh,62cqw)] shrink-0 overflow-hidden rounded-box bg-base-300 shadow-lg">
+      <div class="flex min-h-0 flex-1 gap-3 px-4 [container-type:size]">
+        <div class="relative aspect-[2/3] w-[min(66.6667cqh,76cqw)] shrink-0 self-start overflow-hidden rounded-box bg-base-300 shadow-lg">
           <img
             :if={@title.poster}
             src={@title.poster}
@@ -1734,7 +1734,7 @@ defmodule RokiWeb.TitleLive do
         class="shrink-0 text-left"
         aria-label="Read the full description and more details"
       >
-        <span class="line-clamp-5 text-sm text-base-content/80">{@title.overview}</span>
+        <span class="line-clamp-4 text-sm text-base-content/80">{@title.overview}</span>
         <span class="flex items-center gap-1 text-xs font-medium text-primary">
           More <.icon name="hero-chevron-up-micro" class="h-4 w-4" />
         </span>
