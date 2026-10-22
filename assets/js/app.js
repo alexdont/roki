@@ -24,12 +24,13 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/roki"
 import topbar from "../vendor/topbar"
+import {StudySidebar} from "./study/sidebar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...window.PhoenixKitHooks, ...colocatedHooks},
+  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar},
 })
 
 // Show progress bar on live navigation and form submits

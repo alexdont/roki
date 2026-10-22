@@ -300,3 +300,28 @@ Settings reach the terminal app only when API keys are carried (they travel in t
 blob); the page says so. The shelf no longer has a Connections section — sync, carry-keys and
 disconnect live here. The header link is "Settings"; PhoenixKit's own account settings stay in the
 avatar menu. The test config lifts PhoenixKit's registration rate limit (tests register users).
+
+## Study sidebar (`/study`)
+
+The first piece of a language-learning player: a `<video>` on the left and, on the right, every
+subtitle line — the spoken line highlighted, kept centred while it plays, free to scroll, a click plays
+from that line. Prototype source: a file from the user's computer, a direct URL, or the built-in
+demo; subtitles: an uploaded .srt/.vtt/.ass/.ssa (converted to WebVTT by `Roki.Subtitles` using laev's
+converters, encoding detected) or the demo. **No JS libraries** — plain DOM, no hls.js / kuromoji yet
+(those arrive with the real watch flow; the design to follow is `alexdont/debrid_theatre`).
+
+- `assets/js/study/cues.js` — pure functions (`parseVtt`, `activeIndex` binary search, `liveIndexes`,
+  `formatTime`); `assets/js/study/sidebar.js` — the `StudySidebar` hook; CSS `.study-row` in `app.css`.
+- Rows are built once; highlighting only flips `data-state` (past/current/future) and `data-live`.
+  **Highlighting must never change a row's size** (no bold): a wider font wraps differently and the whole
+  list jumps under the reader (caught by the browser test).
+- Following: it scrolls the *list*, never the page; a seek jumps, a line coming up in order glides. Any
+  wheel/touch/pointer-down in the list stops following (a "Back to current line" pill appears) and it
+  resumes after 5 s idle or on click. While playing it runs on `requestAnimationFrame`, not `timeupdate`.
+- `allow_upload ... accept: :any` on purpose: LiveView refuses extensions the MIME database does not
+  know, and it has never heard of .srt/.ass. The extension is checked in `handle_progress` instead.
+- Subtitle files that are neither Unicode nor Latin-1 (e.g. Shift-JIS Japanese) will be read as Latin-1
+  and garble; they need a real encoding detector.
+- Tests: `node --test assets/js/study/cues.test.mjs` (logic), `mix test` (conversion + page), and
+  `NODE_PATH=$(npm root -g) node test/e2e/study.js` (Chromium against the running dev server, 22 checks;
+  `ROKI_URL` to point elsewhere, `SHOT=/path.jpg` for a screenshot).
