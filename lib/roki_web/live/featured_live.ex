@@ -166,6 +166,7 @@ defmodule RokiWeb.FeaturedLive do
           title={@titles[kind]}
           shelf={@shelves[kind]}
           seen={@seen}
+          cached_titles={@cached_titles}
         />
 
         <%!-- Last, and only once the shelves above have settled, so it can never push
@@ -190,6 +191,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :title, :string, required: true
   attr :shelf, :map, required: true
   attr :seen, :any, required: true
+  attr :cached_titles, :any, default: nil
 
   defp shelf(assigns) do
     ~H"""

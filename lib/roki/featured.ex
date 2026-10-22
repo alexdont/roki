@@ -39,6 +39,11 @@ defmodule Roki.Featured do
     memo({kind, n}, fn -> fetch(kind, n, uuid) end)
   end
 
+  @doc false
+  # For tests: put a page in the cache so a page can be drawn without TMDB.
+  def seed(kind, n, items, more? \\ false),
+    do: :persistent_term.put({__MODULE__, @version, {kind, n}}, {now(), {:ok, items, more?}})
+
   def configured?, do: Application.get_env(:laev, :tmdb_key) not in [nil, ""]
 
   # Remembered for @ttl_s under `key`, one computation at a time: a cold cache under a
