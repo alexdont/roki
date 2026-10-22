@@ -135,18 +135,37 @@ defmodule RokiWeb.WatchComponents do
   attr :current, :any, default: nil
   attr :busy, :boolean, default: false
 
+  attr :limit, :string,
+    default: nil,
+    doc: "highest resolution to list (the browser's cap); nil lists everything"
+
   def sources(assigns) do
+    entries =
+      for {{source, _stream} = pair, i} <- Enum.with_index(assigns.playable),
+          Laev.Sources.resolution_at_most?(source.resolution, assigns.limit),
+          do: {pair, i}
+
+    assigns =
+      assign(assigns,
+        entries: entries,
+        hidden: length(assigns.playable) - length(entries)
+      )
+
     ~H"""
     <section class="space-y-3">
       <h2 class="text-xl font-semibold">
         Releases
-        <span class="text-sm font-normal text-base-content/60">{length(@playable)} playable</span>
+        <span class="text-sm font-normal text-base-content/60">{length(@entries)} playable</span>
       </h2>
-      <ul class="divide-y divide-base-300 rounded-box border border-base-300">
-        <li
-          :for={{{source, stream}, i} <- Enum.with_index(@playable)}
-          class="flex items-center gap-3 p-3"
-        >
+      <p :if={@hidden > 0} class="text-sm text-base-content/60">
+        {@hidden} above {Resolver.label(@limit)} {if @hidden == 1, do: "is", else: "are"} hidden — a
+        browser can't play them well. Switch to External player to see them.
+      </p>
+      <p :if={@entries == []} class="alert alert-warning text-sm">
+        Nothing at {Resolver.label(@limit)} or below was found. Switch to External player.
+      </p>
+      <ul :if={@entries != []} class="divide-y divide-base-300 rounded-box border border-base-300">
+        <li :for={{{source, stream}, i} <- @entries} class="flex items-center gap-3 p-3">
           <div class="min-w-0 flex-1 space-y-1">
             <div class="truncate text-sm font-medium" title={source.name}>{source.name}</div>
             <div class="flex flex-wrap items-center gap-1.5 text-xs">

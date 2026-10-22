@@ -153,7 +153,14 @@ defmodule Roki.Watch.Resolver do
 
   @doc "What to choose with nobody asked: the release that started last time, else the best."
   def pick(playable, cap, good, mode) do
-    case Enum.find(playable, fn {source, _} -> good && source.hash == good end) do
+    # The release that worked last time goes first — unless it is above what this player takes:
+    # a 4K one opened in an external player is not what the browser should be handed.
+    known =
+      Enum.find(playable, fn {source, _} ->
+        good && source.hash == good && Laev.Sources.resolution_at_most?(source.resolution, cap)
+      end)
+
+    case known do
       nil when mode == :external -> Watch.auto_choice_external(playable, cap)
       nil -> Watch.auto_choice(playable, cap)
       pair -> {:play, pair}

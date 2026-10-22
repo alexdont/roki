@@ -284,10 +284,16 @@ defmodule RokiWeb.SourcesLive do
     do: {:noreply, socket |> assign(:auto, :cancelled) |> begin(true)}
 
   def handle_event("set_mode", %{"mode" => mode}, socket) when mode in ["browser", "external"] do
+    mode = String.to_existing_atom(mode)
+
+    # The page follows the player: the list is the releases that player can take (a browser:
+    # up to its cap; an external player: all, 4K included), and an opened external player's
+    # panel goes when the browser is chosen.
     {:noreply,
      socket
-     |> assign(mode: String.to_existing_atom(mode))
-     |> push_event("roki:player", %{mode: mode})}
+     |> assign(mode: mode, cap: new_cap(socket, mode))
+     |> then(&if(mode == :browser, do: assign(&1, external: nil, current: nil), else: &1))
+     |> push_event("roki:player", %{mode: Atom.to_string(mode)})}
   end
 
   def handle_event("mark_watched", _params, socket) do
@@ -295,6 +301,16 @@ defmodule RokiWeb.SourcesLive do
     if uuid && ctx, do: Watch.mark_watched(uuid, ctx)
     {:noreply, socket}
   end
+
+  defp new_cap(%{assigns: %{ctx: nil, cap: cap}}, _mode), do: cap
+
+  defp new_cap(%{assigns: %{uuid: uuid, ctx: ctx}}, mode),
+    do: Watch.ceiling(uuid, ctx, mode, Roki.Laev.web_settings(uuid))
+
+  defp limit(:browser, uuid),
+    do: Roki.Laev.web_settings(uuid)["browser_max_resolution"] || "1080p"
+
+  defp limit(:external, _uuid), do: nil
 
   defp to_int(v) do
     case Integer.parse(to_string(v)) do
@@ -385,6 +401,7 @@ defmodule RokiWeb.SourcesLive do
           current={@current}
           mode={@mode}
           busy={@busy?}
+          limit={limit(@mode, @uuid)}
         />
       </div>
 

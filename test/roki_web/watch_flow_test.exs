@@ -68,6 +68,14 @@ defmodule RokiWeb.WatchFlowTest do
       assert {:play, {%{hash: "aaa"}, _}} = Resolver.pick(playable, "1080p", nil, :browser)
     end
 
+    test "the release that worked last time is not handed to a player that cannot take it" do
+      uhd = pair("uhd", "2160p")
+      hd = pair("hd", "1080p")
+
+      assert {:play, {%{hash: "uhd"}, _}} = Resolver.pick([uhd, hd], "2160p", "uhd", :external)
+      assert {:play, {%{hash: "hd"}, _}} = Resolver.pick([uhd, hd], "1080p", "uhd", :browser)
+    end
+
     test "failures are said in words, resolutions as people say them" do
       assert Resolver.failure(:none_playable) =~ "None of the releases"
       assert Resolver.failure({:above_ceiling, 3, "2160p"}) =~ "4K"
