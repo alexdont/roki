@@ -44,6 +44,9 @@ defmodule Roki.TTLCache do
     end
   end
 
+  @doc "Is a live answer held for `key`? (Never computes.)"
+  def cached?(key), do: match?({:ok, _}, lookup(key))
+
   defp lookup(key) do
     case :ets.lookup(@table, key) do
       [{^key, expires, value}] -> if expires > now(), do: value, else: :miss

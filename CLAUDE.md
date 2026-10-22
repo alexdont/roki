@@ -257,3 +257,29 @@ user-made lists, which laev does not know about. A list opens complete from the 
 come from laev's card cache (per scope dir — the shared `_featured` scope when a server key is set, so one
 cache serves everyone). Some lists carry their own tier keyed `all` (Marvel) — `tabs/1` in `ListLive`
 handles that. Search offers matching lists above the first page of results.
+
+## Stats, calendar, the pulse
+
+`/:username/stats` (`StatsLive`, `Roki.Stats`), `/:username/calendar` (`CalendarLive`, `Roki.Calendar`);
+the three user pages share `RokiWeb.UserTabs` and are gated by `RokiWeb.UserGuard`.
+
+**Stats must never run without a TMDB key.** Laev times films/shows from TMDB runtimes cached in the
+scope's `runtimes.json`, and a failed lookup is cached as `"unknown"` *forever*. Run keyless (as the shelf
+once did before the user's keys had synced) and every film/show is remembered as zero-length: the owner's
+6,940h read as 2,500h. `Roki.Stats.build/0` therefore refuses without a key and `heal_runtimes/0` clears a
+cache that is >50% unknown (anime lengths, from MAL, are kept). Don't call `Laev.Stats.all_time/0` directly.
+Only `Roki.Stats.for_user/1` (rate limited, 4/min) should be used. The first measurement is ~1,450 TMDB
+lookups (about a minute for a big library); later ones are instant. The shelf loads stats and the pulse in
+separate async tasks after the shelf itself, so they never delay it.
+
+**Day logs can be corrupt.** Synced `watched/*.log` files can have entries fused onto one line
+(`2026-10-22 12026-10-22 2`); laev's own `Laev.Days` parser reads that as 12,026 s and reported 245,000 h.
+`Roki.Stats.day_totals/0` re-parses with a lazy-digit regex that splits them and caps a day at 24 h.
+(Likely a laev sync bug: the log is rewritten without its trailing newline, so the next append fuses.)
+
+**Calendar** = the user's *Saved* list (laev's rule), ported from `Laev.Calendar`: AniList for anime,
+TMDB seasons for TV, TMDB release dates for films. Laev's own keeps a 7-day look-back in the machine's
+`/tmp` (RAM here); ours keeps each title's whole schedule in `Roki.TTLCache` for 6 h, shared across users,
+never caching a failure, with a 3/min per-client + 20/min site-wide budget for uncached titles. The home
+page's pulse ("X drops in 3 days", "Just dropped: Y") is `Roki.Calendar.pulse/1` over the same events.
+The logo links to `/home` (the featured page), not `/`.

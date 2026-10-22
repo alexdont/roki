@@ -15,7 +15,7 @@ defmodule Roki.Laev do
   called from a task (`start_async`), never from a process shared between users.
   """
 
-  alias Laev.{Resume, Settings, Shelf, Stats, Sync, Watchlist}
+  alias Laev.{Resume, Settings, Shelf, Sync, Watchlist}
 
   @doc "Where laev keeps state for accounts. `/root/laev-users` in the container — `data/` on the host."
   def base_dir do
@@ -88,7 +88,6 @@ defmodule Roki.Laev do
            %{
              tally: Shelf.tally(),
              watchlist: watchlist() |> Map.new(fn {k, v} -> {k, mark_seen(v)} end),
-             stats: Stats.all_time(),
              continue: mark_seen(continue_watching()),
              saved: mark_seen(saved()),
              keys: keys(),
@@ -152,7 +151,7 @@ defmodule Roki.Laev do
   def explain({:http, status}), do: "the server answered #{status}"
   def explain(other), do: "could not sync (#{inspect(other)})"
 
-  def duration(seconds), do: Stats.duration(seconds)
+  def duration(seconds), do: Laev.Stats.duration(seconds)
 
   # ── what the page shows ────────────────────────────────────────────
 

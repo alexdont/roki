@@ -57,7 +57,7 @@ defmodule RokiWeb.Layouts do
     ~H"""
     <header class="navbar mx-auto max-w-6xl gap-2 px-4 sm:px-6 lg:px-8">
       <div class="flex-none">
-        <a href={~p"/"} class="flex w-fit items-center gap-2 text-lg font-bold tracking-tight">
+        <a href={~p"/home"} class="flex w-fit items-center gap-2 text-lg font-bold tracking-tight">
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
             <.icon name="hero-play-solid" class="h-4 w-4" />
           </span>
