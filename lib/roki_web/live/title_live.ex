@@ -1754,6 +1754,14 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <.about_sheet title={@title} />
+
+      <%!-- While the page is exactly one screen, it is not a page you can drag: the document is
+            locked in place (and unlocked as soon as there is more below, e.g. after Play). --%>
+      <style :if={@locked?}>
+        @media (max-width: 639px) {
+          html, body { overflow: hidden; height: 100%; overscroll-behavior: none; }
+        }
+      </style>
     </section>
     """
   end
