@@ -285,23 +285,23 @@ defmodule RokiWeb.UserHomeLive do
     <.link
       :if={@next || @dropped != []}
       navigate={~p"/#{@username}/calendar"}
-      class="flex items-center gap-3 rounded-box border border-primary/30 bg-primary/10 p-4 transition hover:bg-primary/15"
+      class="flex items-start gap-1.5 text-xs text-base-content/60 transition hover:text-base-content"
     >
-      <.icon name="hero-calendar-days" class="h-6 w-6 shrink-0 text-primary" />
-      <div class="min-w-0 flex-1 space-y-0.5 text-sm">
-        <div :if={@next}>
-          <b>{@next.label}</b>
-          drops <b>{Roki.Calendar.relative(@next.days)}</b>
-          <span :if={length(@upcoming) > 1} class="text-base-content/60">
-            · {length(@upcoming) - 1} more this week
-          </span>
-        </div>
-        <div :if={@dropped != []} class="text-base-content/70">
-          Just dropped: {@dropped |> Enum.take(2) |> Enum.map_join(", ", & &1.label)}
-          <span :if={length(@dropped) > 2}>+ {length(@dropped) - 2} more</span>
-        </div>
-      </div>
-      <.icon name="hero-chevron-right" class="h-4 w-4 shrink-0 text-base-content/50" />
+      <.icon name="hero-calendar-days" class="mt-px h-3.5 w-3.5 shrink-0" />
+      <span class="min-w-0">
+        <span :if={@next}>
+          <span class="text-base-content/80">{@next.label}</span>
+          drops {Roki.Calendar.relative(@next.days)}<span :if={length(@upcoming) > 1}> · +{length(
+            @upcoming
+          ) - 1} more this week</span>
+        </span>
+        <span :if={@next && @dropped != []} class="hidden sm:inline"> · </span>
+        <span :if={@dropped != []} class={[@next && "hidden sm:inline"]}>
+          just dropped: {@dropped |> Enum.take(2) |> Enum.map_join(", ", & &1.label)}<span :if={
+            length(@dropped) > 2
+          }> +{length(@dropped) - 2}</span>
+        </span>
+      </span>
     </.link>
     """
   end
@@ -336,59 +336,30 @@ defmodule RokiWeb.UserHomeLive do
 
       <p :if={@error} class="alert alert-error text-sm">{@error}</p>
 
-      <.pulse_banner :if={@pulse} pulse={@pulse} username={@username} />
-
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <%!-- Stats and the release note, small and quiet: the shelf below is the point. --%>
+      <div class="-mt-6 space-y-1.5">
         <.link
           navigate={~p"/#{@username}/stats"}
-          class="rounded-box bg-base-200 p-4 transition hover:bg-base-300"
+          class="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-sm text-base-content/60 transition hover:text-base-content"
         >
-          <div class="text-sm text-base-content/60">Time watched</div>
-          <div :if={match?(%{totals: _}, @stats)} class="text-2xl font-bold">
-            {Roki.Laev.duration(@stats.totals.seconds)}
-          </div>
-          <div :if={@stats == nil} class="text-2xl font-bold text-base-content/30">…</div>
-          <div :if={match?({:error, _}, @stats)} class="text-2xl font-bold text-base-content/30">
-            —
-          </div>
-          <div class="text-xs text-base-content/60">
-            <span :if={match?(%{totals: _}, @stats)}>
-              films &amp; tv {Roki.Laev.duration(@stats.totals.other.seconds)} · anime {Roki.Laev.duration(
-                @stats.totals.anime.seconds
-              )}
-            </span>
-            <span :if={@stats == nil}>measuring… · all stats →</span>
-            <span :if={match?({:error, _}, @stats)}>all stats →</span>
-          </div>
+          <span :if={match?(%{totals: _}, @stats)}>
+            <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
+          </span>
+          <span :if={match?(%{totals: _}, @stats)} class="hidden sm:inline">
+            <b class="text-base-content">{@stats.totals.films}</b> films
+          </span>
+          <span :if={match?(%{totals: _}, @stats)} class="hidden sm:inline">
+            <b class="text-base-content">{@stats.totals.episodes}</b> episodes
+          </span>
+          <span :if={@stats == nil} class="text-base-content/40">measuring your history…</span>
+          <span><b class="text-base-content">{@data.tally.behind}</b> in progress</span>
+          <span>
+            <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
+            finished
+          </span>
+          <span class="text-xs text-base-content/50">all stats →</span>
         </.link>
-        <div class="rounded-box bg-base-200 p-4">
-          <div class="text-sm text-base-content/60">Films</div>
-          <div :if={match?(%{totals: _}, @stats)} class="text-2xl font-bold">
-            {@stats.totals.films}
-          </div>
-          <div :if={!match?(%{totals: _}, @stats)} class="text-2xl font-bold text-base-content/30">
-            …
-          </div>
-          <div :if={match?(%{totals: _}, @stats)} class="text-xs text-base-content/60">
-            {@stats.totals.episodes} episodes from {@stats.totals.shows} shows
-          </div>
-        </div>
-        <div class="rounded-box bg-base-200 p-4">
-          <div class="text-sm text-base-content/60">In progress</div>
-          <div class="text-2xl font-bold">{@data.tally.behind}</div>
-          <div class="text-xs text-base-content/60">
-            {@data.tally.caught_up} caught up · {@data.tally.held} on hold
-          </div>
-        </div>
-        <div class="rounded-box bg-base-200 p-4">
-          <div class="text-sm text-base-content/60">Finished</div>
-          <div class="text-2xl font-bold">
-            {@data.tally.series_finished + @data.tally.anime_finished}
-          </div>
-          <div class="text-xs text-base-content/60">
-            {@data.tally.series_finished} series · {@data.tally.anime_finished} anime
-          </div>
-        </div>
+        <.pulse_banner :if={@pulse} pulse={@pulse} username={@username} />
       </div>
 
       <.poster_row
