@@ -68,15 +68,17 @@ defmodule Roki.Lists do
   end
 
   @doc "`{:ok, franchise}` for a slug, or `:error`."
-  def find("collection-" <> id) do
-    with {n, ""} <- Integer.parse(id), {:ok, f} <- tmdb_collection(n) do
+  def find(slug, uuid \\ nil)
+
+  def find("collection-" <> id, uuid) do
+    with {n, ""} <- Integer.parse(id), {:ok, f} <- tmdb_collection(n, uuid) do
       {:ok, f}
     else
       _ -> :error
     end
   end
 
-  def find(slug) do
+  def find(slug, _uuid) do
     case Enum.find(Franchises.all(), &(slug(&1.name) == slug)) do
       nil -> :error
       f -> {:ok, f}
@@ -84,9 +86,9 @@ defmodule Roki.Lists do
   end
 
   @doc "One of TMDB's collections as a franchise (cached a day), `{:error, _}` when it is not a series."
-  def tmdb_collection(id) when is_integer(id) do
+  def tmdb_collection(id, uuid \\ nil) when is_integer(id) do
     TTLCache.fetch({:collection, id}, @collection_ttl, fn ->
-      Roki.Laev.public(nil, fn ->
+      Roki.Laev.public(uuid, fn ->
         case Laev.Tmdb.collection(id) do
           {:ok, %{"parts" => parts, "name" => name}} when length(parts) > 1 ->
             {:ok, collection_franchise(id, name, parts)}

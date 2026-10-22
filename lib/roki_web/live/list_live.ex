@@ -35,7 +35,7 @@ defmodule RokiWeb.ListLive do
 
   @impl true
   def handle_params(%{"slug" => slug} = params, _uri, socket) do
-    case Lists.find(slug) do
+    case Lists.find(slug, socket.assigns.uuid) do
       {:ok, franchise} ->
         socket =
           socket

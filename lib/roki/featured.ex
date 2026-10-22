@@ -8,8 +8,9 @@ defmodule Roki.Featured do
   home page is a handful of TMDB requests per half hour rather than a handful
   per visitor. It needs a TMDB key, which laev reads from the application
   environment for anything that runs outside a user's scope (`config :laev,
-  tmdb_key:`, set from `TMDB_API_KEY` in `config/runtime.exs`); without one
-  this returns `{:error, :no_tmdb_key}` and the page says so.
+  tmdb_key:`, set from `TMDB_API_KEY` in `config/runtime.exs`). When the site has
+  none, a signed-in user's own carried key is used instead (`Roki.Laev.public/2`);
+  with neither, this returns `{:error, :no_tmdb_key}` and the page says so.
   """
 
   @ttl_s 30 * 60
@@ -18,10 +19,10 @@ defmodule Roki.Featured do
   def kinds, do: @kinds
 
   @doc "`{:ok, items, more?}` for page `n` of a shelf, or `{:error, reason}`."
-  def page(kind, n \\ 1) when kind in @kinds and is_integer(n) and n >= 1 do
+  def page(kind, n \\ 1, uuid \\ nil) when kind in @kinds and is_integer(n) and n >= 1 do
     case cached(kind, n) do
       {:fresh, result} -> result
-      {:stale, old} -> refresh(kind, n, old)
+      {:stale, old} -> refresh(kind, n, old, uuid)
     end
   end
 
@@ -38,14 +39,14 @@ defmodule Roki.Featured do
 
   # One refresh per page at a time: a cold cache under a burst of visitors would
   # otherwise be a burst of identical TMDB requests.
-  defp refresh(kind, n, old) do
+  defp refresh(kind, n, old, uuid) do
     :global.trans({{__MODULE__, kind, n}, self()}, fn ->
       case cached(kind, n) do
         {:fresh, result} ->
           result
 
         _ ->
-          case fetch(kind, n) do
+          case fetch(kind, n, uuid) do
             {:ok, _items, _more?} = ok ->
               :persistent_term.put(key(kind, n), {now(), ok})
               ok
@@ -58,19 +59,14 @@ defmodule Roki.Featured do
     end)
   end
 
-  defp fetch(kind, n) do
-    if configured?() do
-      run(fn -> call(kind, n) end)
-    else
-      {:error, :no_tmdb_key}
-    end
-  end
+  # Whose key pays is `Roki.Laev.public/2`'s call: the site's when it has one, else
+  # the signed-in user's own carried key. The answer is public data either way, so
+  # it lands in the shared cache and the next visitor gets it free.
+  defp fetch(kind, n, uuid), do: Roki.Laev.public(uuid, fn -> call(kind, n) end)
 
   defp call(:movies, n), do: Laev.Tmdb.trending("movie", n)
   defp call(:shows, n), do: Laev.Tmdb.trending("tv", n)
   defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)
-
-  defp run(fun), do: Roki.Laev.shared(fun)
 
   defp now, do: System.system_time(:second)
 end

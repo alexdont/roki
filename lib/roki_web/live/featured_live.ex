@@ -46,7 +46,7 @@ defmodule RokiWeb.FeaturedLive do
     uuid = socket.assigns.uuid
 
     start_async(socket, {:page, kind}, fn ->
-      case Featured.page(kind, page) do
+      case Featured.page(kind, page, uuid) do
         {:ok, items, _more?} = ok -> {page, ok, Roki.Laev.seen_keys(uuid, items)}
         error -> {page, error, MapSet.new()}
       end

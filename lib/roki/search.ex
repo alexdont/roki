@@ -80,23 +80,23 @@ defmodule Roki.Search do
   defp upstream(client, uuid, q, page) do
     with :ok <- RateLimit.check(:search, client, @client_limit, @window),
          :ok <- RateLimit.check(:search_global, :all, @global_limit, @window) do
-      Roki.Laev.public(uuid, fn -> lookup(q, page) end)
+      Roki.Laev.public(uuid, fn -> lookup(uuid, q, page) end)
     end
   end
 
-  defp lookup(q, page) do
-    if Regex.match?(@imdb, q), do: imdb(q), else: text(q, page)
+  defp lookup(uuid, q, page) do
+    if Regex.match?(@imdb, q), do: imdb(uuid, q), else: text(uuid, q, page)
   end
 
-  defp imdb(id) do
+  defp imdb(uuid, id) do
     case Laev.Tmdb.find_imdb(id) do
-      {:ok, title} -> {:ok, {[title], false, franchises([title])}}
+      {:ok, title} -> {:ok, {[title], false, franchises(uuid, [title])}}
       {:error, :not_found} -> {:ok, {[], false, []}}
       error -> error
     end
   end
 
-  defp text(q, page) do
+  defp text(uuid, q, page) do
     {text, year} = split_year(q)
 
     answers = Enum.map(spelling_variants(text), &Laev.Tmdb.search(&1, page))
@@ -109,7 +109,7 @@ defmodule Roki.Search do
         results = oks |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq_by(&{&1.type, &1.id})
         more? = Enum.any?(oks, &elem(&1, 2))
         titles = rank_titles(results, text, year)
-        {:ok, {titles, more?, if(page == 1, do: franchises(titles), else: [])}}
+        {:ok, {titles, more?, if(page == 1, do: franchises(uuid, titles), else: [])}}
     end
   end
 
@@ -174,16 +174,16 @@ defmodule Roki.Search do
 
   # Curated lists the results belong to, then TMDB's own collection when the
   # results point at one; smallest list first.
-  defp franchises(titles) do
-    (Laev.Franchises.detect(titles) ++ List.wrap(collection_franchise(titles)))
+  defp franchises(uuid, titles) do
+    (Laev.Franchises.detect(titles) ++ List.wrap(collection_franchise(uuid, titles)))
     |> Enum.uniq_by(& &1.name)
     |> Enum.sort_by(&length(&1.entries))
     |> Enum.map(&Lists.summary/1)
   end
 
-  defp collection_franchise(titles) do
+  defp collection_franchise(uuid, titles) do
     with id when is_integer(id) <- likeliest_collection(titles),
-         {:ok, franchise} <- Lists.tmdb_collection(id) do
+         {:ok, franchise} <- Lists.tmdb_collection(id, uuid) do
       franchise
     else
       _ -> nil
