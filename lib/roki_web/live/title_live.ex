@@ -1577,18 +1577,17 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- The poster takes all the height there is between the title and the synopsis; the
             three buttons are a strip against the right edge of the screen. --%>
-      <div class="flex min-h-0 flex-1 justify-between gap-2">
-        <%!-- The whole poster, never cropped: the biggest 2:3 that fits the height left over by the
-              synopsis below. --%>
-        <div class="flex min-w-0 shrink-0 justify-start">
-          <div class="relative aspect-[2/3] h-full max-w-[62vw] overflow-hidden rounded-box bg-base-300 shadow-lg">
-            <img
-              :if={@title.poster}
-              src={@title.poster}
-              alt={@title.title}
-              class="absolute inset-0 h-full w-full object-cover"
-            />
-          </div>
+      <%!-- The row is a size container: the poster is sized in its units (two thirds of its height,
+            but never more than 62% of its width), so it never depends on its own content — a
+            percentage height plus an aspect ratio collapses to nothing in Safari. --%>
+      <div class="flex min-h-0 flex-1 gap-3 [container-type:size]">
+        <div class="relative aspect-[2/3] w-[min(66.6667cqh,62cqw)] shrink-0 overflow-hidden rounded-box bg-base-300 shadow-lg">
+          <img
+            :if={@title.poster}
+            src={@title.poster}
+            alt={@title.title}
+            class="absolute inset-0 h-full w-full object-cover"
+          />
         </div>
 
         <%!-- Icons only: saved, on hold, watched — three tiles sharing the height and the width left of
