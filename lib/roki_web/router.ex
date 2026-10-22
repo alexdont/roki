@@ -35,7 +35,8 @@ defmodule RokiWeb.Router do
   live_session :site,
     on_mount: [
       {PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope},
-      {RokiWeb.Cached, :assign_titles}
+      {RokiWeb.Cached, :assign_titles},
+      {RokiWeb.PlayerMode, :attach}
     ] do
     scope "/", RokiWeb do
       pipe_through :browser

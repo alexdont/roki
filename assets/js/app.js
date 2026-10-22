@@ -66,6 +66,7 @@ window.addEventListener("phx:roki:grid", e => {
 
 window.addEventListener("phx:roki:player", e => {
   try { localStorage.setItem("roki:player", e.detail.mode) } catch {}
+  document.documentElement.dataset.player = e.detail.mode
 })
 
 setupPeek()

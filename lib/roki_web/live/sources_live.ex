@@ -369,7 +369,6 @@ defmodule RokiWeb.SourcesLive do
           Couldn't load this title just now. Try again in a minute.
         </p>
 
-        <.mode_switch :if={@linked?} mode={@mode} />
         <.cache_note :if={@cached_at} at={@cached_at} busy={@phase == :working} />
 
         <.progress_line

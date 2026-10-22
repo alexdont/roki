@@ -128,7 +128,10 @@ defmodule RokiWeb.Layouts do
           />
         </div>
 
-        <div class="hidden items-center px-2 lg:flex"><.theme_toggle /></div>
+        <div class="hidden items-center gap-3 px-2 md:flex">
+          <.player_toggle />
+          <div class="hidden lg:block"><.theme_toggle /></div>
+        </div>
 
         <%!-- PhoenixKit's own account menu: avatar, Settings (which opens this site's settings
               page), admin, log out; or log in / register for a visitor. --%>
@@ -200,8 +203,8 @@ defmodule RokiWeb.Layouts do
         <div class="flex cursor-not-allowed items-center justify-between rounded-lg px-4 py-3 text-base font-medium text-base-content/40">
           Manga <span class="badge badge-ghost badge-sm">soon</span>
         </div>
-        <div class="mt-1 flex items-center justify-between border-t border-base-300 px-4 pb-2 pt-3">
-          <span class="text-sm text-base-content/60">Theme</span>
+        <div class="mt-1 flex items-center justify-between gap-3 border-t border-base-300 px-4 pb-2 pt-3">
+          <.player_toggle />
           <.theme_toggle />
         </div>
       </nav>
@@ -262,6 +265,42 @@ defmodule RokiWeb.Layouts do
         {gettext("Attempting to reconnect")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
+    </div>
+    """
+  end
+
+  @doc """
+  Which player this device uses: the page's own (browser) or an app such as VLC (external).
+  Two icons, lit from `data-player` on the page element (set before paint in root.html.heex and
+  kept by app.js), so it reads right on every page. A click goes to the open LiveView as
+  `set_mode`; `RokiWeb.PlayerMode` makes sure there is always something to answer it.
+  """
+  def player_toggle(assigns) do
+    ~H"""
+    <div
+      class="card relative flex flex-row items-center rounded-full border-2 border-base-300 bg-base-300"
+      role="group"
+      aria-label="Where to watch"
+    >
+      <div class="absolute left-1/2 h-full w-1/2 rounded-full border-1 border-base-200 bg-primary transition-[left] [[data-player=browser]_&]:left-0" />
+      <button
+        class="relative flex w-1/2 cursor-pointer justify-center p-2.5 text-base-content [[data-player=browser]_&]:text-primary-content"
+        phx-click="set_mode"
+        phx-value-mode="browser"
+        title="Watch in the browser"
+        aria-label="Watch in the browser"
+      >
+        <.icon name="hero-globe-alt" class="size-5" />
+      </button>
+      <button
+        class="relative flex w-1/2 cursor-pointer justify-center p-2.5 text-primary-content [[data-player=browser]_&]:text-base-content"
+        phx-click="set_mode"
+        phx-value-mode="external"
+        title="Watch in an external player (VLC and the like)"
+        aria-label="Watch in an external player"
+      >
+        <.icon name="hero-tv" class="size-5" />
+      </button>
     </div>
     """
   end

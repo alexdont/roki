@@ -1,6 +1,6 @@
 defmodule RokiWeb.WatchComponents do
   @moduledoc """
-  The pieces of the watching pages (sources, player): the Browser / External player switch, the
+  The pieces of the watching pages (sources, player): the
   list of releases, the external-player panel, the "starting the best source" pop-up. Shared by
   `SourcesLive` and `WatchLive`.
   """
@@ -9,35 +9,6 @@ defmodule RokiWeb.WatchComponents do
   alias Phoenix.LiveView.JS
   alias Roki.Watch
   alias Roki.Watch.Resolver
-
-  attr :mode, :atom, required: true
-
-  def mode_switch(assigns) do
-    ~H"""
-    <div class="flex flex-wrap items-center gap-2 text-sm">
-      <span class="hidden text-base-content/60 sm:inline">Play in</span>
-      <div class="join">
-        <button
-          phx-click="set_mode"
-          phx-value-mode="browser"
-          class={["btn btn-xs join-item sm:btn-sm", @mode == :browser && "btn-primary"]}
-        >
-          Browser
-        </button>
-        <button
-          phx-click="set_mode"
-          phx-value-mode="external"
-          class={["btn btn-xs join-item sm:btn-sm", @mode == :external && "btn-primary"]}
-        >
-          External player
-        </button>
-      </div>
-      <span :if={@mode == :external} class="hidden text-base-content/60 sm:inline">
-        full quality, 4K included; nothing is converted on the server
-      </span>
-    </div>
-    """
-  end
 
   attr :at, :integer, required: true
   attr :busy, :boolean, default: false

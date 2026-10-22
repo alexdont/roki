@@ -30,6 +30,7 @@
             document.documentElement.setAttribute("data-theme-source", "user");
           }
         };
+        try { document.documentElement.dataset.player = localStorage.getItem("roki:player") || "external" } catch (_) { document.documentElement.dataset.player = "external" }
         if (!document.documentElement.hasAttribute("data-theme")) {
           setTheme(localStorage.getItem("phx:theme") || "system");
         }

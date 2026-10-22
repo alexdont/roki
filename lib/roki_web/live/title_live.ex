@@ -10,8 +10,6 @@ defmodule RokiWeb.TitleLive do
   """
   use RokiWeb, :live_view
 
-  import RokiWeb.WatchComponents, only: [mode_switch: 1]
-
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
   alias Roki.Watch.SourceCache
@@ -519,12 +517,8 @@ defmodule RokiWeb.TitleLive do
 
         <div class="space-y-3 pt-2">
           <%!-- Where it plays, then the button: one decision above the other. --%>
-          <div
-            :if={@linked?}
-            class="flex flex-wrap items-center justify-around gap-3 [&>*:only-child]:mx-auto"
-          >
-            <.sources_link :if={@title.type == "movie"} title={@title} />
-            <.mode_switch mode={@mode} />
+          <div :if={@linked? and @title.type == "movie"} class="flex">
+            <.sources_link title={@title} />
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
@@ -699,11 +693,33 @@ defmodule RokiWeb.TitleLive do
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
   attr :busy?, :boolean, default: false
+  attr :split?, :boolean, default: false
   attr :class, :string, default: nil
 
   # The big button. A film: one button, Start / Continue mm:ss. A series: two halves — the left
   # picks a season and episode, the right goes straight to the sources of S1.E1 (or wherever you
   # were) and starts the best one.
+  defp play_button(%{title: %{type: "movie"}, split?: true} = assigns) do
+    ~H"""
+    <div class={["flex gap-2", @class]}>
+      <.link
+        navigate={~p"/sources/movie/#{@title.id}"}
+        class="btn btn-primary btn-lg h-full min-h-0 flex-[2] gap-2 px-3 text-[length:inherit] shadow-md"
+      >
+        <.icon name="hero-queue-list" class="h-6 w-6" /> Sources
+      </.link>
+      <button
+        phx-click="play"
+        class="btn btn-primary btn-lg h-full min-h-0 flex-[3] gap-2 px-3 text-[length:inherit] shadow-md"
+        disabled={@busy?}
+      >
+        <.icon name="hero-play-solid" class="h-6 w-6" />
+        {play_label(@resume_secs)}
+      </button>
+    </div>
+    """
+  end
+
   defp play_button(%{title: %{type: "movie"}} = assigns) do
     ~H"""
     <button
@@ -964,7 +980,7 @@ defmodule RokiWeb.TitleLive do
 
     ~H"""
     <section class={[
-      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(6.5rem+max(0.75rem,env(safe-area-inset-bottom)))] sm:hidden",
+      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(5rem+max(0.75rem,env(safe-area-inset-bottom)))] sm:hidden",
       @locked? && "-mb-9"
     ]}>
       <div class="relative flex shrink-0 items-start gap-2">
@@ -1078,11 +1094,8 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
       <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <div :if={@linked?} class="flex items-center justify-around gap-2 [&>*:only-child]:mx-auto">
-          <.sources_link :if={@title.type == "movie"} title={@title} />
-          <.mode_switch mode={@mode} />
-        </div>
         <.play_button
+          split?
           title={@title}
           resume={@resume}
           resume_secs={@resume_secs}
