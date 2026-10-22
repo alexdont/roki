@@ -36,6 +36,6 @@ defmodule RokiWeb.UserPagesTest do
 
   test "the logo takes you to the featured page", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/lists")
-    assert html =~ ~s(href="/home" class="flex w-fit items-center gap-2 text-lg font-bold)
+    assert html =~ ~s(href="/home" class="flex items-center gap-2 pr-3 text-lg font-bold)
   end
 end

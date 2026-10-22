@@ -364,7 +364,15 @@ defmodule RokiWeb.SettingsLive do
       current_path={"/#{@username}/settings"}
     >
       <div class="mx-auto max-w-3xl space-y-10">
-        <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
+          <a
+            href="/phoenix_kit/profile/settings"
+            class="text-sm text-base-content/60 hover:text-primary"
+          >
+            Account: name, email, password →
+          </a>
+        </div>
 
         <div :if={@state == :not_connected} class="alert">
           <span>Connect laev on your shelf to manage its settings.</span>

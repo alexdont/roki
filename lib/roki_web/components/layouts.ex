@@ -52,93 +52,134 @@ defmodule RokiWeb.Layouts do
         _ -> nil
       end
 
-    links =
-      [{"Featured", ~p"/home"}] ++
-        if username,
-          do: [
-            {"Shelf", ~p"/#{username}/home"},
-            {"Stats", ~p"/#{username}/stats"},
-            {"Calendar", ~p"/#{username}/calendar"},
-            {"Settings", ~p"/#{username}/settings"}
-          ],
-          else: []
+    # The sections of the site, left; what is yours (shelf, calendar, search), right.
+    sections = [
+      {"Movies", ~p"/movies"},
+      {"Shows", ~p"/shows"},
+      {"Anime", ~p"/anime"}
+    ]
 
     assigns =
-      assigns |> assign(:scope, scope) |> assign(:username, username) |> assign(:links, links)
+      assigns
+      |> assign(:scope, scope)
+      |> assign(:username, username)
+      |> assign(:sections, sections)
 
     ~H"""
-    <header class="navbar mx-auto max-w-6xl gap-2 px-4 sm:px-6 lg:px-8">
-      <div class="flex-none">
-        <a href={~p"/home"} class="flex w-fit items-center gap-2 text-lg font-bold tracking-tight">
+    <header class="relative border-b border-base-300/60">
+      <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-1 px-4 sm:px-6 lg:px-8">
+        <a
+          href={~p"/home"}
+          class="flex items-center gap-2 pr-3 text-lg font-bold tracking-tight"
+          aria-label="roki — home"
+        >
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
             <.icon name="hero-play-solid" class="h-4 w-4" />
           </span>
           roki
         </a>
+
+        <nav class="hidden items-stretch md:flex" aria-label="Sections">
+          <.top_link
+            :for={{label, href} <- @sections}
+            href={href}
+            active={active?(@current_path, href)}
+          >
+            {label}
+          </.top_link>
+          <%!-- Placeholder: manga comes later. --%>
+          <span
+            class="flex cursor-not-allowed items-center gap-1.5 px-3 text-sm font-medium text-base-content/35"
+            title="Coming soon"
+          >
+            Manga <span class="badge badge-ghost badge-xs">soon</span>
+          </span>
+        </nav>
+
+        <div class="flex-1"></div>
+
+        <div class="flex items-stretch">
+          <button
+            type="button"
+            phx-click={JS.toggle(to: "#search-pop", display: "flex") |> JS.focus(to: "#search-input")}
+            class="flex items-center px-3 text-base-content/70 transition hover:bg-base-200 hover:text-base-content"
+            aria-label="Search"
+            title="Search"
+          >
+            <.icon name="hero-magnifying-glass" class="h-5 w-5" />
+          </button>
+          <.top_icon
+            :if={@username}
+            href={~p"/#{@username}/calendar"}
+            icon="hero-calendar-days"
+            label="Calendar"
+            active={active?(@current_path, ~p"/#{@username}/calendar")}
+          />
+          <.top_icon
+            :if={@username}
+            href={~p"/#{@username}/home"}
+            icon="hero-star"
+            label="Shelf"
+            active={active?(@current_path, ~p"/#{@username}/home")}
+          />
+        </div>
+
+        <div class="hidden items-center px-2 lg:flex"><.theme_toggle /></div>
+
+        <%!-- PhoenixKit's own account menu: avatar, Settings (which opens this site's settings
+              page), admin, log out; or log in / register for a visitor. --%>
+        <div class="flex items-center pl-1">
+          <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown
+            scope={@scope}
+            current_path={@current_path}
+          />
+        </div>
+
+        <%!-- On a phone the sections move into a menu. --%>
+        <div class="dropdown dropdown-end flex items-center md:hidden">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-square btn-sm" aria-label="Menu">
+            <.icon name="hero-bars-3" class="h-6 w-6" />
+          </div>
+          <ul
+            tabindex="0"
+            class="menu dropdown-content z-[60] mt-3 w-52 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+          >
+            <li :for={{label, href} <- @sections}>
+              <.link navigate={href} class={active?(@current_path, href) && "menu-active"}>
+                {label}
+              </.link>
+            </li>
+            <li class="disabled">
+              <span>Manga <span class="badge badge-ghost badge-xs">soon</span></span>
+            </li>
+            <li class="menu-title mt-1">Theme</li>
+            <li class="px-2 py-1"><.theme_toggle /></li>
+          </ul>
+        </div>
       </div>
-      <%!-- Search: the box on wider screens, an icon on a phone. --%>
+
+      <%!-- Search opens under the icon, big enough to type in; Enter goes to the results, Escape or
+            a click elsewhere puts it away. --%>
       <form
+        id="search-pop"
         action={~p"/search"}
         method="get"
         role="search"
-        class="hidden flex-1 justify-center px-4 sm:flex"
+        class="absolute right-4 top-full z-50 hidden w-[min(24rem,calc(100vw-2rem))] items-center gap-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-6 lg:right-8"
+        phx-click-away={JS.hide(to: "#search-pop")}
+        phx-window-keydown={JS.hide(to: "#search-pop")}
+        phx-key="escape"
       >
-        <label class="input input-bordered input-sm flex w-full max-w-md items-center gap-2">
-          <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-60" />
-          <input
-            type="search"
-            name="q"
-            placeholder="Search movies and shows"
-            autocomplete="off"
-            class="grow"
-          />
-        </label>
-      </form>
-      <div class="flex-1 sm:hidden"></div>
-      <.link
-        navigate={~p"/search"}
-        class="btn btn-ghost btn-square sm:hidden"
-        aria-label="Search"
-      >
-        <.icon name="hero-magnifying-glass" class="h-5 w-5" />
-      </.link>
-      <%!-- One list of links, two homes: in the bar from laptop width up, in the menu
-            beside the avatar below it — so a long set never crowds the search box. --%>
-      <nav class="hidden flex-none items-center gap-1 lg:flex">
-        <.link
-          :for={{label, href} <- @links}
-          navigate={href}
-          class={["btn btn-ghost btn-sm", active?(@current_path, href) && "btn-active"]}
-        >
-          {label}
-        </.link>
-      </nav>
-      <div class="dropdown dropdown-end lg:hidden">
-        <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Menu">
-          <.icon name="hero-bars-3" class="h-6 w-6" />
-        </div>
-        <ul
-          tabindex="0"
-          class="menu dropdown-content z-[60] mt-3 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
-        >
-          <li :for={{label, href} <- @links}>
-            <.link navigate={href} class={active?(@current_path, href) && "menu-active"}>
-              {label}
-            </.link>
-          </li>
-          <li class="menu-title mt-1">Theme</li>
-          <li class="px-2 py-1"><.theme_toggle /></li>
-        </ul>
-      </div>
-      <div class="flex flex-none items-center gap-3">
-        <div class="hidden lg:block"><.theme_toggle /></div>
-        <%!-- PhoenixKit's own account menu: avatar, settings, admin, log out; or
-              log in / register for a visitor. --%>
-        <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown
-          scope={@scope}
-          current_path={@current_path}
+        <.icon name="hero-magnifying-glass" class="ml-1 h-5 w-5 shrink-0 opacity-60" />
+        <input
+          id="search-input"
+          type="search"
+          name="q"
+          placeholder="Search movies and shows"
+          autocomplete="off"
+          class="input input-ghost w-full focus:outline-none"
         />
-      </div>
+      </form>
     </header>
 
     <main class="px-4 py-8 sm:px-6 lg:px-8">
@@ -238,6 +279,53 @@ defmodule RokiWeb.Layouts do
   end
 
   # The link for the page you are on is lit; /lists stays lit inside a list.
+  attr :href, :string, required: true
+  attr :active, :boolean, default: false
+  slot :inner_block, required: true
+
+  # A section link: as tall as the header, the current one underlined.
+  defp top_link(assigns) do
+    ~H"""
+    <.link
+      navigate={@href}
+      class={[
+        "flex items-center border-b-2 px-3 text-sm font-medium transition hover:bg-base-200",
+        if(@active,
+          do: "border-primary text-base-content",
+          else: "border-transparent text-base-content/70 hover:text-base-content"
+        )
+      ]}
+    >
+      {render_slot(@inner_block)}
+    </.link>
+    """
+  end
+
+  attr :href, :string, required: true
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+  attr :active, :boolean, default: false
+
+  # An icon button, the full height of the header.
+  defp top_icon(assigns) do
+    ~H"""
+    <.link
+      navigate={@href}
+      aria-label={@label}
+      title={@label}
+      class={[
+        "flex items-center border-b-2 px-3 transition hover:bg-base-200",
+        if(@active,
+          do: "border-primary text-primary",
+          else: "border-transparent text-base-content/70 hover:text-base-content"
+        )
+      ]}
+    >
+      <.icon name={@icon} class="h-5 w-5" />
+    </.link>
+    """
+  end
+
   defp active?(current_path, href) when is_binary(current_path),
     do: current_path == href or String.starts_with?(current_path, href <> "/")
 

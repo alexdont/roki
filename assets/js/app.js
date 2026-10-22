@@ -38,12 +38,17 @@ const storedPlayer = () => {
   try { return localStorage.getItem("roki:player") } catch { return null }
 }
 
+const storedGrid = () => {
+  try { return localStorage.getItem("roki:grid") } catch { return null }
+}
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: () => ({
     _csrf_token: csrfToken,
     platform,
-    player: storedPlayer() || (platform === "desktop" ? "browser" : "external"),
+    player: storedPlayer() || "external",
+    grid: storedGrid(),
   }),
   hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar},
 })
@@ -53,6 +58,10 @@ window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "
 
 // Play on an external player: the server found the release and says where to open it.
 window.addEventListener("phx:roki:launch", e => { window.location.href = e.detail.url })
+
+window.addEventListener("phx:roki:grid", e => {
+  try { localStorage.setItem("roki:grid", e.detail.size) } catch {}
+})
 
 window.addEventListener("phx:roki:player", e => {
   try { localStorage.setItem("roki:player", e.detail.mode) } catch {}

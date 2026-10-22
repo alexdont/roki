@@ -74,7 +74,7 @@ defmodule RokiWeb.TitleLive do
   # How this device plays: the page tells us (`player` in the socket params, from the browser's
   # own storage; a phone defaults to its own player). `platform` picks which link to lead with.
   defp mode_param(socket),
-    do: if(connect_param(socket, "player") == "external", do: :external, else: :browser)
+    do: if(connect_param(socket, "player") == "browser", do: :browser, else: :external)
 
   defp platform_param(socket) do
     case connect_param(socket, "platform") do

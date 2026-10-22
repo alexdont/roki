@@ -354,3 +354,9 @@ A device-level choice, stored in the browser (`localStorage["roki:player"]`) and
 ### Poster progress and hover card
 
 On the shelf (`compact` posters) the caption under the poster is gone: episodes/seasons done (parsed from laev's `note`, "7/13 episodes") and, for a film or episode in progress, the stop position and time left sit in a strip on the poster, with a thin bar. A hover card (`assets/js/peek.js`, mouse only) shows year, length, rating, genres and a short overview from `GET /peek/:type/:id` (`PeekController`: signed-in only, 90 lookups/min, `Watch.title` is cached 12 h), plus the progress/resume/cached lines the page already has (`data-peek-*` attributes). Other pages keep their caption.
+
+### Navigation and the section pages
+
+Header (`RokiWeb.Layouts.app`): logo (= Featured `/home`), then Movies / Shows / Anime (Manga is a disabled placeholder), and on the right search (an icon that opens a box under it; Enter goes to `/search?q=`), calendar and shelf (star) icons for a signed-in user, the theme toggle, and PhoenixKit's account dropdown. Settings and Stats are not in the bar: the dropdown's "Settings" (`/phoenix_kit/:locale/profile/settings`) is redirected by `AccountController` to `/:username/settings`, which links to PhoenixKit's own account page at `/phoenix_kit/profile/settings`; Stats is reached from the shelf's strip.
+
+`/movies`, `/shows`, `/anime` (`CategoryLive`, `Roki.Browse`): a larger-poster grid, Popular (= the Featured list) by default or Newest / Oldest / Top rated (TMDB discover, out already, with a vote floor so the oldest/newest/top are not obscure), grid size S/M/L at the top right (kept in `localStorage["roki:grid"]`, sent as the `grid` socket param), "Load more" at the bottom. Featured shows two rows per kind and "See more →".

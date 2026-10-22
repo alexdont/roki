@@ -63,18 +63,6 @@ defmodule RokiWeb.FeaturedLive do
   end
 
   @impl true
-  def handle_event("more", %{"kind" => kind}, socket) do
-    # Match the string against the known shelves — never turn client input into an atom.
-    with kind when kind != nil <- Enum.find(Featured.kinds(), &(Atom.to_string(&1) == kind)),
-         %{more?: true, loading?: false} = shelf <- socket.assigns.shelves[kind] do
-      {:noreply,
-       socket |> put_shelf(kind, %{shelf | loading?: true}) |> fetch(kind, shelf.page + 1)}
-    else
-      _ -> {:noreply, socket}
-    end
-  end
-
-  @impl true
   def handle_async({:page, kind}, {:ok, {page, {:ok, items, more?}, seen}}, socket) do
     shelf = socket.assigns.shelves[kind]
     known = MapSet.new(shelf.items, & &1.id)
@@ -207,9 +195,18 @@ defmodule RokiWeb.FeaturedLive do
   defp shelf(assigns) do
     ~H"""
     <section :if={@shelf.items != []} class="space-y-3">
-      <h2 class="text-xl font-semibold">{@title}</h2>
+      <div class="flex items-baseline justify-between gap-3">
+        <h2 class="text-xl font-semibold">{@title}</h2>
+        <.link
+          navigate={"/#{@kind}"}
+          class="text-sm font-medium text-base-content/60 transition hover:text-primary"
+        >
+          See more →
+        </.link>
+      </div>
+      <%!-- Two rows: the rest of the list is on its own page, so this one stays short. --%>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- @shelf.items} class="space-y-1">
+        <li :for={i <- Enum.take(@shelf.items, 16)} class="space-y-1">
           <.poster
             item={i}
             seen={MapSet.member?(@seen, {i.type, i.id})}
@@ -217,20 +214,6 @@ defmodule RokiWeb.FeaturedLive do
             upcoming={@upcoming}
             compact
           />
-        </li>
-        <%!-- Poster-sized, and the next cell in the grid: more of the same shelf. --%>
-        <li :if={@shelf.more?}>
-          <button
-            phx-click="more"
-            phx-value-kind={@kind}
-            disabled={@shelf.loading?}
-            aria-label={"Load more #{String.downcase(@title)}"}
-            class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed border-base-300 text-base-content/60 transition hover:border-primary hover:text-primary disabled:cursor-wait"
-          >
-            <span :if={@shelf.loading?} class="loading loading-spinner"></span>
-            <.icon :if={!@shelf.loading?} name="hero-ellipsis-horizontal" class="h-8 w-8" />
-            <span class="text-sm font-medium">{if @shelf.loading?, do: "Loading…", else: "Load more"}</span>
-          </button>
         </li>
       </ul>
     </section>
