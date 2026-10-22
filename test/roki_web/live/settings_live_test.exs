@@ -127,7 +127,7 @@ defmodule RokiWeb.SettingsLiveTest do
     {:ok, view, _} = live(conn, "/settingstest/settings")
     html = render_async(view)
 
-    assert html =~ "this page&#39;s player"
+    assert html =~ "browser player"
     assert has_element?(view, "#w-browser_max_resolution option[selected]", "1080p")
 
     html =
@@ -165,7 +165,7 @@ defmodule RokiWeb.SettingsLiveTest do
     |> render_change(%{"_target" => ["d", "player"], "d" => %{"player" => "browser"}})
 
     assert_push_event(view, "roki:player", %{mode: "browser"})
-    assert has_element?(view, "#d-player option[selected]", "This page")
+    assert has_element?(view, "#d-player option[selected]", "Browser")
   end
 
   test "a value laev refuses is explained, not saved", %{conn: conn, user: user} do

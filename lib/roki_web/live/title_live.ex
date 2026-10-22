@@ -967,7 +967,7 @@ defmodule RokiWeb.TitleLive do
           phx-value-mode="browser"
           class={["btn btn-sm join-item", @mode == :browser && "btn-primary"]}
         >
-          This page
+          Browser
         </button>
         <button
           phx-click="set_mode"

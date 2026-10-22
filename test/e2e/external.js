@@ -17,8 +17,8 @@ const results = []; const check = (n, ok, x = "") => { results.push(!!ok); conso
   const url = decodeURIComponent(vlc.split("url=")[1]);
   fs.writeFileSync("/tmp/ext-url.txt", url);
   await p.screenshot({ path: "/tmp/x1.jpg", type: "jpeg", quality: 55 });
-  await p.click("button:has-text('This page')"); await p.waitForTimeout(800);
-  check("can switch back to the page player", (await p.locator("button.btn-primary:has-text('This page')").count()) === 1);
+  await p.click("button:has-text('Browser')"); await p.waitForTimeout(800);
+  check("can switch back to the page player", (await p.locator("button.btn-primary:has-text('Browser')").count()) === 1);
   check("preference persisted in the browser", (await p.evaluate(() => localStorage.getItem("roki:player"))) === "browser");
   check("no page errors", errs.length === 0, errs.join("|"));
   console.log(`${results.filter(Boolean).length}/${results.length} passed`);

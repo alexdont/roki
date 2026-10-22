@@ -28,17 +28,17 @@ defmodule RokiWeb.SettingsLive do
   ]
 
   # The resolution ceiling is two settings: laev's own (external player and terminal app, any
-  # value) and the site's (the page's player, nothing above 1080p), shown one under the other.
+  # value) and the site's (the browser player, nothing above 1080p), shown one under the other.
   @web_hints %{
     "browser_max_resolution" =>
-      "For the player on this page, up to 1080p: a browser cannot decode HEVC, so more would mean the server re-encoding the release. Set the 4K you want under the external player."
+      "For the browser player, up to 1080p: a browser cannot decode HEVC, so more would mean the server re-encoding the release. Set the 4K you want under the external player."
   }
-  @web_labels %{"browser_max_resolution" => "Resolution ceiling — this page's player"}
+  @web_labels %{"browser_max_resolution" => "Resolution ceiling — browser player"}
   @labels %{"LAEV_MAX_RESOLUTION" => "Resolution ceiling — external player & terminal app"}
 
   @hints %{
     "LAEV_PLAYER" =>
-      "Which player the terminal app opens. On this site each device chooses on the title page: this page or VLC.",
+      "Which player the terminal app opens. On this site each device chooses on the title page: Browser or VLC.",
     "LAEV_AUTO_SOURCE" => "Play the best source instead of asking which one.",
     "LAEV_MAX_RESOLUTION" =>
       "The highest resolution to start on its own in VLC or another external player and in the terminal app. Any value. Every release is still listed.",
@@ -454,7 +454,7 @@ defmodule RokiWeb.SettingsLive do
         <span class="font-medium">Player on this device</span>
         <span class="block text-xs text-base-content/60">
           What Play does on the title page. The external player (VLC) is the default: the full
-          release, any resolution, nothing converted on the server. "This page" plays in the
+          release, any resolution, nothing converted on the server. "Browser" plays in the
           browser, up to 1080p. Remembered in this browser, so each of your devices has its own.
         </span>
       </label>
@@ -463,7 +463,7 @@ defmodule RokiWeb.SettingsLive do
           <option value="external" selected={@value == "external"}>
             VLC / external player (default)
           </option>
-          <option value="browser" selected={@value == "browser"}>This page</option>
+          <option value="browser" selected={@value == "browser"}>Browser</option>
         </select>
         <span :if={@saved == "device_player"} class="shrink-0 text-sm text-success">Saved</span>
       </div>
