@@ -381,3 +381,17 @@ Pages, in order — nothing plays on the title page any more:
 3. `/watch/movie/:id`, `/watch/tv/:id/:season/:episode?h=<info hash>` (`WatchLive`) — the player page (video + subtitle sidebar). `h` names the release; without it the best is chosen and the address is updated (`push_patch replace`) to name it, so the URL can be copied, reloaded, and Back returns to the sources. A shared URL looks for the hash among the checked releases (a few extra pages) and falls back to the best. Progress goes through laev as before; the next episode autoplays when laev's autoplay is on.
 
 Shared pieces: `Roki.Watch.Resolver` (find/probe/pick/failure texts), `RokiWeb.WatchComponents` (mode switch, release list, external panel, pop-up). `test/e2e/flow.js` and `flow2.js` are the manual end-to-end runs (they use a real debrid account and a session cookie in `/tmp/e2e-cookie.txt`; clean up history, the source cache and the remux directory afterwards).
+
+
+## The study player (`/watch/...`)
+
+`RokiWeb.StudyComponents.study_player/1` + `assets/js/study/sidebar.js` (`StudySidebar` hook). The
+subtitles are drawn by the hook over the video (`.study-overlay`, not native text tracks) with each
+word its own `.study-word`; hover/tap asks `/dict/:lang?q=` (`RokiWeb.DictController`,
+`Roki.Dictionary`: Jisho for Japanese, Wiktionary for the rest, cached a day, rate-limited). Japanese
+words come from `Intl.Segmenter` plus `joinInflections` (Safari cuts 食べました into pieces).
+Tracks are buttons under the player; `Off` hides the overlay only. UI state (`data-theater`,
+`data-panel` = open/compact/closed) lives on `#study-ui` (`phx-update="ignore"`) and in
+localStorage (`roki:study:*`). Extra tracks: `Watch.external_langs/3` — the user's language plus,
+for anime with a Jimaku key set, original Japanese; each fetched in its own async
+(`{:ext_subs, lang}`) and appended to `data-player.tracks`.

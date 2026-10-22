@@ -1,26 +1,24 @@
 defmodule RokiWeb.StudyComponents do
   @moduledoc """
-  The player: a `<video>` on the left and the subtitle sidebar on the right (`StudySidebar`
-  hook, `assets/js/study/`). Used by the title page, which plays real releases, and by
-  `/study`, which plays whatever file you hand it.
+  The player: a `<video>` with the subtitles drawn over it (hover a word for what it means), the
+  subtitle tracks to pick from under it, and the subtitle box beside it — or under it in
+  theater mode, where the player takes the width of the page. Driven by the `StudySidebar` hook
+  (`assets/js/study/`).
 
-  Everything inside the two `phx-update="ignore"` regions belongs to JavaScript; LiveView only
-  changes `data-player` on the root, which the hook reads on mount and on every update:
+  Everything inside `#study-ui` belongs to JavaScript (`phx-update="ignore"`): theater mode and
+  the state of the box are attributes on it (`data-theater`, `data-panel`), kept in the browser.
+  LiveView only changes `data-player` on the root, which the hook reads on mount and on every
+  update:
 
       %{url:, hls: bool, resume: seconds, tracks: [%{label:, lang:, url:}], prefer: "fr", key: "…"}
   """
   use Phoenix.Component
 
-  attr :player, :map,
-    default: nil,
-    doc: "what to play (see above); nil for a player waiting for a source"
+  import RokiWeb.CoreComponents, only: [icon: 1]
 
-  attr :progress?, :boolean,
-    default: false,
-    doc: "post the playhead back to the LiveView (`progress` events)"
-
-  slot :controls,
-    doc: "extra controls above the video (the /study page puts its file pickers here)"
+  attr :player, :map, default: nil, doc: "what to play (see above); nil for a player waiting for a source"
+  attr :progress?, :boolean, default: false, doc: "post the playhead back to the LiveView (`progress` events)"
+  slot :controls, doc: "extra controls above the video (the /study page puts its file pickers here)"
 
   def study_player(assigns) do
     assigns = assign(assigns, :data, if(assigns.player, do: Jason.encode!(assigns.player)))
@@ -36,47 +34,87 @@ defmodule RokiWeb.StudyComponents do
     >
       {render_slot(@controls)}
 
-      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <div class="space-y-2">
-          <div id="study-player" phx-update="ignore">
-            <video
-              id="study-video"
-              controls
-              playsinline
-              class="aspect-video w-full rounded-box bg-black"
-            ></video>
-            <div data-role="audio-wrap" hidden class="mt-2 flex items-center gap-2 text-sm">
-              <span class="text-base-content/60">Audio</span>
-              <select data-role="audio" class="select select-xs select-bordered"></select>
-            </div>
-          </div>
-        </div>
-
-        <%!-- Exactly as tall as the video: the grid row is the video's height and the box is
-              laid over it. On a narrow screen it is a fixed height under the video. --%>
-        <aside id="study-sidebar" phx-update="ignore" class="relative h-[28rem] lg:h-auto">
-          <div class="flex h-full flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 lg:absolute lg:inset-0">
-            <header class="flex items-center justify-between gap-2 border-b border-base-300 px-3 py-2 text-sm">
-              <span data-role="title" class="min-w-0 flex-1 truncate font-medium">Subtitles</span>
-              <select data-role="track" hidden class="select select-xs select-bordered max-w-40"></select>
-              <span data-role="count" class="shrink-0 text-xs tabular-nums text-base-content/50"></span>
-            </header>
-            <div class="relative min-h-0 flex-1">
-              <div data-role="list" class="absolute inset-0 overflow-y-auto p-1"></div>
-              <p data-role="empty" class="p-4 text-sm text-base-content/50">
-                Subtitle lines appear here once a track is loaded.
-              </p>
-              <button
-                type="button"
-                data-role="resume"
-                hidden
-                class="btn btn-xs btn-primary absolute bottom-3 left-1/2 -translate-x-1/2 shadow"
+      <div id="study-ui" phx-update="ignore" data-theater="false" data-panel="open" class="study-ui">
+        <div class="study-layout">
+          <div class="study-main">
+            <div data-role="stage" class="study-stage">
+              <video
+                id="study-video"
+                controls
+                playsinline
+                controlslist="nofullscreen"
+                class="study-video"
               >
-                ↓ Back to current line
-              </button>
+              </video>
+              <div data-role="overlay" class="study-overlay" aria-hidden="true"></div>
+              <div data-role="tip" class="study-tip" hidden></div>
+            </div>
+
+            <div class="study-bar">
+              <div data-role="tracks" class="study-tracks" role="group" aria-label="Subtitles"></div>
+              <div class="study-tools">
+                <div data-role="audio-wrap" hidden class="flex items-center gap-2 text-sm">
+                  <span class="text-base-content/60">Audio</span>
+                  <select data-role="audio" class="select select-sm select-bordered"></select>
+                </div>
+                <button type="button" data-role="theater" class="btn btn-sm gap-1.5" aria-pressed="false">
+                  <.icon name="hero-film" class="h-4 w-4" /> Theater
+                </button>
+                <button
+                  type="button"
+                  data-role="fullscreen"
+                  class="btn btn-sm btn-square"
+                  title="Fullscreen, with the subtitles"
+                  aria-label="Fullscreen"
+                >
+                  <.icon name="hero-arrows-pointing-out" class="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </aside>
+
+          <aside class="study-side">
+            <div class="study-box">
+              <header class="study-head">
+                <span data-role="title" class="min-w-0 flex-1 truncate font-medium">Subtitles</span>
+                <span data-role="count" class="shrink-0 text-xs tabular-nums text-base-content/50"></span>
+                <button
+                  type="button"
+                  data-role="compact"
+                  class="btn btn-xs btn-ghost btn-square"
+                  title="Smaller"
+                  aria-label="Make the subtitle box smaller"
+                >
+                  <.icon name="hero-arrows-pointing-in" class="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  data-role="collapse"
+                  class="btn btn-xs btn-ghost btn-square"
+                  title="Hide the subtitle box"
+                  aria-label="Hide or show the subtitle box"
+                  aria-expanded="true"
+                >
+                  <.icon name="hero-chevron-up" class="h-4 w-4 study-chevron" />
+                </button>
+              </header>
+              <div class="study-body">
+                <div data-role="list" class="absolute inset-0 overflow-y-auto p-1"></div>
+                <p data-role="empty" class="p-4 text-sm text-base-content/50">
+                  Subtitle lines appear here once a track is loaded.
+                </p>
+                <button
+                  type="button"
+                  data-role="resume"
+                  hidden
+                  class="btn btn-xs btn-primary absolute bottom-3 left-1/2 -translate-x-1/2 shadow"
+                >
+                  ↓ Back to current line
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
     """

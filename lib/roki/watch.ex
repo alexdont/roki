@@ -460,7 +460,7 @@ defmodule Roki.Watch do
       poster_path: title.poster_path,
       year: title.year,
       anime: title.anime? and not is_nil(mal),
-      search_title: nil,
+      search_title: mal && Laev.Anime.title(mal),
       mal_id: mal
     }
   end
@@ -826,9 +826,9 @@ defmodule Roki.Watch do
   `{:ok, %{lang:, label:, url:}}` or `:none` (no provider, nothing found — never an error:
   a subtitle problem must not get in the way of watching).
   """
-  def external_subtitle(uuid, ctx, play_id) do
+  def external_subtitle(uuid, ctx, play_id, wanted \\ nil) do
     Roki.Laev.run(uuid, fn ->
-      lang = Laev.Config.subs_lang()
+      lang = wanted || Laev.Config.subs_lang()
 
       with true <- is_binary(lang) and lang != "",
            true <- Laev.OpenSubtitles.configured?() or Laev.Jimaku.configured?(),
@@ -839,13 +839,33 @@ defmodule Roki.Watch do
         File.mkdir_p!(dir)
         file = "ext-#{String.slice(lang, 0, 2)}.vtt"
         File.write!(Path.join(dir, file), Roki.Subtitles.to_vtt(Path.basename(path), body))
-        {:ok, %{lang: lang, label: label, url: "/stream/#{play_id}/#{file}"}}
+        source = if String.starts_with?(label, "Jimaku"), do: "Jimaku", else: "OpenSubtitles"
+
+        {:ok,
+         %{lang: lang, label: "#{language(lang)} · #{source}", url: "/stream/#{play_id}/#{file}"}}
       else
         _ -> :none
       end
     end)
   rescue
     _ -> :none
+  end
+
+  @doc """
+  The languages worth fetching from a provider for what is playing, beyond what the release
+  carries: the user's own, and — for anime, when a Jimaku key is set — the original Japanese.
+  """
+  def external_langs(uuid, ctx, tracks) do
+    Roki.Laev.run(uuid, fn ->
+      have = MapSet.new(tracks, &short_code(&1.lang))
+      prefer = short_code(Laev.Config.subs_lang())
+      jimaku? = ctx.anime and Laev.Jimaku.configured?()
+
+      ([prefer] ++ if(jimaku?, do: ["ja"], else: []))
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(have, &1))
+    end)
   end
 
   @doc "The user's preferred subtitle language, as a two-letter code (laev's setting)."

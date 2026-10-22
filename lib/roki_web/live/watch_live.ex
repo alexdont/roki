@@ -181,14 +181,15 @@ defmodule RokiWeb.WatchLive do
       |> assign(player: data, current: pair, ctx: res.ctx, key: res.key)
       |> name_the_release(source.hash)
 
-    # The release did not carry a subtitle in their language: fetch one if they have a provider.
+    # What the release did not carry: their language, and for anime the original Japanese
+    # (Jimaku), each fetched on its own so a slow provider holds up nothing.
     socket =
-      if Enum.any?(player.subtitles, &(Watch.short_code(&1.lang) == prefer)),
-        do: socket,
-        else:
-          start_async(socket, :ext_subs, fn ->
-            {token, Watch.external_subtitle(uuid, res.ctx, play_id)}
+      for lang <- Watch.external_langs(uuid, res.ctx, player.subtitles), reduce: socket do
+        acc ->
+          start_async(acc, {:ext_subs, lang}, fn ->
+            {token, Watch.external_subtitle(uuid, res.ctx, play_id, lang)}
           end)
+      end
 
     {:noreply, socket}
   end
@@ -207,13 +208,13 @@ defmodule RokiWeb.WatchLive do
   def handle_async(:resolve, _stale, socket), do: {:noreply, socket}
 
   def handle_async(
-        :ext_subs,
+        {:ext_subs, _lang},
         {:ok, {token, {:ok, track}}},
         %{assigns: %{token: token, player: %{} = player}} = socket
       ),
       do: {:noreply, assign(socket, :player, %{player | tracks: player.tracks ++ [track]})}
 
-  def handle_async(:ext_subs, _other, socket), do: {:noreply, socket}
+  def handle_async({:ext_subs, _lang}, _other, socket), do: {:noreply, socket}
 
   def handle_async(:episodes, {:ok, {:ok, eps}}, socket),
     do: {:noreply, assign(socket, :episodes, eps)}

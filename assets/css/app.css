@@ -149,6 +149,131 @@
 /* `btn` sets its own display, which would beat the hidden attribute. */
 [data-role="resume"][hidden] { display: none; }
 
+/* ── Study player: subtitles over the video, a track bar, the box, theater mode ──
+   Layout state lives on #study-ui (data-theater, data-panel) and is set by the hook. */
+.study-layout { display: grid; gap: 1rem; }
+.study-main { display: flex; min-width: 0; flex-direction: column; gap: 0.5rem; }
+.study-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-box);
+  background: #000;
+  container-type: inline-size;
+}
+.study-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+/* What is being said, over the picture, above the player's own controls. Only the words take
+   the pointer, so the video underneath still gets every click that is not on a word. */
+.study-overlay {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 3.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding-inline: 3%;
+  text-align: center;
+  pointer-events: none;
+}
+.study-line {
+  max-width: 100%;
+  padding: 0.1em 0.5em;
+  border-radius: 0.35em;
+  background: rgb(0 0 0 / 0.66);
+  color: #fff;
+  font-size: clamp(0.9rem, 2.7cqw, 2.1rem);
+  line-height: 1.4;
+  white-space: pre-line;
+  text-shadow: 0 1px 2px #000;
+}
+.study-word { pointer-events: auto; cursor: help; border-radius: 0.2em; }
+.study-word:hover, .study-word[data-on] { background: rgb(255 255 255 / 0.3); }
+
+/* The card for a word: inside the stage, so it also shows in fullscreen. */
+.study-tip {
+  position: absolute;
+  z-index: 5;
+  width: max-content;
+  max-width: min(21rem, calc(100% - 1rem));
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.7rem;
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 15%, transparent);
+  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.5);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  pointer-events: none;
+  text-align: left;
+}
+.study-tip[hidden] { display: none; }
+.study-tip .tip-word { font-size: 1.15rem; font-weight: 700; }
+.study-tip .tip-reading { margin-left: 0.4rem; color: var(--color-primary); }
+.study-tip .tip-pos { font-size: 0.7rem; opacity: 0.55; }
+.study-tip ol { margin: 0.15rem 0 0; padding-left: 1.1rem; list-style: decimal; }
+.study-tip .tip-entry + .tip-entry { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent); }
+.study-tip .tip-note { opacity: 0.6; }
+
+.study-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.study-tracks { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.study-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-left: auto; }
+
+.study-side { position: relative; height: 24rem; }
+.study-box {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-box);
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
+}
+.study-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem 0.4rem 0.75rem; border-bottom: 1px solid var(--color-base-300); font-size: 0.875rem; }
+.study-body { position: relative; min-height: 0; flex: 1; }
+.study-chevron { transition: transform 0.15s; }
+
+@media (min-width: 1024px) {
+  .study-layout { grid-template-columns: minmax(0, 1fr) 24rem; }
+  .study-side { height: auto; }
+  .study-box { position: absolute; inset: 0; height: auto; }
+}
+
+/* The box: smaller (narrower, finer print), or gone but for its title bar. */
+.study-ui[data-panel="compact"] .study-row { font-size: 0.8rem; padding: 0.3rem 0.5rem; }
+.study-ui[data-panel="compact"] .study-side { height: 12rem; }
+@media (min-width: 1024px) {
+  .study-ui[data-panel="compact"] .study-layout { grid-template-columns: minmax(0, 1fr) 16rem; }
+  .study-ui[data-panel="compact"] .study-side { height: auto; }
+}
+.study-ui[data-panel="closed"] .study-body { display: none; }
+.study-ui[data-panel="closed"] .study-chevron { transform: rotate(180deg); }
+.study-ui[data-panel="closed"] .study-side { height: auto; }
+.study-ui[data-panel="closed"] .study-box { position: static; height: auto; }
+.study-ui[data-panel="closed"] .study-layout { grid-template-columns: minmax(0, 1fr); }
+
+/* Theater: the picture takes the width of the screen (as tall as the screen allows), and the
+   box goes underneath it. */
+.study-ui[data-theater="true"] .study-layout { grid-template-columns: minmax(0, 1fr); }
+.study-ui[data-theater="true"] .study-stage {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  aspect-ratio: auto;
+  height: min(82vh, 56.25vw);
+  border-radius: 0;
+}
+.study-ui[data-theater="true"] .study-side { height: 18rem; }
+.study-ui[data-theater="true"][data-panel="compact"] .study-side { height: 9rem; }
+.study-ui[data-theater="true"][data-panel="closed"] .study-side { height: auto; }
+.study-ui[data-theater="true"] .study-box { position: static; height: 100%; }
+.study-ui[data-theater="true"][data-panel="closed"] .study-box { height: auto; }
+body:has(.study-ui[data-theater="true"]) { overflow-x: clip; }
+
+.study-stage:fullscreen { width: 100%; height: 100%; margin: 0; aspect-ratio: auto; border-radius: 0; }
+.study-stage:-webkit-full-screen { width: 100%; height: 100%; margin: 0; aspect-ratio: auto; border-radius: 0; }
+
+
 /* The hover card on a poster (assets/js/peek.js). */
 .peek-card {
   position: fixed;

@@ -23,6 +23,7 @@ defmodule RokiWeb.Router do
 
     get "/stream/:id/:file", StreamController, :file
     get "/peek/:type/:id", PeekController, :show
+    get "/dict/:lang", DictController, :show
     # The account menu's "Settings" opens this site's settings page; PhoenixKit's own account
     # page (profile, email, password) stays at /phoenix_kit/profile/settings.
     get "/phoenix_kit/:locale/profile/settings", AccountController, :settings
