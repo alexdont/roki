@@ -57,7 +57,7 @@ defmodule RokiWeb.SettingsLiveTest do
   test "the settings are laid out by group, with laev's own labels", %{conn: conn, user: user} do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    html = render_async(view)
+    html = render_async(view, 3000)
 
     for text <- [
           "Playback",
@@ -79,7 +79,7 @@ defmodule RokiWeb.SettingsLiveTest do
   test "a choice saves the moment it changes", %{conn: conn, user: user} do
     dir = connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    render_async(view)
+    render_async(view, 3000)
 
     html =
       view
@@ -96,7 +96,7 @@ defmodule RokiWeb.SettingsLiveTest do
   test "the terminal app's settings are shown but locked", %{conn: conn, user: user} do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    html = render_async(view)
+    html = render_async(view, 3000)
 
     assert html =~ "Terminal app only"
     assert html =~ "CLI only"
@@ -125,7 +125,7 @@ defmodule RokiWeb.SettingsLiveTest do
   } do
     dir = connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    html = render_async(view)
+    html = render_async(view, 3000)
 
     assert html =~ "browser player"
     assert has_element?(view, "#w-browser_max_resolution option[selected]", "1080p")
@@ -156,7 +156,7 @@ defmodule RokiWeb.SettingsLiveTest do
   } do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    render_async(view)
+    render_async(view, 3000)
 
     assert has_element?(view, "#d-player option[selected]", "VLC / external player")
 
@@ -168,10 +168,37 @@ defmodule RokiWeb.SettingsLiveTest do
     assert has_element?(view, "#d-player option[selected]", "Browser")
   end
 
+  test "when keys are carried, a change schedules its own sync", %{conn: conn, user: user} do
+    dir = connect!(user)
+    # carrying keys needs the whole laev key: the token and the half that never leaves the device
+    File.write!(
+      Path.join(dir, "config"),
+      "LAEV_SYNC_URL=https://sync.invalid/laev\n" <>
+        "LAEV_SYNC_TOKEN=laev_#{String.duplicate("a", 40)}.#{String.duplicate("b", 40)}\nLAEV_SYNC_KEYS=on\n"
+    )
+
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    html = render_async(view, 3000)
+    assert html =~ "No need"
+
+    html =
+      render_hook(view, "change", %{
+        "_target" => ["s", "LAEV_AUTO_SOURCE"],
+        "s" => %{"LAEV_AUTO_SOURCE" => "off"}
+      })
+
+    assert html =~ "sending it on"
+
+    # the sync server in this test does not exist: it says so rather than pretending
+    send(view.pid, :auto_sync)
+    render_async(view, 3000)
+    assert render(view) =~ "Couldn&#39;t reach the sync server"
+  end
+
   test "a value laev refuses is explained, not saved", %{conn: conn, user: user} do
     dir = connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    render_async(view)
+    render_async(view, 3000)
 
     html =
       render_hook(view, "change", %{
@@ -189,7 +216,7 @@ defmodule RokiWeb.SettingsLiveTest do
   } do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
-    render_async(view)
+    render_async(view, 3000)
 
     html =
       view |> element("button[phx-click=edit][phx-value-key=JIMAKU_API_KEY]") |> render_click()
@@ -202,7 +229,7 @@ defmodule RokiWeb.SettingsLiveTest do
     |> form("form[phx-submit=replace]", %{"key" => "JIMAKU_API_KEY", "value" => secret})
     |> render_submit()
 
-    html = render_async(view)
+    html = render_async(view, 3000)
 
     assert html =~ "•"
     refute html =~ secret

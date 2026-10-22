@@ -86,6 +86,8 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:state, if(linked?, do: :loading, else: :not_connected))
           |> assign(:settings, [])
           |> assign(:web, %{})
+          |> assign(:auto_sync, nil)
+          |> assign(:sync_timer, nil)
           |> assign(:device_player, device_player(socket))
           |> assign(:saved, nil)
           |> assign(:editing, MapSet.new())
@@ -153,7 +155,9 @@ defmodule RokiWeb.SettingsLive do
     case Laev.put_setting(socket.assigns.uuid, key, values[key] || "") do
       :ok ->
         Process.send_after(self(), {:clear_saved, key}, 2_000)
-        {:noreply, socket |> assign(saved: key, error: nil) |> refresh_settings()}
+
+        {:noreply,
+         socket |> assign(saved: key, error: nil) |> refresh_settings() |> schedule_sync()}
 
       {:error, reason} ->
         {:noreply, assign(socket, error: "#{key}: " <> Laev.explain(reason))}
@@ -191,7 +195,7 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_event("remove", %{"key" => key}, socket) do
     :ok = Laev.remove_key(socket.assigns.uuid, key)
-    {:noreply, socket |> put_result(key, nil) |> refresh_settings()}
+    {:noreply, socket |> put_result(key, nil) |> refresh_settings() |> schedule_sync()}
   end
 
   def handle_event("toggle_keys", _params, socket) do
@@ -237,7 +241,26 @@ defmodule RokiWeb.SettingsLive do
 
   defp refresh_settings(socket), do: assign(socket, :settings, Laev.settings(socket.assigns.uuid))
 
+  # A change on this account reaches the terminal app through a sync. So that nobody has to
+  # press "Sync now", one runs a few seconds after the last change (several quick changes make
+  # one sync). Only when the laev key carries settings; otherwise they stay on this account.
+  defp schedule_sync(%{assigns: %{carrying?: true}} = socket) do
+    if socket.assigns[:sync_timer], do: Process.cancel_timer(socket.assigns.sync_timer)
+    assign(socket, sync_timer: Process.send_after(self(), :auto_sync, 3_000), auto_sync: :waiting)
+  end
+
+  defp schedule_sync(socket), do: socket
+
   @impl true
+  def handle_info(:auto_sync, socket) do
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     socket
+     |> assign(sync_timer: nil, auto_sync: :syncing)
+     |> start_async(:auto_sync, fn -> Laev.sync(uuid) end)}
+  end
+
   def handle_info({:clear_saved, key}, socket) do
     {:noreply, if(socket.assigns.saved == key, do: assign(socket, :saved, nil), else: socket)}
   end
@@ -252,6 +275,15 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_async(:settings, {:exit, _}, socket),
     do: {:noreply, assign(socket, error: "Could not read your settings.")}
+
+  def handle_async(:auto_sync, {:ok, {:error, _}}, socket),
+    do: {:noreply, assign(socket, auto_sync: :failed)}
+
+  def handle_async(:auto_sync, {:ok, _}, socket),
+    do: {:noreply, assign(socket, auto_sync: :done)}
+
+  def handle_async(:auto_sync, {:exit, _}, socket),
+    do: {:noreply, assign(socket, auto_sync: :failed)}
 
   def handle_async(:web, {:ok, web}, socket), do: {:noreply, assign(socket, :web, web)}
   def handle_async(:web, {:exit, _}, socket), do: {:noreply, socket}
@@ -273,7 +305,8 @@ defmodule RokiWeb.SettingsLive do
      socket
      |> update(:editing, &MapSet.delete(&1, key))
      |> put_result(key, {:ok, detail})
-     |> refresh_settings()}
+     |> refresh_settings()
+     |> schedule_sync()}
   end
 
   def handle_async({:replace, key}, {:ok, {:error, reason}}, socket),
@@ -421,6 +454,25 @@ defmodule RokiWeb.SettingsLive do
               </span>
             </span>
           </label>
+
+          <p class="text-sm text-base-content/60">
+            <span :if={!@carrying?}>
+              Changes here are saved instantly and apply on this site; they reach your terminal app
+              only if you carry your keys above.
+            </span>
+            <span :if={@carrying? and @auto_sync == nil}>
+              Changes are saved instantly and sent to your terminal app a few seconds later. No need
+              to press anything.
+            </span>
+            <span :if={@carrying? and @auto_sync == :waiting}>Change saved — sending it on…</span>
+            <span :if={@carrying? and @auto_sync == :syncing}>Sending your changes…</span>
+            <span :if={@carrying? and @auto_sync == :done} class="text-success">
+              ✓ Sent to your terminal app.
+            </span>
+            <span :if={@carrying? and @auto_sync == :failed} class="text-error">
+              Couldn't reach the sync server; use Sync now to retry.
+            </span>
+          </p>
 
           <div class="flex flex-wrap items-center gap-2">
             <button phx-click="sync" class="btn btn-sm" disabled={@busy != nil}>
