@@ -1578,10 +1578,10 @@ defmodule RokiWeb.TitleLive do
       <%!-- The poster takes all the height there is between the title and the synopsis; the
             three buttons are a strip against the right edge of the screen. --%>
       <div class="flex min-h-0 flex-1 justify-between gap-2">
-        <%!-- The whole poster, never cropped: the biggest 2:3 that fits the height, against the left
-              edge of the screen. --%>
-        <div class="-ml-4 flex min-w-0 flex-1 justify-start">
-          <div class="relative aspect-[2/3] h-full max-w-full overflow-hidden rounded-l-none rounded-r-box bg-base-300 shadow-lg">
+        <%!-- The whole poster, never cropped: the biggest 2:3 that fits the height left over by the
+              synopsis below. --%>
+        <div class="flex min-w-0 shrink-0 justify-start">
+          <div class="relative aspect-[2/3] h-full max-w-[62vw] overflow-hidden rounded-box bg-base-300 shadow-lg">
             <img
               :if={@title.poster}
               src={@title.poster}
@@ -1591,8 +1591,9 @@ defmodule RokiWeb.TitleLive do
           </div>
         </div>
 
-        <%!-- Icons only: saved, on hold, watched. Their state is the colour; the label is the tooltip. --%>
-        <div :if={@linked?} class="-mr-4 flex shrink-0 flex-col items-end justify-evenly">
+        <%!-- Icons only: saved, on hold, watched — three tiles sharing the height and the width left of
+              the poster, the icon centred in each. The state is the colour; the label is the tooltip. --%>
+        <div :if={@linked?} class="flex min-w-0 flex-1 flex-col gap-3">
           <.round_btn
             event="toggle_saved"
             on={@lib.saved?}
@@ -1631,7 +1632,7 @@ defmodule RokiWeb.TitleLive do
         class="shrink-0 text-left"
         aria-label="Read the full description and more details"
       >
-        <span class="line-clamp-2 text-sm text-base-content/80">{@title.overview}</span>
+        <span class="line-clamp-5 text-sm text-base-content/80">{@title.overview}</span>
         <span class="flex items-center gap-1 text-xs font-medium text-primary">
           More <.icon name="hero-chevron-up-micro" class="h-4 w-4" />
         </span>
@@ -1667,12 +1668,12 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-20 w-[4.5rem] rounded-l-2xl rounded-r-none border-r-0 px-0", @on && @on_class]}
+      class={["btn h-auto min-h-0 w-full flex-1 rounded-box px-0", @on && @on_class]}
       title={@label}
       aria-label={@label}
     >
       <span :if={@busy} class="loading loading-spinner"></span>
-      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-9 w-9" />
+      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-10 w-10" />
     </button>
     """
   end
