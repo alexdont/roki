@@ -285,3 +285,5 @@ page's pulse ("X drops in 3 days", "Just dropped: Y") is `Roki.Calendar.pulse/1`
 The logo links to `/home` (the featured page), not `/`.
 
 The header carries only Featured and (signed in) Shelf / Stats / Calendar. **Lists is not a header link**: it is a section at the bottom of `/home` (`FeaturedLive`), shown once the shelves above have settled. `/lists` itself still exists.
+
+**Shows excludes anime** (`Roki.Featured`): a trending-TV title is dropped when `Laev.AnimeMap.anime?/2` (MyAnimeList has an entry) is true, except ids in `@keep_as_shows` (Cyberpunk: Edgerunners). Bump `@version` when what a cached page contains changes.

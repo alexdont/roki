@@ -16,6 +16,14 @@ defmodule Roki.Featured do
   @ttl_s 12 * 60 * 60
   @kinds [:movies, :shows, :anime]
 
+  # Bumped when what a cached page *contains* changes, so old answers are ignored
+  # rather than served for up to 12 hours.
+  @version 2
+
+  # Titles MyAnimeList lists but that read as shows here: Cyberpunk: Edgerunners is
+  # an animation from a Western game, not what anyone means by anime. TMDB ids.
+  @keep_as_shows [105_248]
+
   def kinds, do: @kinds
 
   @doc "`{:ok, items, more?}` for page `n` of a shelf, or `{:error, reason}`."
@@ -28,7 +36,7 @@ defmodule Roki.Featured do
 
   def configured?, do: Application.get_env(:laev, :tmdb_key) not in [nil, ""]
 
-  defp key(kind, n), do: {__MODULE__, kind, n}
+  defp key(kind, n), do: {__MODULE__, @version, kind, n}
 
   defp cached(kind, n) do
     case :persistent_term.get(key(kind, n), nil) do
@@ -40,7 +48,7 @@ defmodule Roki.Featured do
   # One refresh per page at a time: a cold cache under a burst of visitors would
   # otherwise be a burst of identical TMDB requests.
   defp refresh(kind, n, old, uuid) do
-    :global.trans({{__MODULE__, kind, n}, self()}, fn ->
+    :global.trans({{__MODULE__, @version, kind, n}, self()}, fn ->
       case cached(kind, n) do
         {:fresh, result} ->
           result
@@ -65,8 +73,25 @@ defmodule Roki.Featured do
   defp fetch(kind, n, uuid), do: Roki.Laev.public(uuid, fn -> call(kind, n) end)
 
   defp call(:movies, n), do: Laev.Tmdb.trending("movie", n)
-  defp call(:shows, n), do: Laev.Tmdb.trending("tv", n)
+  # TMDB's "trending TV" includes anime (One Piece, Bleach …), which has its own shelf.
+  # Anime is what MyAnimeList has an entry for — laev's own definition, the one it
+  # splits your stats by — so those come out of Shows. Live-action One Piece is a
+  # different TMDB id and stays.
+  defp call(:shows, n) do
+    with {:ok, items, more?} <- Laev.Tmdb.trending("tv", n),
+         {:ok, _count} <- Laev.AnimeMap.ensure() do
+      {:ok, without_anime(items, &Laev.AnimeMap.anime?("tv", &1)), more?}
+    else
+      {:error, _} = error -> error
+    end
+  end
+
   defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)
+
+  @doc false
+  def without_anime(items, anime?) do
+    Enum.reject(items, &(anime?.(&1.id) and &1.id not in @keep_as_shows))
+  end
 
   defp now, do: System.system_time(:second)
 end
