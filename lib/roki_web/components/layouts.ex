@@ -290,7 +290,7 @@ defmodule RokiWeb.Layouts do
         title="Watch in the browser"
         aria-label="Watch in the browser"
       >
-        <.icon name="hero-globe-alt" class="size-5" />
+        <.icon name="hero-window" class="size-5" />
       </button>
       <button
         class="relative flex w-1/2 cursor-pointer justify-center p-2.5 text-primary-content [[data-player=browser]_&]:text-base-content"
@@ -299,7 +299,7 @@ defmodule RokiWeb.Layouts do
         title="Watch in an external player (VLC and the like)"
         aria-label="Watch in an external player"
       >
-        <.icon name="hero-tv" class="size-5" />
+        <.icon name="hero-arrow-top-right-on-square" class="size-5" />
       </button>
     </div>
     """
