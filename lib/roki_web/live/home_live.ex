@@ -26,6 +26,7 @@ defmodule RokiWeb.HomeLive do
       |> assign(:data, nil)
       |> assign(:busy, nil)
       |> assign(:error, nil)
+      |> assign(:history_open, false)
       |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
     {:ok, if(connected?(socket) && uuid, do: load(socket), else: socket)}
@@ -54,6 +55,9 @@ defmodule RokiWeb.HomeLive do
        |> start_async(:connect, fn -> Laev.connect(uuid, key, opts) end)}
     end
   end
+
+  def handle_event("toggle_history", _params, socket),
+    do: {:noreply, update(socket, :history_open, &(!&1))}
 
   def handle_event("sync", _params, socket) do
     uuid = socket.assigns.uuid
@@ -134,7 +138,13 @@ defmodule RokiWeb.HomeLive do
 
       <.connect_card :if={@state == :not_connected} form={@form} busy={@busy} error={@error} />
 
-      <.shelf :if={@state == :ready} data={@data} busy={@busy} error={@error} />
+      <.shelf
+        :if={@state == :ready}
+        data={@data}
+        busy={@busy}
+        error={@error}
+        history_open={@history_open}
+      />
     </Layouts.app>
     """
   end
@@ -229,6 +239,7 @@ defmodule RokiWeb.HomeLive do
   attr :data, :map, required: true
   attr :busy, :string, default: nil
   attr :error, :string, default: nil
+  attr :history_open, :boolean, default: false
 
   defp shelf(assigns) do
     ~H"""
@@ -284,7 +295,7 @@ defmodule RokiWeb.HomeLive do
       </div>
 
       <.poster_row title="Watchlist" items={@data.saved} />
-      <.poster_row title="History" items={@data.continue} />
+      <.history items={@data.continue} open={@history_open} />
 
       <section class="space-y-3">
         <h2 class="text-xl font-semibold">Connections</h2>
@@ -313,6 +324,60 @@ defmodule RokiWeb.HomeLive do
           </button>
         </div>
       </section>
+    </div>
+    """
+  end
+
+  # One line of posters with a "more…" at the end; the rest opens as a grid.
+  attr :items, :list, required: true
+  attr :open, :boolean, default: false
+
+  defp history(assigns) do
+    ~H"""
+    <section :if={@items != []} class="space-y-3">
+      <h2 class="text-xl font-semibold">History</h2>
+      <div :if={!@open} class="flex items-center gap-4">
+        <ul class="flex min-w-0 flex-1 gap-4 overflow-hidden">
+          <li :for={i <- @items} class="w-28 shrink-0 space-y-1">
+            <.poster item={i} />
+          </li>
+        </ul>
+        <button phx-click="toggle_history" class="btn btn-ghost btn-sm shrink-0">more…</button>
+      </div>
+      <div :if={@open} class="space-y-3">
+        <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          <li :for={i <- @items} class="space-y-1">
+            <.poster item={i} />
+          </li>
+        </ul>
+        <button phx-click="toggle_history" class="btn btn-ghost btn-sm">less</button>
+      </div>
+    </section>
+    """
+  end
+
+  attr :item, :map, required: true
+
+  defp poster(assigns) do
+    ~H"""
+    <div class="group space-y-1">
+      <div class="aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
+        <img
+          :if={@item.poster}
+          src={@item.poster}
+          alt={@item.title}
+          loading="lazy"
+          class="h-full w-full object-cover transition group-hover:scale-105"
+        />
+        <div
+          :if={!@item.poster}
+          class="flex h-full items-center justify-center p-2 text-center text-xs"
+        >
+          {@item.title}
+        </div>
+      </div>
+      <div class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
+      <div class="text-xs text-base-content/60">{subtitle(@item)}</div>
     </div>
     """
   end
