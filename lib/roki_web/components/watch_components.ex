@@ -288,8 +288,9 @@ defmodule RokiWeb.WatchComponents do
   end
 
   @doc "A suffix like '· S2E5' for an episode, nothing for a film."
-  def now_playing(%{type: "tv"}, season, episode) when is_integer(season) and is_integer(episode),
-    do: " · S#{season}E#{episode}"
+  def now_playing(%{type: "tv"} = title, season, episode)
+      when is_integer(season) and is_integer(episode),
+      do: " · #{Map.get(title, :tag) || "S#{season}E#{episode}"}"
 
   def now_playing(_, _, _), do: ""
 

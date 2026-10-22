@@ -137,6 +137,8 @@ defmodule RokiWeb.WatchLive do
 
   @impl true
   def handle_async(:title, {:ok, {:ok, title}}, socket) do
+    %{uuid: uuid, season: season, episode: episode} = socket.assigns
+    title = Map.put(title, :tag, Watch.episode_tag(uuid, title, season, episode))
     socket = assign(socket, title: title, page_title: title.title)
 
     socket =

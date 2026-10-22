@@ -52,8 +52,11 @@ defmodule RokiWeb.TitleLive do
         title_error: nil,
         resume: nil,
         resume_secs: nil,
-        req_season: nil,
+        req_section: nil,
         season: nil,
+        sections: [],
+        section: nil,
+        play: %{season: 1, episode: 1, continue?: false, label: "S1.E1"},
         episodes: nil,
         watched: MapSet.new(),
         season_counts: %{},
@@ -106,43 +109,74 @@ defmodule RokiWeb.TitleLive do
       rating = if linked?, do: Watch.my_rating(uuid, title)
 
       secs = if linked?, do: left_at(uuid, title)
+      sections = if title.type == "tv", do: Watch.sections(uuid, title), else: []
 
-      {:ok, title, resume, cached, lib, rating, secs}
+      {:ok, title, resume, cached, lib, rating, secs, sections}
     end
   end
 
   @impl true
   def handle_params(params, _uri, socket) do
-    {:noreply, socket |> assign(:req_season, to_int(params["s"])) |> select()}
+    {:noreply, socket |> assign(:req_section, params["s"]) |> select()}
   end
 
   # On the episodes page, settle which season is on screen and load its episodes.
-  defp select(%{assigns: %{live_action: :episodes, title: %{} = title}} = socket) do
-    %{resume: resume, req_season: req} = socket.assigns
-    numbers = Enum.map(title.seasons, & &1.number)
-    wanted = req || (resume && resume["season"]) || List.first(numbers)
-    season = if wanted in numbers, do: wanted, else: List.first(numbers)
+  defp select(%{assigns: %{live_action: :episodes, title: %{}}} = socket) do
+    %{resume: resume, req_section: req, sections: sections} = socket.assigns
 
-    if season != socket.assigns.season or socket.assigns.episodes == nil do
-      load_episodes(assign(socket, season: season, episodes: nil), season)
-    else
-      socket
+    wanted =
+      find_section(sections, req) || resumed_section(sections, resume) || List.first(sections)
+
+    cond do
+      wanted == nil ->
+        socket
+
+      socket.assigns.section == nil or wanted.key != socket.assigns.section.key or
+          socket.assigns.episodes == nil ->
+        load_episodes(
+          assign(socket, section: wanted, season: wanted.season, episodes: nil),
+          wanted
+        )
+
+      true ->
+        socket
     end
   end
 
   defp select(socket), do: socket
 
-  defp load_episodes(socket, nil), do: socket
+  # `?s=` names a section ("2", or "1.2" for the second part of season 1); a bare season number
+  # (an old link) is that season's first section.
+  defp find_section(_sections, nil), do: nil
 
-  defp load_episodes(socket, season) do
-    %{id: id, uuid: uuid, title: title, linked?: linked?} = socket.assigns
+  defp find_section(sections, req) do
+    Enum.find(sections, &(&1.key == req)) ||
+      Enum.find(sections, &(Integer.to_string(&1.season) == req))
+  end
+
+  defp resumed_section(sections, %{"season" => s, "episode" => e} = r)
+       when is_integer(s) and is_integer(e) do
+    with {sec, _local} <- Watch.locate_section(sections, s, r["tmdb_episode"] || e), do: sec
+  end
+
+  defp resumed_section(_sections, _resume), do: nil
+
+  defp load_episodes(socket, %{} = sec) do
+    %{id: id, uuid: uuid, title: title, linked?: linked?, sections: sections} = socket.assigns
 
     start_async(socket, :episodes, fn ->
-      with {:ok, eps} <- Watch.episodes(id, season, uuid) do
-        watched =
-          if linked?, do: Watch.watched_episodes(uuid, title, season, eps), else: MapSet.new()
+      with {:ok, all} <- Watch.episodes(id, sec.season, uuid) do
+        # Only this section's share of the season, numbered from 1 the way the anime list does.
+        eps =
+          for e <- all,
+              e.number > sec.from and (sec.count == nil or e.number <= sec.from + sec.count),
+              do: Map.put(e, :local, e.number - sec.from)
 
-        {:ok, season, eps, watched, if(linked?, do: Watch.season_counts(uuid, title), else: %{})}
+        watched =
+          if linked?, do: Watch.watched_episodes(uuid, title, sec.season, eps), else: MapSet.new()
+
+        counts = if linked?, do: Watch.section_counts(uuid, title, sections), else: %{}
+        {:ok, sec.key, eps, watched, counts}
       end
     end)
   end
@@ -166,8 +200,9 @@ defmodule RokiWeb.TitleLive do
   def handle_event("play", _params, %{assigns: %{id: id}} = socket),
     do: {:noreply, push_navigate(socket, to: ~p"/title/tv/#{id}/episodes")}
 
-  def handle_event("select_season", %{"season" => s}, socket),
-    do: {:noreply, push_patch(socket, to: ~p"/title/tv/#{socket.assigns.id}/episodes?#{[s: s]}")}
+  def handle_event("select_season", %{"season" => key}, socket),
+    do:
+      {:noreply, push_patch(socket, to: ~p"/title/tv/#{socket.assigns.id}/episodes?#{[s: key]}")}
 
   # Which player this device uses; remembered in the browser, not on the server.
   def handle_event("set_mode", %{"mode" => mode}, socket) when mode in ["browser", "external"] do
@@ -278,10 +313,16 @@ defmodule RokiWeb.TitleLive do
   # ── what comes back from the tasks ─────────────────────────────────
 
   @impl true
-  def handle_async(:title, {:ok, {:ok, title, resume, cached, lib, rating, secs}}, socket) do
+  def handle_async(
+        :title,
+        {:ok, {:ok, title, resume, cached, lib, rating, secs, sections}},
+        socket
+      ) do
     socket =
       assign(socket,
         title: title,
+        sections: sections,
+        play: Watch.play_info(sections, resume),
         resume: resume,
         resume_secs: secs,
         cached: cached,
@@ -337,8 +378,8 @@ defmodule RokiWeb.TitleLive do
 
   def handle_async(:bulk, _other, socket), do: {:noreply, assign(socket, :lib_busy, false)}
 
-  def handle_async(:episodes, {:ok, {:ok, season, eps, watched, counts}}, socket) do
-    if season == socket.assigns.season,
+  def handle_async(:episodes, {:ok, {:ok, key, eps, watched, counts}}, socket) do
+    if socket.assigns.section && key == socket.assigns.section.key,
       do: {:noreply, assign(socket, episodes: eps, watched: watched, season_counts: counts)},
       else: {:noreply, socket}
   end
@@ -380,6 +421,7 @@ defmodule RokiWeb.TitleLive do
       <div :if={@title && @live_action == :show} class="space-y-8">
         <.phone_hero
           title={@title}
+          play={@play}
           resume={@resume}
           resume_secs={@resume_secs}
           phase={@phase}
@@ -397,6 +439,7 @@ defmodule RokiWeb.TitleLive do
         <.hero
           rating={@rating}
           title={@title}
+          play={@play}
           resume={@resume}
           resume_secs={@resume_secs}
           phase={@phase}
@@ -415,12 +458,14 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div :if={@title && @live_action == :episodes} class="space-y-6">
-        <.episodes_header title={@title} resume={@resume} />
+        <.episodes_header title={@title} play={@play} resume={@resume} />
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
         <.episodes
           title={@title}
           season={@season}
+          sections={@sections}
+          section={@section}
           episodes={@episodes}
           watched={@watched}
           season_counts={@season_counts}
@@ -435,6 +480,7 @@ defmodule RokiWeb.TitleLive do
 
   attr :title, :map, required: true
   attr :resume, :any, default: nil
+  attr :play, :map, required: true
 
   # The top of the episodes page: where you are, and a way back to the title.
   defp episodes_header(assigns) do
@@ -458,14 +504,11 @@ defmodule RokiWeb.TitleLive do
         <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">{@title.title}</h1>
       </div>
       <.link
-        :if={match?(%{"season" => s, "episode" => e} when is_integer(s) and is_integer(e), @resume)}
-        navigate={
-          ~p"/sources/tv/#{@title.id}/#{@resume["season"]}/#{@resume["episode"]}?#{[auto: 1]}"
-        }
+        :if={@play.continue?}
+        navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
         class="btn btn-primary"
       >
-        <.icon name="hero-play-solid" class="h-5 w-5" />
-        Continue S{@resume["season"]} · E{@resume["episode"]}
+        <.icon name="hero-play-solid" class="h-5 w-5" /> Continue {@play.label}
       </.link>
     </div>
     """
@@ -475,6 +518,7 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
+  attr :play, :map, default: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
   attr :phase, :any, required: true
   attr :season, :any, default: nil
   attr :mode, :atom, required: true
@@ -524,6 +568,7 @@ defmodule RokiWeb.TitleLive do
           <div class="flex flex-wrap items-center gap-3">
             <.play_button
               title={@title}
+              play={@play}
               resume={@resume}
               resume_secs={@resume_secs}
               busy?={match?({:working, _}, @phase)}
@@ -674,23 +719,10 @@ defmodule RokiWeb.TitleLive do
     if h > 0, do: "#{h}:#{pad.(m)}:#{pad.(s)}", else: "#{pad.(m)}:#{pad.(s)}"
   end
 
-  # The episode Play goes to: where you left off, else the very first one.
-  defp play_target(%{seasons: seasons}, resume) do
-    case resume do
-      %{"season" => s, "episode" => e} = r when is_integer(s) and is_integer(e) ->
-        {s, r["tmdb_episode"] || e, true}
-
-      _ ->
-        first =
-          seasons |> Enum.map(& &1.number) |> Enum.filter(&(&1 > 0)) |> Enum.min(fn -> 1 end)
-
-        {first, 1, false}
-    end
-  end
-
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
+  attr :play, :map, default: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
   attr :busy?, :boolean, default: false
   attr :split?, :boolean, default: false
   attr :class, :string, default: nil
@@ -733,9 +765,6 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp play_button(assigns) do
-    {season, episode, continue?} = play_target(assigns.title, assigns.resume)
-    assigns = assign(assigns, season: season, episode: episode, continue?: continue?)
-
     ~H"""
     <div class={["flex gap-2", @class]}>
       <.link
@@ -745,14 +774,14 @@ defmodule RokiWeb.TitleLive do
         <.icon name="hero-queue-list" class="h-6 w-6" /> Episodes
       </.link>
       <.link
-        navigate={~p"/sources/tv/#{@title.id}/#{@season}/#{@episode}?#{[auto: 1]}"}
+        navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
         class={[
           "btn btn-primary btn-lg h-full min-h-0 flex-[3] gap-2 px-3 shadow-md text-[length:inherit]",
           @busy? && "btn-disabled"
         ]}
       >
         <.icon name="hero-play-solid" class="h-6 w-6" />
-        {if @continue?, do: "Continue", else: "Start"} S{@season}.E{@episode}
+        {if @play.continue?, do: "Continue", else: "Start"} {@play.label}
       </.link>
     </div>
     """
@@ -778,6 +807,8 @@ defmodule RokiWeb.TitleLive do
   attr :season, :any, default: nil
   attr :episodes, :any, default: nil
   attr :watched, :any, required: true
+  attr :sections, :list, default: []
+  attr :section, :map, default: nil
   attr :season_counts, :map, default: %{}
   attr :cached, :any, required: true
   attr :title_id, :integer, required: true
@@ -792,7 +823,7 @@ defmodule RokiWeb.TitleLive do
             square watched button the episode rows carry. --%>
       <div class="flex gap-2">
         <form
-          :if={@title.seasons != []}
+          :if={@sections != []}
           phx-change="select_season"
           id="season-form"
           class="min-w-0 flex-1"
@@ -803,15 +834,15 @@ defmodule RokiWeb.TitleLive do
             class="select select-bordered select-primary h-14 w-full text-lg font-semibold"
           >
             <option
-              :for={s <- @title.seasons}
-              value={s.number}
-              selected={s.number == @season}
+              :for={sec <- @sections}
+              value={sec.key}
+              selected={@section && sec.key == @section.key}
               class={
-                season_done?(s, @season, @episodes, @watched, @season_counts) &&
+                season_done?(sec, @section, @episodes, @watched, @season_counts) &&
                   "text-base-content/40"
               }
             >
-              {season_label(s, season_done?(s, @season, @episodes, @watched, @season_counts))}
+              {season_label(sec, season_done?(sec, @section, @episodes, @watched, @season_counts))}
             </option>
           </select>
         </form>
@@ -879,9 +910,9 @@ defmodule RokiWeb.TitleLive do
                   navigate={~p"/sources/tv/#{@title_id}/#{@season}/#{e.number}"}
                   class="font-medium after:absolute after:inset-0"
                 >
-                  {e.number}. {e.name}
+                  {e.local}. {e.name}
                 </.link>
-                <span :if={not (@can_play? and e.aired?)} class="font-medium">{e.number}. {e.name}</span>
+                <span :if={not (@can_play? and e.aired?)} class="font-medium">{e.local}. {e.name}</span>
                 <span
                   :if={MapSet.member?(@cached, {"tv", @title_id, @season, e.number})}
                   class="badge badge-sm badge-success badge-outline"
@@ -942,17 +973,16 @@ defmodule RokiWeb.TitleLive do
     """
   end
 
-  defp season_label(s, done?),
-    do: (s.name || "Season #{s.number}") <> if(done?, do: " ✓", else: "")
+  defp season_label(sec, done?), do: sec.label <> if(done?, do: " ✓", else: "")
 
   # A season is done when every episode of it is marked. The open season is judged from the list
   # on screen (so it follows a tap at once); the others from laev's counts, no extra lookups.
-  defp season_done?(%{number: n}, n, eps, watched, _counts) when is_list(eps) do
+  defp season_done?(%{key: key}, %{key: key}, eps, watched, _counts) when is_list(eps) do
     eps != [] and Enum.all?(eps, &(&1.aired? and MapSet.member?(watched, &1.number)))
   end
 
-  defp season_done?(%{number: n, episodes: total}, _open, _eps, _watched, counts),
-    do: is_integer(total) and total > 0 and Map.get(counts, n, 0) >= total
+  defp season_done?(%{key: key, total: total}, _open, _eps, _watched, counts),
+    do: is_integer(total) and total > 0 and Map.get(counts, key, 0) >= total
 
   defp season_all_watched?(episodes, watched) do
     out = for e <- episodes, e.aired?, do: e.number
@@ -964,6 +994,7 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
+  attr :play, :map, default: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
   attr :phase, :any, required: true
   attr :season, :any, default: nil
   attr :mode, :atom, required: true
@@ -1097,6 +1128,7 @@ defmodule RokiWeb.TitleLive do
         <.play_button
           split?
           title={@title}
+          play={@play}
           resume={@resume}
           resume_secs={@resume_secs}
           busy?={@busy?}

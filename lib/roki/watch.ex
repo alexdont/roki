@@ -334,18 +334,30 @@ defmodule Roki.Watch do
 
   @doc "Mark a film or one episode watched, or clear the mark. Sent to the user's other devices."
   def set_watched(uuid, title, season, episode, watched?) do
-    Roki.Laev.run(uuid, fn ->
-      Laev.Position.set_watched(build_ctx(title, season, episode), watched?)
-    end)
+    ctx =
+      Roki.Laev.run(uuid, fn ->
+        ctx = build_ctx(title, season, episode)
+        Laev.Position.set_watched(ctx, watched?)
+        ctx
+      end)
+
+    if watched?, do: scrobble(uuid, [ctx])
 
     library_changed(uuid)
   end
 
   @doc "Mark several episodes (`[{season, episode}]`) at once."
   def set_many_watched(uuid, title, pairs, watched?) do
-    Roki.Laev.run(uuid, fn ->
-      for {s, e} <- pairs, do: Laev.Position.set_watched(build_ctx(title, s, e), watched?)
-    end)
+    ctxs =
+      Roki.Laev.run(uuid, fn ->
+        for {s, e} <- pairs do
+          ctx = build_ctx(title, s, e)
+          Laev.Position.set_watched(ctx, watched?)
+          ctx
+        end
+      end)
+
+    if watched?, do: scrobble(uuid, ctxs)
 
     library_changed(uuid)
   end
@@ -360,6 +372,29 @@ defmodule Roki.Watch do
           do: {s.number, e.number}
 
     set_many_watched(uuid, title, pairs, watched?)
+  end
+
+  # Anime is kept on MyAnimeList: once an episode is watched, that entry's list count follows,
+  # as the terminal app does it. Each entry gets the highest episode of it that was just done
+  # (laev never lowers a count MyAnimeList already has) and finishing the last one completes it.
+  # Nothing happens without a MyAnimeList login, and a failure never reaches the page.
+  defp scrobble(uuid, ctxs) do
+    Task.start(fn ->
+      Roki.Laev.run(uuid, fn ->
+        if Laev.MAL.authenticated?() do
+          ctxs
+          |> Enum.filter(&(is_integer(&1[:mal_id]) and is_integer(&1[:episode])))
+          |> Enum.group_by(& &1.mal_id, & &1.episode)
+          |> Enum.each(fn {mal, eps} ->
+            Laev.MAL.set_progress(mal, Enum.max(eps), Laev.Anime.episodes(mal))
+          end)
+        end
+      end)
+    end)
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   # Stats and the shelf's counts read the same marks; the other devices pick them up on a sync.
@@ -883,24 +918,137 @@ defmodule Roki.Watch do
       if finished? and not before?, do: Laev.Sync.live_push()
       {:finished, finished? and not before?}
     end)
+    |> tap(fn {:finished, new?} -> if new?, do: scrobble(uuid, [ctx]) end)
   end
 
   @doc "Where playback should resume, in seconds (0 = from the start)."
   def resume_at(uuid, ctx),
     do: Roki.Laev.run(uuid, fn -> Laev.Position.saved_position(ctx) || 0 end)
 
-  @doc "Watched episodes per season, `%{season => count}`, straight from laev marks."
-  def season_counts(uuid, title) do
+  @doc """
+  What the season picker lists: one *section* per TMDB season — or, for anime where TMDB has
+  merged several cours into one season, one per MyAnimeList entry, numbered the way MAL does.
+  `%{key, season, from, count, total, mal, label, short}`: `season` is TMDB's; `from`/`count`
+  say which of its episodes the section holds (episode `from + 1` is this section's number 1);
+  `short` is the "S2" the buttons use.
+  """
+  def sections(uuid, title) do
+    Roki.Laev.run(uuid, fn -> build_sections(title) end)
+  end
+
+  defp build_sections(title) do
+    main = Enum.count(title.seasons, &(&1.number > 0))
+
+    Enum.flat_map(title.seasons, fn s ->
+      name = s.name || "Season #{s.number}"
+
+      parts =
+        if title.anime? and s.number > 0, do: Roki.Watch.Anime.parts(title.id, s.number), else: []
+
+      case parts do
+        [_, _ | _] ->
+          last = length(parts)
+
+          {out, _} =
+            parts
+            |> Enum.with_index(1)
+            |> Enum.map_reduce(0, fn {{mal, count}, i}, from ->
+              last? = i == last
+              n = count || 0
+
+              {%{
+                 key: "#{s.number}.#{i}",
+                 season: s.number,
+                 from: from,
+                 count: if(last?, do: nil, else: count),
+                 total: if(last?, do: max((s.episodes || 0) - from, n), else: n),
+                 mal: mal,
+                 label: if(main == 1, do: "Season #{i}", else: "#{name} · Part #{i}"),
+                 short: if(main == 1, do: "S#{i}", else: "S#{s.number}P#{i}")
+               }, from + n}
+            end)
+
+          out
+
+        _ ->
+          [
+            %{
+              key: "#{s.number}",
+              season: s.number,
+              from: 0,
+              count: nil,
+              total: s.episodes || 0,
+              mal: with([{mal, _}] <- parts, do: mal, else: (_ -> nil)),
+              label: name,
+              short: "S#{s.number}"
+            }
+          ]
+      end
+    end)
+  end
+
+  @doc """
+  An episode as the pages call it — "S2E1" — in the numbering of the season picker, so an
+  anime whose TMDB season was split reads like the anime list does. Cheap for anything that
+  is not split.
+  """
+  def episode_tag(uuid, title, season, episode) when is_integer(season) and is_integer(episode) do
+    with true <- title.anime?,
+         [_ | _] = sections <- sections(uuid, title),
+         {sec, local} <- locate_section(sections, season, episode) do
+      "#{sec.short}E#{local}"
+    else
+      _ -> "S#{season}E#{episode}"
+    end
+  end
+
+  def episode_tag(_uuid, _title, _season, _episode), do: nil
+
+  @doc "The section holding a TMDB season's episode, and that episode's number inside it."
+  def locate_section(sections, season, tmdb_episode) do
+    sec =
+      Enum.find(sections, fn x ->
+        x.season == season and tmdb_episode > x.from and
+          (x.count == nil or tmdb_episode <= x.from + x.count)
+      end) || Enum.find(sections, &(&1.season == season))
+
+    if sec, do: {sec, max(tmdb_episode - sec.from, 1)}, else: nil
+  end
+
+  @doc """
+  Where the big Play button goes and what it says: `%{season, episode, continue?, label}` —
+  `season`/`episode` are TMDB's (what the sources page takes), `label` is the section's own
+  numbering ("S2.E1").
+  """
+  def play_info(sections, resume) do
+    first = Enum.find(sections, &(&1.season > 0)) || List.first(sections)
+
+    with %{"season" => s, "episode" => e} = r when is_integer(s) and is_integer(e) <- resume,
+         tmdb = r["tmdb_episode"] || e,
+         {sec, local} <- locate_section(sections, s, tmdb) do
+      %{season: s, episode: tmdb, continue?: true, label: "#{sec.short}.E#{local}"}
+    else
+      _ ->
+        if first,
+          do: %{
+            season: first.season,
+            episode: first.from + 1,
+            continue?: false,
+            label: "#{first.short}.E1"
+          },
+          else: %{season: 1, episode: 1, continue?: false, label: "S1.E1"}
+    end
+  end
+
+  @doc "How many episodes of each section are marked watched: `%{key => count}`."
+  def section_counts(uuid, title, sections) do
     Roki.Laev.run(uuid, fn ->
       if title.anime? do
         marks = Laev.Position.anime_marks()
-
-        Map.new(
-          title.seasons,
-          &{&1.number, Roki.Watch.Anime.watched_in_season(title.id, &1.number, marks)}
-        )
+        Map.new(sections, &{&1.key, (&1.mal && Map.get(marks, &1.mal, 0)) || 0})
       else
-        Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{})
+        by_season = Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{})
+        Map.new(sections, &{&1.key, Map.get(by_season, &1.season, 0)})
       end
     end)
   end
