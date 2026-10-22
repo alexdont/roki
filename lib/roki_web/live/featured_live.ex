@@ -199,9 +199,9 @@ defmodule RokiWeb.FeaturedLive do
         <h2 class="text-xl font-semibold">{@title}</h2>
         <.link
           navigate={"/#{@kind}"}
-          class="text-sm font-medium text-base-content/60 transition hover:text-primary"
+          class="btn btn-sm btn-primary btn-outline gap-1.5 rounded-full px-4"
         >
-          See more →
+          See more <.icon name="hero-arrow-right" class="h-4 w-4" />
         </.link>
       </div>
       <%!-- Two rows: the rest of the list is on its own page, so this one stays short. --%>
