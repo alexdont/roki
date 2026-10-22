@@ -198,7 +198,13 @@ defmodule RokiWeb.CategoryLive do
         </li>
       </ul>
 
-      <ul :if={@items != []} class={["grid gap-4", @grid]}>
+      <ul
+        :if={@items != []}
+        id="grid"
+        phx-hook="FillGrid"
+        data-more={to_string(@more?)}
+        class={["grid gap-4", @grid]}
+      >
         <li :for={i <- @items} class="space-y-1">
           <.poster
             item={i}
