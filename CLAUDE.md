@@ -341,7 +341,7 @@ Every poster leads to `/title/:type/:id` (`RokiWeb.TitleLive`); movies and episo
 
 ### External player (VLC / mpv, e.g. on a phone)
 
-A device-level choice, stored in the browser (`localStorage["roki:player"]`) and sent as socket params (`player`, `platform`) — a phone defaults to external, a desktop to "this page". In external mode nothing is remuxed: `Watch.auto_choice_external` applies laev's plain rule (best up to the ceiling, 4K/HEVC allowed) and `Watch.external` writes the history entry and returns the direct debrid link. The panel offers `vlc-x-callback://` (iOS), an Android `intent:`, `vlc://` (desktop), an .m3u download, copy link, Infuse and mpv; Infuse/mpv/desktop-VLC links are untested. An external player cannot report progress, so "Mark as watched" calls `Laev.Position.set_watched`. `test/e2e/external.js` is the manual phone-emulation check (same cookie setup as `watch.js`).
+A device-level choice, stored in the browser (`localStorage["roki:player"]`) and sent as socket params (`player`, `platform`) — external (VLC) is the default on every device; "this page" is opt-in. In external mode nothing is remuxed: `Watch.auto_choice_external` applies laev's plain rule (best up to the ceiling, 4K/HEVC allowed) and `Watch.external` writes the history entry and returns the direct debrid link. The panel offers `vlc-x-callback://` (iOS), an Android `intent:`, `vlc://` (desktop), an .m3u download, copy link, Infuse and mpv; Infuse/mpv/desktop-VLC links are untested. An external player cannot report progress, so "Mark as watched" calls `Laev.Position.set_watched`. `test/e2e/external.js` is the manual phone-emulation check (same cookie setup as `watch.js`).
 
 ### Settings split
 
