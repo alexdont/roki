@@ -86,6 +86,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:state, if(linked?, do: :loading, else: :not_connected))
           |> assign(:settings, [])
           |> assign(:web, %{})
+          |> assign(:device_player, device_player(socket))
           |> assign(:saved, nil)
           |> assign(:editing, MapSet.new())
           |> assign(:results, %{})
@@ -97,6 +98,11 @@ defmodule RokiWeb.SettingsLive do
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
     end
+  end
+
+  defp device_player(socket) do
+    params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
+    if params["player"] == "browser", do: "browser", else: "external"
   end
 
   defp load(socket) do
@@ -113,6 +119,18 @@ defmodule RokiWeb.SettingsLive do
   # ── events ─────────────────────────────────────────────────────────
 
   @impl true
+  # Which player this device uses: remembered in the browser itself (the hook-less
+  # `roki:player` event writes it), read back from the socket params on connect.
+  def handle_event("change", %{"_target" => ["d", "player"], "d" => %{"player" => mode}}, socket)
+      when mode in ["external", "browser"] do
+    Process.send_after(self(), {:clear_saved, "device_player"}, 2_000)
+
+    {:noreply,
+     socket
+     |> assign(device_player: mode, saved: "device_player")
+     |> push_event("roki:player", %{mode: mode})}
+  end
+
   def handle_event("change", %{"_target" => ["w", key], "w" => values}, socket) do
     case Laev.put_web_setting(socket.assigns.uuid, key, values[key] || "") do
       :ok ->
@@ -336,6 +354,7 @@ defmodule RokiWeb.SettingsLive do
               Change them there; they show up here when your devices sync.
             </p>
             <div class="divide-y divide-base-300">
+              <.device_row :if={group == :playback} value={@device_player} saved={@saved} />
               <%= for s <- @by_group[group] || [] do %>
                 <.setting_row s={s} saved={@saved} locked={group == :cli} label={@labels[s.key]} />
                 <.web_row
@@ -422,6 +441,33 @@ defmodule RokiWeb.SettingsLive do
         </section>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :value, :string, required: true
+  attr :saved, :any, default: nil
+
+  defp device_row(assigns) do
+    ~H"""
+    <div class="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-6">
+      <label for="d-player" class="min-w-0 sm:w-1/2">
+        <span class="font-medium">Player on this device</span>
+        <span class="block text-xs text-base-content/60">
+          What Play does on the title page. The external player (VLC) is the default: the full
+          release, any resolution, nothing converted on the server. "This page" plays in the
+          browser, up to 1080p. Remembered in this browser, so each of your devices has its own.
+        </span>
+      </label>
+      <div class="flex items-center gap-2 sm:w-1/2">
+        <select id="d-player" name="d[player]" class="select select-bordered w-full">
+          <option value="external" selected={@value == "external"}>
+            VLC / external player (default)
+          </option>
+          <option value="browser" selected={@value == "browser"}>This page</option>
+        </select>
+        <span :if={@saved == "device_player"} class="shrink-0 text-sm text-success">Saved</span>
+      </div>
+    </div>
     """
   end
 

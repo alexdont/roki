@@ -150,6 +150,24 @@ defmodule RokiWeb.SettingsLiveTest do
     assert Roki.Laev.web_settings(user.uuid)["browser_max_resolution"] == "720p"
   end
 
+  test "the player for this device can be changed, and defaults to external", %{
+    conn: conn,
+    user: user
+  } do
+    connect!(user)
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    render_async(view)
+
+    assert has_element?(view, "#d-player option[selected]", "VLC / external player")
+
+    view
+    |> form("#settings-form")
+    |> render_change(%{"_target" => ["d", "player"], "d" => %{"player" => "browser"}})
+
+    assert_push_event(view, "roki:player", %{mode: "browser"})
+    assert has_element?(view, "#d-player option[selected]", "This page")
+  end
+
   test "a value laev refuses is explained, not saved", %{conn: conn, user: user} do
     dir = connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
