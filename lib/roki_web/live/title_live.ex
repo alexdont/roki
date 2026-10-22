@@ -771,39 +771,64 @@ defmodule RokiWeb.TitleLive do
   defp episodes(assigns) do
     ~H"""
     <section class="space-y-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <h2 class="flex-1 text-xl font-semibold">Episodes</h2>
+      <h2 class="text-xl font-semibold">Episodes</h2>
+
+      <%!-- The season: which one, and the whole of it watched — the dropdown, and the same
+            square watched button the episode rows carry. --%>
+      <div class="flex gap-2">
+        <form
+          :if={length(@title.seasons) > 1}
+          phx-change="select_season"
+          id="season-form"
+          class="min-w-0 flex-1"
+        >
+          <select
+            name="season"
+            aria-label="Season"
+            class="select select-bordered select-primary h-14 w-full text-lg font-semibold"
+          >
+            <option
+              :for={s <- @title.seasons}
+              value={s.number}
+              selected={s.number == @season}
+              class={
+                season_done?(s, @season, @episodes, @watched, @season_counts) &&
+                  "text-base-content/40"
+              }
+            >
+              {if season_done?(s, @season, @episodes, @watched, @season_counts), do: "✓ "}{s.name ||
+                "Season #{s.number}"}
+            </option>
+          </select>
+        </form>
         <button
           :if={@can_play? and is_list(@episodes) and @episodes != []}
           phx-click="toggle_season"
-          class="btn btn-sm gap-1.5"
+          class={[
+            "btn btn-square h-14 w-14 shrink-0",
+            season_all_watched?(@episodes, @watched) && "btn-success"
+          ]}
+          title={
+            if season_all_watched?(@episodes, @watched),
+              do: "Season watched — click to unmark",
+              else: "Mark the whole season watched"
+          }
+          aria-label={
+            if season_all_watched?(@episodes, @watched),
+              do: "Unmark season watched",
+              else: "Mark season watched"
+          }
         >
-          <.icon name="hero-check-circle" class="h-4 w-4" />
-          {if season_all_watched?(@episodes, @watched),
-            do: "Unmark season",
-            else: "Mark season watched"}
+          <.icon
+            name={
+              if season_all_watched?(@episodes, @watched),
+                do: "hero-check-circle-solid",
+                else: "hero-check-circle"
+            }
+            class="h-8 w-8"
+          />
         </button>
       </div>
-
-      <form :if={length(@title.seasons) > 1} phx-change="select_season" id="season-form">
-        <select
-          name="season"
-          aria-label="Season"
-          class="select select-bordered select-primary h-14 w-full text-lg font-semibold sm:w-auto sm:min-w-[18rem]"
-        >
-          <option
-            :for={s <- @title.seasons}
-            value={s.number}
-            selected={s.number == @season}
-            class={
-              season_done?(s, @season, @episodes, @watched, @season_counts) && "text-base-content/40"
-            }
-          >
-            {if season_done?(s, @season, @episodes, @watched, @season_counts), do: "✓ "}{s.name ||
-              "Season #{s.number}"}
-          </option>
-        </select>
-      </form>
 
       <div :if={@episodes == nil} class="space-y-2" aria-busy="true">
         <div :for={_ <- 1..4} class="skeleton h-20 w-full rounded-box"></div>
