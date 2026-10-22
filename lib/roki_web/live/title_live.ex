@@ -918,6 +918,9 @@ defmodule RokiWeb.TitleLive do
           title_id={@id}
           can_play?={@linked?}
         />
+
+        <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
+        <div class="h-36 sm:hidden" aria-hidden="true"></div>
       </div>
     </Layouts.app>
     """
@@ -1550,24 +1553,26 @@ defmodule RokiWeb.TitleLive do
     assigns = assign(assigns, :busy?, match?({:working, _}, assigns.phase))
 
     ~H"""
-    <section class="-mb-6 -mt-4 flex min-h-[calc(100svh-8.75rem)] flex-col gap-4 sm:hidden">
-      <div>
+    <section class="-mt-4 flex h-[calc(100svh-4.5rem)] flex-col gap-3 pb-[calc(8.75rem+env(safe-area-inset-bottom))] sm:hidden">
+      <div class="shrink-0">
         <h1 class="text-xl font-bold leading-tight">{@title.title}</h1>
         <p class="text-xs text-base-content/60">{meta(@title)}</p>
       </div>
 
-      <div class="flex gap-3">
-        <img
-          :if={@title.poster}
-          src={@title.poster}
-          alt={@title.title}
-          class="aspect-[2/3] h-[40svh] shrink-0 rounded-box bg-base-300 object-cover shadow-lg"
-        />
-        <div :if={!@title.poster} class="aspect-[2/3] h-[40svh] shrink-0 rounded-box bg-base-300">
+      <%!-- The poster takes all the height there is between the title and the synopsis; the
+            three buttons are a strip against the right edge of the screen. --%>
+      <div class="flex min-h-0 flex-1 justify-between gap-2">
+        <div class="relative aspect-[3/4] h-full max-w-[calc(100%-3.75rem)] overflow-hidden rounded-box bg-base-300 shadow-lg">
+          <img
+            :if={@title.poster}
+            src={@title.poster}
+            alt={@title.title}
+            class="absolute inset-0 h-full w-full object-cover object-[50%_65%]"
+          />
         </div>
 
         <%!-- Icons only: saved, on hold, watched. Their state is the colour; the label is the tooltip. --%>
-        <div :if={@linked?} class="flex flex-1 flex-col items-center justify-evenly">
+        <div :if={@linked?} class="-mr-4 flex shrink-0 flex-col items-end justify-evenly">
           <.round_btn
             event="toggle_saved"
             on={@lib.saved?}
@@ -1603,16 +1608,17 @@ defmodule RokiWeb.TitleLive do
         :if={@title.overview}
         type="button"
         phx-click={JS.show(to: "#about-sheet", display: "flex")}
-        class="text-left"
+        class="shrink-0 text-left"
         aria-label="Read the full description and more details"
       >
-        <span class="line-clamp-3 text-sm text-base-content/80">{@title.overview}</span>
-        <span class="mt-1 flex items-center gap-1 text-xs font-medium text-primary">
+        <span class="line-clamp-2 text-sm text-base-content/80">{@title.overview}</span>
+        <span class="flex items-center gap-1 text-xs font-medium text-primary">
           More <.icon name="hero-chevron-up-micro" class="h-4 w-4" />
         </span>
       </button>
 
-      <div class="sticky bottom-0 z-20 -mx-4 mt-auto space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
+      <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
         <div :if={@linked?} class="flex justify-center"><.mode_switch mode={@mode} /></div>
         <button
           phx-click="play"
@@ -1641,7 +1647,7 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn btn-circle h-14 w-14", @on && @on_class]}
+      class={["btn h-16 w-14 rounded-l-2xl rounded-r-none border-r-0 px-0", @on && @on_class]}
       title={@label}
       aria-label={@label}
     >
