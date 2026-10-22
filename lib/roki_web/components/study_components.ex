@@ -16,9 +16,16 @@ defmodule RokiWeb.StudyComponents do
 
   import RokiWeb.CoreComponents, only: [icon: 1]
 
-  attr :player, :map, default: nil, doc: "what to play (see above); nil for a player waiting for a source"
-  attr :progress?, :boolean, default: false, doc: "post the playhead back to the LiveView (`progress` events)"
-  slot :controls, doc: "extra controls above the video (the /study page puts its file pickers here)"
+  attr :player, :map,
+    default: nil,
+    doc: "what to play (see above); nil for a player waiting for a source"
+
+  attr :progress?, :boolean,
+    default: false,
+    doc: "post the playhead back to the LiveView (`progress` events)"
+
+  slot :controls,
+    doc: "extra controls above the video (the /study page puts its file pickers here)"
 
   def study_player(assigns) do
     assigns = assign(assigns, :data, if(assigns.player, do: Jason.encode!(assigns.player)))
@@ -44,10 +51,8 @@ defmodule RokiWeb.StudyComponents do
                 playsinline
                 controlslist="nofullscreen"
                 class="study-video"
-              >
-              </video>
-              <div data-role="overlay" class="study-overlay" aria-hidden="true"></div>
-              <div data-role="tip" class="study-tip" hidden></div>
+              ></video>
+              <div data-role="overlay" class="study-overlay"></div>
             </div>
 
             <div class="study-bar">
@@ -57,7 +62,86 @@ defmodule RokiWeb.StudyComponents do
                   <span class="text-base-content/60">Audio</span>
                   <select data-role="audio" class="select select-sm select-bordered"></select>
                 </div>
-                <button type="button" data-role="theater" class="btn btn-sm gap-1.5" aria-pressed="false">
+                <div class="join" role="group" aria-label="Subtitle timing">
+                  <button
+                    type="button"
+                    data-role="earlier"
+                    class="btn btn-sm btn-square join-item"
+                    title="Subtitles half a second earlier"
+                    aria-label="Subtitles earlier"
+                  >
+                    <.icon name="hero-minus-micro" class="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    data-role="offset"
+                    class="btn btn-sm join-item w-16 px-1 tabular-nums"
+                    title="Subtitle sync — click to reset"
+                  >
+                    0.0s
+                  </button>
+                  <button
+                    type="button"
+                    data-role="later"
+                    class="btn btn-sm btn-square join-item"
+                    title="Subtitles half a second later"
+                    aria-label="Subtitles later"
+                  >
+                    <.icon name="hero-plus-micro" class="h-4 w-4" />
+                  </button>
+                </div>
+                <div class="join" role="group" aria-label="Subtitle size">
+                  <button
+                    type="button"
+                    data-role="smaller-text"
+                    class="btn btn-sm join-item"
+                    title="Smaller text"
+                  >
+                    A<span class="text-[0.6rem]">−</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-role="bigger-text"
+                    class="btn btn-sm join-item"
+                    title="Bigger text"
+                  >
+                    A<span class="text-[0.6rem]">+</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  data-role="study"
+                  class="btn btn-sm gap-1.5"
+                  aria-pressed="false"
+                  title="Pause at the end of every line"
+                >
+                  <.icon name="hero-pause-circle" class="h-4 w-4" /> Study
+                </button>
+                <button
+                  type="button"
+                  data-role="replay"
+                  hidden
+                  class="btn btn-sm btn-square"
+                  title="Replay this line"
+                  aria-label="Replay this line"
+                >
+                  <.icon name="hero-arrow-path" class="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  data-role="peek"
+                  class="btn btn-sm gap-1.5"
+                  aria-pressed="false"
+                  title="Hide the translation until you click it"
+                >
+                  <.icon name="hero-eye-slash" class="h-4 w-4" /> Peek
+                </button>
+                <button
+                  type="button"
+                  data-role="theater"
+                  class="btn btn-sm gap-1.5"
+                  aria-pressed="false"
+                >
                   <.icon name="hero-film" class="h-4 w-4" /> Theater
                 </button>
                 <button

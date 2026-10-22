@@ -12,12 +12,14 @@ defmodule RokiWeb.StudyLiveTest do
     assert html =~ ~s(data-video="study-video")
     assert html =~ ~s(id="study-video")
 
-    for role <- ~w(list title count empty resume video-file video-url-form demo) do
+    for role <-
+          ~w(list title count empty resume stage overlay tracks theater fullscreen collapse compact
+                   offset later earlier study replay peek video-file video-url-form demo) do
       assert html =~ ~s(data-role="#{role}"), "missing data-role=#{role}"
     end
 
     # the parts JavaScript owns are not patched away by LiveView
-    for id <- ~w(study-player study-sidebar study-sources) do
+    for id <- ~w(study-ui study-sources) do
       assert Regex.match?(
                ~r/id="#{id}"[^>]*phx-update="ignore"|phx-update="ignore"[^>]*id="#{id}"/,
                html

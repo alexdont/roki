@@ -187,7 +187,7 @@ defmodule RokiWeb.WatchLive do
       for lang <- Watch.external_langs(uuid, res.ctx, player.subtitles), reduce: socket do
         acc ->
           start_async(acc, {:ext_subs, lang}, fn ->
-            {token, Watch.external_subtitle(uuid, res.ctx, play_id, lang)}
+            {token, external(uuid, res.ctx, play_id, lang, source.name)}
           end)
       end
 
@@ -212,7 +212,8 @@ defmodule RokiWeb.WatchLive do
         {:ok, {token, {:ok, track}}},
         %{assigns: %{token: token, player: %{} = player}} = socket
       ),
-      do: {:noreply, assign(socket, :player, %{player | tracks: player.tracks ++ [track]})}
+      do:
+        {:noreply, assign(socket, :player, %{player | tracks: player.tracks ++ List.wrap(track)})}
 
   def handle_async({:ext_subs, _lang}, _other, socket), do: {:noreply, socket}
 
@@ -220,6 +221,18 @@ defmodule RokiWeb.WatchLive do
     do: {:noreply, assign(socket, :episodes, eps)}
 
   def handle_async(:episodes, _other, socket), do: {:noreply, socket}
+
+  # Japanese for anime is every plausible file Jimaku has (they differ in timing); anything else
+  # is the one best match laev finds.
+  defp external(uuid, %{anime: true} = ctx, play_id, "ja", source_name) do
+    case Watch.jimaku_tracks(uuid, ctx, play_id, source_name) do
+      {:ok, _} = ok -> ok
+      _ -> Watch.external_subtitle(uuid, ctx, play_id, "ja")
+    end
+  end
+
+  defp external(uuid, ctx, play_id, lang, _source_name),
+    do: Watch.external_subtitle(uuid, ctx, play_id, lang)
 
   # The address names the release that is playing, so a reload — or a copy of it — plays the same.
   defp name_the_release(%{assigns: %{hash: nil}} = socket, hash),

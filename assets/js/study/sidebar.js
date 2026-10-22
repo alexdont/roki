@@ -1,21 +1,28 @@
-// The study sidebar: every subtitle line, the live one highlighted, kept in view while
-// you watch — and left alone the moment you scroll it yourself.
+// The study player: subtitles over the picture and in a list beside it, in one or two
+// languages, with a dictionary under every word. Ported from the idea of debrid_theatre.
 //
-// Mounted on the element that wraps the video, the sidebar and the source controls:
+// Mounted on the element that wraps everything (`#study`, see StudyComponents):
 //
-//   <div id="study" phx-hook="StudySidebar" data-video="study-video"> … </div>
+//   - the video, with the line being spoken drawn over it; under it, the translation
+//   - a card for any word you hover (Japanese is cut into words with Kuromoji and looked up by
+//     its dictionary form: 食べ → 食べる), the video pausing while you read it
+//   - every line in a list: the words, the translation, and a ▶ that plays from there
+//   - tracks to pick under the video — one to study, one as the translation —, a sync offset,
+//     caption size, "pause after each line" with a replay button, theater mode
 //
-// Subtitles arrive either from the server (`study:subtitles`, already WebVTT) or from
-// the demo button. No libraries: the video is a plain <video>, the list is plain DOM.
+// No framework: the video is a plain <video>, the rest is plain DOM.
 import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 
-// After you scroll or click in the list it stops following the video, then picks the
-// current line back up on its own once you've been idle this long.
+// After you scroll the list it stops following the video, then picks the current line back up
+// on its own once you've been idle this long.
 const FOLLOW_RESUME_MS = 5000
+// How long a word must be hovered before the video stops and the card opens (a sweep of the
+// mouse across the line should not).
+const DWELL_MS = 500
 
-// ── words on the screen ───────────────────────────────────────────────
+// ── languages and words ───────────────────────────────────────────────
 
-// Subtitle language codes as ffmpeg and the providers spell them, as the two letters the
+// Subtitle language codes as ffmpeg and the providers spell them → the two letters the
 // dictionary route takes.
 const SHORT = {
   jpn: "ja", ja: "ja", eng: "en", en: "en", fre: "fr", fra: "fr", fr: "fr", spa: "es", es: "es",
@@ -27,13 +34,40 @@ const SHORT = {
 const LOOKUP = new Set(["ja", "fr", "es", "de", "it", "pt", "ru", "ko", "zh", "nl", "pl", "tr", "sv", "ar"])
 const shortLang = (code) => SHORT[String(code || "").toLowerCase()] || ""
 
+const store = {
+  get(key) { try { return localStorage.getItem("roki:study:" + key) } catch { return null } },
+  set(key, value) { try { localStorage.setItem("roki:study:" + key, value) } catch {} },
+}
+
+// Kuromoji (a dictionary-based Japanese tokenizer: words, base forms, readings) is a 300 KB script
+// and 17 MB of dictionary, both fetched the first time a Japanese track is shown and cached by
+// the browser after that. Until it is ready the browser's own segmenter does the cutting.
+let tokenizer = null
+let kuromojiPromise = null
+function loadKuromoji() {
+  kuromojiPromise ||= new Promise((resolve) => {
+    const build = () =>
+      window.kuromoji.builder({dicPath: "/kuromoji/dict/"}).build((err, tok) => {
+        if (err) { console.error("kuromoji", err); resolve(null) }
+        else { tokenizer = tok; resolve(tok) }
+      })
+    if (window.kuromoji) return build()
+    const el = document.createElement("script")
+    el.src = "/vendor/kuromoji.js"
+    el.onload = build
+    el.onerror = () => resolve(null)
+    document.head.appendChild(el)
+  })
+  return kuromojiPromise
+}
+
 const segmenterJa = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("ja", {granularity: "word"}) : null
 const WORDS = /[\p{L}\p{M}\p{N}]+(?:['’-][\p{L}\p{M}]+)*|[^\p{L}\p{M}\p{N}]+/gu
+const ISWORD = /[\p{L}\p{N}]/u
 
-// The browser's segmenter cuts a conjugated verb into its pieces (食べ・ま・し・た); a dictionary
-// wants 食べました. A word that starts with kanji or katakana takes the hiragana right after it
-// (the endings) — up to a few characters, and not past a particle (は が を に の …; で only after
-// ん, as in 読んで).
+// The segmenter alone cuts a conjugated verb into pieces (食べ・ま・し・た); until Kuromoji is
+// ready, a word that starts with kanji or katakana takes the hiragana after it, but not past a
+// particle (で only after ん, as in 読んで).
 const PARTICLES = new Set(["は", "が", "を", "に", "へ", "と", "も", "の", "や", "か", "ね", "よ", "な", "ぞ", "ぜ", "わ", "さ", "で"])
 const HIRAGANA = /^[\p{Script=Hiragana}ー]+$/u
 
@@ -58,22 +92,44 @@ function joinInflections(parts) {
   return out
 }
 
-// A line cut into `{t, w}` pieces: `w` is true for a word you can ask about. Japanese has no
-// spaces, so the browser's own segmenter finds the words; everything else splits on letters.
-function wordsOf(text, lang) {
+// A line cut into `{t, w, lemma}` pieces: `w` is true for a word you can ask about, `lemma` is
+// the form to look up when it is not the word itself.
+function tokensOf(text, lang) {
+  if (lang === "ja" && tokenizer) {
+    return tokenizer.tokenize(text).map((k) => ({
+      t: k.surface_form,
+      w: k.pos !== "記号" && ISWORD.test(k.surface_form),
+      lemma: k.basic_form && k.basic_form !== "*" && k.basic_form !== k.surface_form ? k.basic_form : null,
+    }))
+  }
   if ((lang === "ja" || lang === "zh") && segmenterJa) {
-    const parts = [...segmenterJa.segment(text)].map((x) => ({t: x.segment, w: !!x.isWordLike && /[\p{L}\p{N}]/u.test(x.segment)}))
+    const parts = [...segmenterJa.segment(text)].map((x) => ({t: x.segment, w: !!x.isWordLike && ISWORD.test(x.segment)}))
     return lang === "ja" ? joinInflections(parts) : parts
   }
-  return [...text.matchAll(WORDS)].map((m) => ({t: m[0], w: /[\p{L}\p{N}]/u.test(m[0])}))
+  return [...text.matchAll(WORDS)].map((m) => ({t: m[0], w: ISWORD.test(m[0])}))
 }
 
-const store = {
-  get(key) { try { return localStorage.getItem("roki:study:" + key) } catch { return null } },
-  set(key, value) { try { localStorage.setItem("roki:study:" + key, value) } catch {} },
+// Put a line into `el` as text and, for a language with a dictionary, one hoverable span per
+// word. Always text, never HTML: a subtitle file is untrusted.
+function fillLine(el, text, lang) {
+  el.textContent = ""
+  if (!LOOKUP.has(lang)) { el.textContent = text; return }
+  for (const part of tokensOf(text, lang)) {
+    if (part.w) {
+      const w = document.createElement("span")
+      w.className = "study-word"
+      w.textContent = part.t
+      if (part.lemma) w.dataset.lemma = part.lemma
+      el.appendChild(w)
+    } else {
+      el.appendChild(document.createTextNode(part.t))
+    }
+  }
 }
 
 export const StudySidebar = {
+  isKuromojiReady() { return !!tokenizer },
+
   mounted() {
     this.video = document.getElementById(this.el.dataset.video)
     this.list = this.el.querySelector("[data-role=list]")
@@ -84,36 +140,43 @@ export const StudySidebar = {
     this.ui = this.el.querySelector("#study-ui")
     this.stage = this.el.querySelector("[data-role=stage]")
     this.overlay = this.el.querySelector("[data-role=overlay]")
-    this.tip = this.el.querySelector("[data-role=tip]")
     this.tracksBar = this.el.querySelector("[data-role=tracks]")
 
-    this.lang = ""
-    this.trackKey = ""
-    this.overlayKey = ""
-    this.overlayOn = store.get("overlay") !== "off"
-    this.tracks = []
-    this.dict = new Map()
+    // The card for a word: its own element, in the page (or in the stage while it is fullscreen).
+    this.tip = document.createElement("div")
+    this.tip.className = "study-tip"
+    this.tip.hidden = true
+    this.ui.appendChild(this.tip)
 
-    this.cues = []
-    this.rows = []
-    this.idx = -1
-    this.live = []
+    // Two tracks: `p` is the one being studied (words, list), `s` its translation.
+    this.p = {cues: [], rows: [], idx: -1, live: [], lang: "", url: null, label: "", trackIdx: -1}
+    this.s = {cues: [], lang: "", url: null, label: "", trackIdx: -1}
+    this.tracks = []
     this.follow = true
     this.programmatic = false
     this.objectUrl = null
+    this.offset = 0
+    this.overlayKey = ""
+    this.dict = new Map()
+    this.pausedAt = -1
+    this.watching = -1
+    this.study = store.get("study") === "1"
+    this.peek = store.get("peek") === "1"
+    this.scale = Math.min(3, Math.max(0.5, parseFloat(store.get("scale")) || 1))
 
     this.el.study = this // for tests and the console
+
     this.bindVideo()
     this.bindList()
     this.bindSource()
     this.bindUi()
 
-    this.handleEvent("study:subtitles", ({vtt, name}) => this.setCues(vtt, name))
+    this.handleEvent("study:subtitles", ({vtt, name}) => this.setPrimary(vtt, name, {lang: "", url: "upload"}))
 
     this.readPlayer()
   },
 
-  // LiveView only ever changes `data-player` on the root (the video and list are ignored
+  // LiveView only ever changes `data-player` on the root (the video and the rest are ignored
   // regions), so every update lands here.
   updated() {
     this.readPlayer()
@@ -121,11 +184,14 @@ export const StudySidebar = {
 
   destroyed() {
     cancelAnimationFrame(this.raf)
-    clearTimeout(this.tipTimer)
+    clearTimeout(this.dwellTimer)
+    clearTimeout(this.leaveTimer)
     clearTimeout(this.resumeTimer)
     clearTimeout(this.progTimer)
+    clearTimeout(this.seekWait)
     clearInterval(this.seekTimer)
     clearInterval(this.postTimer)
+    if (this.tip) this.tip.remove()
     if (this.hls) this.hls.destroy()
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
   },
@@ -171,87 +237,163 @@ export const StudySidebar = {
     })
   },
 
-  tick() {
-    if (!this.cues.length) return
-    const t = this.video.currentTime
-    const idx = activeIndex(this.cues, t)
-    const live = liveIndexes(this.cues, idx, t)
+  // The time the subtitles are on: the video's, minus the sync offset.
+  now() { return this.video.currentTime - this.offset },
 
-    if (idx !== this.idx) this.setIndex(idx)
-    this.setLive(live)
-    this.renderOverlay(live)
+  tick() {
+    const p = this.p
+    if (!p.cues.length && !this.s.cues.length) return
+    const t = this.now()
+    const idx = activeIndex(p.cues, t)
+    let live = liveIndexes(p.cues, idx, t)
+
+    if (this.study) live = this.studyStep(t, live)
+
+    if (p.cues.length) {
+      if (idx !== p.idx) this.setIndex(idx)
+      this.setLive(live)
+    }
+    this.renderOverlay(live, t)
+  },
+
+  // "Pause after each line": the line being watched is remembered; at its end the video stops
+  // on it (and the line stays on screen to reread) until you press play. A line you just
+  // resumed from is not paused on again.
+  studyStep(t, live) {
+    const cues = this.p.cues
+    const v = this.video
+    const cur = live.length ? live[live.length - 1] : -1
+    if (cur >= 0 && cur !== this.pausedAt) this.watching = cur
+
+    if (this.pausedAt >= 0 && t > cues[this.pausedAt].end + 0.4) this.pausedAt = -1
+
+    if (this.watching >= 0 && !v.paused && t >= cues[this.watching].end - 0.04) {
+      this.pausedAt = this.watching
+      this.watching = -1
+      v.pause()
+    }
+    return this.pausedAt >= 0 && v.paused && !live.includes(this.pausedAt) ? [this.pausedAt] : live
+  },
+
+  replay() {
+    const cues = this.p.cues
+    const i = this.pausedAt >= 0 ? this.pausedAt : this.p.idx
+    if (i < 0 || !cues[i]) return
+    this.pausedAt = -1
+    this.watching = -1
+    this.video.currentTime = Math.max(0, cues[i].start + this.offset)
+    this.video.play().catch(() => {})
   },
 
   // ── the subtitles over the picture ─────────────────────────────────
 
-  // The line(s) being spoken, each word its own element so it can be asked about. Rebuilt only
-  // when the lines (or the track) change, never every frame.
-  renderOverlay(live) {
-    const key = this.overlayOn ? `${this.trackKey}|${live.join(",")}` : "off"
+  // The line(s) being spoken, each word its own element, and the translation under them. Rebuilt
+  // only when the lines (or the tracks) change, never every frame.
+  renderOverlay(live, t) {
+    const sIdx = this.s.cues.length ? activeIndex(this.s.cues, t) : -1
+    const sLive = sIdx >= 0 ? liveIndexes(this.s.cues, sIdx, t) : []
+    const key = this.p.url ? `${this.p.url}|${this.s.url}|${tokenizer ? 1 : 0}|${live.join(",")}|${sLive.join(",")}` : "off"
     if (key === this.overlayKey) return
     this.overlayKey = key
-    this.hideTip()
+    if (!this.hovering) this.hideTip()
     this.overlay.textContent = ""
-    if (!this.overlayOn) return
+    if (!this.p.url) return
 
-    const lookup = LOOKUP.has(this.lang)
     for (const i of live) {
       const line = document.createElement("div")
       line.className = "study-line"
-      for (const part of wordsOf(this.cues[i].text, this.lang)) {
-        if (lookup && part.w) {
-          const w = document.createElement("span")
-          w.className = "study-word"
-          w.textContent = part.t // text, never HTML: a subtitle file is untrusted
-          line.appendChild(w)
-        } else {
-          line.appendChild(document.createTextNode(part.t))
-        }
-      }
+      fillLine(line, this.p.cues[i].text, this.p.lang)
       this.overlay.appendChild(line)
+    }
+    if (sLive.length) {
+      const trans = document.createElement("div")
+      trans.className = "study-trans study-line"
+      trans.textContent = sLive.map((i) => this.s.cues[i].text).join(" ")
+      this.overlay.appendChild(trans)
     }
   },
 
-  // Hover (mouse) or tap (touch) a word: a card with what it means. A click also stops the
-  // video so there is time to read it.
+  // ── the card for a word ────────────────────────────────────────────
+
+  // Hover a word (mouse) for a moment: the video stops and a card says what it means; move off
+  // and it carries on if it was playing. A tap or a click keeps the card and the pause.
   bindWords() {
     const wordOf = (e) => e.target.closest && e.target.closest(".study-word")
 
-    this.overlay.addEventListener("pointerover", (e) => {
+    this.el.addEventListener("mouseover", (e) => {
       const w = wordOf(e)
-      if (!w || e.pointerType !== "mouse") return
-      clearTimeout(this.tipTimer)
-      this.tipTimer = setTimeout(() => this.showTip(w), 120)
+      if (w) this.wordEnter(w)
     })
-    this.overlay.addEventListener("pointerout", (e) => {
-      if (!wordOf(e) || e.pointerType !== "mouse" || this.pinned) return
-      clearTimeout(this.tipTimer)
-      this.tipTimer = setTimeout(() => this.hideTip(), 150)
+    this.el.addEventListener("mouseout", (e) => {
+      if (wordOf(e)) this.wordLeave()
     })
-    this.overlay.addEventListener("click", (e) => {
+    this.el.addEventListener("click", (e) => {
       const w = wordOf(e)
-      if (!w) return
-      e.stopPropagation()
-      this.video.pause()
-      this.pinned = true
-      this.showTip(w)
+      if (w) {
+        this.pinned = true
+        if (!this.video.paused) this.video.pause()
+        this.hovering = true
+        this.wasPlaying = false
+        this.showTip(w)
+      } else if (!e.target.closest(".study-tip")) {
+        this.dismissTip()
+      }
     })
-    // Anywhere else: let it go.
-    this.stage.addEventListener("click", (e) => { if (!wordOf(e)) this.hideTip() })
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") this.hideTip() })
+    this.tip.addEventListener("mouseenter", () => clearTimeout(this.leaveTimer))
+    this.tip.addEventListener("mouseleave", () => this.wordLeave())
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") this.dismissTip() })
+  },
+
+  wordEnter(w) {
+    clearTimeout(this.leaveTimer)
+    if (this.currentWord === w) return
+    clearTimeout(this.dwellTimer)
+    this.currentWord = w
+    if (this.hovering) {
+      this.showTip(w) // already reading: the next word at once
+    } else {
+      this.dwellTimer = setTimeout(() => {
+        if (this.currentWord !== w) return
+        this.wasPlaying = !this.video.paused
+        this.video.pause()
+        this.hovering = true
+        this.showTip(w)
+      }, DWELL_MS)
+    }
+  },
+
+  wordLeave() {
+    clearTimeout(this.dwellTimer)
+    if (this.pinned) return
+    this.leaveTimer = setTimeout(() => this.dismissTip(), 250)
+  },
+
+  // Close the card; if the video was only stopped for the card, let it go on.
+  dismissTip() {
+    clearTimeout(this.dwellTimer)
+    clearTimeout(this.leaveTimer)
+    this.hideTip()
+    if (this.hovering && this.wasPlaying) this.video.play().catch(() => {})
+    this.hovering = false
+    this.pinned = false
+    this.wasPlaying = false
+    this.currentWord = null
   },
 
   async showTip(word) {
-    const text = word.textContent
-    const lang = this.lang
+    const text = word.dataset.lemma || word.textContent
     this.tipFor = word
-    for (const el of this.overlay.querySelectorAll("[data-on]")) delete el.dataset.on
+    for (const el of this.el.querySelectorAll("[data-on]")) delete el.dataset.on
     word.dataset.on = "true"
 
     this.fillTip(word, text, null)
+    const lang = this.langOf(word)
     const result = await this.define(lang, text)
     if (this.tipFor === word) this.fillTip(word, text, result)
   },
+
+  // Which track's language a word on screen belongs to (the studied one: only it has words).
+  langOf() { return this.p.lang },
 
   async define(lang, word) {
     const key = `${lang}:${word}`
@@ -283,7 +425,7 @@ export const StudySidebar = {
     }
 
     if (!result) {
-      add(add(tip, "div"), "span", "tip-word", text)
+      add(tip, "div", "tip-word", text)
       add(tip, "div", "tip-note", "…")
     } else if (!result.entries.length) {
       add(tip, "div", "tip-word", text)
@@ -293,7 +435,7 @@ export const StudySidebar = {
         const box = add(tip, "div", "tip-entry")
         const head = add(box, "div")
         add(head, "span", "tip-word", e.word)
-        if (e.reading) add(head, "span", "tip-reading", e.reading)
+        if (e.reading) add(head, "span", "tip-reading", `【${e.reading}】`)
         if (e.pos && e.pos.length) add(box, "div", "tip-pos", e.pos.join(" · "))
         const list = add(box, "ol")
         for (const m of (e.meanings || []).slice(0, 3)) add(list, "li", null, m)
@@ -303,37 +445,41 @@ export const StudySidebar = {
     this.placeTip(word)
   },
 
-  // Above the word when there is room, below it when not; kept inside the picture.
+  // Beside the word where there is room (below it, else above), kept inside what contains it:
+  // the picture when fullscreen, the window otherwise.
   placeTip(word) {
-    const stage = this.stage.getBoundingClientRect()
-    const w = word.getBoundingClientRect()
     const tip = this.tip
+    const inStage = tip.parentElement === this.stage
+    const box = inStage
+      ? this.stage.getBoundingClientRect()
+      : {left: 0, top: 0, width: window.innerWidth, height: window.innerHeight}
+    const w = word.getBoundingClientRect()
+
     // A small picture (a phone) has room for fewer meanings: drop the last entries until it fits.
-    while (tip.querySelectorAll(".tip-entry").length > 1 && tip.offsetHeight > stage.height * 0.62) {
+    while (tip.querySelectorAll(".tip-entry").length > 1 && tip.offsetHeight > box.height * 0.6) {
       tip.querySelector(".tip-entry:last-child").remove()
     }
     const width = tip.offsetWidth
     const height = tip.offsetHeight
-    let left = w.left - stage.left + w.width / 2 - width / 2
-    left = Math.max(6, Math.min(left, stage.width - width - 6))
-    // Above the word if it fits there, else below it, else wherever it fits in the picture.
-    let top = w.top - stage.top - height - 8
-    if (top < 6) {
-      top = w.bottom - stage.top + 8
-      if (top + height > stage.height - 6) top = Math.max(6, stage.height - height - 6)
+
+    let left = w.left - box.left + w.width / 2 - width / 2
+    left = Math.max(6, Math.min(left, box.width - width - 6))
+    let top = w.bottom - box.top + 8
+    if (top + height > box.height - 6) {
+      top = w.top - box.top - height - 8
+      if (top < 6) top = Math.max(6, box.height - height - 6)
     }
     tip.style.left = `${left}px`
     tip.style.top = `${top}px`
   },
 
   hideTip() {
-    this.pinned = false
     this.tipFor = null
     if (this.tip) this.tip.hidden = true
-    if (this.overlay) for (const el of this.overlay.querySelectorAll("[data-on]")) delete el.dataset.on
+    for (const el of this.el.querySelectorAll("[data-on]")) delete el.dataset.on
   },
 
-  // ── theater mode, fullscreen, the box ──────────────────────────────
+  // ── theater mode, fullscreen, the box, the controls ────────────────
 
   bindUi() {
     const $ = (sel) => this.el.querySelector(sel)
@@ -345,16 +491,21 @@ export const StudySidebar = {
       theater.setAttribute("aria-pressed", String(on))
       theater.classList.toggle("btn-primary", on)
       store.set("theater", on ? "1" : "0")
-      // The picture changed size under a card that may be open.
       if (this.tipFor) this.placeTip(this.tipFor)
     }
     theater.addEventListener("click", () => setTheater(this.ui.dataset.theater !== "true"))
     setTheater(store.get("theater") === "1")
 
+    // Fullscreen is the picture with its subtitles (the card goes in with it), not the bare video.
     $("[data-role=fullscreen]").addEventListener("click", () => {
       if (document.fullscreenElement) document.exitFullscreen()
       else if (this.stage.requestFullscreen) this.stage.requestFullscreen().catch(() => {})
       else if (this.video.webkitEnterFullscreen) this.video.webkitEnterFullscreen()
+    })
+    document.addEventListener("fullscreenchange", () => {
+      const full = document.fullscreenElement === this.stage
+      ;(full ? this.stage : this.ui).appendChild(this.tip)
+      this.hideTip()
     })
 
     // The box: open, smaller, or just its title bar (and then the chevron opens it again).
@@ -365,74 +516,201 @@ export const StudySidebar = {
       collapse.setAttribute("aria-expanded", String(state !== "closed"))
       compact.classList.toggle("btn-active", state === "compact")
       store.set("panel", state)
-      if (state !== "closed") requestAnimationFrame(() => this.idx >= 0 && this.scrollToIndex(this.idx, false))
+      if (state !== "closed") requestAnimationFrame(() => this.p.idx >= 0 && this.scrollToIndex(this.p.idx, false))
     }
     collapse.addEventListener("click", () => setPanel(this.ui.dataset.panel === "closed" ? "open" : "closed"))
     compact.addEventListener("click", () => setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
     const saved = store.get("panel")
     setPanel(["open", "compact", "closed"].includes(saved) ? saved : "open")
+
+    // Sync: subtitles a little earlier or later than the picture (a file made for another cut).
+    const offsetLabel = $("[data-role=offset]")
+    this.setOffset = (value) => {
+      this.offset = Math.round(value * 10) / 10
+      offsetLabel.textContent = `${this.offset > 0 ? "+" : ""}${this.offset.toFixed(1)}s`
+      store.set("offset:" + (this.mediaKey || ""), String(this.offset))
+      this.overlayKey = ""
+      this.tick()
+    }
+    $("[data-role=later]").addEventListener("click", () => this.setOffset(this.offset + 0.5))
+    $("[data-role=earlier]").addEventListener("click", () => this.setOffset(this.offset - 0.5))
+    offsetLabel.addEventListener("click", () => this.setOffset(0))
+
+    // Caption size.
+    const setScale = (value) => {
+      this.scale = Math.min(3, Math.max(0.5, Math.round(value * 100) / 100))
+      this.ui.style.setProperty("--cap-scale", this.scale)
+      store.set("scale", String(this.scale))
+    }
+    $("[data-role=smaller-text]").addEventListener("click", () => setScale(this.scale - 0.15))
+    $("[data-role=bigger-text]").addEventListener("click", () => setScale(this.scale + 0.15))
+    setScale(this.scale)
+
+    // Pause after each line, with a replay of it.
+    const study = $("[data-role=study]")
+    const replay = $("[data-role=replay]")
+    const setStudy = (on) => {
+      this.study = on
+      study.setAttribute("aria-pressed", String(on))
+      study.classList.toggle("btn-primary", on)
+      replay.hidden = !on
+      store.set("study", on ? "1" : "0")
+      this.pausedAt = -1
+      this.watching = -1
+    }
+    study.addEventListener("click", () => setStudy(!this.study))
+    replay.addEventListener("click", () => this.replay())
+    setStudy(this.study)
+
+    // Peek: the translation blurred until you click it.
+    const peek = $("[data-role=peek]")
+    const setPeek = (on) => {
+      this.peek = on
+      this.ui.dataset.peek = on ? "true" : "false"
+      peek.setAttribute("aria-pressed", String(on))
+      peek.classList.toggle("btn-primary", on)
+      store.set("peek", on ? "1" : "0")
+    }
+    peek.addEventListener("click", () => setPeek(!this.peek))
+    setPeek(this.peek)
+    this.el.addEventListener("click", (e) => {
+      const trans = e.target.closest && e.target.closest(".study-trans")
+      if (trans) trans.toggleAttribute("data-revealed")
+    })
   },
 
   // ── the list ───────────────────────────────────────────────────────
 
-  setCues(vtt, name, track) {
-    this.cues = parseVtt(vtt)
-    if (track) {
-      this.lang = shortLang(track.lang)
-      this.trackKey = track.url
-    }
+  // The track being studied: its lines, with the words and the translation under each, and
+  // the language (so the words know what to ask).
+  setPrimary(vtt, name, track) {
+    const p = this.p
+    p.cues = parseVtt(vtt)
+    p.lang = shortLang(track.lang)
+    p.url = track.url
+    p.label = name || "Subtitles"
+    p.idx = -1
+    p.live = []
+    this.pausedAt = -1
+    this.watching = -1
     this.overlayKey = ""
-    this.idx = -1
-    this.live = []
+    if (p.lang === "ja") loadKuromoji().then(() => this.retokenize())
+    this.buildRows()
+  },
+
+  // The translation: its lines go under the studied ones, in the overlay and in the list.
+  setSecondary(vtt, name, track) {
+    const s = this.s
+    s.cues = parseVtt(vtt)
+    s.lang = shortLang(track.lang)
+    s.url = track.url
+    s.label = name
+    this.overlayKey = ""
+    this.buildRows()
+  },
+
+  // Kuromoji finished loading: the words in what is already on screen are cut again, better.
+  retokenize() {
+    if (!this.p.cues.length) return
+    this.buildRows()
+    this.overlayKey = ""
+    this.tick()
+  },
+
+  clearTrack(slot) {
+    const t = this[slot]
+    t.cues = []
+    t.url = null
+    t.lang = ""
+    t.loading = null
+    if (slot === "p") { t.rows = []; t.idx = -1; t.live = [] }
+    this.overlayKey = ""
+    if (this.overlay) this.overlay.textContent = ""
+  },
+
+  // The translation lines that belong to a line: those whose middle falls within it (a long
+  // cue — the opening song — would otherwise swallow every line spoken under it), at most
+  // three; failing that, any that overlap it by more than half of their own length.
+  translationFor(cue) {
+    const mid = (c) => (c.start + c.end) / 2
+    let hits = this.s.cues.filter((c) => mid(c) >= cue.start - 0.3 && mid(c) <= cue.end + 0.3)
+    if (!hits.length) {
+      hits = this.s.cues.filter((c) => Math.min(c.end, cue.end) - Math.max(c.start, cue.start) > (c.end - c.start) / 2)
+    }
+    return hits.slice(0, 3).map((c) => c.text).join(" ")
+  },
+
+  buildRows() {
+    const p = this.p
     this.list.textContent = ""
-    this.rows = []
+    p.rows = []
 
-    this.title.textContent = name || "Subtitles"
-    this.empty.hidden = this.cues.length > 0
-    this.empty.textContent = this.cues.length ? "" : "No subtitle lines found in that file."
-    this.count.textContent = this.cues.length ? `0 / ${this.cues.length}` : ""
+    this.title.textContent = p.label || "Subtitles"
+    this.empty.hidden = p.cues.length > 0
+    this.empty.textContent = p.cues.length ? "" : "No subtitle lines found in that file."
+    this.count.textContent = p.cues.length ? `0 / ${p.cues.length}` : ""
 
-    // One row per cue, built once. Highlighting only ever flips attributes after this.
+    // One row per cue, built once (again when the words are cut better, or a translation
+    // arrives). Highlighting only ever flips attributes after this.
     const frag = document.createDocumentFragment()
-    this.cues.forEach((cue, i) => {
+    p.cues.forEach((cue, i) => {
       const row = document.createElement("div")
       row.className = "study-row"
       row.dataset.idx = i
       row.dataset.state = "future"
-      row.tabIndex = 0
-      row.setAttribute("role", "button")
 
       const time = document.createElement("span")
       time.className = "study-time"
       time.textContent = formatTime(cue.start)
 
-      const text = document.createElement("span")
+      const main = document.createElement("div")
+      main.className = "study-main"
+      const text = document.createElement("div")
       text.className = "study-text"
-      text.textContent = cue.text // text, never HTML: a subtitle file is untrusted
+      fillLine(text, cue.text, p.lang)
+      main.appendChild(text)
 
-      row.append(time, text)
+      const trans = this.s.cues.length ? this.translationFor(cue) : ""
+      if (trans) {
+        const t = document.createElement("div")
+        t.className = "study-trans"
+        t.textContent = trans
+        main.appendChild(t)
+      }
+
+      // Only the ▶ (and the time) plays from here: clicking the words selects and looks them up.
+      const play = document.createElement("button")
+      play.type = "button"
+      play.className = "study-play"
+      play.textContent = "▶"
+      play.title = "Play from this line"
+
+      row.append(time, main, play)
       frag.appendChild(row)
-      this.rows.push(row)
+      p.rows.push(row)
     })
     this.list.appendChild(frag)
 
     this.setFollow(true)
+    p.idx = -1
+    p.live = []
     this.tick()
-    if (this.idx >= 0) this.scrollToIndex(this.idx, false)
+    if (p.idx >= 0) this.scrollToIndex(p.idx, false)
   },
 
   // The line you are on changed. Rows before it are "past", it is "current", the rest are
   // "future"; only the rows between the old and new position can have changed state.
   setIndex(idx) {
-    const prev = this.idx
+    const p = this.p
+    const prev = p.idx
     const from = Math.max(0, Math.min(prev, idx))
-    const to = Math.min(this.rows.length - 1, Math.max(prev, idx))
+    const to = Math.min(p.rows.length - 1, Math.max(prev, idx))
 
     for (let i = from; i <= to; i++) {
-      this.rows[i].dataset.state = i < idx ? "past" : i === idx ? "current" : "future"
+      p.rows[i].dataset.state = i < idx ? "past" : i === idx ? "current" : "future"
     }
-    this.idx = idx
-    this.count.textContent = `${idx + 1} / ${this.cues.length}`
+    p.idx = idx
+    this.count.textContent = `${idx + 1} / ${p.cues.length}`
 
     if (this.follow && idx >= 0) {
       // A line coming up in order glides; a seek jumps, so it doesn't scroll for a second.
@@ -442,16 +720,17 @@ export const StudySidebar = {
 
   // The line(s) being spoken right now are brighter than the one just heard.
   setLive(live) {
-    if (live.length === this.live.length && live.every((v, i) => v === this.live[i])) return
-    for (const i of this.live) delete this.rows[i].dataset.live
-    for (const i of live) this.rows[i].dataset.live = "true"
-    this.live = live
+    const p = this.p
+    if (live.length === p.live.length && live.every((v, i) => v === p.live[i])) return
+    for (const i of p.live) if (p.rows[i]) delete p.rows[i].dataset.live
+    for (const i of live) if (p.rows[i]) p.rows[i].dataset.live = "true"
+    p.live = live
   },
 
   // Centre a row in the list — scrolling the list itself, never the page (scrollIntoView
   // would walk up and shove the video off screen).
   scrollToIndex(i, smooth) {
-    const row = this.rows[i]
+    const row = this.p.rows[i]
     if (!row) return
     const top = row.offsetTop - (this.list.clientHeight - row.offsetHeight) / 2
 
@@ -471,34 +750,58 @@ export const StudySidebar = {
     }
     for (const ev of ["wheel", "touchstart", "pointerdown"]) this.list.addEventListener(ev, userTouch, {passive: true})
 
-    // Click (or Enter) a line: play from there, and follow again.
-    const seek = (e) => {
-      const row = e.target.closest(".study-row")
-      if (!row) return
-      this.video.currentTime = this.cues[Number(row.dataset.idx)].start
-      this.video.play().catch(() => {})
+    this.list.addEventListener("click", (e) => {
+      const trans = e.target.closest(".study-trans")
+      if (trans) return // the shared handler reveals it
+      const hit = e.target.closest(".study-play, .study-time")
+      if (!hit) return
+      const row = hit.closest(".study-row")
+      this.seekToLine(this.p.cues[Number(row.dataset.idx)], row.querySelector(".study-play"))
       this.resume()
-    }
-    this.list.addEventListener("click", seek)
-    this.list.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault()
-        seek(e)
-      }
     })
 
     this.pill.addEventListener("click", () => this.resume())
   },
 
+  // Play from a line. The remux is written while you watch: if that part is not there yet the
+  // browser would clamp the seek to what is, so the ▶ shows ⏳ and waits until it is reachable.
+  seekToLine(cue, btn) {
+    if (!cue) return
+    const v = this.video
+    const target = Math.max(0, cue.start + this.offset)
+    clearTimeout(this.seekWait)
+    if (this.seekBtn && this.seekBtn !== btn) this.seekBtn.textContent = "▶"
+
+    const reach = () => { const r = v.seekable; return r && r.length ? r.end(r.length - 1) : 0 }
+    const go = () => {
+      v.currentTime = target
+      v.play().catch(() => {})
+      this.pausedAt = -1
+      this.watching = -1
+      if (btn) btn.textContent = "▶"
+      this.seekBtn = null
+    }
+    if (target <= reach() + 0.5) return go()
+
+    if (btn) { btn.textContent = "⏳"; this.seekBtn = btn }
+    let tries = 600
+    const wait = () => {
+      if (target <= reach() + 0.5) return go()
+      if (--tries <= 0) { if (btn) btn.textContent = "▶"; this.seekBtn = null; return }
+      this.seekWait = setTimeout(wait, 500)
+    }
+    wait()
+  },
+
   setFollow(on) {
     this.follow = on
-    this.pill.hidden = on || this.idx < 0
+    this.pill.hidden = on || this.p.idx < 0
   },
 
   resume() {
     clearTimeout(this.resumeTimer)
     this.setFollow(true)
-    if (this.idx >= 0) this.scrollToIndex(this.idx, true)
+    if (this.p.idx >= 0) this.scrollToIndex(this.p.idx, true)
   },
 
   // ── where the video and subtitles come from ────────────────────────
@@ -524,7 +827,7 @@ export const StudySidebar = {
     $("[data-role=demo]").addEventListener("click", async () => {
       this.setSource(URL.createObjectURL(silentWav(75)))
       const vtt = await (await fetch("/study/demo.vtt")).text()
-      this.setCues(vtt, "Demo — français")
+      this.setPrimary(vtt, "Demo — français", {lang: "fr", url: "demo"})
     })
   },
 
@@ -553,7 +856,8 @@ export const StudySidebar = {
     this.ready = !(p.resume > 0)
     clearInterval(this.seekTimer)
     if (this.hls) { this.hls.destroy(); this.hls = null }
-    this.cues = []
+    this.clearTrack("p")
+    this.clearTrack("s")
     this.audioWrap().hidden = true
 
     if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
@@ -616,103 +920,144 @@ export const StudySidebar = {
     wrap.hidden = hls.audioTracks.length < 2
   },
 
-  // Subtitle tracks of the release (and any fetched later), as buttons under the player: one
-  // each, and Off for the overlay. The one in the user's language is loaded first.
-  setTracks(p) {
-    const tracks = p.tracks || []
-    const current = this.trackUrl
-    this.tracks = tracks
+  // ── the subtitle tracks ────────────────────────────────────────────
 
-    if (!tracks.length) {
-      this.renderChips(-1)
-      if (!this.cues.length) {
-        this.empty.hidden = false
-        this.empty.textContent = "No subtitles came with this release."
-      }
-      return
+  // The release's tracks (and any fetched later). Which two are shown follows what you chose
+  // last time, by language, so a second episode starts as the first ended; the first time it is
+  // your language, with no translation.
+  setTracks(p) {
+    this.tracks = p.tracks || []
+    this.mediaKey = p.key || ""
+    const saved = parseFloat(store.get("offset:" + this.mediaKey))
+    if (!Number.isNaN(saved) && saved !== this.offset && this.setOffset) this.setOffset(saved)
+
+    const want1 = store.get("lang1") || p.prefer
+    const want2 = store.get("lang2")
+    const i1 = this.tracks.findIndex((t) => want1 && shortLang(t.lang) === want1)
+    const first = i1 >= 0 ? i1 : this.p.url && this.p.url !== "upload" ? this.tracks.findIndex((t) => t.url === this.p.url) : -1
+    const idx1 = want1 === "none" ? -1 : first >= 0 ? first : this.tracks.length ? 0 : -1
+    const i2 = want2 && want2 !== "none" ? this.tracks.findIndex((t, i) => i !== idx1 && shortLang(t.lang) === want2) : -1
+
+    this.choose("p", idx1)
+    this.choose("s", i2)
+    this.renderChips()
+
+    if (!this.tracks.length && !this.p.cues.length) {
+      this.empty.hidden = false
+      this.empty.textContent = "No subtitles came with this release."
     }
-    const want = tracks.findIndex((t) => p.prefer && shortLang(t.lang) === p.prefer)
-    const kept = tracks.findIndex((t) => t.url === current)
-    // Keep what is showing unless something in the preferred language has just arrived.
-    const pick = want >= 0 && (kept < 0 || shortLang(tracks[kept].lang) !== p.prefer) ? want : kept >= 0 ? kept : Math.max(want, 0)
-    this.renderChips(pick)
-    if (tracks[pick].url !== current) this.loadTrack(tracks[pick])
   },
 
-  renderChips(active) {
+  // Make track `i` (or none: -1) the one for slot `p` or `s`; loads it unless already loaded.
+  choose(slot, i) {
+    const t = this[slot]
+    const track = i >= 0 ? this.tracks[i] : null
+    t.trackIdx = i
+    if (!track) {
+      if (t.url && t.url !== "upload") this.clearTrack(slot)
+      this.buildRows()
+      return
+    }
+    if (track.url !== t.url) this.loadTrack(slot, track)
+  },
+
+  renderChips() {
     const bar = this.tracksBar
     bar.textContent = ""
     if (!this.tracks.length) return
 
-    const chip = (label, on, click) => {
-      const b = document.createElement("button")
-      b.type = "button"
-      b.className = "btn btn-sm " + (on ? "btn-primary" : "")
-      b.textContent = label
-      b.setAttribute("aria-pressed", String(on))
-      b.addEventListener("click", click)
-      bar.appendChild(b)
+    const seen = {}
+    const labels = this.tracks.map((t) => {
+      seen[t.label] = (seen[t.label] || 0) + 1
+      return seen[t.label] > 1 ? `${t.label} ${seen[t.label]}` : t.label
+    })
+
+    const group = (name, active, none, pick, skip) => {
+      // `skip(t, i)`: tracks that do not belong in this group.
+      const rows = this.tracks.map((t, i) => [t, i]).filter(([t, i]) => !skip(t, i))
+      if (name === "Translation" && !rows.length) return
+      const g = document.createElement("div")
+      g.className = "study-group"
+      const l = document.createElement("span")
+      l.className = "study-group-label"
+      l.textContent = name
+      g.appendChild(l)
+      const chip = (label, on, click) => {
+        const b = document.createElement("button")
+        b.type = "button"
+        b.className = "btn btn-sm " + (on ? "btn-primary" : "")
+        b.textContent = label
+        b.setAttribute("aria-pressed", String(on))
+        b.addEventListener("click", click)
+        g.appendChild(b)
+      }
+      for (const [, i] of rows) chip(labels[i], i === active, () => pick(i))
+      chip(none, active < 0, () => pick(-1))
+      bar.appendChild(g)
     }
 
-    const seen = {}
-    this.tracks.forEach((t, i) => {
-      seen[t.label] = (seen[t.label] || 0) + 1
-      const label = seen[t.label] > 1 ? `${t.label} ${seen[t.label]}` : t.label
-      chip(label, this.overlayOn && i === active, () => this.pickTrack(i))
-    })
-    chip("Off", !this.overlayOn, () => this.pickTrack(-1))
-    this.activeTrack = active
+    // What is studied can be any track but the translation; the translation is another language.
+    const studied = this.p.trackIdx >= 0 ? shortLang(this.tracks[this.p.trackIdx].lang) : null
+    group("Subtitles", this.p.trackIdx, "Off", (i) => this.pick("p", i), (t, i) => i === this.s.trackIdx)
+    group(
+      "Translation",
+      this.s.trackIdx,
+      "None",
+      (i) => this.pick("s", i),
+      (t, i) => i === this.p.trackIdx || (studied && shortLang(t.lang) === studied)
+    )
   },
 
-  pickTrack(i) {
-    this.overlayOn = i >= 0
-    store.set("overlay", this.overlayOn ? "on" : "off")
-    if (i >= 0 && this.tracks[i].url !== this.trackUrl) this.loadTrack(this.tracks[i])
+  pick(slot, i) {
+    const other = slot === "p" ? "s" : "p"
+    // The same track cannot be both: choosing it for one takes it from the other.
+    if (i >= 0 && this[other].trackIdx === i) this.choose(other, -1)
+    store.set(slot === "p" ? "lang1" : "lang2", i >= 0 ? shortLang(this.tracks[i].lang) || "x" : "none")
+    this.choose(slot, i)
+    this.renderChips()
     this.overlayKey = ""
-    this.renderChips(i >= 0 ? i : this.activeTrack)
     this.tick()
-    if (!this.overlayOn) this.renderOverlay([])
   },
 
   // A release's tracks are written by ffmpeg while the player already runs: the file may not
   // exist yet (404) and then grows as it reads on. So it is fetched again every few seconds
   // until it stops getting longer.
-  async loadTrack(track) {
-    if (!track) return
-    this.trackUrl = track.url
+  async loadTrack(slot, track) {
+    const t = this[slot]
+    t.loading = track.url
     let seen = -1
     let still = 0
 
-    for (let tries = 0; tries < 75 && this.trackUrl === track.url; tries++) {
+    for (let tries = 0; tries < 75 && t.loading === track.url; tries++) {
       try {
         const res = await fetch(track.url, {credentials: "same-origin", cache: "no-store"})
 
         if (res.ok) {
           const text = await res.text()
-          if (this.trackUrl !== track.url) return
+          if (t.loading !== track.url) return
           const n = parseVtt(text).length
           if (n === 0) {
-            // Created but nothing written yet: ffmpeg has not reached the first line.
-            if (!this.cues.length) {
+            if (slot === "p" && !t.cues.length) {
               this.empty.hidden = false
               this.empty.textContent = "Reading the subtitles out of the release…"
             }
           } else if (n > seen) {
             seen = n
             still = 0
-            this.setCues(text, track.label, track)
+            if (slot === "p") this.setPrimary(text, track.label, track)
+            else this.setSecondary(text, track.label, track)
           } else if (++still >= 3) return
         } else if (res.status === 404) {
-          if (!this.cues.length) {
+          if (slot === "p" && !t.cues.length) {
             this.empty.hidden = false
             this.empty.textContent = "Reading the subtitles out of the release…"
           }
         } else {
-          this.title.textContent = "Couldn't load that subtitle track."
+          if (slot === "p") this.title.textContent = "Couldn't load that subtitle track."
           return
         }
       } catch {
-        this.title.textContent = "Couldn't load that subtitle track."
+        if (slot === "p") this.title.textContent = "Couldn't load that subtitle track."
       }
       await new Promise((resolve) => setTimeout(resolve, 4000))
     }

@@ -868,6 +868,121 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  The Japanese subtitle files Jimaku has for this anime episode, as tracks: the one most likely to
+  be timed like the release first. Jimaku holds several per episode — the broadcast, Netflix's and
+  Amazon's cuts, fansub groups' — and they do not all start at the same second; laev's own fetch
+  takes the first it finds, which is often a streaming cut that runs half a minute off a rip. So
+  the plausible ones are all offered, each named by where it came from (the sync buttons cover
+  the rest). `source_name` is the release being played: a file from the same group comes first.
+  """
+  def jimaku_tracks(uuid, ctx, play_id, source_name) do
+    Roki.Laev.run(uuid, fn ->
+      query = ctx[:search_title] || ctx.title
+
+      with true <- Laev.Jimaku.configured?(),
+           {:ok, [_ | _] = entries} <- Laev.Jimaku.search(query),
+           entry = jimaku_entry(entries, query),
+           {:ok, files} <- Laev.Jimaku.files(entry["id"], ctx[:episode]) do
+        tracks =
+          files
+          |> Enum.filter(&jimaku_japanese?/1)
+          |> Enum.sort_by(&{jimaku_rank(&1["name"], source_name), &1["name"]})
+          |> Enum.uniq_by(&jimaku_base/1)
+          |> Enum.take(5)
+          |> Enum.with_index()
+          |> Enum.flat_map(fn {file, i} -> jimaku_track(file, i, play_id) end)
+
+        if tracks == [], do: :none, else: {:ok, tracks}
+      else
+        _ -> :none
+      end
+    end)
+  rescue
+    _ -> :none
+  end
+
+  # The entry named exactly what was asked (Jimaku lists a show's seasons as separate entries and
+  # puts the first season first, whichever was searched for).
+  defp jimaku_entry(entries, query) do
+    q = String.downcase(query)
+    Enum.find(entries, &(String.downcase(&1["name"] || "") == q)) || hd(entries)
+  end
+
+  defp jimaku_japanese?(%{"name" => name}) do
+    subtitle_file?(name) and not String.contains?(name, ["CHS", "CHT", ".zh", ".en", ".eng"]) and
+      (String.contains?(name, [".ja", "JPN", "jpn"]) or
+         String.match?(name, ~r/[\x{3040}-\x{30ff}\x{4e00}-\x{9fff}]/u) or
+         not String.match?(name, ~r/\.(en|eng|fr|es|pt|de|it|ru|ar|id|vi|th)[\].]/i))
+  end
+
+  defp jimaku_japanese?(_), do: false
+
+  defp subtitle_file?(name),
+    do: String.downcase(Path.extname(name)) in [".srt", ".ass", ".ssa", ".vtt"]
+
+  defp jimaku_base(%{"name" => name}),
+    do: name |> Path.rootname() |> String.replace(~r/\.(jpn|ja)$/i, "")
+
+  # Same group as the release first; then the broadcast and the big fansub groups, whose timing
+  # follows the rips; streaming cuts (Netflix, Amazon, [cc]/[sdh] captions) last; srt before ass.
+  defp jimaku_rank(name, source_name) do
+    n = String.downcase(name)
+
+    group =
+      with [_, g] <- Regex.run(~r/^\[([^\]]+)\]/, to_string(source_name)), do: String.downcase(g)
+
+    base =
+      cond do
+        is_binary(group) and String.contains?(n, group) -> 0
+        String.contains?(n, ["nanako", "tbs", "subsplease", "erai", "judas"]) -> 1
+        String.contains?(n, ["netflix", "amazon", "[cc]", "[sdh]", "crunchyroll"]) -> 3
+        true -> 2
+      end
+
+    base * 2 + if(String.ends_with?(n, ".srt"), do: 0, else: 1)
+  end
+
+  defp jimaku_label(name) do
+    cond do
+      String.match?(name, ~r/^\[([^\]]+)\]/) ->
+        hd(Regex.run(~r/^\[([^\]]+)\]/, name, capture: :all_but_first))
+
+      String.contains?(String.downcase(name), "netflix") ->
+        "Netflix"
+
+      String.contains?(String.downcase(name), "amazon") ->
+        "Amazon"
+
+      String.contains?(String.downcase(name), "crunchyroll") ->
+        "Crunchyroll"
+
+      true ->
+        "Jimaku"
+    end
+  end
+
+  defp jimaku_track(%{"name" => name, "url" => url}, i, play_id) do
+    with {:ok, %{status: 200, body: body}} when is_binary(body) <-
+           Req.get(url, receive_timeout: 15_000, retry: :transient, max_retries: 1),
+         vtt when is_binary(vtt) <- Roki.Subtitles.to_vtt(name, body) do
+      dir = Laev.Remux.dir(play_id)
+      File.mkdir_p!(dir)
+      file = if i == 0, do: "ext-ja.vtt", else: "ext-ja-#{i + 1}.vtt"
+      File.write!(Path.join(dir, file), vtt)
+
+      [
+        %{
+          lang: "ja",
+          label: "Japanese · #{jimaku_label(name)}",
+          url: "/stream/#{play_id}/#{file}"
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
   @doc "The user's preferred subtitle language, as a two-letter code (laev's setting)."
   def preferred_subs(uuid), do: Roki.Laev.run(uuid, fn -> Laev.Config.subs_lang() end)
 

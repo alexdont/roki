@@ -385,13 +385,24 @@ Shared pieces: `Roki.Watch.Resolver` (find/probe/pick/failure texts), `RokiWeb.W
 
 ## The study player (`/watch/...`)
 
-`RokiWeb.StudyComponents.study_player/1` + `assets/js/study/sidebar.js` (`StudySidebar` hook). The
-subtitles are drawn by the hook over the video (`.study-overlay`, not native text tracks) with each
-word its own `.study-word`; hover/tap asks `/dict/:lang?q=` (`RokiWeb.DictController`,
-`Roki.Dictionary`: Jisho for Japanese, Wiktionary for the rest, cached a day, rate-limited). Japanese
-words come from `Intl.Segmenter` plus `joinInflections` (Safari cuts 食べました into pieces).
-Tracks are buttons under the player; `Off` hides the overlay only. UI state (`data-theater`,
-`data-panel` = open/compact/closed) lives on `#study-ui` (`phx-update="ignore"`) and in
-localStorage (`roki:study:*`). Extra tracks: `Watch.external_langs/3` — the user's language plus,
-for anime with a Jimaku key set, original Japanese; each fetched in its own async
-(`{:ext_subs, lang}`) and appended to `data-player.tracks`.
+`RokiWeb.StudyComponents.study_player/1` + `assets/js/study/sidebar.js` (`StudySidebar` hook), after
+the idea of `alexdont/debrid_theatre`. Two subtitle tracks: the **studied** one (words, list,
+overlay) and a **translation** under it (overlay and list; "Peek" blurs it until clicked); both
+picked from chips under the player, remembered by language (`roki:study:lang1/lang2`).
+Subtitles are drawn by the hook (`.study-overlay`), not native text tracks. Every word of a
+language with a dictionary is a `.study-word`: hover 500 ms → the video pauses and a card shows
+(`/dict/:lang?q=` → `RokiWeb.DictController`, `Roki.Dictionary`: Jisho for Japanese, Wiktionary
+for the rest; cached a day, rate-limited); leaving resumes it; a click/tap pins it. Japanese is cut
+with **Kuromoji** (`priv/static/vendor/kuromoji.js` + 17 MB `priv/static/kuromoji/dict`, loaded
+the first time a Japanese track shows; until then `Intl.Segmenter` + `joinInflections`) and
+looked up by the dictionary form (`basic_form`: 食べ → 食べる). The list rows have the words, the
+translation and a ▶ (only ▶/the time seeks, so text can be selected). Tools: sync offset ±0.5 s
+(per release), caption size, "Study" (pause after every line, ⟲ replays it), theater, fullscreen
+(the stage, so the overlay stays). UI state (`data-theater`, `data-panel` = open/compact/closed,
+`data-peek`) lives on `#study-ui` (`phx-update="ignore"`) and in localStorage (`roki:study:*`).
+Extra tracks: `Watch.external_langs/3` — the user's language, and for anime with a Jimaku key
+the original Japanese; each in its own async (`{:ext_subs, lang}`) appended to
+`data-player.tracks`. Japanese for anime is `Watch.jimaku_tracks/4`: *every* plausible Jimaku file
+for the episode (they differ in timing), the one from the release's own group first, labelled by
+group. The matching MAL season is the ctx (`search_title` = romaji, `episode` = the episode of that
+MAL entry).
