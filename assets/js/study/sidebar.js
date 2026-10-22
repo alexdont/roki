@@ -375,15 +375,47 @@ export const StudySidebar = {
     if (tracks[pick].url !== current) this.loadTrack(tracks[pick], sel)
   },
 
+  // A release's tracks are written by ffmpeg while the player already runs: the file may not
+  // exist yet (404) and then grows as it reads on. So it is fetched again every few seconds
+  // until it stops getting longer.
   async loadTrack(track, sel) {
     if (!track) return
     this.trackUrl = track.url
-    try {
-      const res = await fetch(track.url, {credentials: "same-origin"})
-      if (!res.ok || this.trackUrl !== track.url) return
-      this.setCues(await res.text(), track.label)
-    } catch {
-      this.title.textContent = "Couldn't load that subtitle track."
+    let seen = -1
+    let still = 0
+
+    for (let tries = 0; tries < 75 && this.trackUrl === track.url; tries++) {
+      try {
+        const res = await fetch(track.url, {credentials: "same-origin", cache: "no-store"})
+
+        if (res.ok) {
+          const text = await res.text()
+          if (this.trackUrl !== track.url) return
+          const n = parseVtt(text).length
+          if (n === 0) {
+            // Created but nothing written yet: ffmpeg has not reached the first line.
+            if (!this.cues.length) {
+              this.empty.hidden = false
+              this.empty.textContent = "Reading the subtitles out of the release…"
+            }
+          } else if (n > seen) {
+            seen = n
+            still = 0
+            this.setCues(text, track.label)
+          } else if (++still >= 3) return
+        } else if (res.status === 404) {
+          if (!this.cues.length) {
+            this.empty.hidden = false
+            this.empty.textContent = "Reading the subtitles out of the release…"
+          }
+        } else {
+          this.title.textContent = "Couldn't load that subtitle track."
+          return
+        }
+      } catch {
+        this.title.textContent = "Couldn't load that subtitle track."
+      }
+      await new Promise((resolve) => setTimeout(resolve, 4000))
     }
   },
 

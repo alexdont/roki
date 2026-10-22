@@ -588,7 +588,6 @@ defmodule RokiWeb.TitleLive do
       <%!-- A film is watched or not; a series is "all watched" or not (episodes below one by one).
             The same button marks and unmarks. --%>
       <button
-        :if={@title.type == "movie" or not @title.anime?}
         phx-click="toggle_watched"
         disabled={@busy}
         class={[
@@ -678,8 +677,8 @@ defmodule RokiWeb.TitleLive do
   # The episode Play goes to: where you left off, else the very first one.
   defp play_target(%{seasons: seasons}, resume) do
     case resume do
-      %{"season" => s, "episode" => e} when is_integer(s) and is_integer(e) ->
-        {s, e, true}
+      %{"season" => s, "episode" => e} = r when is_integer(s) and is_integer(e) ->
+        {s, r["tmdb_episode"] || e, true}
 
       _ ->
         first =
@@ -793,7 +792,7 @@ defmodule RokiWeb.TitleLive do
             square watched button the episode rows carry. --%>
       <div class="flex gap-2">
         <form
-          :if={length(@title.seasons) > 1}
+          :if={@title.seasons != []}
           phx-change="select_season"
           id="season-form"
           class="min-w-0 flex-1"
@@ -1064,7 +1063,6 @@ defmodule RokiWeb.TitleLive do
               on_class="btn-primary"
             />
             <.round_btn
-              :if={@title.type == "movie" or not @title.anime?}
               event="toggle_watched"
               on={watched_state?(@title, @lib)}
               icon="check-circle"

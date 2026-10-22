@@ -174,7 +174,7 @@ defmodule Roki.Watch do
   @doc """
   Where this title stands for this user: `%{saved?, held?, watched?, all_watched?}`.
   `watched?` is for a film; `all_watched?` for a series (every episode out so far has a mark).
-  Anime is kept on MyAnimeList, so it has no hold here and no whole-series mark.
+  Anime is kept on MyAnimeList, so it has no hold here.
   """
   def library(uuid, title) do
     Roki.Laev.run(uuid, fn ->
@@ -184,7 +184,7 @@ defmodule Roki.Watch do
         saved?: Laev.Watchlist.has?(title.type, title.id),
         held?: not title.anime? and Laev.Holds.held?(title.type, title.id),
         watched?: title.type == "movie" and Laev.Position.finished?(ctx),
-        all_watched?: title.type == "tv" and not title.anime? and series_done?(title)
+        all_watched?: title.type == "tv" and series_done?(title)
       }
     end)
   end
@@ -193,10 +193,18 @@ defmodule Roki.Watch do
     total = title |> aired_seasons() |> Enum.map(&(&1.episodes || 0)) |> Enum.sum()
 
     watched =
-      Laev.Position.episode_marks()
-      |> Map.get({"tv", title.id}, %{})
-      |> Map.values()
-      |> Enum.sum()
+      if title.anime? do
+        marks = Laev.Position.anime_marks()
+
+        title.seasons
+        |> Enum.map(&Roki.Watch.Anime.watched_in_season(title.id, &1.number, marks))
+        |> Enum.sum()
+      else
+        Laev.Position.episode_marks()
+        |> Map.get({"tv", title.id}, %{})
+        |> Map.values()
+        |> Enum.sum()
+      end
 
     total > 0 and watched >= total
   end
@@ -226,8 +234,7 @@ defmodule Roki.Watch do
             Laev.AnimeMap.mal_id("movie", title.id, nil)
 
           _ ->
-            Laev.AnimeMap.mal_id("tv", title.id, 1) ||
-              List.first(Laev.AnimeMap.mal_ids("tv", title.id))
+            Roki.Watch.Anime.first_entry(title.id)
         end
       end
 
@@ -399,15 +406,21 @@ defmodule Roki.Watch do
 
   # Needs a laev scope: the season → MyAnimeList mapping is read from the user's files.
   defp build_ctx(title, season, episode) do
-    mal =
-      if title.anime? and title.type == "tv" and season,
-        do: Laev.AnimeMap.mal_id("tv", title.id, season)
+    # An anime episode is keyed by its MAL entry and the number inside that entry (laev's
+    # `mal-<id>-e<n>`); `tmdb_episode` keeps TMDB's own number for the page.
+    {mal, local} =
+      case (title.anime? and title.type == "tv") &&
+             Roki.Watch.Anime.locate(title.id, season, episode) do
+        {mal, local} -> {mal, local}
+        _ -> {nil, episode}
+      end
 
     %{
       type: title.type,
       tmdb_id: title.id,
       season: season,
-      episode: episode,
+      episode: local,
+      tmdb_episode: episode,
       title: title.title,
       poster_path: title.poster_path,
       year: title.year,
@@ -446,13 +459,14 @@ defmodule Roki.Watch do
   # An anime season: its releases are fansub groups numbering by the anime's own episode
   # count, found by title and by Kitsu / AniDB id, never by "S02E05".
   defp search_sources(%{type: "tv", anime?: true} = t, season, episode) do
-    mal = season && Laev.AnimeMap.mal_id("tv", t.id, season)
+    located = season && Roki.Watch.Anime.locate(t.id, season, episode)
 
-    if mal do
+    if located do
+      {mal, local} = located
       name = Laev.Anime.title(mal) || t.title
 
       {:ok, found, _scope} =
-        Sources.anime_episode_search(name, episode,
+        Sources.anime_episode_search(name, local,
           anidb_id: Laev.AnimeMap.anidb(mal),
           kitsu_id: Laev.AnimeMap.kitsu_id(mal),
           search_title: name
@@ -809,8 +823,11 @@ defmodule Roki.Watch do
   defp ready(_), do: :ok
 
   defp embedded_subtitles(%{kind: :remux, remux_id: id}) do
+    # laev lists a track by its basename (`sub0`); ffmpeg writes, and the stream route serves,
+    # `sub0.vtt` — without the extension every embedded track is a 400.
     for t <- Laev.Playback.subtitles(id), is_binary(t[:file]) do
-      %{lang: t.lang, label: language(t.lang), url: "/stream/#{id}/#{t.file}"}
+      file = if String.ends_with?(t.file, ".vtt"), do: t.file, else: t.file <> ".vtt"
+      %{lang: t.lang, label: language(t.lang), url: "/stream/#{id}/#{file}"}
     end
   end
 
@@ -825,6 +842,7 @@ defmodule Roki.Watch do
         "tmdb_id" => ctx.tmdb_id,
         "season" => ctx.season,
         "episode" => ctx.episode,
+        "tmdb_episode" => ctx.tmdb_episode,
         "title" => ctx.title,
         "poster_path" => ctx.poster_path,
         "anime" => ctx.anime,
@@ -873,7 +891,18 @@ defmodule Roki.Watch do
 
   @doc "Watched episodes per season, `%{season => count}`, straight from laev marks."
   def season_counts(uuid, title) do
-    Roki.Laev.run(uuid, fn -> Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{}) end)
+    Roki.Laev.run(uuid, fn ->
+      if title.anime? do
+        marks = Laev.Position.anime_marks()
+
+        Map.new(
+          title.seasons,
+          &{&1.number, Roki.Watch.Anime.watched_in_season(title.id, &1.number, marks)}
+        )
+      else
+        Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{})
+      end
+    end)
   end
 
   @doc "Which of these episodes the user has watched: a `MapSet` of episode numbers."
