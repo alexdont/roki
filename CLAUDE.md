@@ -325,3 +325,16 @@ converters, encoding detected) or the demo. **No JS libraries** — plain DOM, n
 - Tests: `node --test assets/js/study/cues.test.mjs` (logic), `mix test` (conversion + page), and
   `NODE_PATH=$(npm root -g) node test/e2e/study.js` (Chromium against the running dev server, 22 checks;
   `ROKI_URL` to point elsewhere, `SHOT=/path.jpg` for a screenshot).
+
+## Watching (the default player)
+
+Every poster leads to `/title/:type/:id` (`RokiWeb.TitleLive`); movies and episodes play there in the study player (video left, subtitle sidebar right). The flow lives in `Roki.Watch`, the screen in `TitleLive`, the player in `RokiWeb.StudyComponents.study_player/1` + `assets/js/study/sidebar.js`.
+
+- **Pipeline** (a Task per Play, results ignored if `token` is stale): subscription check → `Watch.ctx` → `Watch.sources` (TTLCache 10 min; movie/tv/anime paths) → probe 8 releases at a time through the user's debrid (`Laev.Providers.probe_sources` with `notify:`) → `attach_and_rank` → auto-pick (`Watch.auto_choice`) or a list to choose from → `Watch.start`.
+- **Cost rule:** h264 is copied into HLS (free); h265/AV1 is re-encoded by libx264 on this server (a 4K one took ~7 cores and 7 GB). So `auto_choice` prefers the best h264/unlabelled release, falls back to a re-encode capped at 1080p, and `start` refuses a re-encode when 2+ ffmpeg are already running (`:busy`). Marked "re-encoded" in the list.
+- **Streaming:** laev writes HLS under `$TMPDIR/realdebrid_remux/<id>` — `TMPDIR=/var/cache/remux` (the `cache` dataset: no snapshot/backup, 24 h TTL swept by laev). `/stream/:id/:file` (`StreamController`) serves it to signed-in users only, whitelisted names. hls.js 1.7.3 is vendored at `priv/static/vendor/` (Apache-2.0), loaded lazily; Safari plays HLS natively.
+- **hls.js settings matter:** `liveDurationInfinity: false` + `startPosition` — the playlist is EVENT-type while ffmpeg runs, and without these there is no seek bar and resume is impossible.
+- **Progress** is posted every 5 s / on pause by the hook (`progress` event → `Watch.record_progress` → laev's own position/watched arithmetic; synced to the terminal app when an episode finishes). Nothing is posted before the resume seek.
+- **Chromium in the container** crashes when `TMPDIR=/var/cache/remux`; run Playwright with `TMPDIR=/tmp`.
+- `test/e2e/watch.js` is a manual end-to-end that uses a real debrid account and needs a session cookie in `/tmp/e2e-cookie.txt` (see git history of this note); it adds a history entry — clean up with `Laev.Position.forget/2` + `Laev.Resume.delete/2`.
+- Known edge: a laev remux worker whose ffmpeg was killed or whose directory was deleted stays registered until its TTL, so replaying that release times out; restart the app or wait.

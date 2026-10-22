@@ -35,12 +35,23 @@ export const StudySidebar = {
     this.bindSource()
 
     this.handleEvent("study:subtitles", ({vtt, name}) => this.setCues(vtt, name))
+
+    this.readPlayer()
+  },
+
+  // LiveView only ever changes `data-player` on the root (the video and list are ignored
+  // regions), so every update lands here.
+  updated() {
+    this.readPlayer()
   },
 
   destroyed() {
     cancelAnimationFrame(this.raf)
     clearTimeout(this.resumeTimer)
     clearTimeout(this.progTimer)
+    clearInterval(this.seekTimer)
+    clearInterval(this.postTimer)
+    if (this.hls) this.hls.destroy()
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
   },
 
@@ -62,6 +73,26 @@ export const StudySidebar = {
     })
     for (const ev of ["pause", "ended"]) v.addEventListener(ev, () => { cancelAnimationFrame(this.raf); tick() })
     for (const ev of ["seeked", "timeupdate", "loadedmetadata"]) v.addEventListener(ev, tick)
+
+    // Progress goes back to the server only when the page asked for it, and never before the
+    // resume seek has happened (a playhead at 0 would overwrite where you were).
+    if (this.el.dataset.progress === "true") {
+      this.postTimer = setInterval(() => !v.paused && this.postProgress(), 5000)
+      v.addEventListener("pause", () => this.postProgress())
+      v.addEventListener("ended", () => {
+        this.postProgress()
+        this.pushEvent("ended", {})
+      })
+    }
+  },
+
+  postProgress() {
+    const v = this.video
+    if (!this.ready || !(v.currentTime > 0)) return
+    this.pushEvent("progress", {
+      position: Math.floor(v.currentTime),
+      duration: Number.isFinite(v.duration) ? Math.floor(v.duration) : 0,
+    })
   },
 
   tick() {
@@ -202,6 +233,9 @@ export const StudySidebar = {
   bindSource() {
     const $ = (sel) => this.el.querySelector(sel)
 
+    // The title page has none of these controls; the /study page has all of them.
+    if (!$("[data-role=demo]")) return
+
     // A file from this computer: played straight from disk, nothing is uploaded.
     $("[data-role=video-file]").addEventListener("change", (e) => {
       const file = e.target.files[0]
@@ -219,6 +253,137 @@ export const StudySidebar = {
       const vtt = await (await fetch("/study/demo.vtt")).text()
       this.setCues(vtt, "Demo — français")
     })
+  },
+
+  // ── a real release, from the title page ────────────────────────────
+
+  readPlayer() {
+    const raw = this.el.dataset.player
+    if (!raw) return
+
+    let p
+    try { p = JSON.parse(raw) } catch { return }
+
+    if (p.url !== this.playerUrl) {
+      this.playerUrl = p.url
+      this.startMedia(p)
+    }
+    const key = JSON.stringify(p.tracks)
+    if (key !== this.tracksKey) {
+      this.tracksKey = key
+      this.setTracks(p)
+    }
+  },
+
+  async startMedia(p) {
+    const v = this.video
+    this.ready = !(p.resume > 0)
+    clearInterval(this.seekTimer)
+    if (this.hls) { this.hls.destroy(); this.hls = null }
+    this.cues = []
+    this.audioWrap().hidden = true
+
+    if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
+      const Hls = await loadHls()
+      if (this.playerUrl !== p.url) return // another source was chosen while it loaded
+      if (!Hls || !Hls.isSupported()) { this.title.textContent = "This browser can't play HLS."; return }
+
+      const hls = (this.hls = new Hls({
+        maxBufferLength: 60,
+        // A growing playlist is still a film, not a broadcast: a finite duration, a seek bar,
+        // and (when coming back to it) a start where you left off instead of the live edge.
+        liveDurationInfinity: false,
+        startPosition: p.resume > 0 ? p.resume : -1,
+      }))
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.setAudioTracks(hls))
+      hls.loadSource(p.url)
+      hls.attachMedia(v)
+    } else {
+      v.src = p.url
+      v.load()
+    }
+
+    if (p.resume > 0) this.seekWhenReachable(p.resume)
+    v.play().catch(() => {}) // may be refused without a gesture; the controls are right there
+  },
+
+  // The remux is written while you watch, so a position far in may not exist yet. Wait for
+  // it, up to two minutes, then start from the beginning rather than never.
+  seekWhenReachable(t) {
+    const v = this.video
+    let tries = 0
+    this.seekTimer = setInterval(() => {
+      const r = v.seekable
+      const reach = r.length ? r.end(r.length - 1) : 0
+      if (reach >= t - 1) {
+        v.currentTime = t
+        this.ready = true
+        clearInterval(this.seekTimer)
+      } else if (++tries > 240) {
+        this.ready = true
+        clearInterval(this.seekTimer)
+      }
+    }, 500)
+  },
+
+  audioWrap() { return this.el.querySelector("[data-role=audio-wrap]") },
+
+  setAudioTracks(hls) {
+    const wrap = this.audioWrap()
+    const sel = wrap.querySelector("select")
+    sel.textContent = ""
+    hls.audioTracks.forEach((t, i) => {
+      const o = document.createElement("option")
+      o.value = i
+      o.textContent = t.name || t.lang || `Track ${i + 1}`
+      sel.appendChild(o)
+    })
+    sel.value = hls.audioTrack
+    sel.onchange = () => (hls.audioTrack = Number(sel.value))
+    wrap.hidden = hls.audioTracks.length < 2
+  },
+
+  // Subtitle tracks of the release (and any fetched later). The one in the user's language
+  // is loaded; the picker is only there when there is a choice.
+  setTracks(p) {
+    const tracks = p.tracks || []
+    const sel = this.el.querySelector("[data-role=track]")
+    const current = this.trackUrl
+    sel.textContent = ""
+    tracks.forEach((t, i) => {
+      const o = document.createElement("option")
+      o.value = i
+      o.textContent = t.label
+      sel.appendChild(o)
+    })
+    sel.hidden = tracks.length < 2
+    sel.onchange = () => this.loadTrack(tracks[Number(sel.value)], sel)
+
+    if (!tracks.length) {
+      if (!this.cues.length) {
+        this.empty.hidden = false
+        this.empty.textContent = "No subtitles came with this release."
+      }
+      return
+    }
+    const want = tracks.findIndex((t) => p.prefer && t.lang === p.prefer)
+    const kept = tracks.findIndex((t) => t.url === current)
+    // Keep what is showing unless something in the preferred language has just arrived.
+    const pick = want >= 0 && (kept < 0 || tracks[kept].lang !== p.prefer) ? want : kept >= 0 ? kept : Math.max(want, 0)
+    sel.value = pick
+    if (tracks[pick].url !== current) this.loadTrack(tracks[pick], sel)
+  },
+
+  async loadTrack(track, sel) {
+    if (!track) return
+    this.trackUrl = track.url
+    try {
+      const res = await fetch(track.url, {credentials: "same-origin"})
+      if (!res.ok || this.trackUrl !== track.url) return
+      this.setCues(await res.text(), track.label)
+    } catch {
+      this.title.textContent = "Couldn't load that subtitle track."
+    }
   },
 
   setSource(src) {
@@ -244,4 +409,19 @@ function silentWav(seconds, rate = 4000) {
   new Uint8Array(buf, 44).fill(128) // 8-bit PCM silence is 0x80
 
   return new Blob([buf], {type: "audio/wav"})
+}
+
+// hls.js is a self-hosted file (`/vendor/hls.min.js`), loaded the first time something needs
+// it; browsers with native HLS (Safari) never download it.
+let hlsPromise
+function loadHls() {
+  if (window.Hls) return Promise.resolve(window.Hls)
+  hlsPromise ||= new Promise((resolve) => {
+    const el = document.createElement("script")
+    el.src = "/vendor/hls.min.js"
+    el.onload = () => resolve(window.Hls)
+    el.onerror = () => { hlsPromise = null; resolve(null) }
+    document.head.appendChild(el)
+  })
+  return hlsPromise
 }

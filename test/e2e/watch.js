@@ -1,0 +1,61 @@
+const { chromium } = require("playwright");
+const fs = require("fs");
+const results = [];
+const check = (n, ok, x = "") => { results.push(!!ok); console.log((ok ? "PASS " : "FAIL ") + n + (x ? "  — " + x : "")); };
+(async () => {
+  const b = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage", "--autoplay-policy=no-user-gesture-required"] });
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 1000 } });
+  await ctx.addCookies([{ name: "_roki_key", value: fs.readFileSync("/tmp/e2e-cookie.txt", "utf8"), domain: "roki.ee", path: "/", secure: true, httpOnly: true, sameSite: "Lax" }]);
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on("pageerror", e => errs.push("PAGEERROR " + (e.stack||e)));
+  p.on("console", m => { if (m.type() === "error" && !/favicon|404/.test(m.text())) errs.push("CONSOLE " + m.text() + " @ " + JSON.stringify(m.location())); });
+  await p.goto("https://roki.ee/title/movie/10331", { waitUntil: "domcontentloaded" });
+  await p.waitForSelector("[data-phx-main].phx-connected", { timeout: 20000 });
+  await p.waitForSelector("h1", { timeout: 20000 });
+  check("title page loads for the signed-in user", (await p.textContent("h1")).includes("Night of the Living Dead"));
+  check("no 'connect' notice for a linked user", (await p.locator("text=/Connect laev|Log in, and connect/").count()) === 0);
+  await p.screenshot({ path: "/tmp/w1.jpg", type: "jpeg", quality: 50 });
+
+  await p.click("button:has-text('Play')");
+  await p.waitForSelector("text=/Checking releases|Searching|Starting/", { timeout: 10000 });
+  check("shows progress while it works", true);
+  await p.screenshot({ path: "/tmp/w2.jpg", type: "jpeg", quality: 50 });
+  await p.waitForSelector("#study[data-player]", { timeout: 150000 });
+  const dp = JSON.parse(await p.getAttribute("#study", "data-player"));
+  check("player data handed to the hook", dp.url.startsWith("/stream/") && dp.hls === true, JSON.stringify(dp).slice(0, 160));
+  await p.waitForFunction(() => { const v = document.getElementById("study-video"); return v && v.readyState >= 2 && v.currentTime > 1 && !v.paused; }, null, { timeout: 90000 });
+  const st = await p.evaluate(() => { const v = document.getElementById("study-video"); return { t: v.currentTime, w: v.videoWidth, h: v.videoHeight, d: v.duration }; });
+  check("video is playing via hls.js", st.t > 1 && st.w > 0, JSON.stringify(st));
+  await p.waitForTimeout(6500);
+  const st2 = await p.evaluate(() => document.getElementById("study-video").currentTime);
+  check("playhead advances", st2 > st.t + 3, `${st.t.toFixed(1)} -> ${st2.toFixed(1)}`);
+  await p.screenshot({ path: "/tmp/w3.jpg", type: "jpeg", quality: 55 });
+  const h = await p.evaluate(() => ({ v: Math.round(document.getElementById("study-video").getBoundingClientRect().height), s: Math.round(document.querySelector("#study-sidebar > div").getBoundingClientRect().height) }));
+  check("sidebar as tall as the video", Math.abs(h.v - h.s) <= 2, JSON.stringify(h));
+  // progress was written back
+  await p.evaluate(() => document.getElementById("study-video").pause());
+  await p.waitForTimeout(1500);
+  check("a release without subtitles says so", (await p.textContent("[data-role=empty]")).includes("No subtitles"));
+
+  // seek a few minutes in (the remux is ahead of realtime), let the position be saved, then come back
+  await p.evaluate(() => { const v = document.getElementById("study-video"); v.currentTime = 150; v.play(); });
+  await p.waitForFunction(() => document.getElementById("study-video").currentTime >= 150, null, { timeout: 60000 });
+  await p.waitForTimeout(6500);
+  await p.evaluate(() => document.getElementById("study-video").pause());
+  await p.waitForTimeout(1500);
+  await p.goto("https://roki.ee/title/movie/10331", { waitUntil: "domcontentloaded" });
+  await p.waitForSelector("[data-phx-main].phx-connected", { timeout: 20000 });
+  await p.waitForSelector("h1");
+  await p.click("button:has-text('Play')");
+  await p.waitForSelector("#study[data-player]", { timeout: 150000 });
+  const dp2 = JSON.parse(await p.getAttribute("#study", "data-player"));
+  check("coming back resumes where you left off", dp2.resume >= 148 && dp2.resume <= 175, `resume=${dp2.resume}`);
+  await p.waitForFunction(() => document.getElementById("study-video").currentTime >= 148, null, { timeout: 90000 });
+  check("the player actually jumped there", true, "t=" + (await p.evaluate(() => document.getElementById("study-video").currentTime)).toFixed(1));
+  console.log("errors:", errs.slice(0, 5));
+  check("no page errors", errs.length === 0);
+  console.log(`${results.filter(Boolean).length}/${results.length} passed`);
+  await b.close();
+  process.exit(results.every(Boolean) ? 0 : 1);
+})();

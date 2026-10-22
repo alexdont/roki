@@ -13,6 +13,17 @@ defmodule RokiWeb.Router do
     plug PhoenixKitWeb.Plugs.Integration
   end
 
+  pipeline :session_user do
+    plug :fetch_session
+    plug PhoenixKitWeb.Users.Auth, :fetch_phoenix_kit_current_user
+  end
+
+  scope "/", RokiWeb do
+    pipe_through :session_user
+
+    get "/stream/:id/:file", StreamController, :file
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -25,6 +36,7 @@ defmodule RokiWeb.Router do
       live "/", RootLive, :index
       live "/home", FeaturedLive, :index
       live "/search", SearchLive, :index
+      live "/title/:type/:id", TitleLive, :show
       live "/study", StudyLive, :index
       live "/lists", ListsLive, :index
       live "/lists/:slug", ListLive, :show

@@ -2,6 +2,11 @@ defmodule RokiWeb.PosterComponents do
   @moduledoc "The poster card shared by every page that lists titles."
   use Phoenix.Component
 
+  use Phoenix.VerifiedRoutes,
+    endpoint: RokiWeb.Endpoint,
+    router: RokiWeb.Router,
+    statics: RokiWeb.static_paths()
+
   attr :item, :map,
     required: true,
     doc: "a title: %{title, poster, type, year?, note?, season?, episode?, vote?, seen?}"
@@ -16,8 +21,10 @@ defmodule RokiWeb.PosterComponents do
         assigns.seen || (assigns.seen == nil && assigns.item[:seen] == true)
       )
 
+    assigns = assign(assigns, :href, href(assigns.item))
+
     ~H"""
-    <div class={["group space-y-1", @watched? && "opacity-50"]}>
+    <.card href={@href} class={["group block space-y-1", @watched? && "opacity-50"]}>
       <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
         <img
           :if={@item.poster}
@@ -59,9 +66,31 @@ defmodule RokiWeb.PosterComponents do
       <div class="text-xs text-base-content/60">
         {if @watched?, do: "Watched · ", else: ""}{subtitle(@item)}
       </div>
-    </div>
+    </.card>
     """
   end
+
+  attr :href, :any, default: nil
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  defp card(%{href: nil} = assigns), do: ~H"<div class={@class}>{render_slot(@inner_block)}</div>"
+
+  defp card(assigns),
+    do: ~H"<.link navigate={@href} class={@class}>{render_slot(@inner_block)}</.link>"
+
+  @doc "Where a poster leads: the title page (a franchise season entry opens on its season)."
+  def href(%{id: id, type: type} = item)
+      when is_integer(id) and type in ["movie", "tv", "anime"] do
+    type = if type == "movie", do: "movie", else: "tv"
+
+    case item do
+      %{season: s} when is_integer(s) -> ~p"/title/#{type}/#{id}?#{[s: s]}"
+      _ -> ~p"/title/#{type}/#{id}"
+    end
+  end
+
+  def href(_), do: nil
 
   @doc "The grey line under a poster — where you are in it, else when it came out."
   def subtitle(%{note: n}) when is_binary(n) and n != "",
