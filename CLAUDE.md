@@ -366,3 +366,7 @@ The section grids keep to whole rows while more can be loaded (`assets/js/fill_g
 ### Title page: library actions
 
 Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`), Put on hold (`Laev.Holds`; not for anime, whose status lives on MyAnimeList), and Mark watched / Mark all watched (`Laev.Position.set_watched`: a film's one mark, or every episode that is out for a series; the same button unmarks). Each episode row has its own mark/unmark toggle and the season header has Mark/Unmark season. All go through `Roki.Watch` (`library/2`, `toggle_saved/2`, `toggle_hold/2`, `set_watched/5`, `set_many_watched/4`, `set_series_watched/3`), clear the stats cache and push to the user's other devices. Above Play: the Browser / External player switch, and Play itself is the big button.
+
+### Rating on TMDB
+
+The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet.

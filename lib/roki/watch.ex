@@ -211,6 +211,42 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  Your own TMDB rating of a title: `{:ok, 8.5 | nil}`, or `:no_account` when the user has not
+  linked a TMDB account in laev (ratings are sent with a TMDB session, which laev holds).
+  """
+  def my_rating(uuid, title) do
+    Roki.Laev.run(uuid, fn ->
+      if Laev.Tmdb.account?() do
+        {:ok,
+         if(title.type == "movie",
+           do: Laev.Tmdb.movie_rating(title.id),
+           else: Laev.Tmdb.tv_rating(title.id)
+         )}
+      else
+        :no_account
+      end
+    end)
+  end
+
+  @doc "Rate a film or a series on TMDB, 0.5–10 in half steps: `{:ok, rating}` or `{:error, why}`."
+  def rate(uuid, title, value) do
+    Roki.Laev.run(uuid, fn ->
+      if title.type == "movie",
+        do: Laev.Tmdb.rate_movie(title.id, value),
+        else: Laev.Tmdb.rate_tv(title.id, value)
+    end)
+  end
+
+  @doc "Take your TMDB rating back: `:ok` or `{:error, why}`."
+  def clear_rating(uuid, title) do
+    Roki.Laev.run(uuid, fn ->
+      if title.type == "movie",
+        do: Laev.Tmdb.clear_movie_rating(title.id),
+        else: Laev.Tmdb.clear_tv_rating(title.id)
+    end)
+  end
+
   @doc "Save for later (the watchlist's saved list), or take it off. `:added | :removed`."
   def toggle_saved(uuid, title) do
     result =

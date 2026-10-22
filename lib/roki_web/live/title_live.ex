@@ -47,6 +47,8 @@ defmodule RokiWeb.TitleLive do
         cached: MapSet.new(),
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         lib_busy: false,
+        rating: %{state: :loading, value: nil},
+        rating_error: nil,
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -94,14 +96,19 @@ defmodule RokiWeb.TitleLive do
     SourceCache.keys(uuid, hours)
   end
 
+  defp rating_state({:ok, value}), do: %{state: :ok, value: value}
+  defp rating_state(:no_account), do: %{state: :no_account, value: nil}
+  defp rating_state(_), do: %{state: :loading, value: nil}
+
   defp load_title(type, id, uuid) do
     with {:ok, title} <- Watch.title(type, id, uuid) do
       linked? = uuid && Roki.Laev.connected?(uuid)
       resume = if linked?, do: Roki.Laev.run(uuid, fn -> Laev.Resume.get(type, id) end)
       cached = if linked?, do: cached_keys(uuid), else: MapSet.new()
       lib = if linked?, do: Watch.library(uuid, title)
+      rating = if linked?, do: Watch.my_rating(uuid, title)
 
-      {:ok, title, resume, cached, lib}
+      {:ok, title, resume, cached, lib, rating}
     end
   end
 
@@ -225,6 +232,29 @@ defmodule RokiWeb.TitleLive do
   end
 
   def handle_event("toggle_watched", _params, socket), do: {:noreply, socket}
+
+  # Your TMDB rating (0.5–10, half steps): sent to TMDB through laev, shown beside TMDB's average.
+  def handle_event("rate", %{"value" => v}, %{assigns: %{rating: %{state: :ok}}} = socket) do
+    %{uuid: uuid, title: title} = socket.assigns
+
+    case Float.parse(to_string(v)) do
+      {value, _} ->
+        {:noreply,
+         start_async(socket, :rating, fn -> {:rate, Watch.rate(uuid, title, value)} end)}
+
+      :error ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("rate", _params, socket), do: {:noreply, socket}
+
+  def handle_event("clear_rating", _params, %{assigns: %{rating: %{state: :ok}}} = socket) do
+    %{uuid: uuid, title: title} = socket.assigns
+    {:noreply, start_async(socket, :rating, fn -> {:clear, Watch.clear_rating(uuid, title)} end)}
+  end
+
+  def handle_event("clear_rating", _params, socket), do: {:noreply, socket}
 
   def handle_event("toggle_saved", _params, socket) do
     %{uuid: uuid, title: title, lib: lib} = socket.assigns
@@ -591,18 +621,28 @@ defmodule RokiWeb.TitleLive do
   # ── what comes back from the tasks ─────────────────────────────────
 
   @impl true
-  def handle_async(:title, {:ok, {:ok, title, resume, cached, lib}}, socket) do
+  def handle_async(:title, {:ok, {:ok, title, resume, cached, lib, rating}}, socket) do
     socket =
       assign(socket,
         title: title,
         resume: resume,
         cached: cached,
         lib: lib || socket.assigns.lib,
+        rating: rating_state(rating),
         page_title: title.title
       )
 
     {:noreply, select(socket)}
   end
+
+  def handle_async(:rating, {:ok, {:rate, {:ok, value}}}, socket),
+    do: {:noreply, assign(socket, rating: %{state: :ok, value: value}, rating_error: nil)}
+
+  def handle_async(:rating, {:ok, {:clear, :ok}}, socket),
+    do: {:noreply, assign(socket, rating: %{state: :ok, value: nil}, rating_error: nil)}
+
+  def handle_async(:rating, _other, socket),
+    do: {:noreply, assign(socket, :rating_error, "TMDB did not take that. Try again.")}
 
   def handle_async(:bulk, {:ok, {new, lib}}, socket) do
     socket = assign(socket, lib: lib, lib_busy: false)
@@ -868,10 +908,14 @@ defmodule RokiWeb.TitleLive do
           linked?={@linked?}
           lib={@lib}
           lib_busy={@lib_busy}
+          rating={@rating}
           locked?={@locked?}
         />
 
+        <.rate_sheet :if={@linked?} title={@title} rating={@rating} error={@rating_error} />
+
         <.hero
+          rating={@rating}
           title={@title}
           resume={@resume}
           phase={@phase}
@@ -947,6 +991,7 @@ defmodule RokiWeb.TitleLive do
   attr :linked?, :boolean, default: false
   attr :lib, :map, required: true
   attr :lib_busy, :boolean, default: false
+  attr :rating, :map, required: true
 
   defp hero(assigns) do
     ~H"""
@@ -961,7 +1006,7 @@ defmodule RokiWeb.TitleLive do
         <div :if={!@title.poster} class="aspect-[2/3] w-full rounded-box bg-base-300"></div>
 
         <%!-- Under the poster, well away from Play: a slip here should not save or hold a title. --%>
-        <.library_buttons :if={@linked?} title={@title} lib={@lib} busy={@lib_busy} />
+        <.library_buttons :if={@linked?} title={@title} lib={@lib} busy={@lib_busy} rating={@rating} />
       </div>
 
       <div class="min-w-0 flex-1 space-y-3">
@@ -1010,6 +1055,7 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :lib, :map, required: true
   attr :busy, :boolean, default: false
+  attr :rating, :map, required: true
 
   # What the terminal app has on a title: watched (and back), saved for later, on hold.
   defp library_buttons(assigns) do
@@ -1074,8 +1120,32 @@ defmodule RokiWeb.TitleLive do
         />
         {watched_label(@title, @lib)}
       </button>
+
+      <%!-- TMDB's average, and — once you have rated it — yours beside it in another colour. --%>
+      <button
+        phx-click={JS.show(to: "#rate-sheet", display: "flex")}
+        class="btn h-auto min-h-10 w-full justify-between gap-2 px-3 py-2 text-xs sm:h-12 sm:px-4 sm:text-sm"
+        title="Rate it on TMDB"
+      >
+        <span class="flex items-center gap-1.5">
+          <.icon name="hero-star-solid" class="h-4 w-4 shrink-0 text-warning sm:h-5 sm:w-5" />
+          <span class="font-semibold text-warning">{avg_text(@title)}</span>
+        </span>
+        <span :if={@rating.value} class="font-semibold text-info">You {fmt_rating(@rating.value)}</span>
+        <span :if={!@rating.value} class="text-base-content/60">Rate</span>
+      </button>
     </div>
     """
+  end
+
+  defp avg_text(%{vote: v}) when is_number(v) and v > 0, do: fmt_rating(Float.round(v * 1.0, 1))
+  defp avg_text(_), do: "–"
+
+  # 8.0 → "8", 8.5 → "8.5"
+  defp fmt_rating(v) when is_number(v) do
+    if v == trunc(v),
+      do: Integer.to_string(trunc(v)),
+      else: :erlang.float_to_binary(v * 1.0, decimals: 1)
   end
 
   defp watched_state?(%{type: "movie"}, lib), do: lib.watched?
@@ -1557,6 +1627,7 @@ defmodule RokiWeb.TitleLive do
   attr :linked?, :boolean, default: false
   attr :lib, :map, required: true
   attr :lib_busy, :boolean, default: false
+  attr :rating, :map, required: true
   attr :locked?, :boolean, default: false
 
   # One screen on a phone: the title and its details on top, a large poster with the three icon
@@ -1592,7 +1663,7 @@ defmodule RokiWeb.TitleLive do
 
         <%!-- Icons only: saved, on hold, watched — three tiles sharing the height and the width left of
               the poster, the icon centred in each. The state is the colour; the label is the tooltip. --%>
-        <div :if={@linked?} class="flex min-w-0 flex-1 flex-col gap-3">
+        <div :if={@linked?} class="flex min-w-0 flex-1 flex-col justify-evenly gap-2">
           <.round_btn
             event="toggle_saved"
             on={@lib.saved?}
@@ -1621,6 +1692,7 @@ defmodule RokiWeb.TitleLive do
             on_class="btn-success"
             busy={@lib_busy}
           />
+          <.rate_tile title={@title} rating={@rating} />
         </div>
       </div>
 
@@ -1667,12 +1739,12 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-auto min-h-0 w-full flex-1 rounded-box px-0", @on && @on_class]}
+      class={["btn h-14 w-full rounded-box px-0", @on && @on_class]}
       title={@label}
       aria-label={@label}
     >
       <span :if={@busy} class="loading loading-spinner"></span>
-      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-10 w-10" />
+      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-8 w-8" />
     </button>
     """
   end
@@ -1797,4 +1869,111 @@ defmodule RokiWeb.TitleLive do
       |> String.reverse()
 
   defp thousands(n), do: to_string(n)
+
+  attr :title, :map, required: true
+  attr :rating, :map, required: true
+
+  # The phone's rating tile: TMDB's average on top, yours under it once you have rated.
+  defp rate_tile(assigns) do
+    ~H"""
+    <button
+      phx-click={JS.show(to: "#rate-sheet", display: "flex")}
+      class="btn h-16 w-full flex-col gap-0 rounded-box px-0 leading-tight"
+      title="Rate it on TMDB"
+      aria-label="Rate it on TMDB"
+    >
+      <span class="flex items-center gap-1 text-base font-bold text-warning">
+        <.icon name="hero-star-solid" class="h-4 w-4" />{avg_text(@title)}
+      </span>
+      <span :if={@rating.value} class="text-sm font-bold text-info">You {fmt_rating(@rating.value)}</span>
+      <span :if={!@rating.value} class="text-xs font-normal text-base-content/60">Rate</span>
+    </button>
+    """
+  end
+
+  attr :title, :map, required: true
+  attr :rating, :map, required: true
+  attr :error, :string, default: nil
+
+  # Where you rate: TMDB's score for reference, a half-step slider, save or take it back.
+  defp rate_sheet(assigns) do
+    ~H"""
+    <div
+      id="rate-sheet"
+      class="fixed inset-0 z-[70] hidden items-end bg-black/50 sm:items-center sm:justify-center"
+      phx-window-keydown={JS.hide(to: "#rate-sheet")}
+      phx-key="escape"
+    >
+      <div
+        class="w-full rounded-t-2xl bg-base-100 p-5 pb-8 shadow-2xl sm:max-w-sm sm:rounded-2xl sm:pb-5"
+        phx-click-away={JS.hide(to: "#rate-sheet")}
+      >
+        <div class="flex items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-lg font-bold leading-tight">Rate {@title.title}</h2>
+            <p class="text-sm text-base-content/60">
+              <span class="font-semibold text-warning">★ {avg_text(@title)}</span>
+              on TMDB<span :if={@title.vote_count && @title.vote_count > 0}> · {thousands(
+                @title.vote_count
+              )} votes</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            phx-click={JS.hide(to: "#rate-sheet")}
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="h-5 w-5" />
+          </button>
+        </div>
+
+        <p :if={@rating.state == :no_account} class="mt-4 text-sm text-base-content/70">
+          Ratings are sent with your TMDB account, which isn't linked in laev yet. Link it in the
+          terminal app (it comes across with your keys), then rate here.
+        </p>
+
+        <form
+          :if={@rating.state == :ok}
+          id="rate-form"
+          phx-submit={JS.push("rate") |> JS.hide(to: "#rate-sheet")}
+          class="mt-4 space-y-4"
+        >
+          <div class="text-center">
+            <span id="rate-out" class="text-4xl font-bold text-info">{fmt_rating(@rating.value || 7)}</span>
+            <span class="text-lg text-base-content/50"> / 10</span>
+          </div>
+          <input
+            type="range"
+            name="value"
+            min="0.5"
+            max="10"
+            step="0.5"
+            value={@rating.value || 7}
+            oninput="document.getElementById('rate-out').textContent = Number(this.value) % 1 === 0 ? String(Number(this.value)) : Number(this.value).toFixed(1)"
+            class="range range-info w-full"
+            aria-label="Your rating"
+          />
+          <div class="flex gap-2">
+            <button type="submit" class="btn btn-info flex-1">Save rating</button>
+            <button
+              :if={@rating.value}
+              type="button"
+              phx-click={JS.push("clear_rating") |> JS.hide(to: "#rate-sheet")}
+              class="btn btn-ghost"
+            >
+              Remove
+            </button>
+          </div>
+          <p :if={@rating.value} class="text-center text-xs text-base-content/60">
+            Your rating: <span class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
+          </p>
+        </form>
+
+        <p :if={@rating.state == :loading} class="mt-4 text-sm text-base-content/60">Loading…</p>
+        <p :if={@error} class="mt-3 text-sm text-error">{@error}</p>
+      </div>
+    </div>
+    """
+  end
 end
