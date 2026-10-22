@@ -17,6 +17,18 @@ function ensureCard() {
   return card
 }
 
+// "Released 3 Mar 2026 (233 days ago)" — a show says "First aired".
+export function released(iso, key = "") {
+  const [y, m, d] = iso.split("-").map(Number)
+  if (!y || !m || !d) return ""
+  const date = new Date(y, m - 1, d)
+  const now = new Date()
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - date) / 86400000)
+  const when = date.toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"})
+  const ago = days <= 0 ? "today" : days === 1 ? "yesterday" : `${days.toLocaleString("en-GB")} days ago`
+  return `${key.startsWith("tv/") ? "First aired" : "Released"} ${when} (${ago})`
+}
+
 function line(cls, text) {
   const el = document.createElement("div")
   el.className = cls
@@ -47,7 +59,9 @@ function render(el, info) {
 
   if (el.dataset.peekProgress) c.appendChild(line("peek-progress", el.dataset.peekProgress))
   if (el.dataset.peekResume) c.appendChild(line("peek-progress", el.dataset.peekResume))
+  // Not out yet (red, from the page) or out already (grey, when the lookup arrives).
   if (el.dataset.peekDue) c.appendChild(line("peek-due", el.dataset.peekDue))
+  else if (info?.date) c.appendChild(line("peek-released", released(info.date, el.dataset.peek)))
   if (el.dataset.peekCached) c.appendChild(line("peek-cached", "⚡ sources cached — plays right away"))
 
   place(el)

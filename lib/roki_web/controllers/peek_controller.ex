@@ -20,6 +20,7 @@ defmodule RokiWeb.PeekController do
       |> json(%{
         title: t.title,
         year: t.year,
+        date: t.date,
         minutes: t.minutes,
         vote: t.vote,
         genres: Enum.take(t.genres || [], 4),
