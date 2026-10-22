@@ -26,7 +26,7 @@ defmodule RokiWeb.HomeLive do
       |> assign(:data, nil)
       |> assign(:busy, nil)
       |> assign(:error, nil)
-      |> assign(:history_open, false)
+      |> assign(:open, MapSet.new())
       |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
     {:ok, if(connected?(socket) && uuid, do: load(socket), else: socket)}
@@ -56,8 +56,16 @@ defmodule RokiWeb.HomeLive do
     end
   end
 
-  def handle_event("toggle_history", _params, socket),
-    do: {:noreply, update(socket, :history_open, &(!&1))}
+  def handle_event("toggle_section", %{"id" => id}, socket) do
+    open = socket.assigns.open
+
+    {:noreply,
+     assign(
+       socket,
+       :open,
+       if(MapSet.member?(open, id), do: MapSet.delete(open, id), else: MapSet.put(open, id))
+     )}
+  end
 
   def handle_event("sync", _params, socket) do
     uuid = socket.assigns.uuid
@@ -143,7 +151,7 @@ defmodule RokiWeb.HomeLive do
         data={@data}
         busy={@busy}
         error={@error}
-        history_open={@history_open}
+        open={@open}
       />
     </Layouts.app>
     """
@@ -239,7 +247,7 @@ defmodule RokiWeb.HomeLive do
   attr :data, :map, required: true
   attr :busy, :string, default: nil
   attr :error, :string, default: nil
-  attr :history_open, :boolean, default: false
+  attr :open, :any, default: nil
 
   defp shelf(assigns) do
     ~H"""
@@ -299,10 +307,10 @@ defmodule RokiWeb.HomeLive do
         count={length(@data.watchlist.behind)}
         items={@data.watchlist.behind}
       />
-      <.poster_fold title="Saved" items={@data.saved} />
-      <.poster_fold title="Caught up" items={@data.watchlist.caught_up} />
-      <.poster_fold title="On hold" items={@data.watchlist.on_hold} />
-      <.history items={@data.continue} open={@history_open} />
+      <.fold id="saved" title="Saved" items={@data.saved} open={@open} />
+      <.fold id="caught_up" title="Caught up" items={@data.watchlist.caught_up} open={@open} />
+      <.fold id="on_hold" title="On hold" items={@data.watchlist.on_hold} open={@open} />
+      <.fold id="history" title="History" items={@data.continue} open={@open} />
 
       <section class="space-y-3">
         <h2 class="text-xl font-semibold">Connections</h2>
@@ -335,30 +343,36 @@ defmodule RokiWeb.HomeLive do
     """
   end
 
-  # One line of posters with a "more…" at the end; the rest opens as a grid.
+  # A section that starts closed and draws nothing — no posters, so no image
+  # requests — until it is opened. Open state lives on the server.
+  attr :id, :string, required: true
+  attr :title, :string, required: true
   attr :items, :list, required: true
-  attr :open, :boolean, default: false
+  attr :open, :any, required: true
 
-  defp history(assigns) do
+  defp fold(assigns) do
+    assigns = assign(assigns, :shown, MapSet.member?(assigns.open, assigns.id))
+
     ~H"""
     <section :if={@items != []} class="space-y-3">
-      <h2 class="text-xl font-semibold">History</h2>
-      <div :if={!@open} class="flex items-center gap-4">
-        <ul class="flex min-w-0 flex-1 gap-4 overflow-hidden">
-          <li :for={i <- @items} class="w-28 shrink-0 space-y-1">
-            <.poster item={i} />
-          </li>
-        </ul>
-        <button phx-click="toggle_history" class="btn btn-ghost btn-sm shrink-0">more…</button>
-      </div>
-      <div :if={@open} class="space-y-3">
-        <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          <li :for={i <- @items} class="space-y-1">
-            <.poster item={i} />
-          </li>
-        </ul>
-        <button phx-click="toggle_history" class="btn btn-ghost btn-sm">less</button>
-      </div>
+      <button
+        phx-click="toggle_section"
+        phx-value-id={@id}
+        aria-expanded={to_string(@shown)}
+        class="flex cursor-pointer items-center gap-2 text-xl font-semibold"
+      >
+        <.icon
+          name="hero-chevron-right"
+          class={["h-4 w-4 transition", @shown && "rotate-90"]}
+        />
+        {@title}
+        <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
+      </button>
+      <ul :if={@shown} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+        <li :for={i <- @items} class="space-y-1">
+          <.poster item={i} />
+        </li>
+      </ul>
     </section>
     """
   end
@@ -386,30 +400,6 @@ defmodule RokiWeb.HomeLive do
       <div class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
       <div class="text-xs text-base-content/60">{subtitle(@item)}</div>
     </div>
-    """
-  end
-
-  # A section that starts closed: "Caught up (19)".
-  attr :title, :string, required: true
-  attr :items, :list, required: true
-
-  defp poster_fold(assigns) do
-    ~H"""
-    <details :if={@items != []} class="group/fold space-y-3">
-      <summary class="flex cursor-pointer list-none items-center gap-2 text-xl font-semibold">
-        <.icon
-          name="hero-chevron-right"
-          class="h-4 w-4 transition group-open/fold:rotate-90"
-        />
-        {@title}
-        <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
-      </summary>
-      <ul class="mt-3 grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} />
-        </li>
-      </ul>
-    </details>
     """
   end
 
