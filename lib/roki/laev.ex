@@ -38,9 +38,15 @@ defmodule Roki.Laev do
     if File.exists?(Path.join(dir(uuid), "config")) do
       run(uuid, fn ->
         if Sync.enabled?() do
+          # Laev never downloads this during a lookup, and without it no anime can
+          # be matched to a TMDB title — every in-progress anime silently drops off
+          # the watchlist. One download per account, then it is just a file.
+          Laev.AnimeMap.ensure()
+
           {:ok,
            %{
              tally: Shelf.tally(),
+             watchlist: watchlist(),
              stats: Stats.all_time(),
              continue: continue_watching(),
              saved: saved(),
@@ -108,6 +114,37 @@ defmodule Roki.Laev do
   def duration(seconds), do: Stats.duration(seconds)
 
   # ── what the page shows ────────────────────────────────────────────
+
+  # Laev's own Watchlist: what you are in the middle of, most recently watched
+  # first, then the shows you are caught up on, then the ones on hold. `rows/0`
+  # marks the boundaries with `:caught_up` / `:on_hold` atoms between the maps.
+  defp watchlist do
+    {sections, _} =
+      Enum.reduce(Shelf.rows(), {%{behind: [], caught_up: [], on_hold: []}, :behind}, fn
+        row, {acc, section} when is_map(row) ->
+          {Map.update!(acc, section, &[watch_item(row) | &1]), section}
+
+        marker, {acc, _section} when marker in [:caught_up, :on_hold] ->
+          {acc, marker}
+
+        _other, state ->
+          state
+      end)
+
+    Map.new(sections, fn {k, v} -> {k, Enum.reverse(v)} end)
+  end
+
+  defp watch_item(row) do
+    %{
+      type: row.type,
+      id: row.id,
+      title: row.title || "Untitled",
+      year: row[:year],
+      poster: row[:poster],
+      note: row[:note],
+      anime: row[:mal_id] != nil
+    }
+  end
 
   # Laev keeps title, poster and the season/episode you are on in the resume
   # record itself, so this needs no TMDB key.

@@ -294,8 +294,15 @@ defmodule RokiWeb.HomeLive do
         </div>
       </div>
 
-      <.poster_row title="Watchlist" items={@data.saved} />
+      <.poster_row
+        title="Watchlist"
+        count={length(@data.watchlist.behind)}
+        items={@data.watchlist.behind}
+      />
       <.history items={@data.continue} open={@history_open} />
+      <.poster_fold title="Caught up" items={@data.watchlist.caught_up} />
+      <.poster_fold title="On hold" items={@data.watchlist.on_hold} />
+      <.poster_fold title="Saved" items={@data.saved} />
 
       <section class="space-y-3">
         <h2 class="text-xl font-semibold">Connections</h2>
@@ -382,13 +389,41 @@ defmodule RokiWeb.HomeLive do
     """
   end
 
+  # A section that starts closed: "Caught up (19)".
   attr :title, :string, required: true
+  attr :items, :list, required: true
+
+  defp poster_fold(assigns) do
+    ~H"""
+    <details :if={@items != []} class="group/fold space-y-3">
+      <summary class="flex cursor-pointer list-none items-center gap-2 text-xl font-semibold">
+        <.icon
+          name="hero-chevron-right"
+          class="h-4 w-4 transition group-open/fold:rotate-90"
+        />
+        {@title}
+        <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
+      </summary>
+      <ul class="mt-3 grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+        <li :for={i <- @items} class="space-y-1">
+          <.poster item={i} />
+        </li>
+      </ul>
+    </details>
+    """
+  end
+
+  attr :title, :string, required: true
+  attr :count, :integer, default: nil
   attr :items, :list, required: true
 
   defp poster_row(assigns) do
     ~H"""
     <section :if={@items != []} class="space-y-3">
-      <h2 class="text-xl font-semibold">{@title}</h2>
+      <h2 class="text-xl font-semibold">
+        {@title}
+        <span :if={@count} class="text-sm font-normal text-base-content/60">{@count}</span>
+      </h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @items} class="group space-y-1">
           <div class="aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
@@ -413,6 +448,9 @@ defmodule RokiWeb.HomeLive do
     </section>
     """
   end
+
+  defp subtitle(%{note: n}) when is_binary(n) and n != "",
+    do: n |> String.trim() |> String.trim_leading("·") |> String.trim()
 
   defp subtitle(%{season: s, episode: e}) when is_integer(s) and is_integer(e),
     do: "S#{s} · E#{e}"
