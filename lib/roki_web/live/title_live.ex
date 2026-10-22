@@ -720,17 +720,17 @@ defmodule RokiWeb.TitleLive do
     assigns = assign(assigns, season: season, episode: episode, continue?: continue?)
 
     ~H"""
-    <div class={["join shadow-md", @class]}>
+    <div class={["flex gap-2", @class]}>
       <.link
         navigate={~p"/title/tv/#{@title.id}/episodes"}
-        class="btn btn-primary btn-lg join-item h-full min-h-0 flex-[2] gap-2 border-r border-primary-content/30 px-3 text-[length:inherit]"
+        class="btn btn-primary btn-lg h-full min-h-0 flex-[2] gap-2 px-3 shadow-md text-[length:inherit]"
       >
         <.icon name="hero-queue-list" class="h-6 w-6" /> Episodes
       </.link>
       <.link
         navigate={~p"/sources/tv/#{@title.id}/#{@season}/#{@episode}?#{[auto: 1]}"}
         class={[
-          "btn btn-primary btn-lg join-item h-full min-h-0 flex-[3] gap-2 px-3 text-[length:inherit]",
+          "btn btn-primary btn-lg h-full min-h-0 flex-[3] gap-2 px-3 shadow-md text-[length:inherit]",
           @busy? && "btn-disabled"
         ]}
       >
