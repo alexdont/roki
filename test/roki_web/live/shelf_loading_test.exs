@@ -50,9 +50,11 @@ defmodule RokiWeb.ShelfLoadingTest do
 
     {:ok, _view, html} = live(conn, "/shelftest/home")
 
-    # The real header and strip are there from the first paint…
-    assert html =~ "Your shelf"
+    # The real strip and its sync button are there from the first paint — and no
+    # "Your shelf" title, which says nothing the page does not already.
+    refute html =~ "Your shelf"
     assert html =~ "all stats"
+    assert html =~ ~s(aria-label="Sync now")
     # …with a placeholder grid standing where the Watchlist will be…
     assert html =~ "aria-busy"
     assert length(Regex.scan(~r/skeleton aspect-\[2\/3\]/, html)) == 16

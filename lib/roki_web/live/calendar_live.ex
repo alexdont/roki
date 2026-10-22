@@ -11,8 +11,6 @@ defmodule RokiWeb.CalendarLive do
   """
   use RokiWeb, :live_view
 
-  import RokiWeb.UserTabs
-
   alias Roki.Calendar, as: Cal
 
   @impl true
@@ -99,8 +97,6 @@ defmodule RokiWeb.CalendarLive do
       current_path={"/#{@username}/calendar"}
     >
       <div class="space-y-6">
-        <.user_tabs username={@username} active={:calendar} />
-
         <div
           :if={@state == :loading}
           class="flex flex-col items-center gap-3 py-24 text-center text-base-content/60"

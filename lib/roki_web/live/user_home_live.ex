@@ -11,7 +11,6 @@ defmodule RokiWeb.UserHomeLive do
   use RokiWeb, :live_view
 
   import RokiWeb.PosterComponents
-  import RokiWeb.UserTabs
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Laev
@@ -190,8 +189,6 @@ defmodule RokiWeb.UserHomeLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}/home"}
     >
-      <div class="mb-6"><.user_tabs username={@username} active={:shelf} /></div>
-
       <.connect_card :if={@state == :not_connected} form={@form} busy={@busy} error={@error} />
 
       <.shelf
@@ -336,8 +333,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :class, :string, default: ""
 
   defp sk(assigns),
-    do:
-      ~H|<span class={["skeleton inline-block h-5 origin-center scale-y-75 rounded align-middle", @class]}></span>|
+    do: ~H|<span class={["skeleton h-5 origin-center scale-y-75 rounded", @class]}></span>|
 
   attr :data, :any,
     default: nil,
@@ -353,66 +349,63 @@ defmodule RokiWeb.UserHomeLive do
   defp shelf(assigns) do
     ~H"""
     <div class="space-y-10">
-      <div class="flex flex-wrap items-center gap-3">
-        <h1 class="mr-auto text-2xl font-bold tracking-tight sm:text-3xl">Your shelf</h1>
-        <span :if={@busy} class="flex items-center gap-2 text-sm text-base-content/60">
-          <span class="loading loading-spinner loading-sm"></span> {@busy}
-        </span>
-        <button phx-click="sync" class="btn btn-sm" disabled={@busy != nil or @data == nil}>
-          <.icon name="hero-arrow-path" class="h-4 w-4" /> Sync now
-        </button>
-        <button
-          phx-click="disconnect"
-          data-confirm="Disconnect laev and delete everything pulled for this account? Your laev key's server keeps its copy."
-          class="btn btn-sm btn-ghost"
-          disabled={@data == nil}
-        >
-          Disconnect
-        </button>
-      </div>
-
-      <p :if={@error} class="alert alert-error text-sm">{@error}</p>
-
       <%!-- Stats and the release note: small, quiet, and the same size whether loaded or
             not — placeholders stand in at their width, and what is known at once comes
             first, so numbers arriving later only ever fill space already reserved. --%>
-      <div class="-mt-6 space-y-1.5">
-        <.link
-          navigate={~p"/#{@username}/stats"}
-          class="flex min-h-5 flex-wrap items-center gap-x-4 gap-y-0.5 text-sm text-base-content/60 transition hover:text-base-content"
-        >
-          <span :if={@data}>
-            <b class="text-base-content">{@data.tally.behind}</b> in progress
-          </span>
-          <span :if={@data}>
-            <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
-            finished
-          </span>
-          <.sk :if={!@data} class="w-24" />
-          <.sk :if={!@data} class="w-20" />
+      <div class="space-y-1.5">
+        <div class="flex items-center gap-1">
+          <.link
+            navigate={~p"/#{@username}/stats"}
+            class="flex min-h-5 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-0.5 text-sm text-base-content/60 transition hover:text-base-content"
+          >
+            <span :if={@data}>
+              <b class="text-base-content">{@data.tally.behind}</b> in progress
+            </span>
+            <span :if={@data}>
+              <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
+              finished
+            </span>
+            <.sk :if={!@data} class="w-[5.5rem]" />
+            <.sk :if={!@data} class="w-[4.5rem]" />
 
-          <%= cond do %>
-            <% match?(%{totals: _}, @stats) -> %>
-              <span>
-                <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
-              </span>
-              <span class="hidden sm:inline">
-                <b class="text-base-content">{@stats.totals.films}</b> films
-              </span>
-              <span class="hidden sm:inline">
-                <b class="text-base-content">{@stats.totals.episodes}</b> episodes
-              </span>
-            <% match?({:error, _}, @stats) -> %>
-              <span class="text-base-content/40">time watched unavailable</span>
-            <% true -> %>
-              <.sk class="w-32" />
-              <.sk class="hidden w-16 sm:inline-block" />
-              <.sk class="hidden w-24 sm:inline-block" />
-          <% end %>
+            <%= cond do %>
+              <% match?(%{totals: _}, @stats) -> %>
+                <span>
+                  <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
+                </span>
+                <span class="hidden sm:inline">
+                  <b class="text-base-content">{@stats.totals.films}</b> films
+                </span>
+                <span class="hidden sm:inline">
+                  <b class="text-base-content">{@stats.totals.episodes}</b> episodes
+                </span>
+              <% match?({:error, _}, @stats) -> %>
+                <span class="text-base-content/40">time watched unavailable</span>
+              <% true -> %>
+                <.sk class="w-[7.5rem]" />
+                <.sk class="hidden w-16 sm:block" />
+                <.sk class="hidden w-24 sm:block" />
+            <% end %>
 
-          <span class="ml-auto flex h-5 items-center text-xs text-base-content/50">all stats →</span>
-        </.link>
+            <span class="ml-auto hidden h-5 items-center text-xs text-base-content/50 sm:flex">all stats →</span>
+          </.link>
+          <%!-- Sync is a small icon at the end of the line; it spins while it works. --%>
+          <button
+            type="button"
+            phx-click="sync"
+            class="btn btn-ghost btn-xs btn-square shrink-0"
+            title={@busy || "Sync now"}
+            aria-label="Sync now"
+            disabled={@busy != nil or @data == nil}
+          >
+            <.icon
+              name="hero-arrow-path"
+              class={if @busy, do: "h-4 w-4 animate-spin", else: "h-4 w-4"}
+            />
+          </button>
+        </div>
         <.pulse_line pulse={@pulse} username={@username} />
+        <p :if={@error} class="alert alert-error mt-2 text-sm">{@error}</p>
       </div>
 
       <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
@@ -468,6 +461,13 @@ defmodule RokiWeb.UserHomeLive do
           </span>
           <button phx-click="toggle_keys" class="btn btn-xs" disabled={@busy != nil}>
             {if @data.keys_carried?, do: "Stop carrying keys", else: "Bring my API keys"}
+          </button>
+          <button
+            phx-click="disconnect"
+            data-confirm="Disconnect laev and delete everything pulled for this account? Your laev key's server keeps its copy."
+            class="btn btn-xs btn-ghost text-error"
+          >
+            Disconnect laev
           </button>
         </div>
       </section>

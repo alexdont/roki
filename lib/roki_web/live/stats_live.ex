@@ -10,8 +10,6 @@ defmodule RokiWeb.StatsLive do
   """
   use RokiWeb, :live_view
 
-  import RokiWeb.UserTabs
-
   alias Roki.{Laev, Stats}
 
   @page 50
@@ -81,8 +79,6 @@ defmodule RokiWeb.StatsLive do
       current_path={"/#{@username}/stats"}
     >
       <div class="space-y-6">
-        <.user_tabs username={@username} active={:stats} />
-
         <div
           :if={@state == :loading}
           class="flex flex-col items-center gap-3 py-24 text-center text-base-content/60"
