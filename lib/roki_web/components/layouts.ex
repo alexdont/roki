@@ -53,7 +53,7 @@ defmodule RokiWeb.Layouts do
       end
 
     links =
-      [{"Featured", ~p"/home"}, {"Lists", ~p"/lists"}] ++
+      [{"Featured", ~p"/home"}] ++
         if username,
           do: [
             {"Shelf", ~p"/#{username}/home"},

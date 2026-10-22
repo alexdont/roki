@@ -8,6 +8,7 @@ defmodule RokiWeb.FeaturedLive do
   """
   use RokiWeb, :live_view
 
+  import RokiWeb.ListComponents
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
@@ -27,12 +28,19 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:error, nil)
       |> assign(:seen, MapSet.new())
       |> assign(:uuid, uuid(socket))
+      |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
 
-    {:ok,
-     if(connected?(socket),
-       do: Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1)),
-       else: socket
-     )}
+    {:ok, if(connected?(socket), do: start(socket), else: socket)}
+  end
+
+  defp start(socket) do
+    %{uuid: uuid, lists: lists} = socket.assigns
+    socket = Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1))
+
+    # How far through each list a signed-in user is — static data, so it never waits on TMDB.
+    if uuid,
+      do: start_async(socket, :progress, fn -> Roki.Lists.with_progress(uuid, lists) end),
+      else: socket
   end
 
   defp uuid(socket) do
@@ -85,6 +93,9 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async({:page, kind}, {:ok, {_page, {:error, reason}, _seen}}, socket),
     do: {:noreply, failed(socket, kind, reason)}
+
+  def handle_async(:progress, {:ok, lists}, socket), do: {:noreply, assign(socket, :lists, lists)}
+  def handle_async(:progress, {:exit, _reason}, socket), do: {:noreply, socket}
 
   def handle_async({:page, kind}, {:exit, reason}, socket),
     do: {:noreply, failed(socket, kind, reason)}
@@ -156,6 +167,20 @@ defmodule RokiWeb.FeaturedLive do
           shelf={@shelves[kind]}
           seen={@seen}
         />
+
+        <%!-- Last, and only once the shelves above have settled, so it can never push
+              anything down. Curated franchises and TMDB collections, start to finish. --%>
+        <section :if={not @loading?} class="space-y-3">
+          <div class="flex items-baseline justify-between gap-3">
+            <h2 class="text-xl font-semibold">Lists</h2>
+            <p class="hidden text-sm text-base-content/60 sm:block">
+              Franchises start to finish, in release order
+            </p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <.list_card :for={l <- @lists} list={l} />
+          </div>
+        </section>
       </div>
     </Layouts.app>
     """

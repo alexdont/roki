@@ -36,3 +36,30 @@ defmodule RokiWeb.ListsLiveTest do
     assert {:error, {:live_redirect, %{to: "/lists"}}} = live(conn, ~p"/lists/no-such-list")
   end
 end
+
+defmodule RokiWeb.FeaturedListsSectionTest do
+  use RokiWeb.ConnCase
+
+  import Phoenix.LiveViewTest
+
+  test "Lists is a section at the bottom of the featured page, not a header link", %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/home")
+
+    # not in the header, in the bar or the menu
+    refute Regex.match?(
+             ~r/<a[^>]*href="\/lists"[^>]*>\s*Lists\s*<\/a>/,
+             hd(String.split(html, "<main"))
+           )
+
+    # and not shown until the shelves above have settled (no key in test: they error, which settles them)
+    html = render_async(view)
+    assert html =~ ">Lists<"
+    for name <- ["Marvel", "Star Wars", "Animation"], do: assert(html =~ name)
+    assert html =~ ~s(href="/lists/marvel")
+
+    # it is below the shelves, never above
+    {lists_at, _} = :binary.match(html, ">Lists<")
+    {pitch_at, _} = :binary.match(html, "Everything you watch")
+    assert lists_at > pitch_at
+  end
+end

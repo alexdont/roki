@@ -283,3 +283,5 @@ TMDB seasons for TV, TMDB release dates for films. Laev's own keeps a 7-day look
 never caching a failure, with a 3/min per-client + 20/min site-wide budget for uncached titles. The home
 page's pulse ("X drops in 3 days", "Just dropped: Y") is `Roki.Calendar.pulse/1` over the same events.
 The logo links to `/home` (the featured page), not `/`.
+
+The header carries only Featured and (signed in) Shelf / Stats / Calendar. **Lists is not a header link**: it is a section at the bottom of `/home` (`FeaturedLive`), shown once the shelves above have settled. `/lists` itself still exists.
