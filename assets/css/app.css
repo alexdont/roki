@@ -231,6 +231,7 @@
 .study-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .study-tracks { display: flex; flex-direction: column; gap: 0.4rem; }
 .study-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.study-hint { font-size: 0.72rem; line-height: 1.3; opacity: 0.55; }
 .study-group-label { min-width: 5.5rem; font-size: 0.75rem; font-weight: 600; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.04em; }
 .study-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-left: auto; }
 

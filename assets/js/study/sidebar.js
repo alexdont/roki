@@ -149,8 +149,14 @@ export const StudySidebar = {
     this.ui.appendChild(this.tip)
 
     // Two tracks: `p` is the one being studied (words, list), `s` its translation.
-    this.p = {cues: [], rows: [], idx: -1, live: [], lang: "", url: null, label: "", trackIdx: -1}
-    this.s = {cues: [], lang: "", url: null, label: "", trackIdx: -1}
+    // Any number of tracks can be on at once, in the order you like. `p` is the first: the one
+    // studied (words, the list). `extras` are the rest, shown under it as translations. `want` is
+    // the track a layer is for, `url` the one whose lines it has loaded; `cache` keeps what was
+    // downloaded so moving a track between roles costs nothing.
+    this.p = {cues: [], rows: [], idx: -1, live: [], lang: "", url: null, label: "", want: null}
+    this.extras = []
+    this.cache = new Map()
+    this.userChose = false
     this.tracks = []
     this.follow = true
     this.programmatic = false
@@ -242,7 +248,7 @@ export const StudySidebar = {
 
   tick() {
     const p = this.p
-    if (!p.cues.length && !this.s.cues.length) return
+    if (!p.cues.length && !this.extras.some((e) => e.cues.length)) return
     const t = this.now()
     const idx = activeIndex(p.cues, t)
     let live = liveIndexes(p.cues, idx, t)
@@ -290,9 +296,13 @@ export const StudySidebar = {
   // The line(s) being spoken, each word its own element, and the translation under them. Rebuilt
   // only when the lines (or the tracks) change, never every frame.
   renderOverlay(live, t) {
-    const sIdx = this.s.cues.length ? activeIndex(this.s.cues, t) : -1
-    const sLive = sIdx >= 0 ? liveIndexes(this.s.cues, sIdx, t) : []
-    const key = this.p.url ? `${this.p.url}|${this.s.url}|${tokenizer ? 1 : 0}|${live.join(",")}|${sLive.join(",")}` : "off"
+    const extraLive = this.extras.map((e) => {
+      const i = e.cues.length ? activeIndex(e.cues, t) : -1
+      return i >= 0 ? liveIndexes(e.cues, i, t) : []
+    })
+    const key = this.p.url
+      ? `${this.p.url}|${this.extras.map((e) => e.url).join(",")}|${tokenizer ? 1 : 0}|${live.join(",")}|${extraLive.map((l) => l.join(",")).join(";")}`
+      : "off"
     if (key === this.overlayKey) return
     this.overlayKey = key
     if (!this.hovering) this.hideTip()
@@ -302,15 +312,18 @@ export const StudySidebar = {
     for (const i of live) {
       const line = document.createElement("div")
       line.className = "study-line"
+      line.dataset.lang = this.p.lang
       fillLine(line, this.p.cues[i].text, this.p.lang)
       this.overlay.appendChild(line)
     }
-    if (sLive.length) {
+    this.extras.forEach((e, k) => {
+      if (!extraLive[k].length) return
       const trans = document.createElement("div")
       trans.className = "study-trans study-line"
-      trans.textContent = sLive.map((i) => this.s.cues[i].text).join(" ")
+      trans.dataset.lang = e.lang
+      fillLine(trans, extraLive[k].map((i) => e.cues[i].text).join(" "), e.lang)
       this.overlay.appendChild(trans)
-    }
+    })
   },
 
   // ── the card for a word ────────────────────────────────────────────
@@ -392,8 +405,11 @@ export const StudySidebar = {
     if (this.tipFor === word) this.fillTip(word, text, result)
   },
 
-  // Which track's language a word on screen belongs to (the studied one: only it has words).
-  langOf() { return this.p.lang },
+  // Which track's language a word on screen belongs to: the line (or list row text) it is in.
+  langOf(word) {
+    const holder = word.closest("[data-lang]")
+    return (holder && holder.dataset.lang) || this.p.lang
+  },
 
   async define(lang, word) {
     const key = `${lang}:${word}`
@@ -581,8 +597,8 @@ export const StudySidebar = {
 
   // ── the list ───────────────────────────────────────────────────────
 
-  // The track being studied: its lines, with the words and the translation under each, and
-  // the language (so the words know what to ask).
+  // The first track: its lines, with the words and the other tracks under each, and the language
+  // (so the words know what to ask).
   setPrimary(vtt, name, track) {
     const p = this.p
     p.cues = parseVtt(vtt)
@@ -598,46 +614,52 @@ export const StudySidebar = {
     this.buildRows()
   },
 
-  // The translation: its lines go under the studied ones, in the overlay and in the list.
-  setSecondary(vtt, name, track) {
-    const s = this.s
-    s.cues = parseVtt(vtt)
-    s.lang = shortLang(track.lang)
-    s.url = track.url
-    s.label = name
+  // Another track on: its lines go under the first one's, in the overlay and in the list.
+  setExtra(e, vtt, track) {
+    e.cues = parseVtt(vtt)
+    e.lang = shortLang(track.lang)
+    e.url = track.url
     this.overlayKey = ""
+    if (e.lang === "ja") loadKuromoji().then(() => this.retokenize())
     this.buildRows()
   },
 
   // Kuromoji finished loading: the words in what is already on screen are cut again, better.
   retokenize() {
-    if (!this.p.cues.length) return
+    if (!this.p.cues.length && !this.extras.length) return
     this.buildRows()
     this.overlayKey = ""
     this.tick()
   },
 
-  clearTrack(slot) {
-    const t = this[slot]
-    t.cues = []
-    t.url = null
-    t.lang = ""
-    t.loading = null
-    if (slot === "p") { t.rows = []; t.idx = -1; t.live = [] }
+  clearMain() {
+    const p = this.p
+    p.cues = []
+    p.url = null
+    p.lang = ""
+    p.loading = null
+    p.rows = []
+    p.idx = -1
+    p.live = []
     this.overlayKey = ""
     if (this.overlay) this.overlay.textContent = ""
   },
 
-  // The translation lines that belong to a line: those whose middle falls within it (a long
-  // cue — the opening song — would otherwise swallow every line spoken under it), at most
-  // three; failing that, any that overlap it by more than half of their own length.
-  translationFor(cue) {
+  // What the other tracks say while a line is said: those lines whose middle falls within it (a
+  // long cue — the opening song — would otherwise swallow every line spoken under it), at most
+  // three; failing that, any that overlap it by more than half of their own length. One entry
+  // per track that has something.
+  translationsFor(cue) {
     const mid = (c) => (c.start + c.end) / 2
-    let hits = this.s.cues.filter((c) => mid(c) >= cue.start - 0.3 && mid(c) <= cue.end + 0.3)
-    if (!hits.length) {
-      hits = this.s.cues.filter((c) => Math.min(c.end, cue.end) - Math.max(c.start, cue.start) > (c.end - c.start) / 2)
+    const out = []
+    for (const e of this.extras) {
+      let hits = e.cues.filter((c) => mid(c) >= cue.start - 0.3 && mid(c) <= cue.end + 0.3)
+      if (!hits.length) {
+        hits = e.cues.filter((c) => Math.min(c.end, cue.end) - Math.max(c.start, cue.start) > (c.end - c.start) / 2)
+      }
+      if (hits.length) out.push({text: hits.slice(0, 3).map((c) => c.text).join(" "), lang: e.lang})
     }
-    return hits.slice(0, 3).map((c) => c.text).join(" ")
+    return out
   },
 
   buildRows() {
@@ -667,14 +689,15 @@ export const StudySidebar = {
       main.className = "study-main"
       const text = document.createElement("div")
       text.className = "study-text"
+      text.dataset.lang = p.lang
       fillLine(text, cue.text, p.lang)
       main.appendChild(text)
 
-      const trans = this.s.cues.length ? this.translationFor(cue) : ""
-      if (trans) {
+      for (const tr of this.translationsFor(cue)) {
         const t = document.createElement("div")
         t.className = "study-trans"
-        t.textContent = trans
+        t.dataset.lang = tr.lang
+        fillLine(t, tr.text, tr.lang)
         main.appendChild(t)
       }
 
@@ -856,8 +879,9 @@ export const StudySidebar = {
     this.ready = !(p.resume > 0)
     clearInterval(this.seekTimer)
     if (this.hls) { this.hls.destroy(); this.hls = null }
-    this.clearTrack("p")
-    this.clearTrack("s")
+    this.clearMain()
+    this.extras = []
+    this.cache.clear()
     this.audioWrap().hidden = true
 
     if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
@@ -922,29 +946,18 @@ export const StudySidebar = {
 
   // ── the subtitle tracks ────────────────────────────────────────────
 
-  // The release's tracks (and any fetched later). Which two are shown follows what you chose
-  // last time, by language, so a second episode starts as the first ended; the first time it is
-  // your language, with no translation.
+  // Any number of the release's tracks can be on at once, in the order you like: the first is the
+  // one studied (its words have the dictionary, the list is its lines), the others show under it as
+  // translations. Click a track to turn it on or off; ↑ on one that is on makes it the first. What
+  // you chose is remembered by language and name, so the next episode starts the same way.
   setTracks(p) {
     this.tracks = p.tracks || []
     this.mediaKey = p.key || ""
     const saved = parseFloat(store.get("offset:" + this.mediaKey))
     if (!Number.isNaN(saved) && saved !== this.offset && this.setOffset) this.setOffset(saved)
 
-    const want1 = store.get("lang1") || p.prefer
-    const want2 = store.get("lang2")
-    const i1 = this.tracks.findIndex((t) => want1 && shortLang(t.lang) === want1)
-    const first = i1 >= 0 ? i1 : this.p.url && this.p.url !== "upload" ? this.tracks.findIndex((t) => t.url === this.p.url) : -1
-    const idx1 = want1 === "none" ? -1 : first >= 0 ? first : this.tracks.length ? 0 : -1
-    // With nothing chosen yet, a studied language that is not English gets the English track as
-    // its translation.
-    const studiedLang = idx1 >= 0 ? shortLang(this.tracks[idx1].lang) : ""
-    const wanted2 = want2 || (studiedLang && studiedLang !== "en" ? "en" : null)
-    const i2 = wanted2 && wanted2 !== "none" ? this.tracks.findIndex((t, i) => i !== idx1 && shortLang(t.lang) === wanted2 && shortLang(t.lang) !== studiedLang) : -1
-
-    this.choose("p", idx1)
-    this.choose("s", i2)
-    this.renderChips()
+    // Tracks arriving later (a provider's) do not undo what was picked by hand.
+    this.apply(this.userChose ? this.selection() : this.restore(p.prefer))
 
     if (!this.tracks.length && !this.p.cues.length) {
       this.empty.hidden = false
@@ -952,17 +965,79 @@ export const StudySidebar = {
     }
   },
 
-  // Make track `i` (or none: -1) the one for slot `p` or `s`; loads it unless already loaded.
-  choose(slot, i) {
-    const t = this[slot]
-    const track = i >= 0 ? this.tracks[i] : null
-    t.trackIdx = i
-    if (!track) {
-      if (t.url && t.url !== "upload") this.clearTrack(slot)
-      this.buildRows()
-      return
+  // The urls of the tracks that are on, in order.
+  selection() {
+    return [this.p.want, ...this.extras.map((e) => e.want)].filter(Boolean)
+  },
+
+  // What to start with: what was chosen last time (by name, else by language), or the first time
+  // the user's language, with English under it when that is another language.
+  restore(prefer) {
+    let saved = null
+    try { saved = JSON.parse(store.get("layers")) } catch {}
+    if (Array.isArray(saved)) {
+      const used = new Set()
+      const out = []
+      for (const w of saved) {
+        const t =
+          this.tracks.find((t) => !used.has(t.url) && t.label === w.n) ||
+          this.tracks.find((t) => !used.has(t.url) && w.l && shortLang(t.lang) === w.l)
+        if (t) { used.add(t.url); out.push(t.url) }
+      }
+      if (out.length || saved.length === 0) return out
     }
-    if (track.url !== t.url) this.loadTrack(slot, track)
+    const main = this.tracks.find((t) => prefer && shortLang(t.lang) === prefer) || this.tracks[0]
+    if (!main) return []
+    const out = [main.url]
+    if (shortLang(main.lang) !== "en") {
+      const en = this.tracks.find((t) => t.url !== main.url && shortLang(t.lang) === "en")
+      if (en) out.push(en.url)
+    }
+    return out
+  },
+
+  // Make exactly these tracks the ones on, in this order, loading what is not loaded yet.
+  apply(urls) {
+    const track = (u) => this.tracks.find((t) => t.url === u)
+    urls = urls.filter(track)
+    const [first, ...rest] = urls
+
+    this.p.want = first || null
+    if (!first) {
+      if (this.p.url && this.p.url !== "upload") this.clearMain()
+    } else if (this.p.url !== first) {
+      this.clearMain()
+      this.p.want = first
+      this.fill(this.p, track(first))
+    }
+
+    const old = new Map(this.extras.map((e) => [e.want, e]))
+    for (const [u, e] of old) if (!rest.includes(u)) e.loading = null // stop loading what was turned off
+    this.extras = rest.map((u) => {
+      if (old.has(u)) return old.get(u)
+      const t = track(u)
+      const e = {cues: [], lang: shortLang(t.lang), url: null, label: t.label, want: u, loading: null}
+      this.fill(e, t)
+      return e
+    })
+    this.extras.forEach((e) => { if (!e.cues.length && !e.loading) this.fill(e, track(e.want)) })
+
+    this.overlayKey = ""
+    this.buildRows()
+    this.renderChips()
+  },
+
+  // Put a track's lines into a layer: from what was downloaded before, or by loading it.
+  fill(target, track) {
+    if (!track) return
+    const text = this.cache.get(track.url)
+    if (text) this.finish(target, text, track)
+    else this.loadTrack(target, track)
+  },
+
+  finish(target, text, track) {
+    if (target === this.p) this.setPrimary(text, track.label, track)
+    else this.setExtra(target, text, track)
   },
 
   renderChips() {
@@ -975,101 +1050,109 @@ export const StudySidebar = {
       seen[t.label] = (seen[t.label] || 0) + 1
       return seen[t.label] > 1 ? `${t.label} ${seen[t.label]}` : t.label
     })
+    const on = this.selection()
 
-    const group = (name, active, none, pick, skip) => {
-      // `skip(t, i)`: tracks that do not belong in this group.
-      const rows = this.tracks.map((t, i) => [t, i]).filter(([t, i]) => !skip(t, i))
-      if (name === "Translation" && !rows.length) return
-      const g = document.createElement("div")
-      g.className = "study-group"
-      const l = document.createElement("span")
-      l.className = "study-group-label"
-      l.textContent = name
-      g.appendChild(l)
-      const chip = (label, on, click) => {
-        const b = document.createElement("button")
-        b.type = "button"
-        b.className = "btn btn-sm " + (on ? "btn-primary" : "")
-        b.textContent = label
-        b.setAttribute("aria-pressed", String(on))
-        b.addEventListener("click", click)
-        g.appendChild(b)
-      }
-      for (const [, i] of rows) chip(labels[i], i === active, () => pick(i))
-      chip(none, active < 0, () => pick(-1))
-      bar.appendChild(g)
+    const group = document.createElement("div")
+    group.className = "study-group"
+    const name = document.createElement("span")
+    name.className = "study-group-label"
+    name.textContent = "Subtitles"
+    group.appendChild(name)
+
+    const button = (text, cls, click, title) => {
+      const b = document.createElement("button")
+      b.type = "button"
+      b.className = "btn btn-sm " + cls
+      b.textContent = text
+      if (title) b.title = title
+      b.addEventListener("click", click)
+      return b
     }
 
-    // What is studied can be any track but the translation; the translation is another language.
-    const studied = this.p.trackIdx >= 0 ? shortLang(this.tracks[this.p.trackIdx].lang) : null
-    group("Subtitles", this.p.trackIdx, "Off", (i) => this.pick("p", i), (t, i) => i === this.s.trackIdx)
-    group(
-      "Translation",
-      this.s.trackIdx,
-      "None",
-      (i) => this.pick("s", i),
-      (t, i) => i === this.p.trackIdx || (studied && shortLang(t.lang) === studied)
-    )
+    this.tracks.forEach((t, i) => {
+      const k = on.indexOf(t.url)
+      const cls = k === 0 ? "btn-primary" : k > 0 ? "btn-outline btn-primary" : ""
+      const mark = k === 0 ? "★ " : k > 0 ? `${k + 1} · ` : ""
+      const chip = button(mark + labels[i], cls, () => this.toggle(i), k < 0 ? "Show this track" : "Turn this track off")
+      chip.setAttribute("aria-pressed", String(k >= 0))
+      if (k > 0) {
+        const wrap = document.createElement("div")
+        wrap.className = "join"
+        chip.classList.add("join-item")
+        const up = button("↑", "btn-outline btn-primary btn-square join-item", () => this.promote(i), "Make this the main subtitles")
+        wrap.append(chip, up)
+        group.appendChild(wrap)
+      } else {
+        group.appendChild(chip)
+      }
+    })
+    group.appendChild(button("Off", on.length === 0 ? "btn-primary" : "", () => this.setSelection([]), "No subtitles"))
+    bar.appendChild(group)
+
+    const hint = document.createElement("p")
+    hint.className = "study-hint"
+    hint.textContent = "Turn any number on. ★ is the main one (hover its words); the others show under it, in order. ↑ moves one to the top."
+    bar.appendChild(hint)
   },
 
-  pick(slot, i) {
-    const other = slot === "p" ? "s" : "p"
-    // Studying a different language than before: what was being read becomes the translation
-    // (Japanese chosen over English → Japanese on top, English under it), unless one is chosen.
-    const before = this.p.trackIdx
-    if (slot === "p" && i >= 0 && before >= 0 && before !== i && this.s.trackIdx < 0 &&
-        shortLang(this.tracks[before].lang) !== shortLang(this.tracks[i].lang)) {
-      store.set("lang2", shortLang(this.tracks[before].lang) || "x")
-      this.choose("s", before)
-    }
-    // The same track cannot be both: choosing it for one takes it from the other.
-    if (i >= 0 && this[other].trackIdx === i) this.choose(other, -1)
-    store.set(slot === "p" ? "lang1" : "lang2", i >= 0 ? shortLang(this.tracks[i].lang) || "x" : "none")
-    this.choose(slot, i)
-    this.renderChips()
-    this.overlayKey = ""
+  toggle(i) {
+    const u = this.tracks[i].url
+    const on = this.selection()
+    this.setSelection(on.includes(u) ? on.filter((x) => x !== u) : [...on, u])
+  },
+
+  promote(i) {
+    const u = this.tracks[i].url
+    this.setSelection([u, ...this.selection().filter((x) => x !== u)])
+  },
+
+  setSelection(urls) {
+    this.userChose = true
+    const desc = urls.map((u) => this.tracks.find((t) => t.url === u)).filter(Boolean).map((t) => ({l: shortLang(t.lang), n: t.label}))
+    store.set("layers", JSON.stringify(desc))
+    this.apply(urls)
     this.tick()
   },
 
   // A release's tracks are written by ffmpeg while the player already runs: the file may not
   // exist yet (404) and then grows as it reads on. So it is fetched again every few seconds
-  // until it stops getting longer.
-  async loadTrack(slot, track) {
-    const t = this[slot]
-    t.loading = track.url
+  // until it stops getting longer. `target` is the main layer or one of the extras.
+  async loadTrack(target, track) {
+    target.loading = track.url
     let seen = -1
     let still = 0
+    const main = target === this.p
 
-    for (let tries = 0; tries < 75 && t.loading === track.url; tries++) {
+    for (let tries = 0; tries < 75 && target.loading === track.url; tries++) {
       try {
         const res = await fetch(track.url, {credentials: "same-origin", cache: "no-store"})
 
         if (res.ok) {
           const text = await res.text()
-          if (t.loading !== track.url) return
+          if (target.loading !== track.url) return
           const n = parseVtt(text).length
           if (n === 0) {
-            if (slot === "p" && !t.cues.length) {
+            if (main && !target.cues.length) {
               this.empty.hidden = false
               this.empty.textContent = "Reading the subtitles out of the release…"
             }
           } else if (n > seen) {
             seen = n
             still = 0
-            if (slot === "p") this.setPrimary(text, track.label, track)
-            else this.setSecondary(text, track.label, track)
+            this.cache.set(track.url, text)
+            this.finish(target, text, track)
           } else if (++still >= 3) return
         } else if (res.status === 404) {
-          if (slot === "p" && !t.cues.length) {
+          if (main && !target.cues.length) {
             this.empty.hidden = false
             this.empty.textContent = "Reading the subtitles out of the release…"
           }
         } else {
-          if (slot === "p") this.title.textContent = "Couldn't load that subtitle track."
+          if (main) this.title.textContent = "Couldn't load that subtitle track."
           return
         }
       } catch {
-        if (slot === "p") this.title.textContent = "Couldn't load that subtitle track."
+        if (main) this.title.textContent = "Couldn't load that subtitle track."
       }
       await new Promise((resolve) => setTimeout(resolve, 4000))
     }
