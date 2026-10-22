@@ -283,8 +283,8 @@ defmodule RokiWeb.HomeLive do
         </div>
       </div>
 
-      <.poster_row title="Continue watching" items={@data.continue} />
-      <.poster_row title="Saved for later" items={@data.saved} />
+      <.poster_row title="Watchlist" items={@data.saved} />
+      <.poster_row title="History" items={@data.continue} />
 
       <section class="space-y-3">
         <h2 class="text-xl font-semibold">Connections</h2>
