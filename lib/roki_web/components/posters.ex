@@ -57,10 +57,12 @@ defmodule RokiWeb.PosterComponents do
           class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-6 text-white"
           title={resume_title(@item)}
         >
-          <div class="text-xs font-medium leading-tight">
+          <div class="whitespace-nowrap text-[0.7rem] font-medium leading-tight">
             ▶ Continue from {clock(@item.resume_at)}
           </div>
-          <div :if={left(@item)} class="text-[0.7rem] leading-tight text-white/75">{left(@item)}</div>
+          <div :if={left(@item)} class="whitespace-nowrap text-[0.65rem] leading-tight text-white/75">
+            {left(@item)}
+          </div>
           <div
             :if={@item[:runtime] && @item.runtime > @item.resume_at}
             class="mt-1 h-0.5 w-full rounded bg-white/25"
@@ -71,8 +73,8 @@ defmodule RokiWeb.PosterComponents do
         <span
           :if={@cached?}
           class={[
-            "badge badge-success badge-sm absolute left-1.5 gap-1 shadow",
-            if(@item[:resume_at], do: "bottom-14", else: "bottom-1.5")
+            "badge badge-success badge-sm absolute right-1.5 gap-1 shadow",
+            if(@item[:badge], do: "top-8", else: "top-1.5")
           ]}
           title="Sources are cached: plays right away"
         >
