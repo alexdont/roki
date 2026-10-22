@@ -203,7 +203,19 @@ defmodule RokiWeb.PosterComponents do
 
   defp bar(_prog, _item), do: 0
 
-  defp due_text(%Date{} = d), do: Calendar.strftime(d, "%-d %b %Y")
+  # "18 Dec 2026 (in 57 days)"
+  defp due_text(%Date{} = d) do
+    days = Date.diff(d, Date.utc_today())
+
+    in_days =
+      case days do
+        n when n <= 0 -> "today"
+        1 -> "tomorrow"
+        n -> "in #{n} days"
+      end
+
+    "#{Calendar.strftime(d, "%-d %b %Y")} (#{in_days})"
+  end
 
   defp icon_clock(assigns) do
     ~H"""

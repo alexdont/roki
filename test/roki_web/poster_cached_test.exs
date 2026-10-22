@@ -103,20 +103,35 @@ defmodule RokiWeb.PosterCachedTest do
     assert html =~ ~s(data-peek-progress="1 of 3 seasons watched · 8 of 22 episodes")
   end
 
-  test "a title that is not out yet gets a red mark with its date" do
+  test "a title that is not out yet gets a red mark with its date and how far off it is" do
+    date = Date.add(Date.utc_today(), 57)
+    text = "Not out yet: #{Calendar.strftime(date, "%-d %b %Y")} (in 57 days)"
+
     html =
       render_component(&RokiWeb.PosterComponents.poster/1,
         item: @item,
-        upcoming: %{{"movie", 7} => ~D[2026-12-18]}
+        upcoming: %{{"movie", 7} => date}
       )
 
     assert html =~ "bg-error"
-    assert html =~ "Not out yet: 18 Dec 2026"
-    assert html =~ ~s(data-peek-due="Not out yet: 18 Dec 2026")
+    assert html =~ ~s(title="#{text}")
+    assert html =~ ~s(data-peek-due="#{text}")
 
     refute render_component(&RokiWeb.PosterComponents.poster/1,
              item: @item,
-             upcoming: %{{"movie", 8} => ~D[2026-12-18]}
+             upcoming: %{{"movie", 8} => date}
            ) =~ "bg-error"
+  end
+
+  test "tomorrow and today are said as words" do
+    for {offset, word} <- [{1, "(tomorrow)"}, {0, "(today)"}] do
+      html =
+        render_component(&RokiWeb.PosterComponents.poster/1,
+          item: @item,
+          upcoming: %{{"movie", 7} => Date.add(Date.utc_today(), offset)}
+        )
+
+      assert html =~ word
+    end
   end
 end
