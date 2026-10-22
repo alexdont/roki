@@ -837,60 +837,65 @@ defmodule RokiWeb.TitleLive do
       <%!-- The row is a size container: the poster is sized in its units (two thirds of its height,
             but never more than 62% of its width), so it never depends on its own content — a
             percentage height plus an aspect ratio collapses to nothing in Safari. --%>
-      <div class="flex min-h-0 flex-1 gap-3 px-4 [container-type:size]">
-        <div class="relative aspect-[2/3] w-[min(66.6667cqh,76cqw)] shrink-0 self-start overflow-hidden rounded-box bg-base-300 shadow-lg">
-          <img
-            :if={@title.poster}
-            src={@title.poster}
-            alt={@title.title}
-            class="absolute inset-0 h-full w-full object-cover"
-          />
-        </div>
+      <%!-- The poster row and the synopsis are one block, sized in its units (a size container): the
+            row is as tall as the poster can be — the block's height less the synopsis, or what its
+            width allows — and the synopsis follows it directly, so there is no gap between them. --%>
+      <div class="flex min-h-0 flex-1 flex-col gap-3 [container-type:size]">
+        <div class="flex h-[min(calc(100cqh-7rem),105cqw)] shrink-0 gap-3 px-4">
+          <div class="relative aspect-[2/3] w-[min(calc((100cqh-7rem)*0.66667),70cqw)] shrink-0 self-start overflow-hidden rounded-box bg-base-300 shadow-lg">
+            <img
+              :if={@title.poster}
+              src={@title.poster}
+              alt={@title.title}
+              class="absolute inset-0 h-full w-full object-cover"
+            />
+          </div>
 
-        <%!-- Icons only: saved, watched, rating — three tiles sharing the poster's height, the icon
+          <%!-- Icons only: saved, watched, rating — three tiles sharing the poster's height, the icon
               centred in each. The state is the colour; the label is the tooltip. --%>
-        <%!-- As tall as the poster, never taller: the poster's height is 1.5 x its width, which on a
+          <%!-- As tall as the poster, never taller: the poster's height is 1.5 x its width, which on a
               narrow screen is the width cap and not the row's height. --%>
-        <div
-          :if={@linked?}
-          class="flex h-[min(100cqh,114cqw)] min-w-0 flex-1 flex-col gap-2 self-start"
-        >
-          <.round_btn
-            event="toggle_saved"
-            on={@lib.saved?}
-            icon="bookmark"
-            label={if @lib.saved?, do: "Saved for later (tap to remove)", else: "Save for later"}
-            on_class="btn-primary"
-          />
-          <.round_btn
-            :if={@title.type == "movie" or not @title.anime?}
-            event="toggle_watched"
-            on={watched_state?(@title, @lib)}
-            icon="check-circle"
-            label={
-              if watched_state?(@title, @lib),
-                do: "Watched (tap to unmark)",
-                else: watched_label(@title, @lib)
-            }
-            on_class="btn-success"
-            busy={@lib_busy}
-          />
-          <.rate_tile title={@title} rating={@rating} />
+          <div
+            :if={@linked?}
+            class="flex h-[min(calc(100cqh-7rem),105cqw)] min-w-0 flex-1 flex-col gap-2 self-start"
+          >
+            <.round_btn
+              event="toggle_saved"
+              on={@lib.saved?}
+              icon="bookmark"
+              label={if @lib.saved?, do: "Saved for later (tap to remove)", else: "Save for later"}
+              on_class="btn-primary"
+            />
+            <.round_btn
+              :if={@title.type == "movie" or not @title.anime?}
+              event="toggle_watched"
+              on={watched_state?(@title, @lib)}
+              icon="check-circle"
+              label={
+                if watched_state?(@title, @lib),
+                  do: "Watched (tap to unmark)",
+                  else: watched_label(@title, @lib)
+              }
+              on_class="btn-success"
+              busy={@lib_busy}
+            />
+            <.rate_tile title={@title} rating={@rating} />
+          </div>
         </div>
-      </div>
 
-      <button
-        :if={@title.overview}
-        type="button"
-        phx-click={JS.show(to: "#about-sheet", display: "flex")}
-        class="shrink-0 text-left"
-        aria-label="Read the full description and more details"
-      >
-        <span class="line-clamp-4 text-sm text-base-content/80">{@title.overview}</span>
-        <span class="flex items-center gap-1 text-xs font-medium text-primary">
-          More <.icon name="hero-chevron-up-micro" class="h-4 w-4" />
-        </span>
-      </button>
+        <button
+          :if={@title.overview}
+          type="button"
+          phx-click={JS.show(to: "#about-sheet", display: "flex")}
+          class="shrink-0 text-left"
+          aria-label="Read the full description and more details"
+        >
+          <span class="line-clamp-4 text-sm text-base-content/80">{@title.overview}</span>
+          <span class="flex items-center gap-1 text-xs font-medium text-primary">
+            More <.icon name="hero-chevron-up-micro" class="h-4 w-4" />
+          </span>
+        </button>
+      </div>
 
       <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
       <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
