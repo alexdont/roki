@@ -101,7 +101,11 @@ defmodule RokiWeb.Layouts do
         <div class="flex items-stretch">
           <button
             type="button"
-            phx-click={JS.toggle(to: "#search-pop", display: "flex") |> JS.focus(to: "#search-input")}
+            phx-click={
+              JS.hide(to: "#mobile-nav")
+              |> JS.toggle(to: "#search-pop", display: "flex")
+              |> JS.focus(to: "#search-input")
+            }
             class="flex items-center px-3 text-base-content/70 transition hover:bg-base-200 hover:text-base-content"
             aria-label="Search"
             title="Search"
@@ -135,27 +139,17 @@ defmodule RokiWeb.Layouts do
           />
         </div>
 
-        <%!-- On a phone the sections move into a menu. --%>
-        <div class="dropdown dropdown-end flex items-center md:hidden">
-          <div tabindex="0" role="button" class="btn btn-ghost btn-square btn-sm" aria-label="Menu">
-            <.icon name="hero-bars-3" class="h-6 w-6" />
-          </div>
-          <ul
-            tabindex="0"
-            class="menu dropdown-content z-[60] mt-3 w-52 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
-          >
-            <li :for={{label, href} <- @sections}>
-              <.link navigate={href} class={active?(@current_path, href) && "menu-active"}>
-                {label}
-              </.link>
-            </li>
-            <li class="disabled">
-              <span>Manga <span class="badge badge-ghost badge-xs">soon</span></span>
-            </li>
-            <li class="menu-title mt-1">Theme</li>
-            <li class="px-2 py-1"><.theme_toggle /></li>
-          </ul>
-        </div>
+        <%!-- On a phone the sections move into a panel under the header (not a small dropdown
+              that can run off the edge of the screen). --%>
+        <button
+          type="button"
+          phx-click={JS.toggle(to: "#mobile-nav", display: "block") |> JS.hide(to: "#search-pop")}
+          class="flex items-center px-2 text-base-content/70 hover:text-base-content md:hidden"
+          aria-label="Menu"
+          aria-controls="mobile-nav"
+        >
+          <.icon name="hero-bars-3" class="h-6 w-6" />
+        </button>
       </div>
 
       <%!-- Search opens under the icon, big enough to type in; Enter goes to the results, Escape or
@@ -180,6 +174,37 @@ defmodule RokiWeb.Layouts do
           class="input input-ghost w-full focus:outline-none"
         />
       </form>
+
+      <nav
+        id="mobile-nav"
+        aria-label="Sections"
+        class="absolute inset-x-3 top-full z-50 mt-1 hidden rounded-box border border-base-300 bg-base-100 p-2 shadow-xl md:hidden"
+        phx-click-away={JS.hide(to: "#mobile-nav")}
+        phx-window-keydown={JS.hide(to: "#mobile-nav")}
+        phx-key="escape"
+      >
+        <.link
+          :for={{label, href} <- @sections}
+          navigate={href}
+          class={[
+            "flex items-center justify-between rounded-lg px-4 py-3 text-base font-medium",
+            if(active?(@current_path, href),
+              do: "bg-base-200 text-primary",
+              else: "hover:bg-base-200"
+            )
+          ]}
+        >
+          {label}
+          <.icon name="hero-chevron-right-micro" class="h-4 w-4 opacity-40" />
+        </.link>
+        <div class="flex cursor-not-allowed items-center justify-between rounded-lg px-4 py-3 text-base font-medium text-base-content/40">
+          Manga <span class="badge badge-ghost badge-sm">soon</span>
+        </div>
+        <div class="mt-1 flex items-center justify-between border-t border-base-300 px-4 pb-2 pt-3">
+          <span class="text-sm text-base-content/60">Theme</span>
+          <.theme_toggle />
+        </div>
+      </nav>
     </header>
 
     <main class="px-4 py-8 sm:px-6 lg:px-8">

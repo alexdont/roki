@@ -67,4 +67,16 @@ defmodule RokiWeb.HeaderTest do
     assert redirected_to(get(conn, "/phoenix_kit/en/profile/settings")) == "/accounttest/settings"
     assert redirected_to(get(build_conn(), "/phoenix_kit/en/profile/settings")) =~ "log-in"
   end
+
+  test "on a phone the sections are a panel under the header, not a small dropdown", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/lists")
+
+    assert html =~ ~s(id="mobile-nav")
+    assert html =~ ~s(aria-controls="mobile-nav")
+    # inset from both edges and the full width of the screen, so it cannot run off the side
+    assert html =~ "inset-x-3"
+    refute html =~ "dropdown-content z-[60] mt-3 w-52"
+
+    for label <- ~w(Movies Shows Anime Manga), do: assert(html =~ label)
+  end
 end
