@@ -370,3 +370,14 @@ Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`)
 ### Rating on TMDB
 
 The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet.
+
+## The watch flow (replaces the single-page Play described above)
+
+Pages, in order — nothing plays on the title page any more:
+
+1. `/title/:type/:id` (`TitleLive`) — the title. A film's Play → sources; a series' Play → episodes.
+2. `/title/tv/:id/episodes` (`TitleLive`, `:episodes`) — season picker, episodes with watched marks, per-episode Play → that episode's sources (`?auto=1`).
+3. `/sources/movie/:id`, `/sources/tv/:id/:season/:episode` (`SourcesLive`) — searches and checks the releases (`Roki.Watch.Resolver`, source cache first). Arriving with `?auto=1` shows the pop-up ("Starting the best source", a bar, Cancel / click outside / Escape) unless laev's auto-pick is `off` (`Watch.auto_start?/1`; unset = on). The address is cleaned at once, so Back or a reload only lists. When found: Browser device → `push_navigate` to the player page; External player → the app is launched and the page stays (panel + list). Cancelled or off → the releases are listed (Play / External per release, Load more, Retry).
+3. `/watch/movie/:id`, `/watch/tv/:id/:season/:episode?h=<info hash>` (`WatchLive`) — the player page (video + subtitle sidebar). `h` names the release; without it the best is chosen and the address is updated (`push_patch replace`) to name it, so the URL can be copied, reloaded, and Back returns to the sources. A shared URL looks for the hash among the checked releases (a few extra pages) and falls back to the best. Progress goes through laev as before; the next episode autoplays when laev's autoplay is on.
+
+Shared pieces: `Roki.Watch.Resolver` (find/probe/pick/failure texts), `RokiWeb.WatchComponents` (mode switch, release list, external panel, pop-up). `test/e2e/flow.js` and `flow2.js` are the manual end-to-end runs (they use a real debrid account and a session cookie in `/tmp/e2e-cookie.txt`; clean up history, the source cache and the remux directory afterwards).

@@ -650,6 +650,20 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  Whether the sources page starts the best source by itself (with a pop-up that can be
+  cancelled): on unless the user set laev's auto-pick to off. Laev's own default asks each time,
+  which in a browser would mean a page that never moves.
+  """
+  def auto_start?(uuid) do
+    Roki.Laev.run(uuid, fn ->
+      setting =
+        Laev.Settings.get("LAEV_AUTO_SOURCE") |> to_string() |> String.downcase() |> String.trim()
+
+      setting not in ["off", "false", "no", "0"]
+    end)
+  end
+
   @doc "Whether the user's settings want the best source played without asking."
   def auto_source?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.auto_source?/0)
 
