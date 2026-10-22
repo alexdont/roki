@@ -363,17 +363,32 @@ defmodule Roki.Watch do
   # ── the user's ceiling and the automatic pick ──────────────────────
 
   @doc """
-  The highest resolution to start by itself for this title: what the user last picked for it
-  by hand, else their setting. `nil` is no ceiling. Run in the user's scope.
+  The highest resolution to start by itself for this title on this device: what the user last
+  picked for it by hand, else the setting for the player in use — laev's ceiling for an
+  external player, the site's own browser cap for the page (default 1080p; a browser cannot
+  decode HEVC, so more is a heavy re-encode, and the cap is never above 1080p). The two are
+  independent settings. `nil` is no ceiling. Run in the user's scope.
   """
-  def ceiling(uuid, ctx) do
+  def ceiling(uuid, ctx, mode, web) do
+    limit = web["browser_max_resolution"] || @transcode_cap
+
     Roki.Laev.run(uuid, fn ->
-      case Laev.Resume.get(ctx.type, ctx.tmdb_id) do
-        %{"pref_resolution" => r} when is_binary(r) -> r
-        _ -> Laev.Config.max_resolution()
+      pref =
+        case Laev.Resume.get(ctx.type, ctx.tmdb_id) do
+          %{"pref_resolution" => r} when is_binary(r) -> r
+          _ -> nil
+        end
+
+      case mode do
+        :external -> pref || Laev.Config.max_resolution()
+        :browser -> cap_to(pref || limit, limit)
       end
     end)
   end
+
+  @doc "The lower of a ceiling and a limit (`nil` is no ceiling)."
+  def cap_to(nil, limit), do: limit
+  def cap_to(cap, limit), do: if(Sources.resolution_at_most?(limit, cap), do: limit, else: cap)
 
   @doc """
   What plays when nobody is asked — laev's own rule: the best release not above the ceiling,
@@ -454,18 +469,6 @@ defmodule Roki.Watch do
       Laev.Position.set_watched(ctx, true)
       Laev.Sync.live_push()
     end)
-  end
-
-  @doc """
-  The resolution ceiling for a device: the user's laev ceiling, and in the browser also the
-  site's own cap (default 1080p — a browser cannot decode HEVC, so anything above that is a
-  heavy re-encode). The lower of the two. `nil` means no ceiling.
-  """
-  def device_cap(cap, :external, _web), do: cap
-
-  def device_cap(cap, :browser, web) do
-    limit = web["browser_max_resolution"] || @transcode_cap
-    if Sources.resolution_at_most?(limit, cap), do: limit, else: cap
   end
 
   @doc "Whether the user's settings want the best source played without asking."

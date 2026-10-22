@@ -127,7 +127,7 @@ defmodule RokiWeb.SettingsLiveTest do
     {:ok, view, _} = live(conn, "/settingstest/settings")
     html = render_async(view)
 
-    assert html =~ "This site"
+    assert html =~ "this page&#39;s player"
     assert has_element?(view, "#w-browser_max_resolution option[selected]", "1080p")
 
     html =

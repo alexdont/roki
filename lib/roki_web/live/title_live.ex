@@ -297,7 +297,7 @@ defmodule RokiWeb.TitleLive do
          _ = say.("Searching for releases…"),
          {:ok, %{query: query, sources: found}} <- Watch.sources(title, season, episode, uuid),
          sources = Watch.with_library(uuid, query, found),
-         cap = Watch.device_cap(Watch.ceiling(uuid, ctx), mode, Roki.Laev.web_settings(uuid)),
+         cap = Watch.ceiling(uuid, ctx, mode, Roki.Laev.web_settings(uuid)),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, playable, rest} <- probe_until_playable(parent, token, uuid, ctx, sources, []) do
       {:ok, %{token: token, ctx: ctx, playable: playable, rest: rest, cap: cap}}

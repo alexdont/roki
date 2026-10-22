@@ -24,23 +24,26 @@ defmodule RokiWeb.SettingsLive do
   @groups [
     playback: "Playback",
     language: "Language",
-    web: "This site's player",
     cli: "Terminal app only"
   ]
 
+  # The resolution ceiling is two settings: laev's own (external player and terminal app, any
+  # value) and the site's (the page's player, nothing above 1080p), shown one under the other.
   @web_hints %{
     "browser_max_resolution" =>
-      "The highest resolution the player on this page will start on its own. A browser cannot decode HEVC, so above 1080p the server has to re-encode the release. 4K is for your external player (VLC), which follows the ceiling above."
+      "For the player on this page, up to 1080p: a browser cannot decode HEVC, so more would mean the server re-encoding the release. Set the 4K you want under the external player."
   }
-  @web_labels %{"browser_max_resolution" => "Browser player resolution"}
+  @web_labels %{"browser_max_resolution" => "Resolution ceiling — this page's player"}
+  @labels %{"LAEV_MAX_RESOLUTION" => "Resolution ceiling — external player & terminal app"}
 
   @hints %{
     "LAEV_PLAYER" =>
       "Which player the terminal app opens. On this site each device chooses on the title page: this page or VLC.",
     "LAEV_AUTO_SOURCE" => "Play the best source instead of asking which one.",
     "LAEV_MAX_RESOLUTION" =>
-      "The highest resolution to start on its own in the terminal app and in your external player. The browser player has its own cap below. Every release is still listed.",
-    "LAEV_STRICT_RESOLUTION" => "Drop releases above the ceiling before they are even checked.",
+      "The highest resolution to start on its own in VLC or another external player and in the terminal app. Any value. Every release is still listed.",
+    "LAEV_STRICT_RESOLUTION" =>
+      "Drop releases above the ceiling of the player you are using before they are even checked.",
     "LAEV_AUTOPLAY" => "Start the next episode when one ends.",
     "LAEV_SKIP" =>
       "Intros and credits: ask with a button, skip automatically, or leave alone. Not available on this site yet.",
@@ -290,7 +293,8 @@ defmodule RokiWeb.SettingsLive do
         checkable: @checkable,
         web_specs: Laev.web_setting_specs(),
         web_hints: @web_hints,
-        web_labels: @web_labels
+        web_labels: @web_labels,
+        labels: @labels
       )
 
     ~H"""
@@ -323,7 +327,7 @@ defmodule RokiWeb.SettingsLive do
         >
           <section
             :for={{group, title} <- @groups}
-            :if={group == :web or @by_group[group]}
+            :if={@by_group[group]}
             class="space-y-1"
           >
             <h2 class="text-xl font-semibold">{title}</h2>
@@ -332,21 +336,18 @@ defmodule RokiWeb.SettingsLive do
               Change them there; they show up here when your devices sync.
             </p>
             <div class="divide-y divide-base-300">
-              <.web_row
-                :for={{key, spec} <- if(group == :web, do: @web_specs, else: [])}
-                key={key}
-                spec={spec}
-                value={@web[key] || spec.default}
-                label={@web_labels[key]}
-                hint={@web_hints[key]}
-                saved={@saved}
-              />
-              <.setting_row
-                :for={s <- @by_group[group] || []}
-                s={s}
-                saved={@saved}
-                locked={group == :cli}
-              />
+              <%= for s <- @by_group[group] || [] do %>
+                <.setting_row s={s} saved={@saved} locked={group == :cli} label={@labels[s.key]} />
+                <.web_row
+                  :for={{key, spec} <- web_rows_after(s.key, @web_specs)}
+                  key={key}
+                  spec={spec}
+                  value={@web[key] || spec.default}
+                  label={@web_labels[key]}
+                  hint={@web_hints[key]}
+                  saved={@saved}
+                />
+              <% end %>
             </div>
           </section>
         </form>
@@ -450,9 +451,16 @@ defmodule RokiWeb.SettingsLive do
     """
   end
 
+  # The site's browser cap sits right under laev's ceiling.
+  defp web_rows_after("LAEV_MAX_RESOLUTION", specs),
+    do: Enum.filter(specs, &(elem(&1, 0) == "browser_max_resolution"))
+
+  defp web_rows_after(_key, _specs), do: []
+
   attr :s, :map, required: true
   attr :saved, :any, default: nil
   attr :locked, :boolean, default: false
+  attr :label, :string, default: nil
 
   defp setting_row(assigns) do
     assigns =
@@ -471,7 +479,7 @@ defmodule RokiWeb.SettingsLive do
       title={if @locked, do: "Terminal app only: change it in the laev CLI"}
     >
       <label for={@id} class="min-w-0 sm:w-1/2">
-        <span class="font-medium">{@s.label}</span>
+        <span class="font-medium">{@label || @s.label}</span>
         <span :if={@locked} class="badge badge-sm badge-ghost ml-2 align-middle">CLI only</span>
         <span :if={@hint} class="block text-xs text-base-content/60">{@hint}</span>
       </label>
