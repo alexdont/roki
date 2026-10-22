@@ -299,10 +299,10 @@ defmodule RokiWeb.HomeLive do
         count={length(@data.watchlist.behind)}
         items={@data.watchlist.behind}
       />
-      <.history items={@data.continue} open={@history_open} />
+      <.poster_fold title="Saved" items={@data.saved} />
       <.poster_fold title="Caught up" items={@data.watchlist.caught_up} />
       <.poster_fold title="On hold" items={@data.watchlist.on_hold} />
-      <.poster_fold title="Saved" items={@data.saved} />
+      <.history items={@data.continue} open={@history_open} />
 
       <section class="space-y-3">
         <h2 class="text-xl font-semibold">Connections</h2>
