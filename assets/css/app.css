@@ -148,3 +148,37 @@
 }
 /* `btn` sets its own display, which would beat the hidden attribute. */
 [data-role="resume"][hidden] { display: none; }
+
+/* The hover card on a poster (assets/js/peek.js). */
+.peek-card {
+  position: fixed;
+  z-index: 80;
+  width: 17rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.75rem;
+  background: var(--color-base-100);
+  color: var(--color-base-content);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent);
+  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.peek-card[data-show="true"] {
+  opacity: 1;
+  transform: none;
+}
+.peek-title { font-weight: 600; font-size: 0.95rem; line-height: 1.25; }
+.peek-facts { margin-top: 0.15rem; font-size: 0.75rem; opacity: 0.65; }
+.peek-genres { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+.peek-chip {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+}
+.peek-overview { margin-top: 0.5rem; font-size: 0.75rem; line-height: 1.45; opacity: 0.8; }
+.peek-muted { margin-top: 0.4rem; font-size: 0.75rem; opacity: 0.5; }
+.peek-progress { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 500; }
+.peek-cached { margin-top: 0.35rem; font-size: 0.7rem; color: var(--color-success); }

@@ -350,3 +350,7 @@ A device-level choice, stored in the browser (`localStorage["roki:player"]`) and
 ### Source cache
 
 `Roki.Watch.SourceCache` keeps the ranked, already-probed releases of a film/episode for the user's "Keep found sources" setting (12 h default; off/6/12/24) as files under `<user dir>/roki-sources/` (per user because the links belong to their debrid account; survives restarts, goes on disconnect). A cached Play skips search and probing (≈60 ms) and goes straight to `good`, the release that last started. Retry (`force?`) bypasses both this cache and the shared 10-minute `Watch.sources` list. If a cached release fails to start, the entry is dropped and the search runs again by itself. Posters carry a "⚡ cached" badge via the `RokiWeb.Cached` on_mount (`@cached_titles`); episode rows and the movie hero show it too. Cached debrid links are assumed to stay valid for the window; the failure fallback covers the case they don't.
+
+### Poster progress and hover card
+
+On the shelf (`compact` posters) the caption under the poster is gone: episodes/seasons done (parsed from laev's `note`, "7/13 episodes") and, for a film or episode in progress, the stop position and time left sit in a strip on the poster, with a thin bar. A hover card (`assets/js/peek.js`, mouse only) shows year, length, rating, genres and a short overview from `GET /peek/:type/:id` (`PeekController`: signed-in only, 90 lookups/min, `Watch.title` is cached 12 h), plus the progress/resume/cached lines the page already has (`data-peek-*` attributes). Other pages keep their caption.

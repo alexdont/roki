@@ -22,6 +22,7 @@ defmodule RokiWeb.Router do
     pipe_through :session_user
 
     get "/stream/:id/:file", StreamController, :file
+    get "/peek/:type/:id", PeekController, :show
   end
 
   pipeline :api do

@@ -26,23 +26,45 @@ defmodule RokiWeb.PosterCachedTest do
     item = Map.merge(@item, %{resume_at: 3579, runtime: 4779})
     html = render_component(&RokiWeb.PosterComponents.poster/1, item: item)
 
-    assert html =~ "Continue from 59:39"
+    assert html =~ "59:39"
     assert html =~ "20 min left"
+    assert html =~ ~s(data-peek-resume="Continue from 59:39)
   end
 
   test "without a runtime only the place is shown; before half a minute nothing is" do
     html =
       render_component(&RokiWeb.PosterComponents.poster/1, item: Map.put(@item, :resume_at, 3779))
 
-    assert html =~ "Continue from 1:02:59"
-    refute html =~ "left"
+    assert html =~ "1:02:59"
+    refute html =~ "min left"
 
-    refute render_component(&RokiWeb.PosterComponents.poster/1, item: @item) =~ "Continue from"
+    refute render_component(&RokiWeb.PosterComponents.poster/1, item: @item) =~ "data-peek-resume"
   end
 
   test "time helpers" do
     assert RokiWeb.PosterComponents.clock(59) == "0:59"
     assert RokiWeb.PosterComponents.clock(3600) == "1:00:00"
     assert RokiWeb.PosterComponents.left(%{resume_at: 100, runtime: 7300}) == "2 h 0 min left"
+  end
+
+  test "episodes and seasons done are drawn on the poster, and the caption can go" do
+    ep = Map.merge(@item, %{type: "tv", note: " · 7/13 episodes"})
+    html = render_component(&RokiWeb.PosterComponents.poster/1, item: ep, compact: true)
+    assert html =~ "7"
+    assert html =~ "13"
+    assert html =~ "episodes"
+    assert html =~ ~s(data-peek-progress="7 of 13 episodes watched")
+    assert html =~ ~s(data-peek="tv/7")
+    refute html =~ "text-base-content/60"
+
+    seasons = Map.put(ep, :note, "1/3 seasons watched")
+    html = render_component(&RokiWeb.PosterComponents.poster/1, item: seasons, compact: true)
+    assert html =~ "seasons"
+    assert html =~ "width: 33%"
+  end
+
+  test "outside the shelf the caption stays" do
+    html = render_component(&RokiWeb.PosterComponents.poster/1, item: @item)
+    assert html =~ "2020"
   end
 end

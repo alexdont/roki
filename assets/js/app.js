@@ -25,6 +25,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/roki"
 import topbar from "../vendor/topbar"
 import {StudySidebar} from "./study/sidebar"
+import {setupPeek} from "./peek"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 // Which player this device uses. Remembered here, not on the server: a phone wants its own
@@ -56,6 +57,8 @@ window.addEventListener("phx:roki:launch", e => { window.location.href = e.detai
 window.addEventListener("phx:roki:player", e => {
   try { localStorage.setItem("roki:player", e.detail.mode) } catch {}
 })
+
+setupPeek()
 
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})

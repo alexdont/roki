@@ -478,7 +478,7 @@ defmodule RokiWeb.UserHomeLive do
       </button>
       <ul :if={@shown} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} cached_titles={@cached_titles} />
+          <.poster item={i} cached_titles={@cached_titles} compact />
         </li>
       </ul>
     </section>
@@ -499,7 +499,7 @@ defmodule RokiWeb.UserHomeLive do
       </h2>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} cached_titles={@cached_titles} />
+          <.poster item={i} cached_titles={@cached_titles} compact />
         </li>
       </ul>
     </section>

@@ -17,6 +17,10 @@ defmodule RokiWeb.PosterComponents do
     default: nil,
     doc: "MapSet of {type, id} with cached sources: those posters say so"
 
+  attr :compact, :boolean,
+    default: false,
+    doc: "no caption under the poster: progress sits on the poster, the rest on hover"
+
   def poster(assigns) do
     assigns =
       assign(
@@ -28,6 +32,7 @@ defmodule RokiWeb.PosterComponents do
     assigns =
       assign(assigns,
         href: href(assigns.item),
+        prog: progress_of(assigns.item),
         cached?:
           match?(%MapSet{}, assigns.cached_titles) and
             MapSet.member?(assigns.cached_titles, {assigns.item[:type], assigns.item[:id]})
@@ -35,7 +40,14 @@ defmodule RokiWeb.PosterComponents do
 
     ~H"""
     <.card href={@href} class={["group block space-y-1", @watched? && "opacity-50"]}>
-      <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
+      <div
+        class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow"
+        data-peek={peek_key(@item)}
+        data-peek-title={@item.title}
+        data-peek-progress={@prog && progress_text(@prog)}
+        data-peek-resume={@item[:resume_at] && resume_title(@item)}
+        data-peek-cached={@cached? && "true"}
+      >
         <img
           :if={@item.poster}
           src={@item.poster}
@@ -52,22 +64,24 @@ defmodule RokiWeb.PosterComponents do
         >
           {@item[:badge]}
         </span>
+        <%!-- Where you are in it, on the poster: episodes or seasons done, and for a film or
+              an episode in progress the spot you stopped at. Everything else is on hover. --%>
         <div
-          :if={@item[:resume_at]}
-          class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-6 text-white"
-          title={resume_title(@item)}
+          :if={@prog || @item[:resume_at]}
+          class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-2 pb-1.5 pt-8 text-white"
         >
-          <div class="whitespace-nowrap text-[0.7rem] font-medium leading-tight">
-            ▶ Continue from {clock(@item.resume_at)}
-          </div>
-          <div :if={left(@item)} class="whitespace-nowrap text-[0.65rem] leading-tight text-white/75">
-            {left(@item)}
+          <div :if={@prog} class="flex items-baseline gap-1 text-xs font-semibold leading-tight">
+            <span>{elem(@prog, 0)}<span class="font-normal text-white/60"> / {elem(@prog, 1)}</span></span>
+            <span class="text-[0.65rem] font-normal text-white/70">{elem(@prog, 2)}</span>
           </div>
           <div
-            :if={@item[:runtime] && @item.runtime > @item.resume_at}
-            class="mt-1 h-0.5 w-full rounded bg-white/25"
+            :if={@item[:resume_at]}
+            class="whitespace-nowrap text-[0.65rem] leading-tight text-white/85"
           >
-            <div class="h-full rounded bg-primary" style={"width: #{progress(@item)}%"}></div>
+            ▶ {clock(@item.resume_at)}{if left(@item), do: " · #{left(@item)}"}
+          </div>
+          <div class="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-white/25">
+            <div class="h-full rounded-full bg-primary" style={"width: #{bar(@prog, @item)}%"}></div>
           </div>
         </div>
         <span
@@ -101,7 +115,7 @@ defmodule RokiWeb.PosterComponents do
         </div>
       </div>
       <div class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
-      <div class="text-xs text-base-content/60">
+      <div :if={!@compact} class="text-xs text-base-content/60">
         {if @watched?, do: "Watched · ", else: ""}{subtitle(@item)}
       </div>
     </.card>
@@ -129,6 +143,31 @@ defmodule RokiWeb.PosterComponents do
   end
 
   def href(_), do: nil
+
+  # "7/13 episodes" / "1/3 seasons watched" in the note laev writes → {7, 13, "episodes"}.
+  defp progress_of(%{note: note}) when is_binary(note) do
+    case Regex.run(~r/(\d+)\s*\/\s*(\d+)\s+(episodes|seasons)/, note) do
+      [_, done, total, unit] -> {String.to_integer(done), String.to_integer(total), unit}
+      _ -> nil
+    end
+  end
+
+  defp progress_of(_item), do: nil
+
+  defp progress_text({done, total, unit}), do: "#{done} of #{total} #{unit} watched"
+
+  # The bar: the share of episodes (or seasons) watched, else how far into the film.
+  defp bar({done, total, _}, _item) when total > 0, do: min(round(done * 100 / total), 100)
+
+  defp bar(nil, %{resume_at: at, runtime: rt}) when is_integer(rt) and rt > 0,
+    do: progress(%{resume_at: at, runtime: rt})
+
+  defp bar(_prog, _item), do: 0
+
+  defp peek_key(%{type: type, id: id}) when type in ["movie", "tv", "anime"] and is_integer(id),
+    do: "#{if type == "movie", do: "movie", else: "tv"}/#{id}"
+
+  defp peek_key(_item), do: nil
 
   @doc "Seconds as `59:39`, or `1:02:03` past an hour."
   def clock(secs) when is_integer(secs) do
