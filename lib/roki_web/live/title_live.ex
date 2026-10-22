@@ -58,6 +58,7 @@ defmodule RokiWeb.TitleLive do
         season: nil,
         episodes: nil,
         watched: MapSet.new(),
+        season_counts: %{},
         phase: :idle
       )
 
@@ -143,7 +144,7 @@ defmodule RokiWeb.TitleLive do
         watched =
           if linked?, do: Watch.watched_episodes(uuid, title, season, eps), else: MapSet.new()
 
-        {:ok, season, eps, watched}
+        {:ok, season, eps, watched, if(linked?, do: Watch.season_counts(uuid, title), else: %{})}
       end
     end)
   end
@@ -338,9 +339,9 @@ defmodule RokiWeb.TitleLive do
 
   def handle_async(:bulk, _other, socket), do: {:noreply, assign(socket, :lib_busy, false)}
 
-  def handle_async(:episodes, {:ok, {:ok, season, eps, watched}}, socket) do
+  def handle_async(:episodes, {:ok, {:ok, season, eps, watched, counts}}, socket) do
     if season == socket.assigns.season,
-      do: {:noreply, assign(socket, episodes: eps, watched: watched)},
+      do: {:noreply, assign(socket, episodes: eps, watched: watched, season_counts: counts)},
       else: {:noreply, socket}
   end
 
@@ -424,6 +425,7 @@ defmodule RokiWeb.TitleLive do
           season={@season}
           episodes={@episodes}
           watched={@watched}
+          season_counts={@season_counts}
           cached={@cached}
           title_id={@id}
           can_play?={@linked?}
@@ -761,6 +763,7 @@ defmodule RokiWeb.TitleLive do
   attr :season, :any, default: nil
   attr :episodes, :any, default: nil
   attr :watched, :any, required: true
+  attr :season_counts, :map, default: %{}
   attr :cached, :any, required: true
   attr :title_id, :integer, required: true
   attr :can_play?, :boolean, default: false
@@ -788,8 +791,16 @@ defmodule RokiWeb.TitleLive do
           aria-label="Season"
           class="select select-bordered select-primary h-14 w-full text-lg font-semibold sm:w-auto sm:min-w-[18rem]"
         >
-          <option :for={s <- @title.seasons} value={s.number} selected={s.number == @season}>
-            {s.name || "Season #{s.number}"}
+          <option
+            :for={s <- @title.seasons}
+            value={s.number}
+            selected={s.number == @season}
+            class={
+              season_done?(s, @season, @episodes, @watched, @season_counts) && "text-base-content/40"
+            }
+          >
+            {if season_done?(s, @season, @episodes, @watched, @season_counts), do: "✓ "}{s.name ||
+              "Season #{s.number}"}
           </option>
         </select>
       </form>
@@ -891,6 +902,15 @@ defmodule RokiWeb.TitleLive do
     </section>
     """
   end
+
+  # A season is done when every episode of it is marked. The open season is judged from the list
+  # on screen (so it follows a tap at once); the others from laev's counts, no extra lookups.
+  defp season_done?(%{number: n}, n, eps, watched, _counts) when is_list(eps) do
+    eps != [] and Enum.all?(eps, &(&1.aired? and MapSet.member?(watched, &1.number)))
+  end
+
+  defp season_done?(%{number: n, episodes: total}, _open, _eps, _watched, counts),
+    do: is_integer(total) and total > 0 and Map.get(counts, n, 0) >= total
 
   defp season_all_watched?(episodes, watched) do
     out = for e <- episodes, e.aired?, do: e.number

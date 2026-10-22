@@ -871,6 +871,11 @@ defmodule Roki.Watch do
   def resume_at(uuid, ctx),
     do: Roki.Laev.run(uuid, fn -> Laev.Position.saved_position(ctx) || 0 end)
 
+  @doc "Watched episodes per season, `%{season => count}`, straight from laev marks."
+  def season_counts(uuid, title) do
+    Roki.Laev.run(uuid, fn -> Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{}) end)
+  end
+
   @doc "Which of these episodes the user has watched: a `MapSet` of episode numbers."
   def watched_episodes(uuid, title, season, episodes) do
     Roki.Laev.run(uuid, fn ->
