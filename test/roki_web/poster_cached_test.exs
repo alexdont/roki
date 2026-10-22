@@ -89,4 +89,17 @@ defmodule RokiWeb.PosterCachedTest do
     refute html =~ "⚡ cached"
     assert html =~ ~s(title="Sources cached)
   end
+
+  test "the number says seasons but the bar follows episodes once they are known" do
+    show = Map.merge(@item, %{type: "tv", note: " · 1/3 seasons watched"})
+
+    before = render_component(&RokiWeb.PosterComponents.poster/1, item: show, compact: true)
+    assert before =~ "width: 33%"
+
+    known = Map.merge(show, %{ep_done: 8, ep_total: 22})
+    html = render_component(&RokiWeb.PosterComponents.poster/1, item: known, compact: true)
+    assert html =~ "seasons"
+    assert html =~ "width: 36%"
+    assert html =~ ~s(data-peek-progress="1 of 3 seasons watched · 8 of 22 episodes")
+  end
 end

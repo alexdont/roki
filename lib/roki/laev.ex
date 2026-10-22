@@ -339,6 +339,67 @@ defmodule Roki.Laev do
 
   defp runtime_of(_item, ctx, rt), do: rt["tv-#{ctx.tmdb_id}"]
 
+  @doc """
+  Episodes watched out of all episodes, for shows the shelf counts in seasons ("1/3 seasons
+  watched"): `%{{"tv", id} => {watched, total}}`. The watched side is laev's own marks; the
+  total is the aired seasons' episode counts from TMDB (a show is looked up once and
+  remembered, `Roki.Watch.title/3`). Slow the first time, so the page asks for it after the
+  shelf is already drawn. Anime and shows noted in episodes already have their own count.
+  """
+  def episode_progress(uuid, items) do
+    wanted =
+      items
+      |> Enum.filter(&(&1.type == "tv" and &1[:anime] != true and season_note?(&1[:note])))
+      |> Enum.uniq_by(& &1.id)
+
+    if wanted == [] do
+      %{}
+    else
+      marks = run(uuid, &Laev.Position.episode_marks/0)
+      today = Date.utc_today()
+
+      wanted
+      |> Task.async_stream(&{&1.id, total_episodes(uuid, &1.id, today)},
+        max_concurrency: 4,
+        timeout: 30_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.reduce(%{}, fn
+        {:ok, {id, total}}, acc when is_integer(total) and total > 0 ->
+          done = marks |> Map.get({"tv", id}, %{}) |> Map.values() |> Enum.sum()
+          Map.put(acc, {"tv", id}, {min(done, total), total})
+
+        _other, acc ->
+          acc
+      end)
+    end
+  end
+
+  defp season_note?(note) when is_binary(note), do: note =~ ~r/\d+\s*\/\s*\d+\s+seasons/
+  defp season_note?(_note), do: false
+
+  defp total_episodes(uuid, id, today) do
+    case Roki.Watch.title("tv", id, uuid) do
+      {:ok, t} ->
+        t.seasons
+        |> Enum.filter(&(&1.number > 0 and aired?(&1.air_date, today)))
+        |> Enum.map(&(&1.episodes || 0))
+        |> Enum.sum()
+
+      _ ->
+        nil
+    end
+  end
+
+  defp aired?(date, today) when is_binary(date) do
+    case Date.from_iso8601(date) do
+      {:ok, d} -> Date.compare(d, today) != :gt
+      _ -> false
+    end
+  end
+
+  defp aired?(_date, _today), do: false
+
   # `seen: true` greys a title out — laev's own "watched" rule, from the synced marks.
   defp mark_seen(items) do
     seen = seen_keys(items)

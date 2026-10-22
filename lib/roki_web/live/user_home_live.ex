@@ -122,9 +122,28 @@ defmodule RokiWeb.UserHomeLive do
     {:noreply,
      socket
      |> assign(state: :ready, data: data, busy: nil)
+     |> start_async(:eps, fn -> Laev.episode_progress(uuid, watchlist_items(data)) end)
      |> start_async(:stats, fn -> Roki.Stats.summary(uuid) end)
      |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)}
   end
+
+  # Episodes watched out of all episodes, for the posters that count in seasons: only the
+  # progress bar uses it, so nothing moves when it arrives.
+  def handle_async(:eps, {:ok, eps}, %{assigns: %{data: %{} = data}} = socket) when eps != %{} do
+    add = fn items ->
+      Enum.map(items, fn i ->
+        case eps[{i.type, i.id}] do
+          {done, total} -> Map.merge(i, %{ep_done: done, ep_total: total})
+          nil -> i
+        end
+      end)
+    end
+
+    watchlist = Map.new(data.watchlist, fn {k, items} -> {k, add.(items)} end)
+    {:noreply, assign(socket, :data, %{data | watchlist: watchlist})}
+  end
+
+  def handle_async(:eps, _other, socket), do: {:noreply, socket}
 
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
 
@@ -515,4 +534,6 @@ defmodule RokiWeb.UserHomeLive do
   end
 
   defp thousands(n), do: to_string(n)
+
+  defp watchlist_items(%{watchlist: wl}), do: wl |> Map.values() |> List.flatten()
 end

@@ -44,7 +44,7 @@ defmodule RokiWeb.PosterComponents do
         class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow"
         data-peek={peek_key(@item)}
         data-peek-title={@item.title}
-        data-peek-progress={@prog && progress_text(@prog)}
+        data-peek-progress={@prog && progress_text(@prog, @item)}
         data-peek-resume={@item[:resume_at] && resume_title(@item)}
         data-peek-cached={@cached? && "true"}
       >
@@ -161,9 +161,22 @@ defmodule RokiWeb.PosterComponents do
 
   defp progress_of(_item), do: nil
 
-  defp progress_text({done, total, unit}), do: "#{done} of #{total} #{unit} watched"
+  defp progress_text({done, total, unit}, item) do
+    base = "#{done} of #{total} #{unit} watched"
+
+    case item do
+      %{ep_done: d, ep_total: t} when unit == "seasons" -> base <> " · #{d} of #{t} episodes"
+      _ -> base
+    end
+  end
 
   # The bar: the share of episodes (or seasons) watched, else how far into the film.
+  # Seasons are a coarse measure (1 of 3 reads a third however far into the second you are), so
+  # when the episode count is known the bar follows episodes while the number keeps saying
+  # seasons.
+  defp bar(_prog, %{ep_done: d, ep_total: t}) when is_integer(t) and t > 0,
+    do: min(round(d * 100 / t), 100)
+
   defp bar({done, total, _}, _item) when total > 0, do: min(round(done * 100 / total), 100)
 
   defp bar(nil, %{resume_at: at, runtime: rt}) when is_integer(rt) and rt > 0,
