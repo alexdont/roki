@@ -197,7 +197,7 @@ defmodule Roki.Watch do
         marks = Laev.Position.anime_marks()
 
         title.seasons
-        |> Enum.map(&Roki.Watch.Anime.watched_in_season(title.id, &1.number, marks))
+        |> Enum.map(&Roki.Watch.Anime.watched_in_season(title.id, &1.number, marks, &1.episodes))
         |> Enum.sum()
       else
         Laev.Position.episode_marks()
@@ -943,7 +943,9 @@ defmodule Roki.Watch do
       name = s.name || "Season #{s.number}"
 
       parts =
-        if title.anime? and s.number > 0, do: Roki.Watch.Anime.parts(title.id, s.number), else: []
+        if title.anime? and s.number > 0,
+          do: Roki.Watch.Anime.parts(title.id, s.number, s.episodes),
+          else: []
 
       case parts do
         [_, _ | _] ->

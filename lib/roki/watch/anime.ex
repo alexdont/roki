@@ -15,12 +15,33 @@ defmodule Roki.Watch.Anime do
   Everything here reads laev's files: call it inside `Roki.Laev.run/2` / `public/2`.
   """
 
-  @doc "The MAL entries of a TMDB season, oldest first, each with its episode count (or nil)."
-  def parts(tmdb_id, season) do
-    for mal <- Laev.AnimeMap.mal_ids("tv", tmdb_id),
-        {"tv", _id, s} <- [Laev.AnimeMap.tmdb(mal)],
-        (s || 1) == season,
-        do: {mal, Laev.Anime.episodes(mal)}
+  @doc """
+  The MAL entries of a TMDB season, oldest first, each with its episode count (or nil).
+
+  laev's list also files specials, recaps and OVAs under the season they belong to, with no
+  episode count and no episodes on TMDB's side. They are not parts of the season, so: an entry
+  whose length is unknown is skipped unless it is the last one, and once `total` (the season's
+  episodes on TMDB) is used up nothing more is a part. "That Time I Got Reincarnated as a
+  Slime" season 1 is one entry of 24 plus two such extras.
+  """
+  def parts(tmdb_id, season, total \\ nil) do
+    all =
+      for mal <- Laev.AnimeMap.mal_ids("tv", tmdb_id),
+          {"tv", _id, s} <- [Laev.AnimeMap.tmdb(mal)],
+          (s || 1) == season,
+          do: {mal, Laev.Anime.episodes(mal)}
+
+    trim(all, total, 0, [])
+  end
+
+  defp trim([], _total, _offset, acc), do: Enum.reverse(acc)
+
+  defp trim([{_mal, count} = part | rest], total, offset, acc) do
+    cond do
+      is_integer(total) and total > 0 and offset >= total -> Enum.reverse(acc)
+      count == nil and rest != [] -> trim(rest, total, offset, acc)
+      true -> trim(rest, total, offset + (count || 0), [part | acc])
+    end
   end
 
   @doc """
@@ -63,9 +84,9 @@ defmodule Roki.Watch.Anime do
   end
 
   @doc "How many episodes of a season are marked watched, from laev's per-entry counts."
-  def watched_in_season(tmdb_id, season, marks) do
+  def watched_in_season(tmdb_id, season, marks, total \\ nil) do
     tmdb_id
-    |> parts(season)
+    |> parts(season, total)
     |> Enum.reduce(0, fn {mal, _}, acc -> acc + Map.get(marks, mal, 0) end)
   end
 end
