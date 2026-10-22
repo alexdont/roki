@@ -27,10 +27,31 @@ import topbar from "../vendor/topbar"
 import {StudySidebar} from "./study/sidebar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+// Which player this device uses. Remembered here, not on the server: a phone wants its own
+// player (VLC), a laptop the page. The title page reads both from the socket params.
+const platform = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  ? "ios"
+  : /Android/.test(navigator.userAgent) ? "android" : "desktop"
+
+const storedPlayer = () => {
+  try { return localStorage.getItem("roki:player") } catch { return null }
+}
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken},
+  params: () => ({
+    _csrf_token: csrfToken,
+    platform,
+    player: storedPlayer() || (platform === "desktop" ? "browser" : "external"),
+  }),
   hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar},
+})
+
+// A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
+window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "smooth", block: "center"}))
+
+window.addEventListener("phx:roki:player", e => {
+  try { localStorage.setItem("roki:player", e.detail.mode) } catch {}
 })
 
 // Show progress bar on live navigation and form submits

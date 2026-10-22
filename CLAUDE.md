@@ -338,3 +338,7 @@ Every poster leads to `/title/:type/:id` (`RokiWeb.TitleLive`); movies and episo
 - **Chromium in the container** crashes when `TMPDIR=/var/cache/remux`; run Playwright with `TMPDIR=/tmp`.
 - `test/e2e/watch.js` is a manual end-to-end that uses a real debrid account and needs a session cookie in `/tmp/e2e-cookie.txt` (see git history of this note); it adds a history entry — clean up with `Laev.Position.forget/2` + `Laev.Resume.delete/2`.
 - Known edge: a laev remux worker whose ffmpeg was killed or whose directory was deleted stays registered until its TTL, so replaying that release times out; restart the app or wait.
+
+### External player (VLC / mpv, e.g. on a phone)
+
+A device-level choice, stored in the browser (`localStorage["roki:player"]`) and sent as socket params (`player`, `platform`) — a phone defaults to external, a desktop to "this page". In external mode nothing is remuxed: `Watch.auto_choice_external` applies laev's plain rule (best up to the ceiling, 4K/HEVC allowed) and `Watch.external` writes the history entry and returns the direct debrid link. The panel offers `vlc-x-callback://` (iOS), an Android `intent:`, `vlc://` (desktop), an .m3u download, copy link, Infuse and mpv; Infuse/mpv/desktop-VLC links are untested. An external player cannot report progress, so "Mark as watched" calls `Laev.Position.set_watched`. `test/e2e/external.js` is the manual phone-emulation check (same cookie setup as `watch.js`).

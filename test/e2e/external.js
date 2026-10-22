@@ -1,0 +1,26 @@
+const { chromium, devices } = require("playwright"); const fs = require("fs");
+const results = []; const check = (n, ok, x = "") => { results.push(!!ok); console.log((ok ? "PASS " : "FAIL ") + n + (x ? "  — " + x : "")); };
+(async () => {
+  const b = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  const ctx = await b.newContext({ ...devices["iPhone 13"] });
+  await ctx.addCookies([{ name: "_roki_key", value: fs.readFileSync("/tmp/e2e-cookie.txt", "utf8"), domain: "roki.ee", path: "/", secure: true, httpOnly: true, sameSite: "Lax" }]);
+  const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(String(e)));
+  await p.goto("https://roki.ee/title/movie/10331"); await p.waitForSelector("[data-phx-main].phx-connected"); await p.waitForSelector("h1");
+  check("a phone defaults to the external player", (await p.locator("button.btn-primary:has-text('VLC / external player')").count()) === 1);
+  await p.click("button:has-text('Play')");
+  await p.waitForSelector("text=Ready for your player", { timeout: 120000 });
+  const vlc = await p.getAttribute("a:has-text('Open in VLC')", "href");
+  check("iOS gets the VLC x-callback link with a debrid URL", /^vlc-x-callback:\/\/x-callback-url\/stream\?url=https%3A%2F%2F/.test(vlc), vlc.slice(0, 90));
+  check("no video element on the page, no server conversion", (await p.locator("#study-video").count()) === 0);
+  const m3u = await p.getAttribute("a:has-text('.m3u')", "href");
+  check(".m3u download carries the link", decodeURIComponent(m3u).includes("#EXTM3U") && decodeURIComponent(m3u).includes("https://"));
+  const url = decodeURIComponent(vlc.split("url=")[1]);
+  fs.writeFileSync("/tmp/ext-url.txt", url);
+  await p.screenshot({ path: "/tmp/x1.jpg", type: "jpeg", quality: 55 });
+  await p.click("button:has-text('This page')"); await p.waitForTimeout(800);
+  check("can switch back to the page player", (await p.locator("button.btn-primary:has-text('This page')").count()) === 1);
+  check("preference persisted in the browser", (await p.evaluate(() => localStorage.getItem("roki:player"))) === "browser");
+  check("no page errors", errs.length === 0, errs.join("|"));
+  console.log(`${results.filter(Boolean).length}/${results.length} passed`);
+  await b.close(); process.exit(results.every(Boolean) ? 0 : 1);
+})();

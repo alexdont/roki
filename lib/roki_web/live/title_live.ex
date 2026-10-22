@@ -38,6 +38,9 @@ defmodule RokiWeb.TitleLive do
         id: id,
         uuid: uuid,
         linked?: uuid != nil and Roki.Laev.connected?(uuid),
+        mode: mode_param(socket),
+        platform: platform_param(socket),
+        external: nil,
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -62,6 +65,22 @@ defmodule RokiWeb.TitleLive do
     if connected?(socket),
       do: start_async(socket, :title, fn -> load_title(type, id, uuid) end),
       else: socket
+  end
+
+  # How this device plays: the page tells us (`player` in the socket params, from the browser's
+  # own storage; a phone defaults to its own player). `platform` picks which link to lead with.
+  defp mode_param(socket),
+    do: if(connect_param(socket, "player") == "external", do: :external, else: :browser)
+
+  defp platform_param(socket) do
+    case connect_param(socket, "platform") do
+      p when p in ["ios", "android"] -> String.to_existing_atom(p)
+      _ -> :desktop
+    end
+  end
+
+  defp connect_param(socket, key) do
+    if connected?(socket), do: (get_connect_params(socket) || %{})[key]
   end
 
   defp load_title(type, id, uuid) do
@@ -142,15 +161,32 @@ defmodule RokiWeb.TitleLive do
 
   # The user chose from the list: that is a stronger statement than a setting, so the
   # next episode of this show starts at the same resolution (laev's rule).
-  def handle_event("choose", %{"idx" => idx}, socket) do
+  def handle_event("choose", %{"idx" => idx} = params, socket) do
     case Enum.at(socket.assigns.playable, to_int(idx) || -1) do
       nil ->
         {:noreply, socket}
 
       {source, _stream} = pair ->
         Watch.remember_resolution(socket.assigns.uuid, socket.assigns.ctx, source)
-        {:noreply, play_pair(socket, pair)}
+
+        if socket.assigns.mode == :external or params["via"] == "external",
+          do: {:noreply, hand_over(socket, pair)},
+          else: {:noreply, play_pair(socket, pair)}
     end
+  end
+
+  # Which player this device uses; remembered in the browser, not on the server.
+  def handle_event("set_mode", %{"mode" => mode}, socket) when mode in ["browser", "external"] do
+    {:noreply,
+     socket
+     |> assign(mode: String.to_existing_atom(mode))
+     |> push_event("roki:player", %{mode: mode})}
+  end
+
+  def handle_event("mark_watched", _params, socket) do
+    %{uuid: uuid, ctx: ctx} = socket.assigns
+    if uuid && ctx, do: Watch.mark_watched(uuid, ctx)
+    {:noreply, finished(socket)}
   end
 
   def handle_event("more", _params, socket) do
@@ -243,6 +279,7 @@ defmodule RokiWeb.TitleLive do
       rest: [],
       current: nil,
       player: nil,
+      external: nil,
       up_next: nil,
       ctx: nil
     )
@@ -348,12 +385,28 @@ defmodule RokiWeb.TitleLive do
     end)
   end
 
+  # A release for the user's own player: the direct link and the ways to open it.
+  defp hand_over(socket, {source, stream} = pair) do
+    %{uuid: uuid, ctx: ctx} = socket.assigns
+    external = Watch.external(uuid, ctx, source, stream)
+    assign(socket, current: pair, player: nil, external: external, phase: :external)
+  end
+
   # The pipeline found what plays: play the best (laev's rule) or show the list.
   defp after_probe(socket, %{ctx: ctx, playable: playable, rest: rest, cap: cap}) do
     socket = assign(socket, ctx: ctx, playable: playable, rest: rest)
     auto? = Watch.auto_source?(socket.assigns.uuid)
+    external? = socket.assigns.mode == :external
 
-    case auto? && Watch.auto_choice(playable, cap) do
+    choice =
+      cond do
+        not auto? -> nil
+        external? -> Watch.auto_choice_external(playable, cap)
+        true -> Watch.auto_choice(playable, cap)
+      end
+
+    case choice do
+      {:play, pair} when external? -> hand_over(socket, pair)
       {:play, pair} -> play_pair(socket, pair)
       {:ask, why} -> assign(socket, phase: {:choose, why})
       _ -> assign(socket, phase: {:choose, nil})
@@ -571,7 +624,18 @@ defmodule RokiWeb.TitleLive do
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
+        <.mode_switch :if={@linked?} mode={@mode} />
+
         <.status :if={@phase != :idle} phase={@phase} probe={@probe} />
+
+        <.external_panel
+          :if={@external}
+          external={@external}
+          platform={@platform}
+          title={@title}
+          season={@season}
+          episode={@episode}
+        />
 
         <section :if={@player} class="space-y-3">
           <div class="flex flex-wrap items-center gap-3">
@@ -591,6 +655,7 @@ defmodule RokiWeb.TitleLive do
           rest={@rest}
           current={@current}
           phase={@phase}
+          mode={@mode}
         />
 
         <.episodes
@@ -731,6 +796,7 @@ defmodule RokiWeb.TitleLive do
   defp choose_text({:choose, nil}), do: "Pick a release."
   defp choose_text({:choose, why}), do: "#{why} — pick one yourself."
 
+  attr :mode, :atom, default: :browser
   attr :playable, :list, required: true
   attr :rest, :list, required: true
   attr :current, :any, default: nil
@@ -776,7 +842,22 @@ defmodule RokiWeb.TitleLive do
             class="btn btn-sm"
             disabled={match?({:working, _}, @phase)}
           >
-            {if @current && elem(@current, 0).hash == source.hash, do: "Playing", else: "Play"}
+            {cond do
+              @current && elem(@current, 0).hash == source.hash -> "Selected"
+              @mode == :external -> "Open"
+              true -> "Play"
+            end}
+          </button>
+          <button
+            :if={@mode == :browser}
+            phx-click="choose"
+            phx-value-idx={i}
+            phx-value-via="external"
+            class="btn btn-sm btn-ghost"
+            title="Open in VLC or another player on this device"
+            disabled={match?({:working, _}, @phase)}
+          >
+            External
           </button>
         </li>
       </ul>
@@ -873,4 +954,145 @@ defmodule RokiWeb.TitleLive do
     </section>
     """
   end
+
+  attr :mode, :atom, required: true
+
+  defp mode_switch(assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="text-base-content/60">Play in</span>
+      <div class="join">
+        <button
+          phx-click="set_mode"
+          phx-value-mode="browser"
+          class={["btn btn-sm join-item", @mode == :browser && "btn-primary"]}
+        >
+          This page
+        </button>
+        <button
+          phx-click="set_mode"
+          phx-value-mode="external"
+          class={["btn btn-sm join-item", @mode == :external && "btn-primary"]}
+        >
+          VLC / external player
+        </button>
+      </div>
+      <span :if={@mode == :external} class="text-base-content/60">
+        full quality, 4K included; nothing is converted on the server
+      </span>
+    </div>
+    """
+  end
+
+  attr :external, :map, required: true
+  attr :platform, :atom, required: true
+  attr :title, :map, required: true
+  attr :season, :any, default: nil
+  attr :episode, :any, default: nil
+
+  defp external_panel(assigns) do
+    url = assigns.external.url
+    name = assigns.external.filename || assigns.title.title
+
+    assigns =
+      assign(assigns,
+        url: url,
+        links: external_links(url, name),
+        m3u:
+          "data:audio/x-mpegurl;charset=utf-8," <>
+            URI.encode(
+              "#EXTM3U\n#EXTINF:-1," <> name <> "\n" <> url <> "\n",
+              &URI.char_unreserved?/1
+            ),
+        m3u_name: Path.rootname(name) <> ".m3u"
+      )
+
+    ~H"""
+    <section
+      id="external-panel"
+      phx-mounted={Phoenix.LiveView.JS.dispatch("roki:reveal")}
+      class="space-y-3 rounded-box border border-base-300 p-4"
+    >
+      <div>
+        <h2 class="text-lg font-semibold">
+          Ready for your player{now_playing(@title, @season, @episode, nil)}
+        </h2>
+        <p class="break-all text-sm text-base-content/60">
+          {@external.name}{if @external.resolution, do: " · #{label(@external.resolution)}"}
+        </p>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <a :if={@platform == :ios} href={@links.vlc_ios} class="btn btn-primary">Open in VLC</a>
+        <a :if={@platform == :android} href={@links.vlc_android} class="btn btn-primary">
+          Open in VLC
+        </a>
+        <a :if={@platform == :desktop} href={@links.vlc_desktop} class="btn btn-primary">
+          Open in VLC
+        </a>
+        <a href={@m3u} download={@m3u_name} class="btn">Download .m3u</a>
+        <button
+          type="button"
+          class="btn"
+          data-url={@url}
+          onclick="navigator.clipboard.writeText(this.dataset.url).then(() => { this.textContent = 'Copied' })"
+        >
+          Copy link
+        </button>
+        <button phx-click="mark_watched" class="btn btn-ghost">Mark as watched</button>
+      </div>
+
+      <details class="text-sm">
+        <summary class="cursor-pointer text-base-content/60">Other apps</summary>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <a :if={@platform != :ios} href={@links.vlc_ios} class="btn btn-sm">VLC (iPhone/iPad)</a>
+          <a :if={@platform != :android} href={@links.vlc_android} class="btn btn-sm">
+            VLC (Android)
+          </a>
+          <a :if={@platform != :desktop} href={@links.vlc_desktop} class="btn btn-sm">
+            VLC (desktop)
+          </a>
+          <a href={@links.infuse} class="btn btn-sm">Infuse</a>
+          <a href={@links.mpv} class="btn btn-sm">mpv</a>
+        </div>
+      </details>
+
+      <p class="text-sm text-base-content/60">
+        <span :if={@external.resume_at > 0}>
+          You were at {format_time(@external.resume_at)}. Seek there in your player.
+        </span>
+        Your player can't report progress back, so use “Mark as watched” when you finish.
+        The link is private to your debrid account; don't share it.
+      </p>
+    </section>
+    """
+  end
+
+  # `vlc://` is registered by VLC on iOS and macOS; Android takes an intent; mpv needs the
+  # mpv-handler protocol. All carry the same direct link.
+  defp external_links(url, name) do
+    enc = URI.encode_www_form(url)
+    %URI{host: host} = uri = URI.parse(url)
+    rest = url |> String.replace_prefix("#{uri.scheme}:", "")
+
+    %{
+      vlc_ios: "vlc-x-callback://x-callback-url/stream?url=#{enc}",
+      vlc_android:
+        "intent:#{rest}#Intent;scheme=#{uri.scheme};package=org.videolan.vlc;type=video/*;S.title=#{URI.encode_www_form(name)};end",
+      vlc_desktop: "vlc://#{url}",
+      infuse: "infuse://x-callback-url/play?url=#{enc}",
+      mpv: "mpv://#{Base.url_encode64(url)}",
+      host: host
+    }
+  end
+
+  defp format_time(s) do
+    s = trunc(s)
+    h = div(s, 3600)
+    m = div(rem(s, 3600), 60)
+    sec = rem(s, 60)
+    if h > 0, do: "#{h}:#{pad(m)}:#{pad(sec)}", else: "#{m}:#{pad(sec)}"
+  end
+
+  defp pad(n), do: n |> Integer.to_string() |> String.pad_leading(2, "0")
 end

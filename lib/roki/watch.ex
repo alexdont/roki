@@ -421,6 +421,41 @@ defmodule Roki.Watch do
     _ -> 0
   end
 
+  @doc """
+  What plays when the release goes to the user's own player (VLC, mpv): nothing is decoded
+  here, so laev's plain rule applies — the best release up to the ceiling, 4K and HEVC included.
+  """
+  def auto_choice_external(playable, cap), do: pick_or_ask(Laev.CLI.auto_choice(playable, cap))
+
+  defp pick_or_ask({:play, pick, _note}), do: {:play, pick}
+  defp pick_or_ask({:ask, why}), do: {:ask, why}
+
+  @doc """
+  Hand a probed release to an external player: writes the history entry (so it shows under
+  Continue) and returns the direct link. Nothing is remuxed and no ffmpeg runs.
+  """
+  def external(uuid, ctx, source, stream) do
+    Roki.Laev.run(uuid, fn ->
+      save_resume(ctx, source)
+
+      %{
+        url: stream.url,
+        filename: stream.filename,
+        name: source.name,
+        resolution: source.resolution,
+        resume_at: Laev.Position.saved_position(ctx) || 0
+      }
+    end)
+  end
+
+  @doc "Mark this episode or film watched (an external player cannot report progress)."
+  def mark_watched(uuid, ctx) do
+    Roki.Laev.run(uuid, fn ->
+      Laev.Position.set_watched(ctx, true)
+      Laev.Sync.live_push()
+    end)
+  end
+
   @doc "Whether the user's settings want the best source played without asking."
   def auto_source?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.auto_source?/0)
 
