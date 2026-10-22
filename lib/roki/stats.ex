@@ -39,9 +39,23 @@ defmodule Roki.Stats do
   def ranges, do: @ranges
 
   @doc """
+  The headline totals for the shelf's one-line strip, kept ten minutes — the shelf is
+  opened far more often than the numbers change, and measuring is real work. The full
+  page uses `for_user/1` and is always live.
+
   `build/0` for a user, under a small per-user budget — the first measurement is a
   burst of TMDB lookups, and nothing should be able to repeat it in a loop.
   """
+  def summary(uuid) do
+    Roki.TTLCache.fetch({:stats_summary, uuid}, 10 * 60, fn ->
+      with {:ok, s} <- for_user(uuid), do: {:ok, %{totals: s.totals}}
+    end)
+  end
+
+  @doc "Drop the cached summary — call when the user's data changed (sync, connect, disconnect)."
+  def forget(uuid), do: Roki.TTLCache.delete({:stats_summary, uuid})
+
+  @doc false
   def for_user(uuid) do
     with :ok <- Roki.RateLimit.check(:stats, {:user, uuid}, 4, 60_000) do
       Roki.Laev.run(uuid, &build/0)

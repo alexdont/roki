@@ -21,6 +21,9 @@ defmodule Roki.Calendar do
   alias Roki.{RateLimit, TTLCache}
 
   @ttl 6 * 3600
+  # A title whose lookup failed is left alone this long, so one broken show costs a
+  # request every ten minutes rather than one per page view.
+  @failure_ttl 10 * 60
   @client_limit 3
   @global_limit 20
   @window 60_000
@@ -82,7 +85,11 @@ defmodule Roki.Calendar do
 
   # Only titles that would reach a source count against the budget.
   defp budget(client, entries) do
-    missing = Enum.count(entries, &(not TTLCache.cached?(key(&1))))
+    missing =
+      Enum.count(
+        entries,
+        &(not TTLCache.cached?(key(&1)) and not TTLCache.cached?(failed_key(&1)))
+      )
 
     if missing == 0 do
       :ok
@@ -94,11 +101,20 @@ defmodule Roki.Calendar do
   end
 
   defp key(entry), do: {:calendar, entry["type"], entry["tmdb_id"]}
+  defp failed_key(entry), do: {:calendar_failed, entry["type"], entry["tmdb_id"]}
 
   defp entry_events(entry) do
-    case TTLCache.fetch(key(entry), @ttl, fn -> fetch(entry) end) do
-      {:ok, events} -> events
-      _ -> []
+    if TTLCache.cached?(failed_key(entry)) do
+      []
+    else
+      case TTLCache.fetch(key(entry), @ttl, fn -> fetch(entry) end) do
+        {:ok, events} ->
+          events
+
+        _ ->
+          TTLCache.fetch(failed_key(entry), @failure_ttl, fn -> {:ok, true} end)
+          []
+      end
     end
   rescue
     _ -> []

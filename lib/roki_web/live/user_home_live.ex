@@ -35,7 +35,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:page_title, "Home")
           |> assign(:username, username)
           |> assign(:uuid, uuid)
-          |> assign(:state, :loading)
+          |> assign(:state, if(Laev.connected?(uuid), do: :loading, else: :not_connected))
           |> assign(:data, nil)
           |> assign(:busy, nil)
           |> assign(:error, nil)
@@ -45,7 +45,11 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
-        {:ok, if(connected?(socket), do: load(socket), else: socket)}
+        {:ok,
+         if(connected?(socket) and socket.assigns.state == :loading,
+           do: load(socket),
+           else: socket
+         )}
     end
   end
 
@@ -54,7 +58,14 @@ defmodule RokiWeb.UserHomeLive do
 
   defp same_user?(_, _), do: false
 
+  # First load / after connecting: the skeleton shows until the shelf arrives.
   defp load(socket) do
+    socket |> assign(state: :loading, data: nil, stats: nil, pulse: nil) |> reload()
+  end
+
+  # A refresh (sync): the page stays exactly as it is and the new data replaces the
+  # old in place — nothing blanks, nothing moves.
+  defp reload(socket) do
     uuid = socket.assigns.uuid
     start_async(socket, :overview, fn -> Laev.overview(uuid) end)
   end
@@ -126,8 +137,8 @@ defmodule RokiWeb.UserHomeLive do
 
     {:noreply,
      socket
-     |> assign(state: :ready, data: data, busy: nil, stats: nil, pulse: nil)
-     |> start_async(:stats, fn -> Roki.Stats.for_user(uuid) end)
+     |> assign(state: :ready, data: data, busy: nil)
+     |> start_async(:stats, fn -> Roki.Stats.summary(uuid) end)
      |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)}
   end
 
@@ -142,8 +153,9 @@ defmodule RokiWeb.UserHomeLive do
   def handle_async(:pulse, {:ok, {:ok, %{events: events}}}, socket),
     do: {:noreply, assign(socket, :pulse, Roki.Calendar.pulse(events))}
 
-  # No release dates is not worth an error on the home page.
-  def handle_async(:pulse, _other, socket), do: {:noreply, socket}
+  # No release dates is not worth an error on the home page — but the placeholder
+  # has to resolve to something, or it would shimmer forever.
+  def handle_async(:pulse, _other, socket), do: {:noreply, assign(socket, :pulse, :unavailable)}
 
   def handle_async(:overview, {:exit, reason}, socket),
     do:
@@ -153,8 +165,7 @@ defmodule RokiWeb.UserHomeLive do
          error: "Could not read your shelf: #{inspect(reason)}"
        )}
 
-  def handle_async(:connect, {:ok, {:ok, _summary}}, socket),
-    do: {:noreply, load(assign(socket, :state, :loading))}
+  def handle_async(:connect, {:ok, {:ok, _summary}}, socket), do: {:noreply, load(socket)}
 
   def handle_async(:connect, {:ok, {:error, reason}}, socket),
     do:
@@ -163,8 +174,7 @@ defmodule RokiWeb.UserHomeLive do
   def handle_async(:sync, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, busy: nil, error: "Sync failed: " <> Laev.explain(reason))}
 
-  def handle_async(:sync, {:ok, _}, socket),
-    do: {:noreply, load(assign(socket, :state, :loading))}
+  def handle_async(:sync, {:ok, _}, socket), do: {:noreply, reload(socket)}
 
   def handle_async(name, {:exit, reason}, socket),
     do: {:noreply, assign(socket, busy: nil, error: "#{name} failed: #{inspect(reason)}")}
@@ -182,17 +192,10 @@ defmodule RokiWeb.UserHomeLive do
     >
       <div class="mb-6"><.user_tabs username={@username} active={:shelf} /></div>
 
-      <div
-        :if={@state == :loading}
-        class="flex items-center gap-3 py-24 justify-center text-base-content/60"
-      >
-        <span class="loading loading-spinner"></span> Loading your shelf…
-      </div>
-
       <.connect_card :if={@state == :not_connected} form={@form} busy={@busy} error={@error} />
 
       <.shelf
-        :if={@state == :ready}
+        :if={@state in [:loading, :ready]}
         data={@data}
         busy={@busy}
         error={@error}
@@ -273,40 +276,73 @@ defmodule RokiWeb.UserHomeLive do
   end
 
   # "Alice in Borderland S3E4 drops in 3 days" — the next things from the Saved list,
-  # from the calendar. Silent when nothing is dropping this week.
-  attr :pulse, :any, required: true
+  # from the calendar. One line of reserved height in every state (placeholder, note,
+  # "nothing this week", unavailable), so it appearing never moves the page.
+  attr :pulse, :any, default: nil
   attr :username, :string, required: true
 
-  defp pulse_banner(assigns) do
-    {dropped, upcoming} = assigns.pulse
-    assigns = assign(assigns, dropped: dropped, upcoming: upcoming, next: List.first(upcoming))
+  defp pulse_line(assigns) do
+    {dropped, upcoming} =
+      case assigns.pulse do
+        {dropped, upcoming} -> {dropped, upcoming}
+        _ -> {[], []}
+      end
+
+    assigns =
+      assign(assigns,
+        dropped: dropped,
+        upcoming: upcoming,
+        next: List.first(upcoming),
+        loaded?: is_tuple(assigns.pulse)
+      )
 
     ~H"""
-    <.link
-      :if={@next || @dropped != []}
-      navigate={~p"/#{@username}/calendar"}
-      class="flex items-start gap-1.5 text-xs text-base-content/60 transition hover:text-base-content"
-    >
-      <.icon name="hero-calendar-days" class="mt-px h-3.5 w-3.5 shrink-0" />
-      <span class="min-w-0">
-        <span :if={@next}>
-          <span class="text-base-content/80">{@next.label}</span>
-          drops {Roki.Calendar.relative(@next.days)}<span :if={length(@upcoming) > 1}> · +{length(
-            @upcoming
-          ) - 1} more this week</span>
+    <div class="min-h-4 text-xs">
+      <div :if={@pulse == nil} class="skeleton h-3 w-72 max-w-full rounded"></div>
+      <.link
+        :if={@loaded? and (@next || @dropped != [])}
+        navigate={~p"/#{@username}/calendar"}
+        class="flex items-start gap-1.5 text-base-content/60 transition hover:text-base-content"
+      >
+        <.icon name="hero-calendar-days" class="mt-px h-3.5 w-3.5 shrink-0" />
+        <span class="min-w-0">
+          <span :if={@next}>
+            <span class="text-base-content/80">{@next.label}</span>
+            drops {Roki.Calendar.relative(@next.days)}<span :if={length(@upcoming) > 1}> · +{length(
+              @upcoming
+            ) - 1} more this week</span>
+          </span>
+          <span :if={@next && @dropped != []} class="hidden sm:inline"> · </span>
+          <span :if={@dropped != []} class={[@next && "hidden sm:inline"]}>
+            just dropped: {@dropped |> Enum.take(2) |> Enum.map_join(", ", & &1.label)}<span :if={
+              length(@dropped) > 2
+            }> +{length(@dropped) - 2}</span>
+          </span>
         </span>
-        <span :if={@next && @dropped != []} class="hidden sm:inline"> · </span>
-        <span :if={@dropped != []} class={[@next && "hidden sm:inline"]}>
-          just dropped: {@dropped |> Enum.take(2) |> Enum.map_join(", ", & &1.label)}<span :if={
-            length(@dropped) > 2
-          }> +{length(@dropped) - 2}</span>
-        </span>
-      </span>
-    </.link>
+      </.link>
+      <.link
+        :if={@loaded? and !@next and @dropped == []}
+        navigate={~p"/#{@username}/calendar"}
+        class="flex items-start gap-1.5 text-base-content/40 transition hover:text-base-content/70"
+      >
+        <.icon name="hero-calendar-days" class="mt-px h-3.5 w-3.5 shrink-0" />
+        <span>Nothing dropping from your Saved list this week</span>
+      </.link>
+    </div>
     """
   end
 
-  attr :data, :map, required: true
+  # A grey bar the size of the text it stands in for.
+  attr :class, :string, default: ""
+
+  defp sk(assigns),
+    do:
+      ~H|<span class={["skeleton inline-block h-5 origin-center scale-y-75 rounded align-middle", @class]}></span>|
+
+  attr :data, :any,
+    default: nil,
+    doc: "nil while the shelf is loading: the page draws placeholders"
+
   attr :busy, :string, default: nil
   attr :error, :string, default: nil
   attr :open, :any, default: nil
@@ -322,13 +358,14 @@ defmodule RokiWeb.UserHomeLive do
         <span :if={@busy} class="flex items-center gap-2 text-sm text-base-content/60">
           <span class="loading loading-spinner loading-sm"></span> {@busy}
         </span>
-        <button phx-click="sync" class="btn btn-sm" disabled={@busy != nil}>
+        <button phx-click="sync" class="btn btn-sm" disabled={@busy != nil or @data == nil}>
           <.icon name="hero-arrow-path" class="h-4 w-4" /> Sync now
         </button>
         <button
           phx-click="disconnect"
           data-confirm="Disconnect laev and delete everything pulled for this account? Your laev key's server keeps its copy."
           class="btn btn-sm btn-ghost"
+          disabled={@data == nil}
         >
           Disconnect
         </button>
@@ -336,43 +373,78 @@ defmodule RokiWeb.UserHomeLive do
 
       <p :if={@error} class="alert alert-error text-sm">{@error}</p>
 
-      <%!-- Stats and the release note, small and quiet: the shelf below is the point. --%>
+      <%!-- Stats and the release note: small, quiet, and the same size whether loaded or
+            not — placeholders stand in at their width, and what is known at once comes
+            first, so numbers arriving later only ever fill space already reserved. --%>
       <div class="-mt-6 space-y-1.5">
         <.link
           navigate={~p"/#{@username}/stats"}
-          class="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-sm text-base-content/60 transition hover:text-base-content"
+          class="flex min-h-5 flex-wrap items-center gap-x-4 gap-y-0.5 text-sm text-base-content/60 transition hover:text-base-content"
         >
-          <span :if={match?(%{totals: _}, @stats)}>
-            <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
+          <span :if={@data}>
+            <b class="text-base-content">{@data.tally.behind}</b> in progress
           </span>
-          <span :if={match?(%{totals: _}, @stats)} class="hidden sm:inline">
-            <b class="text-base-content">{@stats.totals.films}</b> films
-          </span>
-          <span :if={match?(%{totals: _}, @stats)} class="hidden sm:inline">
-            <b class="text-base-content">{@stats.totals.episodes}</b> episodes
-          </span>
-          <span :if={@stats == nil} class="text-base-content/40">measuring your history…</span>
-          <span><b class="text-base-content">{@data.tally.behind}</b> in progress</span>
-          <span>
+          <span :if={@data}>
             <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
             finished
           </span>
-          <span class="text-xs text-base-content/50">all stats →</span>
+          <.sk :if={!@data} class="w-24" />
+          <.sk :if={!@data} class="w-20" />
+
+          <%= cond do %>
+            <% match?(%{totals: _}, @stats) -> %>
+              <span>
+                <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
+              </span>
+              <span class="hidden sm:inline">
+                <b class="text-base-content">{@stats.totals.films}</b> films
+              </span>
+              <span class="hidden sm:inline">
+                <b class="text-base-content">{@stats.totals.episodes}</b> episodes
+              </span>
+            <% match?({:error, _}, @stats) -> %>
+              <span class="text-base-content/40">time watched unavailable</span>
+            <% true -> %>
+              <.sk class="w-32" />
+              <.sk class="hidden w-16 sm:inline-block" />
+              <.sk class="hidden w-24 sm:inline-block" />
+          <% end %>
+
+          <span class="ml-auto flex h-5 items-center text-xs text-base-content/50">all stats →</span>
         </.link>
-        <.pulse_banner :if={@pulse} pulse={@pulse} username={@username} />
+        <.pulse_line pulse={@pulse} username={@username} />
       </div>
 
+      <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
+      <section :if={!@data} class="space-y-3" aria-busy="true">
+        <div class="skeleton h-7 w-40 rounded"></div>
+        <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          <li :for={_ <- 1..16} class="space-y-1">
+            <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
+            <div class="skeleton h-5 w-3/4 rounded"></div>
+            <div class="skeleton h-4 w-1/2 rounded"></div>
+          </li>
+        </ul>
+      </section>
+
       <.poster_row
+        :if={@data}
         title="Watchlist"
         count={length(@data.watchlist.behind)}
         items={@data.watchlist.behind}
       />
-      <.fold id="saved" title="Saved" items={@data.saved} open={@open} />
-      <.fold id="caught_up" title="Caught up" items={@data.watchlist.caught_up} open={@open} />
-      <.fold id="on_hold" title="On hold" items={@data.watchlist.on_hold} open={@open} />
-      <.fold id="history" title="History" items={@data.continue} open={@open} />
+      <.fold :if={@data} id="saved" title="Saved" items={@data.saved} open={@open} />
+      <.fold
+        :if={@data}
+        id="caught_up"
+        title="Caught up"
+        items={@data.watchlist.caught_up}
+        open={@open}
+      />
+      <.fold :if={@data} id="on_hold" title="On hold" items={@data.watchlist.on_hold} open={@open} />
+      <.fold :if={@data} id="history" title="History" items={@data.continue} open={@open} />
 
-      <section class="space-y-3">
+      <section :if={@data} class="space-y-3">
         <h2 class="text-xl font-semibold">Connections</h2>
         <div class="card bg-base-200 p-4">
           <dl class="grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">

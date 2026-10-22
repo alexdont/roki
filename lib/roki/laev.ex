@@ -111,6 +111,7 @@ defmodule Roki.Laev do
   def connect(uuid, key, opts \\ []) do
     carry? = Keyword.get(opts, :carry_keys?, false)
     url = opts |> Keyword.get(:url) |> blank_to_nil()
+    Roki.Stats.forget(uuid)
 
     run(uuid, fn ->
       if carry?, do: Settings.put("LAEV_SYNC_KEYS", "on")
@@ -128,16 +129,23 @@ defmodule Roki.Laev do
   end
 
   @doc "Pull, merge and push once."
-  def sync(uuid), do: run(uuid, &Sync.sync/0)
+  def sync(uuid) do
+    result = run(uuid, &Sync.sync/0)
+    Roki.Stats.forget(uuid)
+    result
+  end
 
   @doc "Forget the connection and everything pulled for this account."
   def disconnect(uuid) do
+    Roki.Stats.forget(uuid)
     File.rm_rf!(dir(uuid))
     :ok
   end
 
   @doc "Turn carrying API keys on or off for a connected account, then sync so it takes effect."
   def set_carry_keys(uuid, on?) do
+    Roki.Stats.forget(uuid)
+
     run(uuid, fn ->
       Settings.put("LAEV_SYNC_KEYS", if(on?, do: "on", else: "off"))
       Sync.sync()

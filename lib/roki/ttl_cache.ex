@@ -54,6 +54,12 @@ defmodule Roki.TTLCache do
     end
   end
 
+  @doc "Forget one entry now (after the thing it was computed from changed)."
+  def delete(key) do
+    :ets.delete(@table, key)
+    :ok
+  end
+
   @doc "Number of entries held (expired ones included until the next sweep)."
   def size, do: :ets.info(@table, :size)
 
