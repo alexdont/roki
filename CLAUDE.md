@@ -362,3 +362,7 @@ Header (`RokiWeb.Layouts.app`): logo (= Featured `/home`), then Movies / Shows /
 `/movies`, `/shows`, `/anime` (`CategoryLive`, `Roki.Browse`): a larger-poster grid, Popular (= the Featured list) by default or Newest / Oldest / Top rated (TMDB discover, out already, with a vote floor so the oldest/newest/top are not obscure), grid size S/M/L at the top right (kept in `localStorage["roki:grid"]`, sent as the `grid` socket param), "Load more" at the bottom. Featured shows two rows per kind and "See more →".
 
 The section grids keep to whole rows while more can be loaded (`assets/js/fill_grid.js`, the `FillGrid` hook): the incomplete last row is hidden until the next page fills it, and shown in full once the list ends.
+
+### Title page: library actions
+
+Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`), Put on hold (`Laev.Holds`; not for anime, whose status lives on MyAnimeList), and Mark watched / Mark all watched (`Laev.Position.set_watched`: a film's one mark, or every episode that is out for a series; the same button unmarks). Each episode row has its own mark/unmark toggle and the season header has Mark/Unmark season. All go through `Roki.Watch` (`library/2`, `toggle_saved/2`, `toggle_hold/2`, `set_watched/5`, `set_many_watched/4`, `set_series_watched/3`), clear the stats cache and push to the user's other devices. Above Play: the Browser / External player switch, and Play itself is the big button.

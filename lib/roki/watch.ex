@@ -162,6 +162,106 @@ defmodule Roki.Watch do
     end
   end
 
+  # ── the user's library: watched, saved for later, on hold ─────────────
+
+  @doc """
+  Where this title stands for this user: `%{saved?, held?, watched?, all_watched?}`.
+  `watched?` is for a film; `all_watched?` for a series (every episode out so far has a mark).
+  Anime is kept on MyAnimeList, so it has no hold here and no whole-series mark.
+  """
+  def library(uuid, title) do
+    Roki.Laev.run(uuid, fn ->
+      ctx = build_ctx(title, nil, nil)
+
+      %{
+        saved?: Laev.Watchlist.has?(title.type, title.id),
+        held?: not title.anime? and Laev.Holds.held?(title.type, title.id),
+        watched?: title.type == "movie" and Laev.Position.finished?(ctx),
+        all_watched?: title.type == "tv" and not title.anime? and series_done?(title)
+      }
+    end)
+  end
+
+  defp series_done?(title) do
+    total = title |> aired_seasons() |> Enum.map(&(&1.episodes || 0)) |> Enum.sum()
+
+    watched =
+      Laev.Position.episode_marks() |> Map.get({"tv", title.id}, %{}) |> Map.values() |> Enum.sum()
+
+    total > 0 and watched >= total
+  end
+
+  defp aired_seasons(title) do
+    today = Date.utc_today()
+
+    Enum.filter(title.seasons, fn s ->
+      s.number > 0 and is_binary(s.air_date) and
+        match?({:ok, d} when d != nil, Date.from_iso8601(s.air_date)) and
+        Date.compare(Date.from_iso8601!(s.air_date), today) != :gt
+    end)
+  end
+
+  @doc "Save for later (the watchlist's saved list), or take it off. `:added | :removed`."
+  def toggle_saved(uuid, title) do
+    result =
+      Roki.Laev.run(uuid, fn ->
+        Laev.Watchlist.toggle(%{
+          type: title.type,
+          id: title.id,
+          title: title.title,
+          year: title.year,
+          poster: title.poster_path
+        })
+      end)
+
+    library_changed(uuid)
+    result
+  end
+
+  @doc "Put on hold (on the shelf's On hold row), or take it off. `:held | :released`."
+  def toggle_hold(uuid, title) do
+    result = Roki.Laev.run(uuid, fn -> Laev.Holds.toggle(title.type, title.id) end)
+    library_changed(uuid)
+    result
+  end
+
+  @doc "Mark a film or one episode watched, or clear the mark. Sent to the user's other devices."
+  def set_watched(uuid, title, season, episode, watched?) do
+    Roki.Laev.run(uuid, fn ->
+      Laev.Position.set_watched(build_ctx(title, season, episode), watched?)
+    end)
+
+    library_changed(uuid)
+  end
+
+  @doc "Mark several episodes (`[{season, episode}]`) at once."
+  def set_many_watched(uuid, title, pairs, watched?) do
+    Roki.Laev.run(uuid, fn ->
+      for {s, e} <- pairs, do: Laev.Position.set_watched(build_ctx(title, s, e), watched?)
+    end)
+
+    library_changed(uuid)
+  end
+
+  @doc "Every episode that is out, across all seasons, marked or cleared. Slow for a long series."
+  def set_series_watched(uuid, title, watched?) do
+    pairs =
+      for s <- aired_seasons(title),
+          {:ok, eps} <- [episodes(title.id, s.number, uuid)],
+          e <- eps,
+          e.aired?,
+          do: {s.number, e.number}
+
+    set_many_watched(uuid, title, pairs, watched?)
+  end
+
+  # Stats and the shelf's counts read the same marks; the other devices pick them up on a sync.
+  defp library_changed(uuid) do
+    Roki.Stats.forget(uuid)
+    Task.start(fn -> Roki.Laev.run(uuid, &Laev.Sync.live_push/0) end)
+    :ok
+  end
+
   @doc "Episodes of one season: `{:ok, [%{number, name, overview, still, air_date, minutes, aired?}]}`."
   def episodes(tv_id, season, uuid \\ nil) when is_integer(tv_id) and is_integer(season) do
     TTLCache.fetch({:episodes, tv_id, season}, @episodes_ttl, fn ->

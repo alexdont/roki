@@ -45,6 +45,8 @@ defmodule RokiWeb.TitleLive do
         cache_info: nil,
         cache_key: nil,
         cached: MapSet.new(),
+        lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
+        lib_busy: false,
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -97,8 +99,9 @@ defmodule RokiWeb.TitleLive do
       linked? = uuid && Roki.Laev.connected?(uuid)
       resume = if linked?, do: Roki.Laev.run(uuid, fn -> Laev.Resume.get(type, id) end)
       cached = if linked?, do: cached_keys(uuid), else: MapSet.new()
+      lib = if linked?, do: Watch.library(uuid, title)
 
-      {:ok, title, resume, cached}
+      {:ok, title, resume, cached, lib}
     end
   end
 
@@ -197,6 +200,81 @@ defmodule RokiWeb.TitleLive do
      |> assign(mode: String.to_existing_atom(mode))
      |> push_event("roki:player", %{mode: mode})}
   end
+
+  # ── marking and saving: what the terminal app does with a title ────
+
+  # Films: one mark. Series: every episode that is out (many lookups, so it runs apart).
+  def handle_event("toggle_watched", _params, %{assigns: %{type: "movie"}} = socket) do
+    %{uuid: uuid, title: title, lib: lib} = socket.assigns
+    new = not lib.watched?
+    Watch.set_watched(uuid, title, nil, nil, new)
+    {:noreply, assign(socket, :lib, %{lib | watched?: new})}
+  end
+
+  def handle_event("toggle_watched", _params, %{assigns: %{lib_busy: false}} = socket) do
+    %{uuid: uuid, title: title, lib: lib} = socket.assigns
+    new = not lib.all_watched?
+
+    {:noreply,
+     socket
+     |> assign(:lib_busy, true)
+     |> start_async(:bulk, fn ->
+       Watch.set_series_watched(uuid, title, new)
+       {new, Watch.library(uuid, title)}
+     end)}
+  end
+
+  def handle_event("toggle_watched", _params, socket), do: {:noreply, socket}
+
+  def handle_event("toggle_saved", _params, socket) do
+    %{uuid: uuid, title: title, lib: lib} = socket.assigns
+    saved? = Watch.toggle_saved(uuid, title) == :added
+    {:noreply, assign(socket, :lib, %{lib | saved?: saved?})}
+  end
+
+  def handle_event("toggle_hold", _params, socket) do
+    %{uuid: uuid, title: title, lib: lib} = socket.assigns
+    held? = Watch.toggle_hold(uuid, title) == :held
+    {:noreply, assign(socket, :lib, %{lib | held?: held?})}
+  end
+
+  def handle_event("toggle_episode", %{"season" => s, "episode" => e}, socket) do
+    %{uuid: uuid, title: title, watched: watched} = socket.assigns
+
+    with season when is_integer(season) <- to_int(s), ep when is_integer(ep) <- to_int(e) do
+      new = not MapSet.member?(watched, ep)
+      Watch.set_watched(uuid, title, season, ep, new)
+
+      {:noreply,
+       socket
+       |> assign(:watched, if(new, do: MapSet.put(watched, ep), else: MapSet.delete(watched, ep)))
+       |> assign(:lib, Watch.library(uuid, title))}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  # The whole season on screen: all marked, or — when they all are — all cleared.
+  def handle_event("toggle_season", _params, %{assigns: %{episodes: eps}} = socket)
+      when is_list(eps) do
+    %{uuid: uuid, title: title, season: season, watched: watched} = socket.assigns
+    out = for e <- eps, e.aired?, do: e.number
+    all? = out != [] and Enum.all?(out, &MapSet.member?(watched, &1))
+    Watch.set_many_watched(uuid, title, Enum.map(out, &{season, &1}), not all?)
+
+    {:noreply,
+     socket
+     |> assign(
+       :watched,
+       if(all?,
+         do: MapSet.difference(watched, MapSet.new(out)),
+         else: MapSet.union(watched, MapSet.new(out))
+       )
+     )
+     |> assign(:lib, Watch.library(uuid, title))}
+  end
+
+  def handle_event("toggle_season", _params, socket), do: {:noreply, socket}
 
   def handle_event("mark_watched", _params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
@@ -512,12 +590,38 @@ defmodule RokiWeb.TitleLive do
   # ── what comes back from the tasks ─────────────────────────────────
 
   @impl true
-  def handle_async(:title, {:ok, {:ok, title, resume, cached}}, socket) do
+  def handle_async(:title, {:ok, {:ok, title, resume, cached, lib}}, socket) do
     socket =
-      assign(socket, title: title, resume: resume, cached: cached, page_title: title.title)
+      assign(socket,
+        title: title,
+        resume: resume,
+        cached: cached,
+        lib: lib || socket.assigns.lib,
+        page_title: title.title
+      )
 
     {:noreply, select(socket)}
   end
+
+  def handle_async(:bulk, {:ok, {new, lib}}, socket) do
+    socket = assign(socket, lib: lib, lib_busy: false)
+    # The episode list on screen follows what was just marked.
+    watched =
+      case socket.assigns.episodes do
+        eps when is_list(eps) and new ->
+          for e <- eps, e.aired?, into: socket.assigns.watched, do: e.number
+
+        eps when is_list(eps) ->
+          MapSet.difference(socket.assigns.watched, MapSet.new(eps, & &1.number))
+
+        _ ->
+          socket.assigns.watched
+      end
+
+    {:noreply, assign(socket, :watched, watched)}
+  end
+
+  def handle_async(:bulk, _other, socket), do: {:noreply, assign(socket, :lib_busy, false)}
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, :title_error, reason || true)}
@@ -748,12 +852,14 @@ defmodule RokiWeb.TitleLive do
           resume={@resume}
           phase={@phase}
           season={@season}
+          mode={@mode}
+          linked?={@linked?}
+          lib={@lib}
+          lib_busy={@lib_busy}
           cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
         />
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
-
-        <.mode_switch :if={@linked?} mode={@mode} />
 
         <.cache_note :if={@cache_info} at={@cache_info.at} busy={match?({:working, _}, @phase)} />
 
@@ -810,11 +916,15 @@ defmodule RokiWeb.TitleLive do
   attr :resume, :any, default: nil
   attr :phase, :any, required: true
   attr :season, :any, default: nil
+  attr :mode, :atom, required: true
+  attr :linked?, :boolean, default: false
+  attr :lib, :map, required: true
+  attr :lib_busy, :boolean, default: false
 
   defp hero(assigns) do
     ~H"""
     <section class="flex flex-col gap-6 sm:flex-row">
-      <div class="w-40 shrink-0 sm:w-56">
+      <div class="w-48 shrink-0 space-y-4 sm:w-56">
         <img
           :if={@title.poster}
           src={@title.poster}
@@ -822,6 +932,9 @@ defmodule RokiWeb.TitleLive do
           class="aspect-[2/3] w-full rounded-box bg-base-300 object-cover shadow-lg"
         />
         <div :if={!@title.poster} class="aspect-[2/3] w-full rounded-box bg-base-300"></div>
+
+        <%!-- Under the poster, well away from Play: a slip here should not save or hold a title. --%>
+        <.library_buttons :if={@linked?} title={@title} lib={@lib} busy={@lib_busy} />
       </div>
 
       <div class="min-w-0 flex-1 space-y-3">
@@ -835,35 +948,105 @@ defmodule RokiWeb.TitleLive do
 
         <p :if={@title.overview} class="max-w-3xl text-base-content/80">{@title.overview}</p>
 
-        <div class="flex flex-wrap items-center gap-2 pt-1">
-          <button
-            :if={@title.type == "movie"}
-            phx-click="play"
-            class="btn btn-primary"
-            disabled={match?({:working, _}, @phase)}
-          >
-            <.icon name="hero-play-solid" class="h-5 w-5" /> {play_label(@resume)}
-          </button>
-          <button
-            :if={@title.type == "tv"}
-            phx-click="play"
-            class="btn btn-primary"
-            disabled={match?({:working, _}, @phase) or @season == nil}
-          >
-            <.icon name="hero-play-solid" class="h-5 w-5" /> {play_label_tv(@resume)}
-          </button>
-          <span
-            :if={@cached?}
-            class="badge badge-success badge-outline gap-1"
-            title="Sources are cached: plays right away"
-          >
-            ⚡ cached
-          </span>
+        <div class="space-y-3 pt-2">
+          <%!-- Where it plays, then the button: one decision above the other. --%>
+          <.mode_switch :if={@linked?} mode={@mode} />
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              phx-click="play"
+              class="btn btn-primary btn-lg h-14 min-w-[15rem] gap-2 px-10 text-xl shadow-md"
+              disabled={match?({:working, _}, @phase) or (@title.type == "tv" and @season == nil)}
+            >
+              <.icon name="hero-play-solid" class="h-6 w-6" />
+              {if @title.type == "movie", do: play_label(@resume), else: play_label_tv(@resume)}
+            </button>
+            <span
+              :if={@cached?}
+              class="badge badge-success badge-outline gap-1"
+              title="Sources are cached: plays right away"
+            >
+              ⚡ cached
+            </span>
+          </div>
         </div>
       </div>
     </section>
     """
   end
+
+  attr :title, :map, required: true
+  attr :lib, :map, required: true
+  attr :busy, :boolean, default: false
+
+  # What the terminal app has on a title: watched (and back), saved for later, on hold.
+  defp library_buttons(assigns) do
+    ~H"""
+    <div class="flex flex-col gap-3">
+      <button
+        phx-click="toggle_saved"
+        class={["btn h-12 w-full justify-start gap-2.5 px-4 text-sm", @lib.saved? && "btn-primary"]}
+        title={if @lib.saved?, do: "Click to remove it from saved", else: "Keep it for later"}
+      >
+        <.icon
+          name={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
+          class="h-4 w-4"
+        />
+        {if @lib.saved?, do: "Saved for later", else: "Save for later"}
+      </button>
+
+      <button
+        :if={not @title.anime?}
+        phx-click="toggle_hold"
+        class={["btn h-12 w-full justify-start gap-2.5 px-4 text-sm", @lib.held? && "btn-warning"]}
+        title={
+          if @lib.held?, do: "Click to take it off hold", else: "Put it down without finishing it"
+        }
+      >
+        <.icon
+          name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
+          class="h-4 w-4"
+        />
+        {if @lib.held?, do: "On hold", else: "Put on hold"}
+      </button>
+
+      <%!-- A film is watched or not; a series is "all watched" or not (episodes below one by one).
+            The same button marks and unmarks. --%>
+      <button
+        :if={@title.type == "movie" or not @title.anime?}
+        phx-click="toggle_watched"
+        disabled={@busy}
+        class={[
+          "btn h-12 w-full justify-start gap-2.5 px-4 text-sm",
+          watched_state?(@title, @lib) && "btn-success"
+        ]}
+        title={
+          if watched_state?(@title, @lib),
+            do: "Click to mark as not watched",
+            else: "Mark it as watched"
+        }
+      >
+        <span :if={@busy} class="loading loading-spinner loading-xs"></span>
+        <.icon
+          :if={!@busy}
+          name={
+            if watched_state?(@title, @lib), do: "hero-check-circle-solid", else: "hero-check-circle"
+          }
+          class="h-4 w-4"
+        />
+        {watched_label(@title, @lib)}
+      </button>
+    </div>
+    """
+  end
+
+  defp watched_state?(%{type: "movie"}, lib), do: lib.watched?
+  defp watched_state?(_title, lib), do: lib.all_watched?
+
+  defp watched_label(%{type: "movie"}, %{watched?: true}), do: "Watched"
+  defp watched_label(%{type: "movie"}, _lib), do: "Mark watched"
+  defp watched_label(_title, %{all_watched?: true}), do: "All watched"
+  defp watched_label(_title, _lib), do: "Mark all watched"
 
   defp meta(t) do
     [
@@ -1046,7 +1229,17 @@ defmodule RokiWeb.TitleLive do
     <section class="space-y-4">
       <div class="flex flex-wrap items-center gap-3">
         <h2 class="flex-1 text-xl font-semibold">Episodes</h2>
-        <form :if={length(@title.seasons) > 1} phx-change="select_season">
+        <button
+          :if={@can_play? and is_list(@episodes) and @episodes != []}
+          phx-click="toggle_season"
+          class="btn btn-sm gap-1.5"
+        >
+          <.icon name="hero-check-circle" class="h-4 w-4" />
+          {if season_all_watched?(@episodes, @watched),
+            do: "Unmark season",
+            else: "Mark season watched"}
+        </button>
+        <form :if={length(@title.seasons) > 1} phx-change="select_season" id="season-form">
           <select name="season" class="select select-sm select-bordered">
             <option :for={s <- @title.seasons} value={s.number} selected={s.number == @season}>
               {s.name || "Season #{s.number}"}
@@ -1087,7 +1280,34 @@ defmodule RokiWeb.TitleLive do
               {e.overview}
             </p>
           </div>
-          <div class="shrink-0 self-center">
+          <div class="flex shrink-0 items-center gap-1 self-center">
+            <button
+              :if={@can_play? and e.aired?}
+              phx-click="toggle_episode"
+              phx-value-season={@season}
+              phx-value-episode={e.number}
+              class={[
+                "btn btn-sm btn-ghost btn-square",
+                MapSet.member?(@watched, e.number) && "text-success"
+              ]}
+              title={
+                if MapSet.member?(@watched, e.number),
+                  do: "Watched — click to unmark",
+                  else: "Mark watched"
+              }
+              aria-label={
+                if MapSet.member?(@watched, e.number), do: "Unmark watched", else: "Mark watched"
+              }
+            >
+              <.icon
+                name={
+                  if MapSet.member?(@watched, e.number),
+                    do: "hero-check-circle-solid",
+                    else: "hero-check-circle"
+                }
+                class="h-5 w-5"
+              />
+            </button>
             <button
               :if={@can_play? and e.aired?}
               phx-click="play"
@@ -1282,5 +1502,10 @@ defmodule RokiWeb.TitleLive do
       secs < 3600 -> "#{div(secs, 60)} min ago"
       true -> "#{div(secs, 3600)} h ago"
     end
+  end
+
+  defp season_all_watched?(episodes, watched) do
+    out = for e <- episodes, e.aired?, do: e.number
+    out != [] and Enum.all?(out, &MapSet.member?(watched, &1))
   end
 end
