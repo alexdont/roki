@@ -1641,9 +1641,48 @@ defmodule RokiWeb.TitleLive do
       "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(8.75rem+env(safe-area-inset-bottom))] sm:hidden",
       @locked? && "-mb-9"
     ]}>
-      <div class="shrink-0">
-        <h1 class="text-xl font-bold leading-tight">{@title.title}</h1>
-        <p class="text-xs text-base-content/60">{meta(@title)}</p>
+      <div class="relative flex shrink-0 items-start gap-2">
+        <div class="min-w-0 flex-1">
+          <h1 class="text-xl font-bold leading-tight">{@title.title}</h1>
+          <p class="text-xs text-base-content/60">{meta(@title)}</p>
+        </div>
+
+        <%!-- Less used actions live behind the dots: on hold (anime has none: MyAnimeList keeps that). --%>
+        <div :if={@linked? and not @title.anime?} class="shrink-0">
+          <button
+            type="button"
+            phx-click={JS.toggle(to: "#more-menu", display: "block")}
+            class="btn btn-ghost btn-circle btn-sm relative"
+            aria-label="More actions"
+            aria-controls="more-menu"
+          >
+            <.icon name="hero-ellipsis-horizontal" class="h-6 w-6" />
+            <span
+              :if={@lib.held?}
+              class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-warning"
+              title="On hold"
+            ></span>
+          </button>
+          <div
+            id="more-menu"
+            class="absolute right-0 top-full z-40 mt-1 hidden w-56 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+            phx-click-away={JS.hide(to: "#more-menu")}
+            phx-window-keydown={JS.hide(to: "#more-menu")}
+            phx-key="escape"
+          >
+            <button
+              type="button"
+              phx-click={JS.push("toggle_hold") |> JS.hide(to: "#more-menu")}
+              class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+            >
+              <.icon
+                name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
+                class={["h-5 w-5", @lib.held? && "text-warning"]}
+              />
+              {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}
+            </button>
+          </div>
+        </div>
       </div>
 
       <%!-- The poster takes all the height there is between the title and the synopsis; the
@@ -1661,8 +1700,8 @@ defmodule RokiWeb.TitleLive do
           />
         </div>
 
-        <%!-- Icons only: saved, on hold, watched — three tiles sharing the height and the width left of
-              the poster, the icon centred in each. The state is the colour; the label is the tooltip. --%>
+        <%!-- Icons only: saved, watched, rating — three tiles sharing the poster's height, the icon
+              centred in each. The state is the colour; the label is the tooltip. --%>
         <div :if={@linked?} class="flex min-w-0 flex-1 flex-col gap-2">
           <.round_btn
             event="toggle_saved"
@@ -1670,14 +1709,6 @@ defmodule RokiWeb.TitleLive do
             icon="bookmark"
             label={if @lib.saved?, do: "Saved for later (tap to remove)", else: "Save for later"}
             on_class="btn-primary"
-          />
-          <.round_btn
-            :if={not @title.anime?}
-            event="toggle_hold"
-            on={@lib.held?}
-            icon="pause-circle"
-            label={if @lib.held?, do: "On hold (tap to resume)", else: "Put on hold"}
-            on_class="btn-warning"
           />
           <.round_btn
             :if={@title.type == "movie" or not @title.anime?}
