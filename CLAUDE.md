@@ -390,7 +390,7 @@ the idea of `alexdont/debrid_theatre`. Two subtitle tracks: the **studied** one 
 overlay) and a **translation** under it (overlay and list; "Peek" blurs it until clicked); both
 picked from chips under the player, remembered by language (`roki:study:lang1/lang2`).
 Subtitles are drawn by the hook (`.study-overlay`), not native text tracks. Every word of a
-language with a dictionary is a `.study-word`: hover 500 ms → the video pauses and a card shows
+language with a dictionary is a `.study-word`: hover 300 ms → the video pauses and a card shows
 (`/dict/:lang?q=` → `RokiWeb.DictController`, `Roki.Dictionary`: Jisho for Japanese, Wiktionary
 for the rest; cached a day, rate-limited); leaving resumes it; a click/tap pins it. Japanese is cut
 with **Kuromoji** (`priv/static/vendor/kuromoji.js` + 17 MB `priv/static/kuromoji/dict`, loaded

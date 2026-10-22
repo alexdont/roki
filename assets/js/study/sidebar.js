@@ -18,7 +18,7 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 const FOLLOW_RESUME_MS = 5000
 // How long a word must be hovered before the video stops and the card opens (a sweep of the
 // mouse across the line should not).
-const DWELL_MS = 500
+const DWELL_MS = 300
 
 // ── languages and words ───────────────────────────────────────────────
 
@@ -936,7 +936,11 @@ export const StudySidebar = {
     const i1 = this.tracks.findIndex((t) => want1 && shortLang(t.lang) === want1)
     const first = i1 >= 0 ? i1 : this.p.url && this.p.url !== "upload" ? this.tracks.findIndex((t) => t.url === this.p.url) : -1
     const idx1 = want1 === "none" ? -1 : first >= 0 ? first : this.tracks.length ? 0 : -1
-    const i2 = want2 && want2 !== "none" ? this.tracks.findIndex((t, i) => i !== idx1 && shortLang(t.lang) === want2) : -1
+    // With nothing chosen yet, a studied language that is not English gets the English track as
+    // its translation.
+    const studiedLang = idx1 >= 0 ? shortLang(this.tracks[idx1].lang) : ""
+    const wanted2 = want2 || (studiedLang && studiedLang !== "en" ? "en" : null)
+    const i2 = wanted2 && wanted2 !== "none" ? this.tracks.findIndex((t, i) => i !== idx1 && shortLang(t.lang) === wanted2 && shortLang(t.lang) !== studiedLang) : -1
 
     this.choose("p", idx1)
     this.choose("s", i2)
@@ -1010,6 +1014,14 @@ export const StudySidebar = {
 
   pick(slot, i) {
     const other = slot === "p" ? "s" : "p"
+    // Studying a different language than before: what was being read becomes the translation
+    // (Japanese chosen over English → Japanese on top, English under it), unless one is chosen.
+    const before = this.p.trackIdx
+    if (slot === "p" && i >= 0 && before >= 0 && before !== i && this.s.trackIdx < 0 &&
+        shortLang(this.tracks[before].lang) !== shortLang(this.tracks[i].lang)) {
+      store.set("lang2", shortLang(this.tracks[before].lang) || "x")
+      this.choose("s", before)
+    }
     // The same track cannot be both: choosing it for one takes it from the other.
     if (i >= 0 && this[other].trackIdx === i) this.choose(other, -1)
     store.set(slot === "p" ? "lang1" : "lang2", i >= 0 ? shortLang(this.tracks[i].lang) || "x" : "none")
