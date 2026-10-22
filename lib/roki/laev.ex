@@ -151,7 +151,7 @@ defmodule Roki.Laev do
   defp continue_watching do
     Resume.all()
     |> Enum.sort_by(&(&1["updated_at"] || 0), :desc)
-    |> Enum.take(24)
+    |> Enum.take(120)
     |> Enum.map(fn e ->
       %{
         type: e["type"],
@@ -169,7 +169,7 @@ defmodule Roki.Laev do
   defp saved do
     Watchlist.all()
     |> Enum.sort_by(&(&1["added_at"] || 0), :desc)
-    |> Enum.take(24)
+    |> Enum.to_list()
     |> Enum.map(fn e ->
       %{
         type: e["type"],
