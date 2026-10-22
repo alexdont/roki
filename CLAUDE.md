@@ -342,3 +342,7 @@ Every poster leads to `/title/:type/:id` (`RokiWeb.TitleLive`); movies and episo
 ### External player (VLC / mpv, e.g. on a phone)
 
 A device-level choice, stored in the browser (`localStorage["roki:player"]`) and sent as socket params (`player`, `platform`) — a phone defaults to external, a desktop to "this page". In external mode nothing is remuxed: `Watch.auto_choice_external` applies laev's plain rule (best up to the ceiling, 4K/HEVC allowed) and `Watch.external` writes the history entry and returns the direct debrid link. The panel offers `vlc-x-callback://` (iOS), an Android `intent:`, `vlc://` (desktop), an .m3u download, copy link, Infuse and mpv; Infuse/mpv/desktop-VLC links are untested. An external player cannot report progress, so "Mark as watched" calls `Laev.Position.set_watched`. `test/e2e/external.js` is the manual phone-emulation check (same cookie setup as `watch.js`).
+
+### Settings split
+
+`SettingsLive` shows three kinds: shared laev settings (editable), **site-only** settings (`Roki.Laev.web_settings/1`, stored in `<user dir>/roki-web.json`, removed on disconnect; today only `browser_max_resolution`, default 1080p, applied by `Watch.device_cap/3` in browser mode — external mode follows laev's ceiling), and **terminal-app-only** settings (`@cli_only`: player, skip, posters, download dir, mpv args), rendered disabled with a "CLI only" badge and refused server-side. The locked Player row lists vlc / mpv / browser; on this site each device picks its player on the title page.

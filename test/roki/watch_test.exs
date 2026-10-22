@@ -46,4 +46,14 @@ defmodule Roki.WatchTest do
     assert Watch.language("tlh") == "TLH"
     assert Watch.language(nil) == "Unknown"
   end
+
+  test "the browser is capped at its own resolution, an external player is not" do
+    web = %{"browser_max_resolution" => "1080p"}
+
+    assert Watch.device_cap("2160p", :browser, web) == "1080p"
+    assert Watch.device_cap("2160p", :external, web) == "2160p"
+    assert Watch.device_cap("720p", :browser, web) == "720p"
+    assert Watch.device_cap(nil, :browser, web) == "1080p"
+    assert Watch.device_cap("2160p", :browser, %{"browser_max_resolution" => "720p"}) == "720p"
+  end
 end

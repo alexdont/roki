@@ -456,6 +456,18 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  The resolution ceiling for a device: the user's laev ceiling, and in the browser also the
+  site's own cap (default 1080p — a browser cannot decode HEVC, so anything above that is a
+  heavy re-encode). The lower of the two. `nil` means no ceiling.
+  """
+  def device_cap(cap, :external, _web), do: cap
+
+  def device_cap(cap, :browser, web) do
+    limit = web["browser_max_resolution"] || @transcode_cap
+    if Sources.resolution_at_most?(limit, cap), do: limit, else: cap
+  end
+
   @doc "Whether the user's settings want the best source played without asking."
   def auto_source?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.auto_source?/0)
 

@@ -151,6 +151,51 @@ defmodule Roki.Laev do
 
   # ── settings ───────────────────────────────────────────────────────
 
+  # Settings that exist only on this site (laev has no such thing), kept beside the account's
+  # laev state. Disconnecting laev removes them with the rest of the directory.
+  @web_settings %{
+    "browser_max_resolution" => %{default: "1080p", allowed: ~w(480p 720p 1080p)}
+  }
+
+  @doc "The site-only settings, defaults filled in: `%{\"browser_max_resolution\" => \"1080p\"}`."
+  def web_settings(uuid) do
+    saved =
+      with {:ok, body} <- File.read(web_path(uuid)),
+           {:ok, %{} = map} <- Jason.decode(body) do
+        map
+      else
+        _ -> %{}
+      end
+
+    Map.new(@web_settings, fn {key, %{default: default, allowed: allowed}} ->
+      value = saved[key]
+      {key, if(value in allowed, do: value, else: default)}
+    end)
+  end
+
+  @doc "What each site-only setting may be: `%{key => %{default:, allowed:}}`."
+  def web_setting_specs, do: @web_settings
+
+  @doc "Change one site-only setting. `:ok` or `{:error, reason}`."
+  def put_web_setting(uuid, key, value) do
+    case @web_settings[key] do
+      %{allowed: allowed} ->
+        if value in allowed do
+          File.mkdir_p!(dir(uuid))
+          merged = Map.put(web_settings(uuid), key, value)
+          File.write!(web_path(uuid), Jason.encode!(merged))
+          :ok
+        else
+          {:error, "not one of #{Enum.join(allowed, ", ")}"}
+        end
+
+      nil ->
+        {:error, "unknown setting"}
+    end
+  end
+
+  defp web_path(uuid), do: Path.join(dir(uuid), "roki-web.json")
+
   @doc "Every laev setting with this user's value; secrets come back masked, never in full."
   def settings(uuid), do: run(uuid, fn -> Settings.all(:browser) end)
 

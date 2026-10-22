@@ -263,7 +263,7 @@ defmodule RokiWeb.TitleLive do
 
   defp begin(socket, season, episode, manual?) do
     token = socket.assigns.token + 1
-    %{uuid: uuid, title: title} = socket.assigns
+    %{uuid: uuid, title: title, mode: mode} = socket.assigns
     parent = self()
 
     socket
@@ -284,12 +284,12 @@ defmodule RokiWeb.TitleLive do
       ctx: nil
     )
     |> start_async(:pipeline, fn ->
-      pipeline(parent, token, uuid, title, season, episode, manual?)
+      pipeline(parent, token, uuid, title, season, episode, manual?, mode)
     end)
   end
 
   # Runs in a task. Everything slow happens here; progress goes to the page as messages.
-  defp pipeline(parent, token, uuid, title, season, episode, _manual?) do
+  defp pipeline(parent, token, uuid, title, season, episode, _manual?, mode) do
     say = fn msg -> send(parent, {:status, token, msg}) end
 
     with :ok <- Watch.subscription(uuid),
@@ -297,7 +297,7 @@ defmodule RokiWeb.TitleLive do
          _ = say.("Searching for releases…"),
          {:ok, %{query: query, sources: found}} <- Watch.sources(title, season, episode, uuid),
          sources = Watch.with_library(uuid, query, found),
-         cap = Watch.ceiling(uuid, ctx),
+         cap = Watch.device_cap(Watch.ceiling(uuid, ctx), mode, Roki.Laev.web_settings(uuid)),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, playable, rest} <- probe_until_playable(parent, token, uuid, ctx, sources, []) do
       {:ok, %{token: token, ctx: ctx, playable: playable, rest: rest, cap: cap}}

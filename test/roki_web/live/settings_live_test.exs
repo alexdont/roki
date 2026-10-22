@@ -93,6 +93,63 @@ defmodule RokiWeb.SettingsLiveTest do
     assert File.read!(Path.join(dir, "config")) =~ "LAEV_AUTO_SOURCE=off"
   end
 
+  test "the terminal app's settings are shown but locked", %{conn: conn, user: user} do
+    connect!(user)
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    html = render_async(view)
+
+    assert html =~ "Terminal app only"
+    assert html =~ "CLI only"
+
+    for key <- ~w(LAEV_PLAYER LAEV_POSTERS LAEV_SKIP LAEV_DOWNLOAD_DIR LAEV_MPV_ARGS) do
+      assert has_element?(view, ~s([name="s[#{key}]"][disabled])), "#{key} should be locked"
+    end
+
+    # the player lists every choice, even ones this server cannot run
+    for o <- ~w(vlc mpv browser), do: assert(has_element?(view, "#s-LAEV_PLAYER option", o))
+    # while the shared ones stay editable
+    refute has_element?(view, ~s([name="s[LAEV_AUTO_SOURCE]"][disabled]))
+
+    html =
+      render_hook(view, "change", %{
+        "_target" => ["s", "LAEV_PLAYER"],
+        "s" => %{"LAEV_PLAYER" => "vlc"}
+      })
+
+    assert html =~ "can only be changed in the terminal app"
+  end
+
+  test "the browser player's own resolution cap saves, and starts at 1080p", %{
+    conn: conn,
+    user: user
+  } do
+    dir = connect!(user)
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    html = render_async(view)
+
+    assert html =~ "This site"
+    assert has_element?(view, "#w-browser_max_resolution option[selected]", "1080p")
+
+    html =
+      render_hook(view, "change", %{
+        "_target" => ["w", "browser_max_resolution"],
+        "w" => %{"browser_max_resolution" => "720p"}
+      })
+
+    assert html =~ "Saved"
+    assert Roki.Laev.web_settings(user.uuid)["browser_max_resolution"] == "720p"
+    refute File.read!(Path.join(dir, "config")) =~ "720p"
+
+    html =
+      render_hook(view, "change", %{
+        "_target" => ["w", "browser_max_resolution"],
+        "w" => %{"browser_max_resolution" => "4K"}
+      })
+
+    assert html =~ "not one of"
+    assert Roki.Laev.web_settings(user.uuid)["browser_max_resolution"] == "720p"
+  end
+
   test "a value laev refuses is explained, not saved", %{conn: conn, user: user} do
     dir = connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")

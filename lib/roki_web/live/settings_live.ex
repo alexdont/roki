@@ -16,22 +16,34 @@ defmodule RokiWeb.SettingsLive do
 
   alias Roki.{Laev, RateLimit}
 
+  # Settings that only the terminal app acts on. They are listed so you can see what is
+  # set, but cannot be changed from here — change them in the terminal app.
+  @cli_only ~w(LAEV_PLAYER LAEV_SKIP LAEV_POSTERS LAEV_DOWNLOAD_DIR LAEV_MPV_ARGS)
+
+  # `web` is this site's own section (`Roki.Laev.web_settings/1`), not one of laev's groups.
   @groups [
     playback: "Playback",
     language: "Language",
-    appearance: "Terminal app display",
-    files: "Terminal app files & player"
+    web: "This site's player",
+    cli: "Terminal app only"
   ]
+
+  @web_hints %{
+    "browser_max_resolution" =>
+      "The highest resolution the player on this page will start on its own. A browser cannot decode HEVC, so above 1080p the server has to re-encode the release. 4K is for your external player (VLC), which follows the ceiling above."
+  }
+  @web_labels %{"browser_max_resolution" => "Browser player resolution"}
 
   @hints %{
     "LAEV_PLAYER" =>
-      "Where a stream plays. The browser player is on this site; mpv and VLC are for the terminal app.",
+      "Which player the terminal app opens. On this site each device chooses on the title page: this page or VLC.",
     "LAEV_AUTO_SOURCE" => "Play the best source instead of asking which one.",
     "LAEV_MAX_RESOLUTION" =>
-      "The highest resolution to start on its own. Every release is still listed.",
+      "The highest resolution to start on its own in the terminal app and in your external player. The browser player has its own cap below. Every release is still listed.",
     "LAEV_STRICT_RESOLUTION" => "Drop releases above the ceiling before they are even checked.",
     "LAEV_AUTOPLAY" => "Start the next episode when one ends.",
-    "LAEV_SKIP" => "Intros and credits: ask with a button, skip automatically, or leave alone.",
+    "LAEV_SKIP" =>
+      "Intros and credits: ask with a button, skip automatically, or leave alone. Not available on this site yet.",
     "LAEV_LANG" =>
       "Preferred audio language, like en. Releases in other languages sink in the ranking.",
     "LAEV_SUBS" => "Preferred subtitle language, like en. Blank follows the audio language.",
@@ -70,6 +82,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:uuid, uuid)
           |> assign(:state, if(linked?, do: :loading, else: :not_connected))
           |> assign(:settings, [])
+          |> assign(:web, %{})
           |> assign(:saved, nil)
           |> assign(:editing, MapSet.new())
           |> assign(:results, %{})
@@ -91,11 +104,30 @@ defmodule RokiWeb.SettingsLive do
       {Laev.settings(uuid), Laev.carrying_keys?(uuid), Laev.sync_server(uuid)}
     end)
     |> start_async(:sync_status, fn -> Laev.sync_status(uuid) end)
+    |> start_async(:web, fn -> Laev.web_settings(uuid) end)
   end
 
   # ── events ─────────────────────────────────────────────────────────
 
   @impl true
+  def handle_event("change", %{"_target" => ["w", key], "w" => values}, socket) do
+    case Laev.put_web_setting(socket.assigns.uuid, key, values[key] || "") do
+      :ok ->
+        Process.send_after(self(), {:clear_saved, key}, 2_000)
+
+        {:noreply,
+         socket |> assign(saved: key, error: nil) |> update(:web, &Map.put(&1, key, values[key]))}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, error: "#{key}: #{reason}")}
+    end
+  end
+
+  # The terminal app's own settings are not changed from the site (the inputs are disabled;
+  # this is for anyone who sends the event anyway).
+  def handle_event("change", %{"_target" => ["s", key]}, socket) when key in @cli_only,
+    do: {:noreply, assign(socket, error: "#{key} can only be changed in the terminal app.")}
+
   def handle_event("change", %{"_target" => ["s", key], "s" => values}, socket) do
     case Laev.put_setting(socket.assigns.uuid, key, values[key] || "") do
       :ok ->
@@ -200,6 +232,9 @@ defmodule RokiWeb.SettingsLive do
   def handle_async(:settings, {:exit, _}, socket),
     do: {:noreply, assign(socket, error: "Could not read your settings.")}
 
+  def handle_async(:web, {:ok, web}, socket), do: {:noreply, assign(socket, :web, web)}
+  def handle_async(:web, {:exit, _}, socket), do: {:noreply, socket}
+
   def handle_async(:sync_status, {:ok, status}, socket),
     do: {:noreply, assign(socket, :sync, status)}
 
@@ -243,7 +278,8 @@ defmodule RokiWeb.SettingsLive do
 
   @impl true
   def render(assigns) do
-    by_group = Enum.group_by(assigns.settings, & &1.group)
+    by_group =
+      Enum.group_by(assigns.settings, &if(&1.key in @cli_only, do: :cli, else: &1.group))
 
     assigns =
       assign(assigns,
@@ -251,7 +287,10 @@ defmodule RokiWeb.SettingsLive do
         by_group: by_group,
         keys: Map.get(by_group, :keys, []),
         key_help: @key_help,
-        checkable: @checkable
+        checkable: @checkable,
+        web_specs: Laev.web_setting_specs(),
+        web_hints: @web_hints,
+        web_labels: @web_labels
       )
 
     ~H"""
@@ -282,10 +321,32 @@ defmodule RokiWeb.SettingsLive do
           class="space-y-10"
           onsubmit="return false"
         >
-          <section :for={{group, title} <- @groups} :if={@by_group[group]} class="space-y-1">
+          <section
+            :for={{group, title} <- @groups}
+            :if={group == :web or @by_group[group]}
+            class="space-y-1"
+          >
             <h2 class="text-xl font-semibold">{title}</h2>
+            <p :if={group == :cli} class="pb-1 text-sm text-base-content/60">
+              These only do something in the laev terminal app, so they can't be changed here.
+              Change them there; they show up here when your devices sync.
+            </p>
             <div class="divide-y divide-base-300">
-              <.setting_row :for={s <- @by_group[group]} s={s} saved={@saved} />
+              <.web_row
+                :for={{key, spec} <- if(group == :web, do: @web_specs, else: [])}
+                key={key}
+                spec={spec}
+                value={@web[key] || spec.default}
+                label={@web_labels[key]}
+                hint={@web_hints[key]}
+                saved={@saved}
+              />
+              <.setting_row
+                :for={s <- @by_group[group] || []}
+                s={s}
+                saved={@saved}
+                locked={group == :cli}
+              />
             </div>
           </section>
         </form>
@@ -363,8 +424,35 @@ defmodule RokiWeb.SettingsLive do
     """
   end
 
+  attr :key, :string, required: true
+  attr :spec, :map, required: true
+  attr :value, :string, required: true
+  attr :label, :string, required: true
+  attr :hint, :string, default: nil
+  attr :saved, :any, default: nil
+
+  defp web_row(assigns) do
+    ~H"""
+    <div class="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-6">
+      <label for={"w-" <> @key} class="min-w-0 sm:w-1/2">
+        <span class="font-medium">{@label}</span>
+        <span :if={@hint} class="block text-xs text-base-content/60">{@hint}</span>
+      </label>
+      <div class="flex items-center gap-2 sm:w-1/2">
+        <select id={"w-" <> @key} name={"w[#{@key}]"} class="select select-bordered w-full">
+          <option :for={o <- @spec.allowed} value={o} selected={@value == o}>
+            {o}{if o == @spec.default, do: " (default)"}
+          </option>
+        </select>
+        <span :if={@saved == @key} class="shrink-0 text-sm text-success">Saved</span>
+      </div>
+    </div>
+    """
+  end
+
   attr :s, :map, required: true
   attr :saved, :any, default: nil
+  attr :locked, :boolean, default: false
 
   defp setting_row(assigns) do
     assigns =
@@ -375,14 +463,22 @@ defmodule RokiWeb.SettingsLive do
       )
 
     ~H"""
-    <div class="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-6">
+    <div
+      class={[
+        "flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-6",
+        @locked && "opacity-60"
+      ]}
+      title={if @locked, do: "Terminal app only: change it in the laev CLI"}
+    >
       <label for={@id} class="min-w-0 sm:w-1/2">
         <span class="font-medium">{@s.label}</span>
+        <span :if={@locked} class="badge badge-sm badge-ghost ml-2 align-middle">CLI only</span>
         <span :if={@hint} class="block text-xs text-base-content/60">{@hint}</span>
       </label>
       <div class="flex items-center gap-2 sm:w-1/2">
         <select
           :if={match?({:one_of, _}, @s.type)}
+          disabled={@locked}
           id={@id}
           name={"s[#{@s.key}]"}
           class="select select-bordered w-full"
@@ -395,6 +491,7 @@ defmodule RokiWeb.SettingsLive do
           id={@id}
           name={"s[#{@s.key}]"}
           type="text"
+          disabled={@locked}
           value={@s.value}
           placeholder={@placeholder}
           phx-debounce="blur"
@@ -411,6 +508,11 @@ defmodule RokiWeb.SettingsLive do
   # What this server can offer, plus whatever the account already has — a terminal
   # player (mpv) chosen on a laptop is still a valid value even though this server
   # has no mpv to offer.
+  defp options(%{key: "LAEV_PLAYER", value: value}) do
+    all = ~w(vlc mpv browser)
+    if value in [nil, ""] or value in all, do: all, else: all ++ [value]
+  end
+
   defp options(%{type: {:one_of, allowed}, value: value}) do
     if value in [nil, ""] or value in allowed, do: allowed, else: allowed ++ [value]
   end
