@@ -812,8 +812,7 @@ defmodule RokiWeb.TitleLive do
                   "text-base-content/40"
               }
             >
-              {if season_done?(s, @season, @episodes, @watched, @season_counts), do: "✓ "}{s.name ||
-                "Season #{s.number}"}
+              {season_label(s, season_done?(s, @season, @episodes, @watched, @season_counts))}
             </option>
           </select>
         </form>
@@ -943,6 +942,9 @@ defmodule RokiWeb.TitleLive do
     </section>
     """
   end
+
+  defp season_label(s, done?),
+    do: (s.name || "Season #{s.number}") <> if(done?, do: " ✓", else: "")
 
   # A season is done when every episode of it is marked. The open season is judged from the list
   # on screen (so it follows a tap at once); the others from laev's counts, no extra lookups.
