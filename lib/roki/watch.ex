@@ -41,7 +41,7 @@ defmodule Roki.Watch do
   (laev's rule: accepting is free, searching costs a request per name).
   """
   def title(type, id, uuid \\ nil) when type in ~w(movie tv) and is_integer(id) do
-    TTLCache.fetch({:title, type, id}, @details_ttl, fn ->
+    TTLCache.fetch({:title, 2, type, id}, @details_ttl, fn ->
       Roki.Laev.public(uuid, fn ->
         with {:ok, d} <- fetch_details(type, id) do
           Laev.AnimeMap.ensure()
@@ -77,6 +77,13 @@ defmodule Roki.Watch do
       language: d["original_language"],
       seasons: seasons(d),
       anime?: Laev.AnimeMap.anime?(type, d["id"]),
+      vote_count: d["vote_count"],
+      countries: for(c <- d["production_countries"] || [], do: c["name"]),
+      studios: for(c <- d["production_companies"] || [], do: c["name"]),
+      networks: for(n <- d["networks"] || [], do: n["name"]),
+      spoken: for(l <- d["spoken_languages"] || [], do: l["english_name"] || l["name"]),
+      episodes_total: d["number_of_episodes"],
+      last_air_date: d["last_air_date"],
       search: title_variants(d)
     }
   end
@@ -186,7 +193,10 @@ defmodule Roki.Watch do
     total = title |> aired_seasons() |> Enum.map(&(&1.episodes || 0)) |> Enum.sum()
 
     watched =
-      Laev.Position.episode_marks() |> Map.get({"tv", title.id}, %{}) |> Map.values() |> Enum.sum()
+      Laev.Position.episode_marks()
+      |> Map.get({"tv", title.id}, %{})
+      |> Map.values()
+      |> Enum.sum()
 
     total > 0 and watched >= total
   end
