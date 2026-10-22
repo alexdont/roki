@@ -87,8 +87,12 @@ defmodule Roki.Laev do
           {:ok,
            %{
              tally: Shelf.tally(),
-             watchlist: watchlist() |> Map.new(fn {k, v} -> {k, mark_seen(v)} end),
-             continue: mark_seen(continue_watching()),
+             watchlist:
+               watchlist()
+               |> Map.new(fn {k, v} ->
+                 {k, v |> mark_seen() |> then(&if(k == :behind, do: with_resume(&1), else: &1))}
+               end),
+             continue: continue_watching() |> mark_seen() |> with_resume(),
              saved: mark_seen(saved())
            }}
         else
@@ -297,6 +301,43 @@ defmodule Roki.Laev do
 
     Map.new(sections, fn {k, v} -> {k, Enum.reverse(v)} end)
   end
+
+  # Where each in-progress title was left: `resume_at` seconds (the same number the terminal
+  # app resumes from; under half a minute is the beginning and not worth showing) and, when
+  # laev knows how long the film or an episode runs, `runtime`, for "37 min left".
+  defp with_resume(items) do
+    runtimes = Laev.Stats.known_runtimes()
+    Enum.map(items, &Map.merge(&1, resume_info(&1, runtimes)))
+  end
+
+  defp resume_info(%{type: type, id: id} = item, runtimes) when type in ["movie", "tv"] do
+    entry = Resume.get(type, id) || %{}
+
+    ctx = %{
+      type: type,
+      tmdb_id: id,
+      season: entry["season"],
+      episode: entry["episode"],
+      mal_id: item[:mal_id] || entry["mal_id"]
+    }
+
+    case Laev.Position.saved_position(ctx) do
+      secs when is_integer(secs) and secs >= 30 ->
+        %{resume_at: secs, runtime: runtime_of(item, ctx, runtimes)}
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp resume_info(_item, _runtimes), do: %{}
+
+  defp runtime_of(_item, %{type: "movie", tmdb_id: id}, rt), do: rt["movie-#{id}"]
+
+  defp runtime_of(_item, %{mal_id: mal} = ctx, rt) when is_integer(mal),
+    do: rt["mal-#{mal}"] || rt["tv-#{ctx.tmdb_id}"]
+
+  defp runtime_of(_item, ctx, rt), do: rt["tv-#{ctx.tmdb_id}"]
 
   # `seen: true` greys a title out — laev's own "watched" rule, from the synced marks.
   defp mark_seen(items) do

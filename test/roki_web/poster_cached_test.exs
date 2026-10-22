@@ -21,4 +21,28 @@ defmodule RokiWeb.PosterCachedTest do
                "cached"
     end
   end
+
+  test "a title in progress says where you stopped, and how much is left" do
+    item = Map.merge(@item, %{resume_at: 3579, runtime: 4779})
+    html = render_component(&RokiWeb.PosterComponents.poster/1, item: item)
+
+    assert html =~ "Continue from 59:39"
+    assert html =~ "20 min left"
+  end
+
+  test "without a runtime only the place is shown; before half a minute nothing is" do
+    html =
+      render_component(&RokiWeb.PosterComponents.poster/1, item: Map.put(@item, :resume_at, 3779))
+
+    assert html =~ "Continue from 1:02:59"
+    refute html =~ "left"
+
+    refute render_component(&RokiWeb.PosterComponents.poster/1, item: @item) =~ "Continue from"
+  end
+
+  test "time helpers" do
+    assert RokiWeb.PosterComponents.clock(59) == "0:59"
+    assert RokiWeb.PosterComponents.clock(3600) == "1:00:00"
+    assert RokiWeb.PosterComponents.left(%{resume_at: 100, runtime: 7300}) == "2 h 0 min left"
+  end
 end

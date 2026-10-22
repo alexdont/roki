@@ -609,7 +609,11 @@ defmodule Roki.Watch do
   when it counts as finished (85%) — is laev's, so it is exactly what the terminal app writes.
   `{:finished, true}` is returned the first time it crosses into watched.
   """
-  def record_progress(uuid, ctx, position, duration) when is_number(position) do
+  def record_progress(uuid, ctx, position, duration, paused? \\ false) when is_number(position) do
+    # Stopped: send the position to the user's other devices now (the terminal app picks it up
+    # on its next sync), without making the player wait for the network.
+    if paused?, do: Task.start(fn -> Roki.Laev.run(uuid, &Laev.Sync.live_push/0) end)
+
     Roki.Laev.run(uuid, fn ->
       before? = Laev.Position.finished?(ctx)
       Laev.Playback.progress(ctx, position, duration: duration, interval: 5)

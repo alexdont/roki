@@ -216,11 +216,11 @@ defmodule RokiWeb.TitleLive do
 
   # The player reports the playhead every few seconds. Laev does the arithmetic (what was
   # watched, what was skipped, when it counts as finished) exactly as it does for mpv.
-  def handle_event("progress", %{"position" => position, "duration" => duration}, socket) do
+  def handle_event("progress", %{"position" => position, "duration" => duration} = params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
 
     if uuid && ctx && is_number(position) do
-      case Watch.record_progress(uuid, ctx, position, duration || 0) do
+      case Watch.record_progress(uuid, ctx, position, duration || 0, params["paused"] == true) do
         {:finished, true} -> {:noreply, finished(socket)}
         _ -> {:noreply, socket}
       end

@@ -78,20 +78,21 @@ export const StudySidebar = {
     // resume seek has happened (a playhead at 0 would overwrite where you were).
     if (this.el.dataset.progress === "true") {
       this.postTimer = setInterval(() => !v.paused && this.postProgress(), 5000)
-      v.addEventListener("pause", () => this.postProgress())
+      v.addEventListener("pause", () => this.postProgress(true))
       v.addEventListener("ended", () => {
-        this.postProgress()
+        this.postProgress(true)
         this.pushEvent("ended", {})
       })
     }
   },
 
-  postProgress() {
+  postProgress(paused = false) {
     const v = this.video
     if (!this.ready || !(v.currentTime > 0)) return
     this.pushEvent("progress", {
       position: Math.floor(v.currentTime),
       duration: Number.isFinite(v.duration) ? Math.floor(v.duration) : 0,
+      paused,
     })
   },
 

@@ -52,9 +52,28 @@ defmodule RokiWeb.PosterComponents do
         >
           {@item[:badge]}
         </span>
+        <div
+          :if={@item[:resume_at]}
+          class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-6 text-white"
+          title={resume_title(@item)}
+        >
+          <div class="text-xs font-medium leading-tight">
+            ▶ Continue from {clock(@item.resume_at)}
+          </div>
+          <div :if={left(@item)} class="text-[0.7rem] leading-tight text-white/75">{left(@item)}</div>
+          <div
+            :if={@item[:runtime] && @item.runtime > @item.resume_at}
+            class="mt-1 h-0.5 w-full rounded bg-white/25"
+          >
+            <div class="h-full rounded bg-primary" style={"width: #{progress(@item)}%"}></div>
+          </div>
+        </div>
         <span
           :if={@cached?}
-          class="badge badge-success badge-sm absolute bottom-1.5 left-1.5 gap-1 shadow"
+          class={[
+            "badge badge-success badge-sm absolute left-1.5 gap-1 shadow",
+            if(@item[:resume_at], do: "bottom-14", else: "bottom-1.5")
+          ]}
           title="Sources are cached: plays right away"
         >
           ⚡ cached
@@ -108,6 +127,29 @@ defmodule RokiWeb.PosterComponents do
   end
 
   def href(_), do: nil
+
+  @doc "Seconds as `59:39`, or `1:02:03` past an hour."
+  def clock(secs) when is_integer(secs) do
+    h = div(secs, 3600)
+    m = div(rem(secs, 3600), 60)
+    s = rem(secs, 60)
+    pad = &(&1 |> Integer.to_string() |> String.pad_leading(2, "0"))
+    if h > 0, do: "#{h}:#{pad.(m)}:#{pad.(s)}", else: "#{m}:#{pad.(s)}"
+  end
+
+  @doc "How much is left, when the runtime is known: `37 min left`."
+  def left(%{resume_at: at, runtime: rt}) when is_integer(rt) and rt > at do
+    mins = div(rt - at + 59, 60)
+    if mins >= 60, do: "#{div(mins, 60)} h #{rem(mins, 60)} min left", else: "#{mins} min left"
+  end
+
+  def left(_item), do: nil
+
+  defp progress(%{resume_at: at, runtime: rt}), do: min(round(at * 100 / rt), 100)
+
+  defp resume_title(item),
+    do:
+      "Continue from #{clock(item.resume_at)}" <> if(left(item), do: " · #{left(item)}", else: "")
 
   @doc "The grey line under a poster — where you are in it, else when it came out."
   def subtitle(%{note: n}) when is_binary(n) and n != "",
