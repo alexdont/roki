@@ -572,7 +572,7 @@ defmodule RokiWeb.SettingsLive do
               <input
                 name="os[user]"
                 value={@os.user}
-                placeholder="username"
+                placeholder="username (not your email)"
                 autocomplete="off"
                 class="input input-bordered input-sm min-w-0 flex-1"
               />

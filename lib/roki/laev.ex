@@ -514,6 +514,9 @@ defmodule Roki.Laev do
              (user != "" and pass != "") || {:error, "enter both the username and the password"},
            true <-
              Laev.OpenSubtitles.configured?() || {:error, "add the OpenSubtitles API key first"},
+           true <-
+             not String.contains?(user, "@") or
+               {:error, "OpenSubtitles wants your username, not your email address"},
            :ok <- check_os_login(user, pass) do
         Laev.Config.write([{"OPENSUBTITLES_USERNAME", user}, {"OPENSUBTITLES_PASSWORD", pass}])
         Laev.Scope.set(:opensubtitles_username, user)
@@ -539,8 +542,17 @@ defmodule Roki.Laev do
       {:ok, %{status: 200}} ->
         :ok
 
+      {:ok, %{status: 400}} ->
+        {:error, "OpenSubtitles wants your username, not your email address"}
+
+      {:ok, %{status: 429}} ->
+        {:error, "OpenSubtitles says too many login attempts — wait a minute and try again"}
+
       {:ok, %{status: s}} when s in [401, 403] ->
         {:error, "OpenSubtitles did not accept that username and password"}
+
+      {:ok, %{status: s, body: %{"message" => m}}} when is_binary(m) ->
+        {:error, "OpenSubtitles answered #{s}: #{String.trim(m)}"}
 
       {:ok, %{status: s}} ->
         {:error, "OpenSubtitles answered #{s}"}
