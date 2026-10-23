@@ -93,7 +93,7 @@ defmodule RokiWeb.StudyComponents do
                   title="Audio track"
                 >
                   <.icon name="hero-speaker-wave" class="h-4 w-4 shrink-0" />
-                  <span data-role="audio-label" class="hidden max-w-[7rem] truncate sm:inline">Audio</span>
+                  <span data-role="audio-label" class="font-semibold">AUDIO</span>
                 </button>
                 <button
                   type="button"

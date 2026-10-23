@@ -1048,13 +1048,21 @@ export const StudySidebar = {
       return nice || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "") || t.lang || t.language || ""
     }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length) {
-      return this.hls.audioTracks.map((t, i) => ({i, name: names(t) || `Track ${i + 1}`, active: i === this.hls.audioTrack}))
+      return this.hls.audioTracks.map((t, i) => ({i, name: names(t) || `Track ${i + 1}`, lang: t.lang, active: i === this.hls.audioTrack}))
     }
     const native = this.video.audioTracks
     if (native && native.length) {
-      return Array.from({length: native.length}, (_, i) => ({i, name: names(native[i]) || `Track ${i + 1}`, active: !!native[i].enabled}))
+      return Array.from({length: native.length}, (_, i) => ({i, name: names(native[i]) || `Track ${i + 1}`, lang: native[i].language, active: !!native[i].enabled}))
     }
     return []
+  },
+
+  // The two letters for an audio track — JA, EN — from its language, or from its name when that
+  // names a language ("Japanese"), else the first letters of the name.
+  audioCode(t) {
+    const byName = {japanese: "JA", english: "EN", french: "FR", spanish: "ES", german: "DE", italian: "IT", portuguese: "PT", russian: "RU", korean: "KO", chinese: "ZH", dutch: "NL", polish: "PL", turkish: "TR", arabic: "AR", swedish: "SV"}
+    const first = String(t.name || "").toLowerCase().split(/[\s·(]/)[0]
+    return (shortLang(t.lang) || (byName[first] || shortLang(first)) || String(t.name || "?").replace(/\s+/g, "").slice(0, 3)).toUpperCase()
   },
 
   setAudio(i) {
@@ -1083,7 +1091,9 @@ export const StudySidebar = {
     }
 
     const active = list.find((x) => x.active) || list[0]
-    this.el.querySelector("[data-role=audio-label]").textContent = active.name
+    const label = this.el.querySelector("[data-role=audio-label]")
+    label.textContent = this.audioCode(active)
+    this.audioBtn.title = `Audio: ${active.name}`
 
     const box = this.el.querySelector("[data-role=audio-list]")
     box.textContent = ""
@@ -1097,7 +1107,10 @@ export const StudySidebar = {
       const name = document.createElement("span")
       name.className = "sub-name"
       name.textContent = t.name
-      row.append(badge, name)
+      const code = document.createElement("span")
+      code.className = "sub-sub"
+      code.textContent = this.audioCode(t)
+      row.append(badge, name, code)
       row.addEventListener("click", () => { this.setAudio(t.i); this.closePops() })
       box.appendChild(row)
     }
