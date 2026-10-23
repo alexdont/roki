@@ -1207,6 +1207,11 @@ export const StudySidebar = {
   setTracks(p) {
     this.tracks = p.tracks || []
     this.mediaKey = p.key || ""
+    // The subtitle choice belongs to the show or film (every episode of it), not to the browser:
+    // Japanese with English under it for an anime must not follow you to a French show.
+    const media = p.media || ""
+    if (media !== this.media) this.userChose = false
+    this.media = media
     const saved = parseFloat(store.get("offset:" + this.mediaKey))
     if (!Number.isNaN(saved) && saved !== this.offset && this.setOffset) this.setOffset(saved)
 
@@ -1330,7 +1335,7 @@ export const StudySidebar = {
   // the choice of tracks, so the next episode starts the same way.
   restoreOffVideo() {
     let saved = []
-    try { saved = JSON.parse(store.get("offvideo")) || [] } catch {}
+    try { saved = JSON.parse(store.get("offvideo:" + this.media)) || [] } catch {}
     this.offVideo = new Set()
     for (const w of saved) {
       const t = this.tracks.find((t) => t.label === w.n) || this.tracks.find((t) => w.l && shortLang(t.lang) === w.l)
@@ -1343,7 +1348,7 @@ export const StudySidebar = {
     if (this.offVideo.has(u)) this.offVideo.delete(u)
     else this.offVideo.add(u)
     const desc = [...this.offVideo].map((x) => this.tracks.find((t) => t.url === x)).filter(Boolean).map((t) => ({l: shortLang(t.lang), n: t.label}))
-    store.set("offvideo", JSON.stringify(desc))
+    store.set("offvideo:" + this.media, JSON.stringify(desc))
     this.userChose = true
     this.overlayKey = ""
     this.renderMenu()
@@ -1359,7 +1364,7 @@ export const StudySidebar = {
   // the user's language, with English under it when that is another language.
   restore(prefer) {
     let saved = null
-    try { saved = JSON.parse(store.get("layers")) } catch {}
+    try { saved = JSON.parse(store.get("layers:" + this.media)) } catch {}
     if (Array.isArray(saved)) {
       const used = new Set()
       const out = []
@@ -1558,7 +1563,7 @@ export const StudySidebar = {
   setSelection(urls) {
     this.userChose = true
     const desc = urls.map((u) => this.tracks.find((t) => t.url === u)).filter(Boolean).map((t) => ({l: shortLang(t.lang), n: t.label}))
-    store.set("layers", JSON.stringify(desc))
+    store.set("layers:" + this.media, JSON.stringify(desc))
     this.apply(urls)
     this.tick()
   },

@@ -195,14 +195,17 @@ defmodule RokiWeb.WatchLive do
     {source, _} = pair
     prefer = Watch.short_code(Watch.preferred_subs(uuid))
     play_id = player.remux_id || fallback_id(pair)
+    # Files picked from OpenSubtitles before: back from the disk copy, no request.
+    saved = Watch.os_saved(uuid, "#{res.ctx.type}:#{res.ctx.tmdb_id}", play_id)
 
     data = %{
       url: player.url,
       hls: player.hls?,
       resume: player.resume_at,
-      tracks: player.subtitles,
+      tracks: player.subtitles ++ saved,
       prefer: prefer,
       key: play_id,
+      media: "#{res.ctx.type}:#{res.ctx.tmdb_id}",
       os: Watch.os_state(uuid),
       os_langs: os_langs(prefer)
     }
@@ -218,7 +221,8 @@ defmodule RokiWeb.WatchLive do
     # What the release did not carry: their language, and for anime the original Japanese
     # (Jimaku), each fetched on its own so a slow provider holds up nothing.
     socket =
-      for lang <- Watch.external_langs(uuid, res.ctx, player.subtitles), reduce: socket do
+      for lang <- Watch.external_langs(uuid, res.ctx, player.subtitles ++ saved),
+          reduce: socket do
         acc ->
           start_async(acc, {:ext_subs, lang}, fn ->
             {token, external(uuid, res.ctx, play_id, lang, source.name)}
@@ -351,7 +355,7 @@ defmodule RokiWeb.WatchLive do
   def handle_event("os_pick", %{"id" => id, "lang" => lang} = params, socket) do
     %{uuid: uuid, player: player} = socket.assigns
 
-    case Watch.os_fetch(uuid, player.key, id, lang, params["release"]) do
+    case Watch.os_fetch(uuid, player.key, id, lang, params["release"], player.media) do
       {:ok, track} ->
         player = %{player | tracks: Enum.uniq_by(player.tracks ++ [track], & &1.url)}
         {:reply, %{track: track}, assign(socket, :player, player)}

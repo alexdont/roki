@@ -839,28 +839,61 @@ defmodule Roki.Watch do
   a subtitle problem must not get in the way of watching).
   """
   def external_subtitle(uuid, ctx, play_id, wanted \\ nil) do
-    Roki.Laev.run(uuid, fn ->
-      lang = wanted || Laev.Config.subs_lang()
+    lang = wanted || Roki.Laev.run(uuid, fn -> Laev.Config.subs_lang() end)
+    key = {ctx.type, ctx.tmdb_id, ctx[:season], ctx[:episode], lang}
 
-      with true <- is_binary(lang) and lang != "",
-           true <- Laev.OpenSubtitles.configured?() or Laev.Jimaku.configured?(),
+    cond do
+      not (is_binary(lang) and lang != "") ->
+        :none
+
+      match?({:ok, _}, Roki.SubCache.get_auto(key)) ->
+        {:ok, found} = Roki.SubCache.get_auto(key)
+        {:ok, place_auto(play_id, lang, found)}
+
+      # Nothing found (or the service said no) a moment ago: do not ask again for hours.
+      Roki.TTLCache.cached?({:os_none, key}) ->
+        :none
+
+      true ->
+        case fetch_auto(uuid, ctx, lang) do
+          {:ok, found} ->
+            Roki.SubCache.put_auto(key, found)
+            {:ok, place_auto(play_id, lang, found)}
+
+          :none ->
+            Roki.TTLCache.fetch({:os_none, key}, 6 * 3_600, fn -> {:ok, :none} end)
+            :none
+        end
+    end
+  rescue
+    _ -> :none
+  end
+
+  defp fetch_auto(uuid, ctx, lang) do
+    Roki.Laev.run(uuid, fn ->
+      with true <- Laev.OpenSubtitles.configured?() or Laev.Jimaku.configured?(),
            {:ok, path, label} <-
              Laev.SubtitleFetch.fetch(Map.put(ctx, :search_title, ctx.search_title), lang),
            {:ok, body} <- File.read(path) do
-        dir = Laev.Remux.dir(play_id)
-        File.mkdir_p!(dir)
-        file = "ext-#{String.slice(lang, 0, 2)}.vtt"
-        File.write!(Path.join(dir, file), Roki.Subtitles.to_vtt(Path.basename(path), body))
         source = if String.starts_with?(label, "Jimaku"), do: "Jimaku", else: "OpenSubtitles"
 
         {:ok,
-         %{lang: lang, label: "#{language(lang)} · #{source}", url: "/stream/#{play_id}/#{file}"}}
+         %{
+           label: "#{language(lang)} · #{source}",
+           vtt: Roki.Subtitles.to_vtt(Path.basename(path), body)
+         }}
       else
         _ -> :none
       end
     end)
-  rescue
-    _ -> :none
+  end
+
+  defp place_auto(play_id, lang, %{label: label, vtt: vtt}) do
+    dir = Laev.Remux.dir(play_id)
+    File.mkdir_p!(dir)
+    file = "ext-#{String.slice(lang, 0, 2)}.vtt"
+    File.write!(Path.join(dir, file), vtt)
+    %{lang: lang, label: label, url: "/stream/#{play_id}/#{file}"}
   end
 
   @doc """
@@ -879,6 +912,15 @@ defmodule Roki.Watch do
 
   @doc "The OpenSubtitles files for what is playing, in one language: `{:ok, [%{id, release, downloads}]}`."
   def os_search(uuid, ctx, lang) do
+    key = {:os_search, ctx.type, ctx.tmdb_id, ctx[:season], ctx[:episode], lang}
+
+    case Roki.TTLCache.fetch(key, 3_600, fn -> os_search_live(uuid, ctx, lang) end) do
+      {:ok, _} = ok -> ok
+      other -> other
+    end
+  end
+
+  defp os_search_live(uuid, ctx, lang) do
     Roki.Laev.run(uuid, fn ->
       query = ctx[:search_title] || ctx.title
 
@@ -913,23 +955,38 @@ defmodule Roki.Watch do
   end
 
   @doc "Download one OpenSubtitles file for the player: `{:ok, track}` or `{:error, why}`."
-  def os_fetch(uuid, play_id, id, lang, release) when is_integer(id) do
+  def os_fetch(uuid, play_id, id, lang, release, media \\ nil)
+
+  def os_fetch(uuid, play_id, id, lang, release, media) when is_integer(id) do
+    result =
+      case Roki.SubCache.get_file(id) do
+        {:ok, vtt} -> {:ok, vtt}
+        :miss -> os_download(uuid, id)
+      end
+
+    case result do
+      {:ok, vtt} ->
+        track = place_os(play_id, id, lang, release, vtt)
+        if media, do: Roki.SubCache.add_pick(uuid, media, %{id: id, lang: lang, release: release})
+        {:ok, track}
+
+      error ->
+        error
+    end
+  end
+
+  def os_fetch(_uuid, _play_id, _id, _lang, _release, _media), do: {:error, "bad request"}
+
+  # One download, ever, per file: the converted text is kept for good.
+  defp os_download(uuid, id) do
     Roki.Laev.run(uuid, fn ->
       with true <-
              Laev.OpenSubtitles.can_download?() ||
                {:error, "Add your OpenSubtitles username and password in Settings to download."},
            {:ok, srt} <- Laev.OpenSubtitles.download_srt(id) do
-        dir = Laev.Remux.dir(play_id)
-        File.mkdir_p!(dir)
-        file = "ext-#{String.slice(lang, 0, 3)}-os#{id}.vtt"
-        File.write!(Path.join(dir, file), Roki.Subtitles.to_vtt("#{id}.srt", srt))
-
-        {:ok,
-         %{
-           lang: lang,
-           label: "#{language(lang)} · OpenSubtitles · #{String.slice(release || "", 0, 70)}",
-           url: "/stream/#{play_id}/#{file}"
-         }}
+        vtt = Roki.Subtitles.to_vtt("#{id}.srt", srt)
+        Roki.SubCache.put_file(id, vtt)
+        {:ok, vtt}
       else
         {:error, {:opensubtitles_download, 406, _}} ->
           {:error, "Your OpenSubtitles download quota for today is used up."}
@@ -945,7 +1002,31 @@ defmodule Roki.Watch do
     _ -> {:error, "OpenSubtitles would not give that file. Try another."}
   end
 
-  def os_fetch(_uuid, _play_id, _id, _lang, _release), do: {:error, "bad request"}
+  defp place_os(play_id, id, lang, release, vtt) do
+    dir = Laev.Remux.dir(play_id)
+    File.mkdir_p!(dir)
+    file = "ext-#{String.slice(lang, 0, 3)}-os#{id}.vtt"
+    File.write!(Path.join(dir, file), vtt)
+
+    %{
+      lang: lang,
+      label: "#{language(lang)} · OpenSubtitles · #{String.slice(release || "", 0, 70)}",
+      url: "/stream/#{play_id}/#{file}"
+    }
+  end
+
+  @doc """
+  The OpenSubtitles files this user picked for this title before, as tracks again — read from the
+  disk cache, never from the service. A file whose copy is gone is left out rather than fetched.
+  """
+  def os_saved(uuid, media, play_id) do
+    for %{id: id, lang: lang, release: release} <- Roki.SubCache.picks(uuid, media),
+        {:ok, vtt} <- [Roki.SubCache.get_file(id)] do
+      place_os(play_id, id, lang, release, vtt)
+    end
+  rescue
+    _ -> []
+  end
 
   @doc """
   The languages worth fetching from a provider for what is playing, beyond what the release
