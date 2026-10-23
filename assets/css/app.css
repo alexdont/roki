@@ -299,6 +299,10 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 }
 .study-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem 0.4rem 0.75rem; border-bottom: 1px solid var(--color-base-300); font-size: 0.875rem; }
 .study-body { position: relative; min-height: 0; flex: 1; }
+/* The size button: arrows pointing in while the list is full size, out once it is the small one. */
+.study-grow { display: none; }
+.study-ui[data-panel="compact"] .study-shrink { display: none; }
+.study-ui[data-panel="compact"] .study-grow { display: inline-block; }
 .study-chevron { transition: transform 0.15s; }
 .study-ui[data-sheet] .study-chevron { transform: rotate(180deg); }
 .study-wide-only { display: none; }

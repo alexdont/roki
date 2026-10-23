@@ -548,7 +548,9 @@ export const StudySidebar = {
     }
     this.setPanel = (state) => {
       this.ui.dataset.panel = state
-      compact.classList.toggle("btn-active", state === "compact")
+      const small = state === "compact"
+      compact.title = small ? "Larger" : "Smaller"
+      compact.setAttribute("aria-label", small ? "Make the list larger" : "Make the list smaller")
       store.set("panel", state)
       if (state !== "closed") showList()
       reflect()

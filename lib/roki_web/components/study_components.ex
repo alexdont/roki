@@ -311,7 +311,8 @@ defmodule RokiWeb.StudyComponents do
                   title="Smaller"
                   aria-label="Make the list smaller"
                 >
-                  <.icon name="hero-arrows-pointing-in" class="h-4 w-4" />
+                  <.icon name="hero-arrows-pointing-in" class="study-shrink h-4 w-4" />
+                  <.icon name="hero-arrows-pointing-out" class="study-grow h-4 w-4" />
                 </button>
               </header>
               <div class="study-body">
