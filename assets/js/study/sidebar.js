@@ -511,6 +511,24 @@ export const StudySidebar = {
     const $ = (sel) => this.el.querySelector(sel)
     this.bindWords()
 
+    // ── the lines sit on the bottom edge, and step up above the timeline while the player's own
+    // controls are showing (they come with the pointer, and stay while paused).
+    let idle
+    const wake = () => {
+      this.stage.dataset.active = "1"
+      clearTimeout(idle)
+      if (!this.video.paused) idle = setTimeout(() => delete this.stage.dataset.active, 2800)
+    }
+    for (const ev of ["mousemove", "pointerdown", "touchstart"]) this.stage.addEventListener(ev, wake, {passive: true})
+    this.stage.addEventListener("mouseleave", () => {
+      clearTimeout(idle)
+      if (!this.video.paused) idle = setTimeout(() => delete this.stage.dataset.active, 400)
+    })
+    this.video.addEventListener("pause", () => { clearTimeout(idle); this.stage.dataset.active = "1" })
+    this.video.addEventListener("play", wake)
+    this.video.addEventListener("ended", () => { this.stage.dataset.active = "1" })
+    if (this.video.paused) this.stage.dataset.active = "1"
+
     // ── theater and fullscreen
     const theater = $("[data-role=theater]")
     const setTheater = (on) => {

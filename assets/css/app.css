@@ -176,7 +176,8 @@
 .study-overlay {
   position: absolute;
   inset-inline: 0;
-  bottom: 3.4rem;
+  bottom: 0.5rem;
+  transition: bottom 0.18s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -185,6 +186,9 @@
   text-align: center;
   pointer-events: none;
 }
+/* The player's controls are showing (the pointer moved, or it is paused): the lines step up
+   above the timeline, and drop to the bottom edge again when they hide. */
+.study-stage[data-active] .study-overlay { bottom: 3.4rem; }
 .study-line {
   max-width: 100%;
   padding: 0.1em 0.5em;
