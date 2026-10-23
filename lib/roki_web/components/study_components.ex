@@ -93,7 +93,7 @@ defmodule RokiWeb.StudyComponents do
                   title="Audio track"
                 >
                   <.icon name="hero-speaker-wave" class="h-4 w-4 shrink-0" />
-                  <span data-role="audio-label" class="max-w-[7rem] truncate">Audio</span>
+                  <span data-role="audio-label" class="hidden max-w-[7rem] truncate sm:inline">Audio</span>
                 </button>
                 <button
                   type="button"
@@ -109,13 +109,24 @@ defmodule RokiWeb.StudyComponents do
               <div class="study-bar-group">
                 <button
                   type="button"
+                  data-role="prev-btn"
+                  hidden
+                  class="btn btn-sm btn-square"
+                  title="Play the previous episode"
+                  aria-label="Previous episode"
+                >
+                  <.icon name="hero-backward" class="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
                   data-role="next-btn"
                   hidden
-                  class="btn btn-sm btn-primary gap-1.5"
+                  class="btn btn-sm btn-primary btn-square sm:w-auto sm:gap-1.5 sm:px-3"
                   title="Play the next episode"
+                  aria-label="Next episode"
                 >
                   <.icon name="hero-forward" class="h-4 w-4" />
-                  <span>Next <span data-role="next-label" class="hidden sm:inline"></span></span>
+                  <span class="hidden sm:inline">Next <span data-role="next-label"></span></span>
                 </button>
                 <button
                   type="button"
@@ -123,7 +134,8 @@ defmodule RokiWeb.StudyComponents do
                   class="btn btn-sm gap-1.5"
                   aria-pressed="false"
                 >
-                  <.icon name="hero-queue-list" class="h-4 w-4" /> <span>Lines</span>
+                  <.icon name="hero-queue-list" class="h-4 w-4" />
+                  <span class="hidden sm:inline">Lines</span>
                 </button>
                 <button
                   type="button"
@@ -150,6 +162,9 @@ defmodule RokiWeb.StudyComponents do
               <div data-role="subs-menu" class="study-pop" role="menu" hidden>
                 <div class="study-pop-head">
                   <span>Subtitles</span>
+                  <button type="button" data-role="subs-off" class="btn btn-xs btn-ghost ml-auto mr-1">
+                    Turn off
+                  </button>
                   <button
                     type="button"
                     data-role="pop-close"

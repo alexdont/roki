@@ -420,3 +420,9 @@ player: a button in the header and a big **Play next episode** in the open-in-VL
 `/sources/tv/…?auto=1&prefer=…`; pressing it there marks the current episode watched (an external player cannot
 report progress). **Audio** (`audioList/setAudio` in sidebar.js) works on hls.js and on a native `audioTracks`
 list, shows a bar button only when there are two or more, and remembers the choice by name.
+
+The player bar is **one row at any width** (`nowrap`; its first group shrinks, the Subtitles label is cut with …):
+the Subtitles button says the codes — `JA · EN · FR`, `+N` past three — and the menu shows the tracks that are on
+(each with ↑ ↓ ✕, 44 px) and small chips to add a language (one that has versions opens to them); duplicate names
+are numbered. **Previous / Next** (`Watch.previous_episode/4`, `next_episode/4`) are icon buttons beside Lines on
+the watch page, and on the sources page header and external panel.

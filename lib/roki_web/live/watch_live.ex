@@ -48,7 +48,8 @@ defmodule RokiWeb.WatchLive do
           player: nil,
           failed: nil,
           episodes: nil,
-          up_next: nil
+          up_next: nil,
+          up_prev: nil
         )
 
       {:ok, if(connected?(socket) and socket.assigns.linked?, do: load(socket), else: socket)}
@@ -195,7 +196,7 @@ defmodule RokiWeb.WatchLive do
     socket =
       socket
       |> assign(player: data, current: pair, ctx: res.ctx, key: res.key)
-      |> with_next()
+      |> with_neighbours()
       |> name_the_release(source.hash)
 
     # What the release did not carry: their language, and for anime the original Japanese
@@ -236,8 +237,13 @@ defmodule RokiWeb.WatchLive do
 
   def handle_async(:episodes, {:ok, {:ok, eps}}, socket) do
     socket = assign(socket, :episodes, eps)
-    {:noreply, socket |> assign(:up_next, next_episode(socket.assigns)) |> with_next()}
+    {:noreply, socket |> assign(:up_next, next_episode(socket.assigns)) |> with_neighbours()}
   end
+
+  def handle_async(:prev, {:ok, {_s, _e, _tag} = prev}, socket),
+    do: {:noreply, socket |> assign(:up_prev, prev) |> with_neighbours()}
+
+  def handle_async(:prev, _other, socket), do: {:noreply, socket}
 
   def handle_async(:episodes, _other, socket), do: {:noreply, socket}
 
@@ -253,15 +259,25 @@ defmodule RokiWeb.WatchLive do
   defp external(uuid, ctx, play_id, lang, _source_name),
     do: Watch.external_subtitle(uuid, ctx, play_id, lang)
 
-  # The player's own "Next" button needs to know what the next episode is called.
-  defp with_next(
-         %{assigns: %{player: %{} = player, up_next: {s, e}, title: title, uuid: uuid}} = socket
-       )
+  # The player's "Previous" and "Next" buttons need to know what the neighbours are called.
+  defp with_neighbours(%{assigns: %{player: %{} = player, title: title, uuid: uuid}} = socket)
        when title != nil do
-    assign(socket, :player, Map.put(player, :next, Watch.episode_tag(uuid, title, s, e)))
+    player =
+      case socket.assigns.up_next do
+        {s, e} -> Map.put(player, :next, Watch.episode_tag(uuid, title, s, e))
+        _ -> player
+      end
+
+    player =
+      case socket.assigns.up_prev do
+        {_s, _e, tag} -> Map.put(player, :prev, tag)
+        _ -> player
+      end
+
+    assign(socket, :player, player)
   end
 
-  defp with_next(socket), do: socket
+  defp with_neighbours(socket), do: socket
 
   # The address names the release that is playing, so a reload — or a copy of it — plays the same.
   defp name_the_release(%{assigns: %{hash: nil}} = socket, hash),
@@ -270,8 +286,11 @@ defmodule RokiWeb.WatchLive do
   defp name_the_release(socket, _hash), do: socket
 
   defp load_episodes(socket) do
-    %{id: id, season: season, uuid: uuid} = socket.assigns
-    start_async(socket, :episodes, fn -> Watch.episodes(id, season, uuid) end)
+    %{id: id, season: season, uuid: uuid, title: title, episode: episode} = socket.assigns
+
+    socket
+    |> start_async(:prev, fn -> Watch.previous_episode(uuid, title, season, episode) end)
+    |> start_async(:episodes, fn -> Watch.episodes(id, season, uuid) end)
   end
 
   # A direct (non-remuxed) release has no remux id; subtitles written beside it need a stable one.
@@ -312,6 +331,18 @@ defmodule RokiWeb.WatchLive do
   end
 
   def handle_event("next", _params, socket), do: {:noreply, socket}
+
+  def handle_event("previous", _params, %{assigns: %{up_prev: {s, e, _tag}, id: id}} = socket) do
+    query =
+      case socket.assigns.current do
+        {source, _} -> [prefer: source.hash]
+        _ -> []
+      end
+
+    {:noreply, push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query}")}
+  end
+
+  def handle_event("previous", _params, socket), do: {:noreply, socket}
 
   def handle_event("ended", _params, socket) do
     next = socket.assigns.up_next || next_episode(socket.assigns)

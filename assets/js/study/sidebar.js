@@ -144,6 +144,7 @@ export const StudySidebar = {
     this.subsLabel = this.el.querySelector("[data-role=subs-label]")
     this.backdrop = this.el.querySelector("[data-role=backdrop]")
     this.nextBtn = this.el.querySelector("[data-role=next-btn]")
+    this.prevBtn = this.el.querySelector("[data-role=prev-btn]")
     this.audioBtn = this.el.querySelector("[data-role=audio-btn]")
     this.wide = window.matchMedia("(min-width: 1024px)")
 
@@ -595,6 +596,8 @@ export const StudySidebar = {
 
     // ── the next episode: the page finds its sources and starts the best one
     this.nextBtn.addEventListener("click", () => this.pushEvent("next", {}))
+    this.prevBtn.addEventListener("click", () => this.pushEvent("previous", {}))
+    this.el.querySelector("[data-role=subs-off]").addEventListener("click", () => this.setSelection([]))
 
     // ── audio tracks (a dual-audio release), on whichever player is in use
     this.video.addEventListener("loadedmetadata", () => this.refreshAudio())
@@ -960,6 +963,8 @@ export const StudySidebar = {
       this.playerUrl = p.url
       this.startMedia(p)
     }
+    this.prevBtn.hidden = !p.prev
+    this.prevBtn.title = p.prev ? `Play the previous episode (${p.prev})` : "Play the previous episode"
     this.nextBtn.hidden = !p.next
     const label = this.nextBtn.querySelector("[data-role=next-label]")
     if (label) label.textContent = p.next || ""
@@ -1039,7 +1044,8 @@ export const StudySidebar = {
     const names = (t) => {
       const lang = shortLang(t.lang || t.language)
       const nice = {ja: "Japanese", en: "English", fr: "French", es: "Spanish", de: "German", it: "Italian", pt: "Portuguese", ru: "Russian", ko: "Korean", zh: "Chinese"}[lang]
-      return t.name || t.label || nice || t.lang || t.language || ""
+      const raw = String(t.name || t.label || "").replace(/_/g, " ").trim()
+      return nice || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "") || t.lang || t.language || ""
     }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length) {
       return this.hls.audioTracks.map((t, i) => ({i, name: names(t) || `Track ${i + 1}`, active: i === this.hls.audioTrack}))
@@ -1194,7 +1200,8 @@ export const StudySidebar = {
   },
 
   // The menu of tracks: what is on, in order (the first is the main one), then the languages that
-  // can be added — one row each, opening to its versions when a language has several.
+  // can be added as small buttons — one each, opening to its versions when a language has several.
+  // Kept short: however much is on, the menu stays a handful of lines.
   renderMenu() {
     const box = this.subsList
     box.textContent = ""
@@ -1205,12 +1212,23 @@ export const StudySidebar = {
       return e
     }
     const langOf = (t) => String(t.label).split(" · ")[0]
-    const versionOf = (t) => String(t.label).split(" · ").slice(1).join(" · ")
+    // Two tracks with the same name ("English", "English") are told apart by a number.
+    const nth = (t) => {
+      const twins = this.tracks.filter((x) => x.label === t.label)
+      return twins.length > 1 ? ` ${twins.indexOf(t) + 1}` : ""
+    }
+    const versionOf = (t) => (String(t.label).split(" · ").slice(1).join(" · ") || "") + (String(t.label).includes(" · ") ? nth(t) : "")
+    const code = (t) => (shortLang(t.lang) || langOf(t).slice(0, 3)).toUpperCase()
 
     const on = this.selection().map((u) => this.tracks.find((t) => t.url === u)).filter(Boolean)
-    const names = []
-    for (const t of on) if (!names.includes(langOf(t))) names.push(langOf(t))
-    this.subsLabel.textContent = on.length ? names.slice(0, 2).join(" + ") + (names.length > 2 ? ` +${names.length - 2}` : "") : this.tracks.length ? "Subtitles off" : "No subtitles"
+    // The bar says it in codes — JA · EN · FR — so the row never grows.
+    const codes = []
+    for (const t of on) if (!codes.includes(code(t))) codes.push(code(t))
+    this.subsLabel.textContent = on.length
+      ? codes.slice(0, 3).join(" · ") + (codes.length > 3 ? ` +${codes.length - 3}` : "")
+      : this.tracks.length ? "Off" : "None"
+    this.subsLabel.title = on.map((t) => t.label).join(", ")
+    this.el.querySelector("[data-role=subs-off]").hidden = !on.length
     if (!this.tracks.length) {
       box.appendChild(el("p", "p-3 text-sm opacity-60", "This release came with no subtitle tracks."))
       return
@@ -1221,9 +1239,10 @@ export const StudySidebar = {
       on.forEach((t, k) => {
         const row = el("div", "sub-row")
         row.appendChild(el("span", "sub-badge" + (k ? " second" : ""), k ? String(k + 1) : "★"))
-        const name = el("span", "sub-name", langOf(t))
+        const name = el("span", "sub-name", langOf(t) + (String(t.label).includes(" · ") ? "" : nth(t)))
         if (versionOf(t)) name.appendChild(el("span", "sub-sub", "  " + versionOf(t)))
         row.appendChild(name)
+
         // Big enough to hit: move up, move down, take off.
         const tool = (text, title, click, disabled) => {
           const b = el("button", "btn btn-square btn-ghost h-11 min-h-0 w-11 text-lg" + (disabled ? " opacity-25" : ""), text)
@@ -1247,47 +1266,34 @@ export const StudySidebar = {
       if (!g) groups.push((g = {name: langOf(t), items: []}))
       g.items.push(t)
     }
-    if (groups.length) box.appendChild(el("div", "study-label", on.length ? "Add" : "Choose"))
-    for (const g of groups) {
-      const add = (t) => this.toggle(this.tracks.indexOf(t))
-      if (g.items.length === 1) {
-        const row = el("button", "sub-row")
-        row.type = "button"
-        row.appendChild(el("span", "sub-badge second", "+"))
-        const name = el("span", "sub-name", g.name)
-        if (versionOf(g.items[0])) name.appendChild(el("span", "sub-sub", "  " + versionOf(g.items[0])))
-        row.appendChild(name)
-        row.addEventListener("click", () => add(g.items[0]))
-        box.appendChild(row)
-      } else {
-        const open = this.openLang === g.name
-        const row = el("button", "sub-row")
-        row.type = "button"
-        row.appendChild(el("span", "sub-badge second", open ? "–" : "+"))
-        const name = el("span", "sub-name", g.name)
-        name.appendChild(el("span", "sub-sub", `  ${g.items.length} versions`))
-        row.appendChild(name)
-        row.addEventListener("click", () => { this.openLang = open ? null : g.name; this.renderMenu() })
-        box.appendChild(row)
-        if (open) {
-          const list = el("div", "sub-variants")
-          g.items.forEach((t, i) => {
-            const v = el("button", "sub-row", versionOf(t) || `Version ${i + 1}`)
-            v.type = "button"
-            v.addEventListener("click", () => add(t))
-            list.appendChild(v)
-          })
-          box.appendChild(list)
-        }
-      }
-    }
+    if (!groups.length) return
 
-    if (on.length) {
-      const off = el("button", "sub-row", "Turn subtitles off")
-      off.type = "button"
-      off.classList.add("opacity-70")
-      off.addEventListener("click", () => this.setSelection([]))
-      box.appendChild(off)
+    box.appendChild(el("div", "study-label", on.length ? "Add" : "Choose"))
+    const chips = el("div", "flex flex-wrap gap-2 px-2 pb-2")
+    for (const g of groups) {
+      const open = this.openLang === g.name
+      const chip = el("button", "btn btn-sm rounded-full" + (open ? " btn-active" : ""), `+ ${g.name}${g.items.length > 1 ? ` ·${g.items.length}` : ""}`)
+      chip.type = "button"
+      chip.addEventListener("click", () => {
+        if (g.items.length === 1) return this.toggle(this.tracks.indexOf(g.items[0]))
+        this.openLang = open ? null : g.name
+        this.renderMenu()
+      })
+      chips.appendChild(chip)
+    }
+    box.appendChild(chips)
+
+    const g = groups.find((g) => g.name === this.openLang)
+    if (g) {
+      box.appendChild(el("div", "study-label", `${g.name} versions`))
+      const versions = el("div", "flex flex-wrap gap-2 px-2 pb-2")
+      g.items.forEach((t, i) => {
+        const v = el("button", "btn btn-sm btn-outline rounded-full", versionOf(t).trim() || `${g.name} ${i + 1}`)
+        v.type = "button"
+        v.addEventListener("click", () => this.toggle(this.tracks.indexOf(t)))
+        versions.appendChild(v)
+      })
+      box.appendChild(versions)
     }
   },
 

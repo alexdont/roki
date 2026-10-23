@@ -53,6 +53,7 @@ defmodule RokiWeb.SourcesLive do
           current: nil,
           external: nil,
           next: nil,
+          prev: nil,
           prefer: nil,
           auto: :off,
           auto_req: false,
@@ -164,7 +165,9 @@ defmodule RokiWeb.SourcesLive do
     socket =
       if socket.assigns.type == "tv",
         do:
-          start_async(socket, :next, fn -> Watch.next_episode(uuid, title, season, episode) end),
+          socket
+          |> start_async(:next, fn -> Watch.next_episode(uuid, title, season, episode) end)
+          |> start_async(:prev, fn -> Watch.previous_episode(uuid, title, season, episode) end),
         else: socket
 
     {:noreply, begin(socket, false)}
@@ -212,6 +215,11 @@ defmodule RokiWeb.SourcesLive do
     do: {:noreply, assign(socket, :next, next)}
 
   def handle_async(:next, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:prev, {:ok, {_s, _e, _tag} = prev}, socket),
+    do: {:noreply, assign(socket, :prev, prev)}
+
+  def handle_async(:prev, _other, socket), do: {:noreply, socket}
 
   def handle_async(:more, _other, socket),
     do: {:noreply, assign(socket, phase: :ready, busy?: false)}
@@ -352,6 +360,19 @@ defmodule RokiWeb.SourcesLive do
 
   def handle_event("next", _params, socket), do: {:noreply, socket}
 
+  # The one before: its sources, the same way (nothing is marked — going back is not finishing).
+  def handle_event("previous", _params, %{assigns: %{prev: {s, e, _tag}, id: id}} = socket) do
+    query =
+      case socket.assigns.current do
+        {source, _} -> [auto: 1, prefer: source.hash]
+        _ -> [auto: 1]
+      end
+
+    {:noreply, push_navigate(socket, to: ~p"/sources/tv/#{id}/#{s}/#{e}?#{query}")}
+  end
+
+  def handle_event("previous", _params, socket), do: {:noreply, socket}
+
   def handle_event("mark_watched", _params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
     if uuid && ctx, do: Watch.mark_watched(uuid, ctx)
@@ -412,9 +433,21 @@ defmodule RokiWeb.SourcesLive do
               )}</span>
             </h1>
           </div>
-          <button :if={@next && @external == nil} phx-click="next" class="btn btn-sm gap-1.5">
-            Next episode · {elem(@next, 2)} <.icon name="hero-forward" class="h-4 w-4" />
-          </button>
+          <div :if={(@next || @prev) && @external == nil} class="flex gap-2">
+            <button
+              :if={@prev}
+              phx-click="previous"
+              class="btn btn-sm gap-1.5"
+              title="The episode before"
+            >
+              <.icon name="hero-backward" class="h-4 w-4" />
+              <span class="hidden sm:inline">Previous ·</span> {elem(@prev, 2)}
+            </button>
+            <button :if={@next} phx-click="next" class="btn btn-sm gap-1.5" title="The next episode">
+              <span class="hidden sm:inline">Next ·</span> {elem(@next, 2)}
+              <.icon name="hero-forward" class="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div :if={@uuid == nil} class="alert text-sm">
@@ -453,6 +486,7 @@ defmodule RokiWeb.SourcesLive do
           season={@season}
           episode={@episode}
           next={@next}
+          prev={@prev}
         />
 
         <.sources

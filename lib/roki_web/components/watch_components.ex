@@ -215,6 +215,7 @@ defmodule RokiWeb.WatchComponents do
   attr :season, :any, default: nil
   attr :episode, :any, default: nil
   attr :next, :any, default: nil
+  attr :prev, :any, default: nil
 
   def external_panel(assigns) do
     url = assigns.external.url
@@ -255,6 +256,9 @@ defmodule RokiWeb.WatchComponents do
       </button>
 
       <div class="flex flex-wrap gap-2">
+        <button :if={@prev} phx-click="previous" class="btn gap-1.5" title="The episode before">
+          <.icon name="hero-backward" class="h-4 w-4" /> Previous · {elem(@prev, 2)}
+        </button>
         <a :if={@external.launch} href={@external.launch} class={["btn", !@next && "btn-primary"]}>
           Open in {app_label(@external.app)}
         </a>
