@@ -138,6 +138,12 @@ defmodule RokiWeb.Layouts do
             current_path={@current_path}
           />
           <template data-role="menu-extras">
+            <li :if={@username} data-menu-extras>
+              <.link navigate={~p"/#{@username}/settings"} class="flex items-center gap-3">
+                <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
+                <span>Playback & services</span>
+              </.link>
+            </li>
             <li data-menu-extras class="mt-1 border-t border-base-300 pt-1">
               <div class="flex items-center justify-between gap-3 !bg-transparent hover:!bg-transparent">
                 <span class="text-sm">Watch in</span>

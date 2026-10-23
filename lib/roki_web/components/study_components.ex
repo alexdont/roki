@@ -178,7 +178,7 @@ defmodule RokiWeb.StudyComponents do
                 <%!-- Always last: the release may lack the language wanted, and OpenSubtitles / Jimaku
                       are keys the user adds in Settings. Opens in a new tab so playback goes on. --%>
                 <a
-                  href="/phoenix_kit/en/profile/settings#connections"
+                  href="/account/services#connections"
                   target="_blank"
                   rel="noopener"
                   class="btn btn-sm btn-ghost mx-2 mb-2 mt-1 justify-start gap-1.5 text-base-content/70"

@@ -49,11 +49,12 @@ defmodule RokiWeb.HeaderTest do
     assert html =~ "hero-star"
     assert html =~ ~s(href="/headertest/calendar")
     assert html =~ "hero-calendar-days"
-    refute html =~ ~s(href="/headertest/settings" data-phx-link)
+    # Playback & services is a row of the account menu, not an icon in the bar.
+    assert html =~ "Playback &amp; services"
     refute html =~ ~s(href="/headertest/stats" data-phx-link)
   end
 
-  test "the account menu's Settings opens this site's settings page" do
+  test "/account/services opens this site's playback and services page" do
     {:ok, user} =
       PhoenixKit.Users.Auth.register_user(%{
         "email" => "account-test@example.com",
@@ -64,8 +65,8 @@ defmodule RokiWeb.HeaderTest do
     token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
     conn = Plug.Test.init_test_session(build_conn(), %{user_token: token})
 
-    assert redirected_to(get(conn, "/phoenix_kit/en/profile/settings")) == "/accounttest/settings"
-    assert redirected_to(get(build_conn(), "/phoenix_kit/en/profile/settings")) =~ "log-in"
+    assert redirected_to(get(conn, "/account/services")) == "/accounttest/settings"
+    assert redirected_to(get(build_conn(), "/account/services")) =~ "log-in"
   end
 
   test "on a phone the sections are a panel under the header, not a small dropdown", %{conn: conn} do

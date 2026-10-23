@@ -141,7 +141,13 @@ endpoint_config = [
   http: [ip: {0, 0, 0, 0}, port: cfg.port],
   secret_key_base: cfg.secret_key_base,
   live_view: [signing_salt: cfg.live_view_salt],
-  url: [host: cfg.phx_host]
+  # Behind Caddy the public address is https on 443; without it the endpoint builds
+  # http://host:4000 links (the QR sign-in code encoded one). A bare localhost stays as it is.
+  url:
+    if(cfg.phx_host == "localhost",
+      do: [host: cfg.phx_host],
+      else: [host: cfg.phx_host, scheme: "https", port: 443]
+    )
 ]
 
 endpoint_config =

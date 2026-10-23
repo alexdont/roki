@@ -439,7 +439,7 @@ defmodule RokiWeb.SettingsLive do
             href="/phoenix_kit/profile/settings"
             class="text-sm text-base-content/60 hover:text-primary"
           >
-            Account: name, email, password →
+            Account: profile picture, name, email, password →
           </a>
         </div>
 
