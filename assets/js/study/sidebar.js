@@ -1025,7 +1025,7 @@ export const StudySidebar = {
     const osKey = JSON.stringify([p.os, p.os_langs, p.key])
     if (osKey !== this.osKey) {
       this.osKey = osKey
-      this.os = {state: p.os || "off", langs: p.os_langs || [], lang: null, results: null, busy: false, error: null}
+      this.os = {state: p.os || "off", langs: p.os_langs || [], lang: null, results: null, busy: false, error: null, open: false}
       this.renderOs()
     }
     const key = JSON.stringify(p.tracks)
@@ -1223,7 +1223,21 @@ export const StudySidebar = {
     }
     const name = (c) => { try { return new Intl.DisplayNames(["en"], {type: "language"}).of(c) } catch { return c } }
 
-    box.appendChild(el("div", "study-label", "OpenSubtitles"))
+    // Closed it is one line, so the tracks above keep the room; it opens to pick a language and a
+    // file, and closes again once a file has been taken.
+    const head = el("button", "btn btn-sm btn-ghost w-full justify-between", "")
+    head.type = "button"
+    head.appendChild(el("span", "", "OpenSubtitles — find more"))
+    head.appendChild(el("span", "opacity-60", os.open ? "▴" : "▾"))
+    head.setAttribute("aria-expanded", String(os.open))
+    head.addEventListener("click", () => {
+      os.open = !os.open
+      if (!os.open) { os.lang = null; os.results = null; os.error = null }
+      this.renderOs()
+    })
+    box.appendChild(head)
+    if (!os.open) return
+
     const chips = el("div", "flex flex-wrap gap-1.5")
     for (const lang of os.langs) {
       const b = el("button", "btn btn-xs rounded-full" + (os.lang === lang ? " btn-primary" : ""), name(lang))
@@ -1239,7 +1253,7 @@ export const StudySidebar = {
     if (os.error) box.appendChild(el("p", "text-xs text-error", os.error))
     if (os.results) {
       if (!os.results.length) box.appendChild(el("p", "text-xs opacity-60", `No ${name(os.lang)} subtitles found for this.`))
-      const list = el("div", "max-h-44 space-y-0.5 overflow-y-auto")
+      const list = el("div", "max-h-36 space-y-0.5 overflow-y-auto")
       for (const r of os.results) {
         const row = el("button", "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-base-200")
         row.type = "button"
@@ -1279,6 +1293,9 @@ export const StudySidebar = {
       if (reply && reply.track) {
         this.wantSelect = reply.track.url
         this.tryWant()
+        os.open = false
+        os.lang = null
+        os.results = null
       } else {
         os.error = (reply && reply.error) || "OpenSubtitles would not give that file."
       }

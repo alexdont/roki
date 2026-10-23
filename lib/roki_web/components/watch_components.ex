@@ -335,7 +335,23 @@ defmodule RokiWeb.WatchComponents do
         <a :if={@external.launch} href={@external.launch} class={["btn", !@next && "btn-primary"]}>
           Open in {app_label(@external.app)}
         </a>
-        <a href={@m3u} download={@m3u_name} class="btn">Download .m3u</a>
+        <a
+          href={@m3u}
+          download={@m3u_name}
+          class={["btn", !@next && !@external.launch && "btn-primary"]}
+        >
+          {if @external.launch, do: "Download .m3u", else: "Open in VLC (.m3u file)"}
+        </a>
+        <button
+          :if={@platform in [:desktop, :mac]}
+          type="button"
+          class="btn"
+          data-cmd={"vlc '" <> @url <> "'"}
+          onclick="navigator.clipboard.writeText(this.dataset.cmd).then(() => { this.textContent = 'Copied' })"
+          title="Paste into a terminal"
+        >
+          Copy VLC command
+        </button>
         <button
           type="button"
           class="btn"
@@ -354,13 +370,19 @@ defmodule RokiWeb.WatchComponents do
           <a :if={@platform != :android} href={@links.vlc_android} class="btn btn-sm">
             VLC (Android)
           </a>
-          <a :if={@platform != :desktop} href={@links.vlc_desktop} class="btn btn-sm">
+          <a :if={@platform not in [:desktop, :mac]} href={@links.vlc_desktop} class="btn btn-sm">
             VLC (desktop)
           </a>
           <a href={@links.infuse} class="btn btn-sm">Infuse</a>
           <a href={@links.mpv} class="btn btn-sm">mpv</a>
         </div>
       </details>
+
+      <p :if={!@external.launch and @platform == :desktop} class="text-sm text-base-content/60">
+        Linux and Windows browsers can't open VLC from a link. The .m3u file opens in VLC when you
+        open it (set VLC as the default for .m3u files once, and a click is enough); or paste the
+        command into a terminal.
+      </p>
 
       <p class="text-sm text-base-content/60">
         <span :if={@external.resume_at > 0}>
@@ -397,11 +419,14 @@ defmodule RokiWeb.WatchComponents do
       {"mpv", _} -> links.mpv
       {_, :ios} -> links.vlc_ios
       {_, :android} -> links.vlc_android
-      {_, _} -> links.vlc_desktop
+      {_, :mac} -> links.vlc_desktop
+      # Linux and Windows do not register `vlc://` links: the click would do nothing. The .m3u
+      # file is what they open.
+      {_, _} -> nil
     end
   end
 
-  # `vlc://` is registered by VLC on iOS and macOS; Android takes an intent; mpv needs the
+  # `vlc://` is registered by VLC on iOS and macOS only; Android takes an intent; mpv needs the
   # mpv-handler protocol. All carry the same direct link.
   defp external_links(url, name) do
     enc = URI.encode_www_form(url)

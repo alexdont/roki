@@ -34,7 +34,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 // player (VLC), a laptop the page. The title page reads both from the socket params.
 const platform = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
   ? "ios"
-  : /Android/.test(navigator.userAgent) ? "android" : "desktop"
+  : /Android/.test(navigator.userAgent) ? "android" : /Mac/.test(navigator.platform) ? "mac" : "desktop"
 
 const storedPlayer = () => {
   try { return localStorage.getItem("roki:player") } catch { return null }

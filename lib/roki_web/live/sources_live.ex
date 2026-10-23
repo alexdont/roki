@@ -87,7 +87,7 @@ defmodule RokiWeb.SourcesLive do
     params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
 
     case params["platform"] do
-      p when p in ["ios", "android"] -> String.to_existing_atom(p)
+      p when p in ["ios", "android", "mac"] -> String.to_existing_atom(p)
       _ -> :desktop
     end
   end
