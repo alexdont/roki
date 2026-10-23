@@ -140,7 +140,10 @@ export const StudySidebar = {
     this.ui = this.el.querySelector("#study-ui")
     this.stage = this.el.querySelector("[data-role=stage]")
     this.overlay = this.el.querySelector("[data-role=overlay]")
-    this.tracksBar = this.el.querySelector("[data-role=tracks]")
+    this.subsList = this.el.querySelector("[data-role=subs-list]")
+    this.subsLabel = this.el.querySelector("[data-role=subs-label]")
+    this.backdrop = this.el.querySelector("[data-role=backdrop]")
+    this.wide = window.matchMedia("(min-width: 1024px)")
 
     // The card for a word: its own element, in the page (or in the stage while it is fullscreen).
     this.tip = document.createElement("div")
@@ -452,6 +455,7 @@ export const StudySidebar = {
         const head = add(box, "div")
         add(head, "span", "tip-word", e.word)
         if (e.reading) add(head, "span", "tip-reading", `【${e.reading}】`)
+        if (e.jlpt) add(head, "span", "tip-jlpt", e.jlpt)
         if (e.pos && e.pos.length) add(box, "div", "tip-pos", e.pos.join(" · "))
         const list = add(box, "ol")
         for (const m of (e.meanings || []).slice(0, 3)) add(list, "li", null, m)
@@ -501,6 +505,7 @@ export const StudySidebar = {
     const $ = (sel) => this.el.querySelector(sel)
     this.bindWords()
 
+    // ── theater and fullscreen
     const theater = $("[data-role=theater]")
     const setTheater = (on) => {
       this.ui.dataset.theater = on ? "true" : "false"
@@ -524,75 +529,149 @@ export const StudySidebar = {
       this.hideTip()
     })
 
-    // The box: open, smaller, or just its title bar (and then the chevron opens it again).
+    // ── the list of lines: beside the picture on a wide screen (open, smaller, or gone), a sheet
+    // that slides up on a narrow one.
+    const lines = $("[data-role=lines-btn]")
     const collapse = $("[data-role=collapse]")
     const compact = $("[data-role=compact]")
-    const setPanel = (state) => {
+    const showList = () => this.p.idx >= 0 && requestAnimationFrame(() => this.scrollToIndex(this.p.idx, false))
+    const reflect = () => {
+      const open = this.wide.matches ? this.ui.dataset.panel !== "closed" : this.ui.dataset.sheet === "open"
+      lines.setAttribute("aria-pressed", String(open))
+      lines.classList.toggle("btn-primary", open)
+      collapse.setAttribute("aria-expanded", String(open))
+      this.syncBackdrop()
+    }
+    this.setPanel = (state) => {
       this.ui.dataset.panel = state
-      collapse.setAttribute("aria-expanded", String(state !== "closed"))
       compact.classList.toggle("btn-active", state === "compact")
       store.set("panel", state)
-      if (state !== "closed") requestAnimationFrame(() => this.p.idx >= 0 && this.scrollToIndex(this.p.idx, false))
+      if (state !== "closed") showList()
+      reflect()
     }
-    collapse.addEventListener("click", () => setPanel(this.ui.dataset.panel === "closed" ? "open" : "closed"))
-    compact.addEventListener("click", () => setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
-    const saved = store.get("panel")
-    setPanel(["open", "compact", "closed"].includes(saved) ? saved : "open")
+    this.setSheet = (open) => {
+      this.ui.dataset.sheet = open ? "open" : "closed"
+      if (open) { this.closePops(); showList() }
+      reflect()
+    }
+    const toggleList = () => {
+      if (this.wide.matches) this.setPanel(this.ui.dataset.panel === "closed" ? "open" : "closed")
+      else this.setSheet(this.ui.dataset.sheet !== "open")
+    }
+    lines.addEventListener("click", toggleList)
+    collapse.addEventListener("click", toggleList)
+    compact.addEventListener("click", () => this.setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
+    const savedPanel = store.get("panel")
+    this.setPanel(["open", "compact", "closed"].includes(savedPanel) ? savedPanel : "open")
+    this.wide.addEventListener("change", reflect)
 
-    // Sync: subtitles a little earlier or later than the picture (a file made for another cut).
+    // ── the two menus
+    this.pops = {
+      subs: {btn: $("[data-role=subs-btn]"), menu: $("[data-role=subs-menu]")},
+      settings: {btn: $("[data-role=settings-btn]"), menu: $("[data-role=settings-menu]")},
+    }
+    for (const [name, pop] of Object.entries(this.pops)) {
+      pop.btn.addEventListener("click", (e) => {
+        e.stopPropagation()
+        const open = pop.menu.hidden
+        this.closePops()
+        if (open) this.openPop(name)
+      })
+    }
+    for (const close of this.el.querySelectorAll("[data-role=pop-close]")) close.addEventListener("click", () => this.closePops())
+    this.backdrop.addEventListener("click", () => { this.closePops(); if (!this.wide.matches) this.setSheet(false) })
+    // Outside a menu closes it. The path is read at the click: a row that re-drew the menu is gone
+    // from the page by the time this runs, and would look like an outside click.
+    document.addEventListener("click", (e) => {
+      const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("study-pop") || n.matches("[data-role=subs-btn], [data-role=settings-btn]")))
+      if (!inside) this.closePops()
+    })
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { this.closePops(); if (!this.wide.matches) this.setSheet(false) }
+    })
+
+    // ── settings: timing (a file made for another cut), text size, study mode, peek
     const offsetLabel = $("[data-role=offset]")
     this.setOffset = (value) => {
-      this.offset = Math.round(value * 10) / 10
-      offsetLabel.textContent = `${this.offset > 0 ? "+" : ""}${this.offset.toFixed(1)}s`
+      this.offset = Math.round(value * 100) / 100
+      offsetLabel.textContent = `${this.offset > 0 ? "+" : ""}${this.offset}s`
       store.set("offset:" + (this.mediaKey || ""), String(this.offset))
       this.overlayKey = ""
       this.tick()
     }
-    $("[data-role=later]").addEventListener("click", () => this.setOffset(this.offset + 0.5))
-    $("[data-role=earlier]").addEventListener("click", () => this.setOffset(this.offset - 0.5))
+    $("[data-role=later]").addEventListener("click", () => this.setOffset(this.offset + 0.25))
+    $("[data-role=earlier]").addEventListener("click", () => this.setOffset(this.offset - 0.25))
     offsetLabel.addEventListener("click", () => this.setOffset(0))
 
-    // Caption size.
+    const scaleLabel = $("[data-role=scale]")
     const setScale = (value) => {
       this.scale = Math.min(3, Math.max(0.5, Math.round(value * 100) / 100))
       this.ui.style.setProperty("--cap-scale", this.scale)
+      scaleLabel.textContent = `${Math.round(this.scale * 100)}%`
       store.set("scale", String(this.scale))
     }
     $("[data-role=smaller-text]").addEventListener("click", () => setScale(this.scale - 0.15))
     $("[data-role=bigger-text]").addEventListener("click", () => setScale(this.scale + 0.15))
+    scaleLabel.addEventListener("click", () => setScale(1))
     setScale(this.scale)
 
-    // Pause after each line, with a replay of it.
+    // Pause after each line, with a replay of it (the round button on the picture).
     const study = $("[data-role=study]")
     const replay = $("[data-role=replay]")
     const setStudy = (on) => {
       this.study = on
-      study.setAttribute("aria-pressed", String(on))
-      study.classList.toggle("btn-primary", on)
+      study.checked = on
       replay.hidden = !on
       store.set("study", on ? "1" : "0")
       this.pausedAt = -1
       this.watching = -1
     }
-    study.addEventListener("click", () => setStudy(!this.study))
+    study.addEventListener("change", () => setStudy(study.checked))
     replay.addEventListener("click", () => this.replay())
     setStudy(this.study)
 
-    // Peek: the translation blurred until you click it.
+    // Peek: the other tracks blurred until you click them.
     const peek = $("[data-role=peek]")
     const setPeek = (on) => {
       this.peek = on
+      peek.checked = on
       this.ui.dataset.peek = on ? "true" : "false"
-      peek.setAttribute("aria-pressed", String(on))
-      peek.classList.toggle("btn-primary", on)
       store.set("peek", on ? "1" : "0")
     }
-    peek.addEventListener("click", () => setPeek(!this.peek))
+    peek.addEventListener("change", () => setPeek(peek.checked))
     setPeek(this.peek)
     this.el.addEventListener("click", (e) => {
       const trans = e.target.closest && e.target.closest(".study-trans")
       if (trans) trans.toggleAttribute("data-revealed")
     })
+  },
+
+  openPop(name) {
+    const pop = this.pops[name]
+    this.dismissTip()
+    pop.menu.hidden = false
+    pop.btn.setAttribute("aria-expanded", "true")
+    pop.btn.classList.add("btn-active")
+    this.syncBackdrop()
+  },
+
+  closePops() {
+    if (!this.pops) return
+    for (const pop of Object.values(this.pops)) {
+      pop.menu.hidden = true
+      pop.btn.setAttribute("aria-expanded", "false")
+      pop.btn.classList.remove("btn-active")
+    }
+    this.syncBackdrop()
+  },
+
+  // The dim layer behind a sheet (a phone's menus and list); a wide screen's menus have none.
+  syncBackdrop() {
+    if (!this.backdrop || !this.pops) return
+    const menu = Object.values(this.pops).some((p) => !p.menu.hidden)
+    const phoneMenu = menu && window.matchMedia("(max-width: 639px)").matches
+    const sheet = !this.wide.matches && this.ui.dataset.sheet === "open"
+    this.backdrop.hidden = !(phoneMenu || sheet)
   },
 
   // ── the list ───────────────────────────────────────────────────────
@@ -1024,7 +1103,7 @@ export const StudySidebar = {
 
     this.overlayKey = ""
     this.buildRows()
-    this.renderChips()
+    this.renderMenu()
   },
 
   // Put a track's lines into a layer: from what was downloaded before, or by loading it.
@@ -1040,59 +1119,102 @@ export const StudySidebar = {
     else this.setExtra(target, text, track)
   },
 
-  renderChips() {
-    const bar = this.tracksBar
-    bar.textContent = ""
-    if (!this.tracks.length) return
+  // The menu of tracks: what is on, in order (the first is the main one), then the languages that
+  // can be added — one row each, opening to its versions when a language has several.
+  renderMenu() {
+    const box = this.subsList
+    box.textContent = ""
+    const el = (tag, cls, text) => {
+      const e = document.createElement(tag)
+      if (cls) e.className = cls
+      if (text != null) e.textContent = text
+      return e
+    }
+    const langOf = (t) => String(t.label).split(" · ")[0]
+    const versionOf = (t) => String(t.label).split(" · ").slice(1).join(" · ")
 
-    const seen = {}
-    const labels = this.tracks.map((t) => {
-      seen[t.label] = (seen[t.label] || 0) + 1
-      return seen[t.label] > 1 ? `${t.label} ${seen[t.label]}` : t.label
-    })
-    const on = this.selection()
-
-    const group = document.createElement("div")
-    group.className = "study-group"
-    const name = document.createElement("span")
-    name.className = "study-group-label"
-    name.textContent = "Subtitles"
-    group.appendChild(name)
-
-    const button = (text, cls, click, title) => {
-      const b = document.createElement("button")
-      b.type = "button"
-      b.className = "btn btn-sm " + cls
-      b.textContent = text
-      if (title) b.title = title
-      b.addEventListener("click", click)
-      return b
+    const on = this.selection().map((u) => this.tracks.find((t) => t.url === u)).filter(Boolean)
+    const names = []
+    for (const t of on) if (!names.includes(langOf(t))) names.push(langOf(t))
+    this.subsLabel.textContent = on.length ? names.slice(0, 2).join(" + ") + (names.length > 2 ? ` +${names.length - 2}` : "") : this.tracks.length ? "Subtitles off" : "No subtitles"
+    if (!this.tracks.length) {
+      box.appendChild(el("p", "p-3 text-sm opacity-60", "This release came with no subtitle tracks."))
+      return
     }
 
-    this.tracks.forEach((t, i) => {
-      const k = on.indexOf(t.url)
-      const cls = k === 0 ? "btn-primary" : k > 0 ? "btn-outline btn-primary" : ""
-      const mark = k === 0 ? "★ " : k > 0 ? `${k + 1} · ` : ""
-      const chip = button(mark + labels[i], cls, () => this.toggle(i), k < 0 ? "Show this track" : "Turn this track off")
-      chip.setAttribute("aria-pressed", String(k >= 0))
-      if (k > 0) {
-        const wrap = document.createElement("div")
-        wrap.className = "join"
-        chip.classList.add("join-item")
-        const up = button("↑", "btn-outline btn-primary btn-square join-item", () => this.promote(i), "Make this the main subtitles")
-        wrap.append(chip, up)
-        group.appendChild(wrap)
-      } else {
-        group.appendChild(chip)
-      }
-    })
-    group.appendChild(button("Off", on.length === 0 ? "btn-primary" : "", () => this.setSelection([]), "No subtitles"))
-    bar.appendChild(group)
+    if (on.length) {
+      box.appendChild(el("div", "study-label", "Showing"))
+      on.forEach((t, k) => {
+        const row = el("div", "sub-row")
+        row.appendChild(el("span", "sub-badge" + (k ? " second" : ""), k ? String(k + 1) : "★"))
+        const name = el("span", "sub-name", langOf(t))
+        if (versionOf(t)) name.appendChild(el("span", "sub-sub", "  " + versionOf(t)))
+        row.appendChild(name)
+        if (k > 0) {
+          const up = el("button", "btn btn-xs btn-ghost btn-square", "↑")
+          up.type = "button"
+          up.title = "Make this the main subtitles"
+          up.addEventListener("click", () => this.promote(this.tracks.indexOf(t)))
+          row.appendChild(up)
+        }
+        const x = el("button", "btn btn-xs btn-ghost btn-square", "✕")
+        x.type = "button"
+        x.title = "Turn this track off"
+        x.addEventListener("click", () => this.toggle(this.tracks.indexOf(t)))
+        row.appendChild(x)
+        box.appendChild(row)
+      })
+    }
 
-    const hint = document.createElement("p")
-    hint.className = "study-hint"
-    hint.textContent = "Turn any number on. ★ is the main one (hover its words); the others show under it, in order. ↑ moves one to the top."
-    bar.appendChild(hint)
+    const groups = []
+    for (const t of this.tracks) {
+      if (on.includes(t)) continue
+      let g = groups.find((g) => g.name === langOf(t))
+      if (!g) groups.push((g = {name: langOf(t), items: []}))
+      g.items.push(t)
+    }
+    if (groups.length) box.appendChild(el("div", "study-label", on.length ? "Add" : "Choose"))
+    for (const g of groups) {
+      const add = (t) => this.toggle(this.tracks.indexOf(t))
+      if (g.items.length === 1) {
+        const row = el("button", "sub-row")
+        row.type = "button"
+        row.appendChild(el("span", "sub-badge second", "+"))
+        const name = el("span", "sub-name", g.name)
+        if (versionOf(g.items[0])) name.appendChild(el("span", "sub-sub", "  " + versionOf(g.items[0])))
+        row.appendChild(name)
+        row.addEventListener("click", () => add(g.items[0]))
+        box.appendChild(row)
+      } else {
+        const open = this.openLang === g.name
+        const row = el("button", "sub-row")
+        row.type = "button"
+        row.appendChild(el("span", "sub-badge second", open ? "–" : "+"))
+        const name = el("span", "sub-name", g.name)
+        name.appendChild(el("span", "sub-sub", `  ${g.items.length} versions`))
+        row.appendChild(name)
+        row.addEventListener("click", () => { this.openLang = open ? null : g.name; this.renderMenu() })
+        box.appendChild(row)
+        if (open) {
+          const list = el("div", "sub-variants")
+          g.items.forEach((t, i) => {
+            const v = el("button", "sub-row", versionOf(t) || `Version ${i + 1}`)
+            v.type = "button"
+            v.addEventListener("click", () => add(t))
+            list.appendChild(v)
+          })
+          box.appendChild(list)
+        }
+      }
+    }
+
+    if (on.length) {
+      const off = el("button", "sub-row", "Turn subtitles off")
+      off.type = "button"
+      off.classList.add("opacity-70")
+      off.addEventListener("click", () => this.setSelection([]))
+      box.appendChild(off)
+    }
   },
 
   toggle(i) {

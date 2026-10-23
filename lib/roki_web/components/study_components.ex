@@ -1,14 +1,14 @@
 defmodule RokiWeb.StudyComponents do
   @moduledoc """
-  The player: a `<video>` with the subtitles drawn over it (hover a word for what it means), the
-  subtitle tracks to pick from under it, and the subtitle box beside it — or under it in
-  theater mode, where the player takes the width of the page. Driven by the `StudySidebar` hook
-  (`assets/js/study/`).
+  The player: a `<video>` with the subtitles drawn over it (hover a word for what it means), a
+  slim bar under it — **Subtitles** and **Settings** open menus, **Lines** shows the list of
+  every line, plus theater and fullscreen — and the list itself: beside the picture on a wide
+  screen (or under it in theater mode), a sheet that slides up on a phone. Driven by the
+  `StudySidebar` hook (`assets/js/study/`).
 
-  Everything inside `#study-ui` belongs to JavaScript (`phx-update="ignore"`): theater mode and
-  the state of the box are attributes on it (`data-theater`, `data-panel`), kept in the browser.
-  LiveView only changes `data-player` on the root, which the hook reads on mount and on every
-  update:
+  Everything inside `#study-ui` belongs to JavaScript (`phx-update="ignore"`): theater mode, the
+  state of the list and which menu is open are attributes on it, kept in the browser. LiveView only
+  changes `data-player` on the root, which the hook reads on mount and on every update:
 
       %{url:, hls: bool, resume: seconds, tracks: [%{label:, lang:, url:}], prefer: "fr", key: "…"}
   """
@@ -41,7 +41,14 @@ defmodule RokiWeb.StudyComponents do
     >
       {render_slot(@controls)}
 
-      <div id="study-ui" phx-update="ignore" data-theater="false" data-panel="open" class="study-ui">
+      <div
+        id="study-ui"
+        phx-update="ignore"
+        data-theater="false"
+        data-panel="open"
+        data-sheet="closed"
+        class="study-ui"
+      >
         <div class="study-layout">
           <div class="study-main">
             <div data-role="stage" class="study-stage">
@@ -53,96 +60,59 @@ defmodule RokiWeb.StudyComponents do
                 class="study-video"
               ></video>
               <div data-role="overlay" class="study-overlay"></div>
+              <button
+                type="button"
+                data-role="replay"
+                hidden
+                class="study-replay btn btn-sm btn-circle"
+                title="Replay this line"
+                aria-label="Replay this line"
+              >
+                <.icon name="hero-arrow-path" class="h-5 w-5" />
+              </button>
             </div>
 
             <div class="study-bar">
-              <div data-role="tracks" class="study-tracks" role="group" aria-label="Subtitles"></div>
-              <div class="study-tools">
-                <div data-role="audio-wrap" hidden class="flex items-center gap-2 text-sm">
-                  <span class="text-base-content/60">Audio</span>
-                  <select data-role="audio" class="select select-sm select-bordered"></select>
-                </div>
-                <div class="join" role="group" aria-label="Subtitle timing">
-                  <button
-                    type="button"
-                    data-role="earlier"
-                    class="btn btn-sm btn-square join-item"
-                    title="Subtitles half a second earlier"
-                    aria-label="Subtitles earlier"
-                  >
-                    <.icon name="hero-minus-micro" class="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    data-role="offset"
-                    class="btn btn-sm join-item w-16 px-1 tabular-nums"
-                    title="Subtitle sync — click to reset"
-                  >
-                    0.0s
-                  </button>
-                  <button
-                    type="button"
-                    data-role="later"
-                    class="btn btn-sm btn-square join-item"
-                    title="Subtitles half a second later"
-                    aria-label="Subtitles later"
-                  >
-                    <.icon name="hero-plus-micro" class="h-4 w-4" />
-                  </button>
-                </div>
-                <div class="join" role="group" aria-label="Subtitle size">
-                  <button
-                    type="button"
-                    data-role="smaller-text"
-                    class="btn btn-sm join-item"
-                    title="Smaller text"
-                  >
-                    A<span class="text-[0.6rem]">−</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-role="bigger-text"
-                    class="btn btn-sm join-item"
-                    title="Bigger text"
-                  >
-                    A<span class="text-[0.6rem]">+</span>
-                  </button>
-                </div>
+              <div class="study-bar-group">
                 <button
                   type="button"
-                  data-role="study"
+                  data-role="subs-btn"
                   class="btn btn-sm gap-1.5"
-                  aria-pressed="false"
-                  title="Pause at the end of every line"
+                  aria-haspopup="menu"
                 >
-                  <.icon name="hero-pause-circle" class="h-4 w-4" /> Study
+                  <.icon name="hero-chat-bubble-bottom-center-text" class="h-4 w-4 shrink-0" />
+                  <span data-role="subs-label" class="max-w-[9rem] truncate sm:max-w-[14rem]">Subtitles</span>
+                  <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 opacity-60" />
                 </button>
                 <button
                   type="button"
-                  data-role="replay"
-                  hidden
-                  class="btn btn-sm btn-square"
-                  title="Replay this line"
-                  aria-label="Replay this line"
+                  data-role="settings-btn"
+                  class="btn btn-sm gap-1.5"
+                  aria-haspopup="menu"
+                  title="Timing, text size, study mode"
                 >
-                  <.icon name="hero-arrow-path" class="h-4 w-4" />
+                  <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
+                  <span class="hidden sm:inline">Settings</span>
                 </button>
+              </div>
+              <div class="study-bar-group">
                 <button
                   type="button"
-                  data-role="peek"
+                  data-role="lines-btn"
                   class="btn btn-sm gap-1.5"
                   aria-pressed="false"
-                  title="Hide the translation until you click it"
                 >
-                  <.icon name="hero-eye-slash" class="h-4 w-4" /> Peek
+                  <.icon name="hero-queue-list" class="h-4 w-4" /> <span>Lines</span>
                 </button>
                 <button
                   type="button"
                   data-role="theater"
-                  class="btn btn-sm gap-1.5"
+                  class="btn btn-sm btn-square study-wide-only"
                   aria-pressed="false"
+                  title="Theater mode"
+                  aria-label="Theater mode"
                 >
-                  <.icon name="hero-film" class="h-4 w-4" /> Theater
+                  <.icon name="hero-film" class="h-4 w-4" />
                 </button>
                 <button
                   type="button"
@@ -153,6 +123,121 @@ defmodule RokiWeb.StudyComponents do
                 >
                   <.icon name="hero-arrows-pointing-out" class="h-4 w-4" />
                 </button>
+              </div>
+
+              <%!-- Which tracks are on, in order, and the languages to add. Built by the hook. --%>
+              <div data-role="subs-menu" class="study-pop" role="menu" hidden>
+                <div class="study-pop-head">
+                  <span>Subtitles</span>
+                  <button
+                    type="button"
+                    data-role="pop-close"
+                    class="btn btn-xs btn-ghost btn-circle"
+                    aria-label="Close"
+                  >
+                    <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+                  </button>
+                </div>
+                <div data-role="subs-list" class="study-pop-body"></div>
+              </div>
+
+              <div data-role="settings-menu" class="study-pop" role="menu" hidden>
+                <div class="study-pop-head">
+                  <span>Settings</span>
+                  <button
+                    type="button"
+                    data-role="pop-close"
+                    class="btn btn-xs btn-ghost btn-circle"
+                    aria-label="Close"
+                  >
+                    <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+                  </button>
+                </div>
+                <div class="study-pop-body space-y-1">
+                  <div class="study-setting">
+                    <div>
+                      <div class="font-medium">Subtitle timing</div>
+                      <div class="text-xs text-base-content/60">
+                        Earlier or later than the picture
+                      </div>
+                    </div>
+                    <div class="join">
+                      <button
+                        type="button"
+                        data-role="earlier"
+                        class="btn btn-sm btn-square join-item"
+                        aria-label="Earlier"
+                      >
+                        <.icon name="hero-minus-micro" class="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        data-role="offset"
+                        class="btn btn-sm join-item w-16 px-1 tabular-nums"
+                        title="Click to reset"
+                      >
+                        0.0s
+                      </button>
+                      <button
+                        type="button"
+                        data-role="later"
+                        class="btn btn-sm btn-square join-item"
+                        aria-label="Later"
+                      >
+                        <.icon name="hero-plus-micro" class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="study-setting">
+                    <div class="font-medium">Text size</div>
+                    <div class="join">
+                      <button
+                        type="button"
+                        data-role="smaller-text"
+                        class="btn btn-sm join-item"
+                        aria-label="Smaller text"
+                      >A<span class="text-[0.6rem]">−</span></button>
+                      <button
+                        type="button"
+                        data-role="scale"
+                        class="btn btn-sm join-item w-16 px-1 tabular-nums"
+                        title="Click to reset"
+                      >
+                        100%
+                      </button>
+                      <button
+                        type="button"
+                        data-role="bigger-text"
+                        class="btn btn-sm join-item"
+                        aria-label="Bigger text"
+                      >A<span class="text-[0.6rem]">+</span></button>
+                    </div>
+                  </div>
+
+                  <label class="study-setting cursor-pointer">
+                    <div>
+                      <div class="font-medium">Study mode</div>
+                      <div class="text-xs text-base-content/60">Pause after every line</div>
+                    </div>
+                    <input type="checkbox" data-role="study" class="toggle toggle-primary" />
+                  </label>
+
+                  <label class="study-setting cursor-pointer">
+                    <div>
+                      <div class="font-medium">Peek</div>
+                      <div class="text-xs text-base-content/60">
+                        Hide translations until you click
+                      </div>
+                    </div>
+                    <input type="checkbox" data-role="peek" class="toggle toggle-primary" />
+                  </label>
+
+                  <div data-role="audio-wrap" hidden class="study-setting">
+                    <div class="font-medium">Audio</div>
+                    <select data-role="audio" class="select select-sm select-bordered max-w-[11rem]"></select>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -165,9 +250,9 @@ defmodule RokiWeb.StudyComponents do
                 <button
                   type="button"
                   data-role="compact"
-                  class="btn btn-xs btn-ghost btn-square"
+                  class="btn btn-xs btn-ghost btn-square study-wide-only"
                   title="Smaller"
-                  aria-label="Make the subtitle box smaller"
+                  aria-label="Make the list smaller"
                 >
                   <.icon name="hero-arrows-pointing-in" class="h-4 w-4" />
                 </button>
@@ -175,8 +260,8 @@ defmodule RokiWeb.StudyComponents do
                   type="button"
                   data-role="collapse"
                   class="btn btn-xs btn-ghost btn-square"
-                  title="Hide the subtitle box"
-                  aria-label="Hide or show the subtitle box"
+                  title="Hide the list"
+                  aria-label="Hide the list"
                   aria-expanded="true"
                 >
                   <.icon name="hero-chevron-up" class="h-4 w-4 study-chevron" />
@@ -199,6 +284,8 @@ defmodule RokiWeb.StudyComponents do
             </div>
           </aside>
         </div>
+
+        <div data-role="backdrop" class="study-backdrop" hidden></div>
       </div>
     </div>
     """

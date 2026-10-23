@@ -388,8 +388,11 @@ Shared pieces: `Roki.Watch.Resolver` (find/probe/pick/failure texts), `RokiWeb.W
 `RokiWeb.StudyComponents.study_player/1` + `assets/js/study/sidebar.js` (`StudySidebar` hook), after
 the idea of `alexdont/debrid_theatre`. Any number of tracks can be on at once, in any order: the first (★) is the **studied** one (words, the
 list's lines), the others show under it as translations in the overlay and the list ("Peek" blurs them until
-clicked). Chips under the player toggle a track; ↑ makes one the first (`apply/selection/restore` in
-sidebar.js); remembered by name and language in `roki:study:layers`. A word in *any* line looks up in
+clicked). The slim bar under the player has **Subtitles** (a menu: what is on, in order, with ↑/✕ per row, then
+the languages to add — a language with several versions opens to them), **Settings** (timing ±0.25 s,
+text size, Study, Peek, audio), **Lines**, theater and fullscreen; menus open upward over the picture, as
+bottom sheets on a phone, and on a phone the list of lines is a sheet too (`data-sheet`; `data-panel`
+and theater are for ≥1024px) (`apply/selection/restore` in sidebar.js); remembered by name and language in `roki:study:layers`. A word in *any* line looks up in
 that line's own language (`data-lang`).
 Subtitles are drawn by the hook (`.study-overlay`), not native text tracks. Every word of a
 language with a dictionary is a `.study-word`: hover 300 ms → the video pauses and a card shows

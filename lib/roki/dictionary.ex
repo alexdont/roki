@@ -74,6 +74,7 @@ defmodule Roki.Dictionary do
 
     %{
       word: first["word"] || first["reading"] || d["slug"],
+      jlpt: jlpt(d["jlpt"]),
       reading: if(first["word"], do: first["reading"]),
       pos:
         senses
@@ -90,6 +91,23 @@ defmodule Roki.Dictionary do
         )
     }
   end
+
+  # "jlpt-n5" … "jlpt-n1": the easiest level it appears at (N5 is the first one learned).
+  defp jlpt([_ | _] = levels) do
+    levels
+    |> Enum.flat_map(fn l ->
+      case Regex.run(~r/n([1-5])/i, to_string(l)) do
+        [_, n] -> [String.to_integer(n)]
+        _ -> []
+      end
+    end)
+    |> case do
+      [] -> nil
+      ns -> "N" <> Integer.to_string(Enum.max(ns))
+    end
+  end
+
+  defp jlpt(_), do: nil
 
   defp wiktionary(lang, word) do
     url =

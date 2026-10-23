@@ -154,8 +154,9 @@
 /* `btn` sets its own display, which would beat the hidden attribute. */
 [data-role="resume"][hidden] { display: none; }
 
-/* ── Study player: subtitles over the video, a track bar, the box, theater mode ──
-   Layout state lives on #study-ui (data-theater, data-panel) and is set by the hook. */
+/* ── Study player: subtitles over the video, a slim bar of menus, the list, theater mode ──
+   Layout state lives on #study-ui (data-theater, data-panel, data-sheet) and is set by the hook.
+   Below 1024px the list is a sheet that slides up; theater and the list's sizes are for wide screens. */
 .study-layout { display: grid; gap: 1rem; }
 .study-main { display: flex; min-width: 0; flex-direction: column; gap: 0.5rem; }
 .study-stage {
@@ -167,6 +168,8 @@
   container-type: inline-size;
 }
 .study-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.study-replay { position: absolute; left: 0.75rem; bottom: 3.6rem; z-index: 3; opacity: 0.9; }
+.study-replay[hidden] { display: none; }
 
 /* What is being said, over the picture, above the player's own controls. Only the words take
    the pointer, so the video underneath still gets every click that is not on a word. */
@@ -193,7 +196,7 @@
   white-space: pre-line;
   text-shadow: 0 1px 2px #000;
 }
-/* The translation, under the line being studied: smaller, softer. */
+/* The other tracks, under the line being studied: smaller, softer. */
 .study-trans { color: #e8e8e8; cursor: default; }
 .study-overlay .study-trans { font-size: calc(clamp(0.8rem, 2.2cqw, 1.7rem) * var(--cap-scale, 1)); pointer-events: auto; }
 .study-ui[data-peek="true"] .study-trans:not([data-revealed]) { filter: blur(0.35em); cursor: pointer; }
@@ -223,67 +226,114 @@
 .study-tip[hidden] { display: none; }
 .study-tip .tip-word { font-size: 1.15rem; font-weight: 700; }
 .study-tip .tip-reading { margin-left: 0.4rem; color: var(--color-primary); }
+.study-tip .tip-jlpt { margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 0.3rem; background: var(--color-primary); color: var(--color-primary-content); font-size: 0.65rem; font-weight: 700; vertical-align: 0.15em; }
 .study-tip .tip-pos { font-size: 0.7rem; opacity: 0.55; }
 .study-tip ol { margin: 0.15rem 0 0; padding-left: 1.1rem; list-style: decimal; }
 .study-tip .tip-entry + .tip-entry { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent); }
 .study-tip .tip-note { opacity: 0.6; }
 
-.study-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.study-tracks { display: flex; flex-direction: column; gap: 0.4rem; }
-.study-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
-.study-hint { font-size: 0.72rem; line-height: 1.3; opacity: 0.55; }
-.study-group-label { min-width: 5.5rem; font-size: 0.75rem; font-weight: 600; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.04em; }
-.study-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-left: auto; }
+/* The bar under the picture: two menus, the list, theater, fullscreen. */
+.study-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.study-bar-group { display: flex; align-items: center; gap: 0.4rem; }
 
-.study-side { position: relative; height: 24rem; }
+/* A menu: under its button on a wide screen, a sheet from the bottom on a phone. */
+.study-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.4rem);
+  z-index: 50;
+  width: min(24rem, calc(100vw - 1.5rem));
+  max-height: min(70vh, 32rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 15%, transparent);
+  background: var(--color-base-100);
+  box-shadow: 0 16px 40px -10px rgb(0 0 0 / 0.5);
+}
+.study-pop[hidden] { display: none; }
+.study-pop-head { display: flex; align-items: center; justify-content: space-between; padding: 0.55rem 0.6rem 0.55rem 0.9rem; border-bottom: 1px solid var(--color-base-300); font-weight: 600; }
+.study-pop-body { overflow-y: auto; padding: 0.4rem; }
+.study-setting { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0.6rem; border-radius: 0.6rem; }
+.study-label { padding: 0.5rem 0.6rem 0.2rem; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.5; }
+.sub-row { display: flex; width: 100%; align-items: center; gap: 0.6rem; padding: 0.55rem 0.6rem; border-radius: 0.6rem; text-align: left; font-size: 0.95rem; }
+button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--color-base-content) 8%, transparent); }
+.sub-row .sub-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-row .sub-sub { font-size: 0.75rem; opacity: 0.55; }
+.sub-badge { display: inline-flex; height: 1.5rem; width: 1.5rem; flex: none; align-items: center; justify-content: center; border-radius: 9999px; background: var(--color-primary); color: var(--color-primary-content); font-size: 0.75rem; font-weight: 700; }
+.sub-badge.second { background: color-mix(in oklab, var(--color-primary) 18%, transparent); color: var(--color-primary); }
+.sub-variants { margin: 0 0 0.3rem 1.2rem; border-left: 2px solid var(--color-base-300); }
+.sub-variants .sub-row { font-size: 0.88rem; padding: 0.45rem 0.6rem; }
+.study-backdrop { position: fixed; inset: 0; z-index: 45; background: rgb(0 0 0 / 0.45); }
+.study-backdrop[hidden] { display: none; }
+
+/* The list. Phones and tablets: a sheet that slides up over the page. */
+.study-side {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 50;
+  height: min(72vh, 36rem);
+  padding: 0 0.5rem 0.5rem;
+  transform: translateY(110%);
+  transition: transform 0.22s ease;
+  pointer-events: none;
+}
+.study-ui[data-sheet="open"] .study-side { transform: none; pointer-events: auto; }
 .study-box {
   display: flex;
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-box);
+  border-radius: 1rem;
   border: 1px solid var(--color-base-300);
   background: var(--color-base-100);
+  box-shadow: 0 -12px 40px -10px rgb(0 0 0 / 0.5);
 }
 .study-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem 0.4rem 0.75rem; border-bottom: 1px solid var(--color-base-300); font-size: 0.875rem; }
 .study-body { position: relative; min-height: 0; flex: 1; }
 .study-chevron { transition: transform 0.15s; }
+.study-ui[data-sheet] .study-chevron { transform: rotate(180deg); }
+.study-wide-only { display: none; }
 
+/* Phones: the menus are sheets from the bottom too. */
+@media (max-width: 639px) {
+  .study-pop { position: fixed; inset-inline: 0; bottom: 0; top: auto; width: 100%; max-height: 75vh; border-radius: 1rem 1rem 0 0; z-index: 55; }
+}
+
+/* A wide screen: the list beside the picture, all the time (collapsible), in a few sizes. */
 @media (min-width: 1024px) {
+  .study-wide-only { display: inline-flex; }
   .study-layout { grid-template-columns: minmax(0, 1fr) 24rem; }
-  .study-side { height: auto; }
-  .study-box { position: absolute; inset: 0; height: auto; }
-}
-
-/* The box: smaller (narrower, finer print), or gone but for its title bar. */
-.study-ui[data-panel="compact"] .study-row { font-size: 0.8rem; padding: 0.3rem 0.5rem; }
-.study-ui[data-panel="compact"] .study-side { height: 12rem; }
-@media (min-width: 1024px) {
+  .study-side { position: relative; inset: auto; z-index: auto; height: auto; padding: 0; transform: none; transition: none; pointer-events: auto; }
+  .study-box { position: absolute; inset: 0; height: auto; border-radius: var(--radius-box); box-shadow: none; }
+  .study-chevron, .study-ui[data-sheet] .study-chevron { transform: none; }
+  .study-ui[data-panel="compact"] .study-row { font-size: 0.8rem; padding: 0.3rem 0.5rem; }
   .study-ui[data-panel="compact"] .study-layout { grid-template-columns: minmax(0, 1fr) 16rem; }
-  .study-ui[data-panel="compact"] .study-side { height: auto; }
-}
-.study-ui[data-panel="closed"] .study-body { display: none; }
-.study-ui[data-panel="closed"] .study-chevron { transform: rotate(180deg); }
-.study-ui[data-panel="closed"] .study-side { height: auto; }
-.study-ui[data-panel="closed"] .study-box { position: static; height: auto; }
-.study-ui[data-panel="closed"] .study-layout { grid-template-columns: minmax(0, 1fr); }
+  .study-ui[data-panel="closed"] .study-layout { grid-template-columns: minmax(0, 1fr); }
+  .study-ui[data-panel="closed"] .study-body { display: none; }
+  .study-ui[data-panel="closed"] .study-chevron { transform: rotate(180deg); }
+  .study-ui[data-panel="closed"] .study-side { height: auto; }
+  .study-ui[data-panel="closed"] .study-box { position: static; height: auto; }
 
-/* Theater: the picture takes the width of the screen (as tall as the screen allows), and the
-   box goes underneath it. */
-.study-ui[data-theater="true"] .study-layout { grid-template-columns: minmax(0, 1fr); }
-.study-ui[data-theater="true"] .study-stage {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  aspect-ratio: auto;
-  height: min(82vh, 56.25vw);
-  border-radius: 0;
+  /* Theater: the picture takes the width of the screen (as tall as the screen allows), and the
+     list goes underneath it. */
+  .study-ui[data-theater="true"] .study-layout { grid-template-columns: minmax(0, 1fr); }
+  .study-ui[data-theater="true"] .study-stage {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    aspect-ratio: auto;
+    height: min(82vh, 56.25vw);
+    border-radius: 0;
+  }
+  .study-ui[data-theater="true"] .study-side { height: 18rem; }
+  .study-ui[data-theater="true"][data-panel="compact"] .study-side { height: 9rem; }
+  .study-ui[data-theater="true"][data-panel="closed"] .study-side { height: auto; }
+  .study-ui[data-theater="true"] .study-box { position: static; height: 100%; }
+  .study-ui[data-theater="true"][data-panel="closed"] .study-box { height: auto; }
+  body:has(.study-ui[data-theater="true"]) { overflow-x: clip; }
 }
-.study-ui[data-theater="true"] .study-side { height: 18rem; }
-.study-ui[data-theater="true"][data-panel="compact"] .study-side { height: 9rem; }
-.study-ui[data-theater="true"][data-panel="closed"] .study-side { height: auto; }
-.study-ui[data-theater="true"] .study-box { position: static; height: 100%; }
-.study-ui[data-theater="true"][data-panel="closed"] .study-box { height: auto; }
-body:has(.study-ui[data-theater="true"]) { overflow-x: clip; }
 
 .study-stage:fullscreen { width: 100%; height: 100%; margin: 0; aspect-ratio: auto; border-radius: 0; }
 .study-stage:-webkit-full-screen { width: 100%; height: 100%; margin: 0; aspect-ratio: auto; border-radius: 0; }
