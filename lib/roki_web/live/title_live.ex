@@ -46,6 +46,7 @@ defmodule RokiWeb.TitleLive do
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         lib_busy: false,
         rating: %{state: :loading, value: nil, provider: :tmdb},
+        rate_mal: nil,
         rating_error: nil,
         page_title: "Watch",
         title: nil,
@@ -106,8 +107,6 @@ defmodule RokiWeb.TitleLive do
       resume = if linked?, do: Roki.Laev.run(uuid, fn -> Laev.Resume.get(type, id) end)
       cached = if linked?, do: cached_keys(uuid), else: MapSet.new()
       lib = if linked?, do: Watch.library(uuid, title)
-      rating = if linked?, do: Watch.my_rating(uuid, title)
-
       secs = if linked?, do: left_at(uuid, title)
       sections = if title.type == "tv", do: Watch.sections(uuid, title), else: []
 
@@ -116,9 +115,52 @@ defmodule RokiWeb.TitleLive do
           do: Watch.play_for(uuid, title, sections, resume),
           else: Watch.play_info(sections, resume)
 
-      {:ok, title, resume, cached, lib, rating, secs, sections, play}
+      # MyAnimeList rates and lists by season: the one you are watching is the one rated.
+      mal = play_mal(title, sections, play)
+      rating = if linked?, do: Watch.my_rating(uuid, title, mal)
+
+      {:ok, title, resume, cached, lib, rating, secs, sections, play, mal}
     end
   end
+
+  # Which season a MyAnimeList rating is about, when the show has more than one.
+  defp rate_label(sections, mal) when is_integer(mal) and length(sections) > 1 do
+    case Enum.find(sections, &(&1.mal == mal)) do
+      %{label: label} -> label
+      _ -> nil
+    end
+  end
+
+  defp rate_label(_sections, _mal), do: nil
+
+  defp play_mal(%{anime?: true, type: "tv"}, sections, %{season: s, episode: e})
+       when is_integer(s) and is_integer(e) do
+    case Watch.locate_section(sections, s, e) do
+      {%{mal: mal}, _} when is_integer(mal) -> mal
+      _ -> nil
+    end
+  end
+
+  defp play_mal(_title, _sections, _play), do: nil
+
+  # The season picked on the episodes page is the one the link and the rating are about.
+  defp follow_section(%{assigns: %{title: %{anime?: true}, rate_mal: current}} = socket, %{
+         mal: mal
+       })
+       when is_integer(mal) and mal != current do
+    %{uuid: uuid, title: title, linked?: linked?} = socket.assigns
+    socket = assign(socket, :rate_mal, mal)
+
+    if linked? do
+      socket
+      |> assign(:rating, %{socket.assigns.rating | state: :loading, value: nil})
+      |> start_async(:rating_load, fn -> Watch.my_rating(uuid, title, mal) end)
+    else
+      socket
+    end
+  end
+
+  defp follow_section(socket, _section), do: socket
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -138,10 +180,10 @@ defmodule RokiWeb.TitleLive do
 
       socket.assigns.section == nil or wanted.key != socket.assigns.section.key or
           socket.assigns.episodes == nil ->
-        load_episodes(
-          assign(socket, section: wanted, season: wanted.season, episodes: nil),
-          wanted
-        )
+        socket
+        |> assign(section: wanted, season: wanted.season, episodes: nil)
+        |> follow_section(wanted)
+        |> load_episodes(wanted)
 
       true ->
         socket
@@ -244,12 +286,14 @@ defmodule RokiWeb.TitleLive do
 
   # Your TMDB rating (0.5–10, half steps): sent to TMDB through laev, shown beside TMDB's average.
   def handle_event("rate", %{"value" => v}, %{assigns: %{rating: %{state: :ok}}} = socket) do
-    %{uuid: uuid, title: title} = socket.assigns
+    %{uuid: uuid, title: title, rate_mal: mal} = socket.assigns
 
     case Float.parse(to_string(v)) do
       {value, _} ->
         {:noreply,
-         start_async(socket, :rating, fn -> {:rate, Watch.rate(uuid, title, value)} end)}
+         start_async(socket, :rating, fn ->
+           {:rate, Watch.rate(uuid, title, value, mal)}
+         end)}
 
       :error ->
         {:noreply, socket}
@@ -259,8 +303,10 @@ defmodule RokiWeb.TitleLive do
   def handle_event("rate", _params, socket), do: {:noreply, socket}
 
   def handle_event("clear_rating", _params, %{assigns: %{rating: %{state: :ok}}} = socket) do
-    %{uuid: uuid, title: title} = socket.assigns
-    {:noreply, start_async(socket, :rating, fn -> {:clear, Watch.clear_rating(uuid, title)} end)}
+    %{uuid: uuid, title: title, rate_mal: mal} = socket.assigns
+
+    {:noreply,
+     start_async(socket, :rating, fn -> {:clear, Watch.clear_rating(uuid, title, mal)} end)}
   end
 
   def handle_event("clear_rating", _params, socket), do: {:noreply, socket}
@@ -320,7 +366,7 @@ defmodule RokiWeb.TitleLive do
   @impl true
   def handle_async(
         :title,
-        {:ok, {:ok, title, resume, cached, lib, rating, secs, sections, play}},
+        {:ok, {:ok, title, resume, cached, lib, rating, secs, sections, play, mal}},
         socket
       ) do
     socket =
@@ -333,6 +379,7 @@ defmodule RokiWeb.TitleLive do
         cached: cached,
         lib: lib || socket.assigns.lib,
         rating: rating_state(rating),
+        rate_mal: mal,
         page_title: title.title
       )
 
@@ -344,6 +391,12 @@ defmodule RokiWeb.TitleLive do
 
   def handle_async(:title, {:exit, reason}, socket),
     do: {:noreply, assign(socket, :title_error, reason)}
+
+  def handle_async(:rating_load, {:ok, rating}, socket),
+    do: {:noreply, assign(socket, :rating, rating_state(rating))}
+
+  def handle_async(:rating_load, _other, socket),
+    do: {:noreply, assign(socket, :rating, %{state: :loading, value: nil, provider: :tmdb})}
 
   def handle_async(:rating, {:ok, {:rate, {:ok, value}}}, socket),
     do:
@@ -437,11 +490,19 @@ defmodule RokiWeb.TitleLive do
           lib_busy={@lib_busy}
           rating={@rating}
           locked?={@locked?}
+          mal={@rate_mal}
         />
 
-        <.rate_sheet :if={@linked?} title={@title} rating={@rating} error={@rating_error} />
+        <.rate_sheet
+          :if={@linked?}
+          title={@title}
+          rating={@rating}
+          error={@rating_error}
+          label={rate_label(@sections, @rate_mal)}
+        />
 
         <.hero
+          mal={@rate_mal}
           rating={@rating}
           title={@title}
           play={@play}
@@ -463,7 +524,21 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div :if={@title && @live_action == :episodes} class="space-y-6">
-        <.episodes_header title={@title} play={@play} resume={@resume} />
+        <.episodes_header
+          title={@title}
+          play={@play}
+          resume={@resume}
+          linked?={@linked?}
+          lib={@lib}
+          mal={@rate_mal}
+        />
+        <.rate_sheet
+          :if={@linked? and @rating.provider == :mal}
+          title={@title}
+          rating={@rating}
+          error={@rating_error}
+          label={rate_label(@sections, @rate_mal)}
+        />
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
         <.episodes
@@ -477,6 +552,7 @@ defmodule RokiWeb.TitleLive do
           cached={@cached}
           title_id={@id}
           can_play?={@linked?}
+          rating={@rating}
         />
       </div>
     </Layouts.app>
@@ -486,11 +562,14 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :play, :map, required: true
+  attr :linked?, :boolean, default: false
+  attr :lib, :map, required: true
+  attr :mal, :any, default: nil
 
   # The top of the episodes page: where you are, and a way back to the title.
   defp episodes_header(assigns) do
     ~H"""
-    <div class="flex items-center gap-4">
+    <div class="relative flex items-center gap-4">
       <.link navigate={~p"/title/tv/#{@title.id}"} class="shrink-0" aria-label="Back to the title">
         <img
           :if={@title.poster}
@@ -515,6 +594,7 @@ defmodule RokiWeb.TitleLive do
       >
         <.icon name="hero-play-solid" class="h-5 w-5" /> {@play.verb} {@play.label}
       </.link>
+      <.more_menu id="more-menu-eps" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
     </div>
     """
   end
@@ -534,6 +614,7 @@ defmodule RokiWeb.TitleLive do
   attr :lib, :map, required: true
   attr :lib_busy, :boolean, default: false
   attr :rating, :map, required: true
+  attr :mal, :any, default: nil
 
   defp hero(assigns) do
     ~H"""
@@ -560,7 +641,7 @@ defmodule RokiWeb.TitleLive do
             </p>
             <p :if={@title.tagline} class="mt-1 italic text-base-content/60">{@title.tagline}</p>
           </div>
-          <.more_menu id="more-menu-desk" title={@title} linked?={@linked?} lib={@lib} />
+          <.more_menu id="more-menu-desk" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
         </div>
 
         <p
@@ -841,6 +922,7 @@ defmodule RokiWeb.TitleLive do
   attr :cached, :any, required: true
   attr :title_id, :integer, required: true
   attr :can_play?, :boolean, default: false
+  attr :rating, :map, default: %{state: :loading, value: nil, provider: :tmdb}
 
   defp episodes(assigns) do
     ~H"""
@@ -874,6 +956,19 @@ defmodule RokiWeb.TitleLive do
             </option>
           </select>
         </form>
+        <%!-- MyAnimeList rates by season: the season picked is the one rated. --%>
+        <button
+          :if={@can_play? and @rating.state == :ok and @rating.provider == :mal}
+          type="button"
+          phx-click={JS.show(to: "#rate-sheet", display: "flex")}
+          class="btn h-14 shrink-0 gap-1.5 px-4"
+          title="Rate this season on MyAnimeList"
+          aria-label="Rate this season"
+        >
+          <.icon name="hero-star" class="h-6 w-6" />
+          <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
+          <span :if={!@rating.value} class="hidden sm:inline">Rate</span>
+        </button>
         <button
           :if={@can_play? and is_list(@episodes) and @episodes != []}
           phx-click="toggle_season"
@@ -1025,12 +1120,13 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :linked?, :boolean, default: false
   attr :lib, :map, required: true
+  attr :mal, :any, default: nil
 
   defp more_menu(assigns) do
     assigns =
       assigns
       |> assign(:hold?, assigns.linked? and not assigns.title.anime?)
-      |> assign(:links, external_links(assigns.title))
+      |> assign(:links, external_links(assigns.title, assigns.mal))
 
     ~H"""
     <div class="shrink-0">
@@ -1084,7 +1180,7 @@ defmodule RokiWeb.TitleLive do
 
   # Where else the title lives: MyAnimeList first for anime (its first season's entry, or the
   # film itself — the cross-id list, no request), then TMDB for everything.
-  defp external_links(t) do
+  defp external_links(t, entry) do
     kind = if t.type == "movie", do: "movie", else: "tv"
 
     mal =
@@ -1092,13 +1188,17 @@ defmodule RokiWeb.TitleLive do
         ids = Laev.AnimeMap.mal_ids(kind, t.id)
 
         first =
-          if kind == "movie",
-            do: List.first(ids),
+          if is_integer(entry),
+            do: entry,
             else:
-              Enum.find(
-                ids,
-                List.first(ids),
-                &match?({"tv", _, s} when s in [nil, 1], Laev.AnimeMap.tmdb(&1))
+              if(kind == "movie",
+                do: List.first(ids),
+                else:
+                  Enum.find(
+                    ids,
+                    List.first(ids),
+                    &match?({"tv", _, s} when s in [nil, 1], Laev.AnimeMap.tmdb(&1))
+                  )
               )
 
         if is_integer(first),
@@ -1126,6 +1226,7 @@ defmodule RokiWeb.TitleLive do
   attr :lib_busy, :boolean, default: false
   attr :rating, :map, required: true
   attr :locked?, :boolean, default: false
+  attr :mal, :any, default: nil
 
   # One screen on a phone: the title and its details on top, a large poster with the three icon
   # buttons beside it, the synopsis (tap for the full text and more facts), and Play pinned to
@@ -1144,7 +1245,7 @@ defmodule RokiWeb.TitleLive do
           <p class="text-xs text-base-content/60">{meta(@title)}</p>
         </div>
 
-        <.more_menu id="more-menu-phone" title={@title} linked?={@linked?} lib={@lib} />
+        <.more_menu id="more-menu-phone" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
       </div>
 
       <%!-- The poster takes all the height there is between the title and the synopsis; the
@@ -1404,6 +1505,7 @@ defmodule RokiWeb.TitleLive do
   attr :title, :map, required: true
   attr :rating, :map, required: true
   attr :error, :string, default: nil
+  attr :label, :string, default: nil
 
   # Where you rate: TMDB's score for reference, a half-step slider, save or take it back.
   defp rate_sheet(assigns) do
@@ -1420,7 +1522,9 @@ defmodule RokiWeb.TitleLive do
       >
         <div class="flex items-start gap-3">
           <div class="min-w-0 flex-1">
-            <h2 class="text-lg font-bold leading-tight">Rate {@title.title}</h2>
+            <h2 class="text-lg font-bold leading-tight">
+              Rate {@title.title}<span :if={@label}> · {@label}</span>
+            </h2>
             <p class="text-sm text-base-content/60">
               <span class="font-semibold text-warning">★ {avg_text(@title)}</span>
               on TMDB<span :if={@title.vote_count && @title.vote_count > 0}> · {thousands(

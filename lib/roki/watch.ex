@@ -220,16 +220,22 @@ defmodule Roki.Watch do
   end
 
   @doc """
+  Where a title is rated; `entry` is the MyAnimeList entry of the season on screen (MAL rates
+  by season, TMDB by show).
+
   Where a title is rated. Anime goes to MyAnimeList while an account is connected (the entry
   is the title's first season, or the film itself) and to TMDB otherwise; everything else is
   TMDB's. Call inside `Roki.Laev.run/2`: the answer depends on the user's own keys.
 
   `{:mal, mal_id}` or `:tmdb`.
   """
-  def rating_target(title) do
+  def rating_target(title, entry \\ nil) do
     mal =
       if title.anime? and Laev.MAL.authenticated?() do
         case title.type do
+          _ when is_integer(entry) ->
+            entry
+
           "movie" ->
             Laev.AnimeMap.mal_id("movie", title.id, nil)
 
@@ -246,9 +252,9 @@ defmodule Roki.Watch do
   (MyAnimeList scores are whole numbers), or `{:tmdb, :no_account}` when no TMDB account is
   linked in laev (ratings are sent with a TMDB session, which laev holds).
   """
-  def my_rating(uuid, title) do
+  def my_rating(uuid, title, entry \\ nil) do
     Roki.Laev.run(uuid, fn ->
-      case rating_target(title) do
+      case rating_target(title, entry) do
         {:mal, mal} ->
           case Laev.MAL.list_status(mal) do
             %{score: n} when is_integer(n) and n > 0 -> {:mal, {:ok, n * 1.0}}
@@ -271,9 +277,9 @@ defmodule Roki.Watch do
   end
 
   @doc "Rate a title (TMDB: 0.5–10 in half steps; MyAnimeList: 1–10): `{:ok, rating}` or `{:error, why}`."
-  def rate(uuid, title, value) do
+  def rate(uuid, title, value, entry \\ nil) do
     Roki.Laev.run(uuid, fn ->
-      case rating_target(title) do
+      case rating_target(title, entry) do
         {:mal, mal} ->
           score = value |> round() |> max(1) |> min(10)
 
@@ -291,9 +297,9 @@ defmodule Roki.Watch do
   end
 
   @doc "Take your rating back: `:ok` or `{:error, why}`."
-  def clear_rating(uuid, title) do
+  def clear_rating(uuid, title, entry \\ nil) do
     Roki.Laev.run(uuid, fn ->
-      case rating_target(title) do
+      case rating_target(title, entry) do
         {:mal, mal} ->
           case Laev.MAL.rate(mal, 0) do
             :ok -> :ok
