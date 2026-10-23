@@ -552,12 +552,15 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div class="min-w-0 flex-1 space-y-3">
-        <div>
-          <h1 class="text-xl font-bold leading-tight tracking-tight sm:text-4xl">{@title.title}</h1>
-          <p class="text-sm text-base-content/60">
-            {meta(@title)}
-          </p>
-          <p :if={@title.tagline} class="mt-1 italic text-base-content/60">{@title.tagline}</p>
+        <div class="relative flex items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <h1 class="text-xl font-bold leading-tight tracking-tight sm:text-4xl">{@title.title}</h1>
+            <p class="text-sm text-base-content/60">
+              {meta(@title)}
+            </p>
+            <p :if={@title.tagline} class="mt-1 italic text-base-content/60">{@title.tagline}</p>
+          </div>
+          <.more_menu id="more-menu-desk" title={@title} linked?={@linked?} lib={@lib} />
         </div>
 
         <p
@@ -1016,6 +1019,98 @@ defmodule RokiWeb.TitleLive do
 
   # ── the phone layout ───────────────────────────────────────────────
 
+  # The less used actions behind the dots, top right of the title: on hold (anime has none:
+  # MyAnimeList keeps that) and the title's page on TMDB and, for anime, on MyAnimeList.
+  attr :id, :string, required: true
+  attr :title, :map, required: true
+  attr :linked?, :boolean, default: false
+  attr :lib, :map, required: true
+
+  defp more_menu(assigns) do
+    assigns =
+      assigns
+      |> assign(:hold?, assigns.linked? and not assigns.title.anime?)
+      |> assign(:links, external_links(assigns.title))
+
+    ~H"""
+    <div class="shrink-0">
+      <button
+        type="button"
+        phx-click={JS.toggle(to: "##{@id}", display: "block")}
+        class="btn btn-ghost btn-circle btn-sm relative"
+        aria-label="More actions"
+        aria-controls={@id}
+      >
+        <.icon name="hero-ellipsis-horizontal" class="h-6 w-6" />
+        <span
+          :if={@hold? and @lib.held?}
+          class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-warning"
+          title="On hold"
+        ></span>
+      </button>
+      <div
+        id={@id}
+        class="absolute right-0 top-full z-40 mt-1 hidden w-56 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        phx-click-away={JS.hide(to: "##{@id}")}
+        phx-window-keydown={JS.hide(to: "##{@id}")}
+        phx-key="escape"
+      >
+        <button
+          :if={@hold?}
+          type="button"
+          phx-click={JS.push("toggle_hold") |> JS.hide(to: "##{@id}")}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon
+            name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
+            class={["h-5 w-5", @lib.held? && "text-warning"]}
+          />
+          {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}
+        </button>
+        <a
+          :for={{label, url} <- @links}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-arrow-top-right-on-square" class="h-5 w-5" />
+          {label}
+        </a>
+      </div>
+    </div>
+    """
+  end
+
+  # Where else the title lives: MyAnimeList first for anime (its first season's entry, or the
+  # film itself — the cross-id list, no request), then TMDB for everything.
+  defp external_links(t) do
+    kind = if t.type == "movie", do: "movie", else: "tv"
+
+    mal =
+      if t.anime? do
+        ids = Laev.AnimeMap.mal_ids(kind, t.id)
+
+        first =
+          if kind == "movie",
+            do: List.first(ids),
+            else:
+              Enum.find(
+                ids,
+                List.first(ids),
+                &match?({"tv", _, s} when s in [nil, 1], Laev.AnimeMap.tmdb(&1))
+              )
+
+        if is_integer(first),
+          do: [{"Open on MyAnimeList", "https://myanimelist.net/anime/#{first}"}],
+          else: []
+      else
+        []
+      end
+
+    mal ++ [{"Open on TMDB", "https://www.themoviedb.org/#{kind}/#{t.id}"}]
+  end
+
   attr :title, :map, required: true
   attr :resume, :any, default: nil
   attr :resume_secs, :any, default: nil
@@ -1049,42 +1144,7 @@ defmodule RokiWeb.TitleLive do
           <p class="text-xs text-base-content/60">{meta(@title)}</p>
         </div>
 
-        <%!-- Less used actions live behind the dots: on hold (anime has none: MyAnimeList keeps that). --%>
-        <div :if={@linked? and not @title.anime?} class="shrink-0">
-          <button
-            type="button"
-            phx-click={JS.toggle(to: "#more-menu", display: "block")}
-            class="btn btn-ghost btn-circle btn-sm relative"
-            aria-label="More actions"
-            aria-controls="more-menu"
-          >
-            <.icon name="hero-ellipsis-horizontal" class="h-6 w-6" />
-            <span
-              :if={@lib.held?}
-              class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-warning"
-              title="On hold"
-            ></span>
-          </button>
-          <div
-            id="more-menu"
-            class="absolute right-0 top-full z-40 mt-1 hidden w-56 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
-            phx-click-away={JS.hide(to: "#more-menu")}
-            phx-window-keydown={JS.hide(to: "#more-menu")}
-            phx-key="escape"
-          >
-            <button
-              type="button"
-              phx-click={JS.push("toggle_hold") |> JS.hide(to: "#more-menu")}
-              class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
-            >
-              <.icon
-                name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
-                class={["h-5 w-5", @lib.held? && "text-warning"]}
-              />
-              {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}
-            </button>
-          </div>
-        </div>
+        <.more_menu id="more-menu-phone" title={@title} linked?={@linked?} lib={@lib} />
       </div>
 
       <%!-- The poster takes all the height there is between the title and the synopsis; the
