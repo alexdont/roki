@@ -442,3 +442,7 @@ stays on the sources page with a message and the list.
 - A pick is rejected when its file names another episode/cour (`S02E01`, `- 13v2`) or a pack has no file for the episode (`confirm_episode/3`).
 - `SourceCache` entries carry `v: 2`; bump `@version` when ranking/validation changes.
 - Posters show a bookmark when the title is on the saved list (`Roki.Laev.annotate` sets `:saved`).
+
+## Video conversions (ffmpeg)
+- A non-h264 release is re-encoded on the server by laev (`libx264`, software). A 4K one never keeps up and takes every core, so `Watch.start` refuses a heavy release above 1080p (`:too_heavy`) and caps concurrent encoders (`:busy`).
+- laev keeps a conversion running for two hours whatever happens to the page. `Roki.Watch.Reaper` stops the ones the stream controller has not served in ten minutes, and `ready_or_stop` stops one that did not get going.

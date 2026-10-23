@@ -798,10 +798,16 @@ defmodule Roki.Watch do
   so the title shows up in the user's History and as the thing to continue.
   """
   def start(uuid, ctx, source, stream) do
-    if heavy?(source) and encoders_running() >= @max_encoders do
-      {:error, :busy}
-    else
-      do_start(uuid, ctx, source, stream)
+    cond do
+      # A 4K re-encode on software never keeps up with playing, and takes every core trying.
+      heavy?(source) and not Sources.resolution_at_most?(source.resolution, @transcode_cap) ->
+        {:error, :too_heavy}
+
+      heavy?(source) and encoders_running() >= @max_encoders ->
+        {:error, :busy}
+
+      true ->
+        do_start(uuid, ctx, source, stream)
     end
   end
 
@@ -809,7 +815,7 @@ defmodule Roki.Watch do
     Roki.Laev.run(uuid, fn ->
       with {:ok, src} <- Laev.Playback.browser_source(ctx, stream, title: ctx.title),
            true <- src.playable || {:error, src[:reason] || :not_playable},
-           :ok <- ready(src) do
+           :ok <- ready_or_stop(src) do
         save_resume(ctx, source)
 
         {:ok,
@@ -994,6 +1000,18 @@ defmodule Roki.Watch do
 
   @doc "Whether the user's setting wants the next episode to start by itself."
   def autoplay?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.autoplay?/0)
+
+  # A conversion that did not get going is stopped, not left to run its two hours.
+  defp ready_or_stop(src) do
+    case ready(src) do
+      :ok ->
+        :ok
+
+      other ->
+        if src.kind == :remux, do: Laev.Remux.stop(src.remux_id)
+        other
+    end
+  end
 
   defp ready(%{kind: :remux, remux_id: id}), do: Laev.Playback.ready(id, :fast, 180_000)
   defp ready(_), do: :ok

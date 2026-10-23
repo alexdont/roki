@@ -24,6 +24,7 @@ defmodule RokiWeb.StreamController do
         send_resp(conn, 400, "bad request")
 
       true ->
+        Roki.Watch.Reaper.touch(id)
         path = Path.join(Laev.Remux.dir(id), resolve(id, file))
 
         if File.regular?(path) do

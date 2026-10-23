@@ -332,6 +332,10 @@ defmodule Roki.Watch.Resolver do
     do:
       "Nothing at #{label(cap)} or below — #{n} found above it. (Settings → only list sources within the ceiling.)"
 
+  def failure(:too_heavy),
+    do:
+      "That release is 4K H.265 — a browser can't play it, and converting it here is too slow. Pick a 1080p or H.264 release, or switch to the external player."
+
   def failure(:busy),
     do:
       "The server is re-encoding other videos right now. Try again in a minute, or pick an h264 release."
