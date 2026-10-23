@@ -161,6 +161,8 @@ export const StudySidebar = {
     // downloaded so moving a track between roles costs nothing.
     this.p = {cues: [], rows: [], idx: -1, live: [], lang: "", url: null, label: "", want: null}
     this.extras = []
+    // Tracks that are on but only in the list at the side, not over the picture (urls).
+    this.offVideo = new Set()
     this.cache = new Map()
     this.userChose = false
     this.tracks = []
@@ -306,8 +308,9 @@ export const StudySidebar = {
       const i = e.cues.length ? activeIndex(e.cues, t) : -1
       return i >= 0 ? liveIndexes(e.cues, i, t) : []
     })
+    const hid = [...this.offVideo].join(",")
     const key = this.p.url
-      ? `${this.p.url}|${this.extras.map((e) => e.url).join(",")}|${tokenizer ? 1 : 0}|${live.join(",")}|${extraLive.map((l) => l.join(",")).join(";")}`
+      ? `${hid}|${this.p.url}|${this.extras.map((e) => e.url).join(",")}|${tokenizer ? 1 : 0}|${live.join(",")}|${extraLive.map((l) => l.join(",")).join(";")}`
       : "off"
     if (key === this.overlayKey) return
     this.overlayKey = key
@@ -315,7 +318,7 @@ export const StudySidebar = {
     this.overlay.textContent = ""
     if (!this.p.url) return
 
-    for (const i of live) {
+    for (const i of this.offVideo.has(this.p.want) ? [] : live) {
       const line = document.createElement("div")
       line.className = "study-line"
       line.dataset.lang = this.p.lang
@@ -323,7 +326,7 @@ export const StudySidebar = {
       this.overlay.appendChild(line)
     }
     this.extras.forEach((e, k) => {
-      if (!extraLive[k].length) return
+      if (!extraLive[k].length || this.offVideo.has(e.want)) return
       const trans = document.createElement("div")
       trans.className = "study-trans study-line"
       trans.dataset.lang = e.lang
@@ -535,14 +538,12 @@ export const StudySidebar = {
     // ── the list of lines: beside the picture on a wide screen (open, smaller, or gone), a sheet
     // that slides up on a narrow one.
     const lines = $("[data-role=lines-btn]")
-    const collapse = $("[data-role=collapse]")
     const compact = $("[data-role=compact]")
     const showList = () => this.p.idx >= 0 && requestAnimationFrame(() => this.scrollToIndex(this.p.idx, false))
     const reflect = () => {
       const open = this.wide.matches ? this.ui.dataset.panel !== "closed" : this.ui.dataset.sheet === "open"
       lines.setAttribute("aria-pressed", String(open))
       lines.classList.toggle("btn-primary", open)
-      collapse.setAttribute("aria-expanded", String(open))
       this.syncBackdrop()
     }
     this.setPanel = (state) => {
@@ -562,7 +563,6 @@ export const StudySidebar = {
       else this.setSheet(this.ui.dataset.sheet !== "open")
     }
     lines.addEventListener("click", toggleList)
-    collapse.addEventListener("click", toggleList)
     compact.addEventListener("click", () => this.setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
     const savedPanel = store.get("panel")
     this.setPanel(["open", "compact", "closed"].includes(savedPanel) ? savedPanel : "open")
@@ -1129,12 +1129,37 @@ export const StudySidebar = {
     if (!Number.isNaN(saved) && saved !== this.offset && this.setOffset) this.setOffset(saved)
 
     // Tracks arriving later (a provider's) do not undo what was picked by hand.
+    if (!this.userChose) this.restoreOffVideo()
     this.apply(this.userChose ? this.selection() : this.restore(p.prefer))
 
     if (!this.tracks.length && !this.p.cues.length) {
       this.empty.hidden = false
       this.empty.textContent = "No subtitles came with this release."
     }
+  },
+
+  // Which of the tracks that are on stay off the picture: remembered by name and language like
+  // the choice of tracks, so the next episode starts the same way.
+  restoreOffVideo() {
+    let saved = []
+    try { saved = JSON.parse(store.get("offvideo")) || [] } catch {}
+    this.offVideo = new Set()
+    for (const w of saved) {
+      const t = this.tracks.find((t) => t.label === w.n) || this.tracks.find((t) => w.l && shortLang(t.lang) === w.l)
+      if (t) this.offVideo.add(t.url)
+    }
+  },
+
+  // Over the picture or only in the list at the side.
+  toggleOnVideo(u) {
+    if (this.offVideo.has(u)) this.offVideo.delete(u)
+    else this.offVideo.add(u)
+    const desc = [...this.offVideo].map((x) => this.tracks.find((t) => t.url === x)).filter(Boolean).map((t) => ({l: shortLang(t.lang), n: t.label}))
+    store.set("offvideo", JSON.stringify(desc))
+    this.userChose = true
+    this.overlayKey = ""
+    this.renderMenu()
+    this.tick()
   },
 
   // The urls of the tracks that are on, in order.
@@ -1255,6 +1280,15 @@ export const StudySidebar = {
         const name = el("span", "sub-name", langOf(t) + (String(t.label).includes(" · ") ? "" : nth(t)))
         if (versionOf(t)) name.appendChild(el("span", "sub-sub", "  " + versionOf(t)))
         row.appendChild(name)
+
+        // Over the picture, or only in the list at the side.
+        const onVideo = !this.offVideo.has(t.url)
+        const pill = el("button", "btn btn-xs rounded-full " + (onVideo ? "btn-primary" : "btn-outline opacity-70"), "video")
+        pill.type = "button"
+        pill.title = onVideo ? "Shown over the picture — click to keep it in the list only" : "Only in the list — click to show it over the picture too"
+        pill.setAttribute("aria-pressed", String(onVideo))
+        pill.addEventListener("click", () => this.toggleOnVideo(t.url))
+        row.appendChild(pill)
 
         // Big enough to hit: move up, move down, take off.
         const tool = (text, title, click, disabled) => {

@@ -313,16 +313,6 @@ defmodule RokiWeb.StudyComponents do
                 >
                   <.icon name="hero-arrows-pointing-in" class="h-4 w-4" />
                 </button>
-                <button
-                  type="button"
-                  data-role="collapse"
-                  class="btn btn-xs btn-ghost btn-square"
-                  title="Hide the list"
-                  aria-label="Hide the list"
-                  aria-expanded="true"
-                >
-                  <.icon name="hero-chevron-up" class="h-4 w-4 study-chevron" />
-                </button>
               </header>
               <div class="study-body">
                 <div data-role="list" class="absolute inset-0 overflow-y-auto p-1"></div>
