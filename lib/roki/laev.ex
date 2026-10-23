@@ -160,7 +160,7 @@ defmodule Roki.Laev do
   """
   def connect(uuid, key, opts \\ []) do
     carry? = Keyword.get(opts, :carry_keys?, false)
-    url = opts |> Keyword.get(:url) |> blank_to_nil()
+    url = opts |> Keyword.get(:url) |> blank_to_nil() || sync_url()
     Roki.Stats.forget(uuid)
 
     run(uuid, fn ->
@@ -249,6 +249,9 @@ defmodule Roki.Laev do
 
   @doc "The laev key to paste into the terminal app, for a connected account."
   def sync_key(uuid), do: run(uuid, fn -> Laev.Scope.get(:sync_token) end)
+
+  @doc "This site's own sync store (`/api/laev`): where an account's laev key is kept unless it says otherwise."
+  def sync_url, do: RokiWeb.Endpoint.url() <> "/api/laev"
 
   @doc "Pull, merge and push once."
   def sync(uuid) do

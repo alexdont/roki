@@ -65,6 +65,16 @@ defmodule RokiWeb.Router do
     end
   end
 
+  # The laev terminal app's sync store: a blob store, the key in the address is the whole of the
+  # authentication (401 on a malformed one), so no session and no CSRF. Bodies are handled raw.
+  scope "/api/laev", RokiWeb do
+    pipe_through :api
+
+    get "/:token/:doc", SyncApiController, :show
+    put "/:token/:doc", SyncApiController, :put
+    patch "/:token/:doc", SyncApiController, :merge
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", RokiWeb do
   #   pipe_through :api

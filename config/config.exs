@@ -9,6 +9,9 @@ import Config
 
 config :swoosh, api_client: Swoosh.ApiClient.Finch
 
+# Sync keys travel in the address and as a `token` parameter; never print them.
+config :phoenix, :filter_parameters, ["password", "token"]
+
 config :phoenix_kit,
   parent_app_name: :roki,
   parent_module: Roki,

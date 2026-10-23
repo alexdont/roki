@@ -40,16 +40,27 @@ defmodule RokiWeb.Endpoint do
     param_key: "request_logger",
     cookie_key: "request_logger"
 
+  # The sync key is in the address; keep it out of the request log.
+  plug :hide_sync_key
+
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
+    # /api/laev/* stores request bodies byte for byte: the raw bytes are kept before parsing.
+    body_reader: {RokiWeb.RawBodyReader, :read_body, []},
     json_decoder: Phoenix.json_library()
 
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
   plug RokiWeb.Router
+
+  # The log line is built from `request_path`; routing reads `path_info`, which stays as it is.
+  defp hide_sync_key(%Plug.Conn{path_info: ["api", "laev", _key | rest]} = conn, _opts),
+    do: %{conn | request_path: "/" <> Enum.join(["api", "laev", "[key]" | rest], "/")}
+
+  defp hide_sync_key(conn, _opts), do: conn
 end

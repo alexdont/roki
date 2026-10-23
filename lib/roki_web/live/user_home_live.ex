@@ -328,7 +328,7 @@ defmodule RokiWeb.UserHomeLive do
             type="url"
             name="laev[url]"
             value={@form[:url].value}
-            placeholder="https://sasha.don.ee/laev (default)"
+            placeholder="https://roki.ee/api/laev (default)"
             class="input input-bordered input-sm mt-2 w-full"
           />
         </details>
