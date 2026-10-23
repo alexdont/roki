@@ -52,6 +52,8 @@ defmodule RokiWeb.SourcesLive do
           good: nil,
           current: nil,
           external: nil,
+          next: nil,
+          prefer: nil,
           auto: :off,
           auto_req: false,
           failed: nil,
@@ -89,8 +91,15 @@ defmodule RokiWeb.SourcesLive do
   # Play arrives with `?auto=1`: the best source starts by itself (this once — the address is
   # cleaned straight away, so coming back here with the back button, or reloading, only lists).
   @impl true
-  def handle_params(%{"auto" => "1"}, _uri, socket) do
-    if connected?(socket),
+  def handle_params(params, _uri, socket) do
+    # `prefer` is the release the last episode played from: a season pack has the next one too, so
+    # the same release goes on without a new choice. A hint only — the best is used if it is gone.
+    socket =
+      if params["prefer"] in [nil, ""],
+        do: socket,
+        else: assign(socket, :prefer, String.slice(params["prefer"], 0, 64))
+
+    if params["auto"] == "1" and connected?(socket),
       do:
         {:noreply,
          socket
@@ -98,8 +107,6 @@ defmodule RokiWeb.SourcesLive do
          |> push_patch(to: clean_path(socket.assigns), replace: true)},
       else: {:noreply, socket}
   end
-
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   defp clean_path(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 
@@ -145,12 +152,20 @@ defmodule RokiWeb.SourcesLive do
     %{uuid: uuid, season: season, episode: episode} = socket.assigns
     title = Map.put(title, :tag, Watch.episode_tag(uuid, title, season, episode))
 
+    %{uuid: uuid, season: season, episode: episode} = socket.assigns
+
     socket =
       assign(socket,
         title: title,
         page_title: title.title,
         auto: if(auto? and socket.assigns.auto_req, do: :pending, else: :off)
       )
+
+    socket =
+      if socket.assigns.type == "tv",
+        do:
+          start_async(socket, :next, fn -> Watch.next_episode(uuid, title, season, episode) end),
+        else: socket
 
     {:noreply, begin(socket, false)}
   end
@@ -193,6 +208,11 @@ defmodule RokiWeb.SourcesLive do
       ),
       do: {:noreply, assign(socket, playable: playable, rest: rest, phase: :ready, busy?: false)}
 
+  def handle_async(:next, {:ok, {_s, _e, _tag} = next}, socket),
+    do: {:noreply, assign(socket, :next, next)}
+
+  def handle_async(:next, _other, socket), do: {:noreply, socket}
+
   def handle_async(:more, _other, socket),
     do: {:noreply, assign(socket, phase: :ready, busy?: false)}
 
@@ -212,14 +232,29 @@ defmodule RokiWeb.SourcesLive do
       )
 
     if socket.assigns.auto == :pending do
-      case Resolver.pick(res.playable, res.cap, res.good, socket.assigns.mode) do
+      case preferred(socket, res) ||
+             Resolver.pick(res.playable, res.cap, res.good, socket.assigns.mode) do
         {:play, pair} -> socket |> assign(auto: :done) |> start(pair)
+        {_source, _stream} = pair -> socket |> assign(auto: :done) |> start(pair)
         _ -> assign(socket, auto: :off)
       end
     else
       socket
     end
   end
+
+  # The release the previous episode used, when it is among these and fits what the player takes.
+  defp preferred(%{assigns: %{prefer: hash}}, res) when is_binary(hash) do
+    case Resolver.find(res.playable, hash) do
+      {source, _} = pair ->
+        if Laev.Sources.resolution_at_most?(source.resolution, res.cap), do: pair
+
+      _ ->
+        nil
+    end
+  end
+
+  defp preferred(_socket, _res), do: nil
 
   # The browser plays on its own page; an external player is opened from here.
   defp start(%{assigns: %{mode: :browser}} = socket, {source, _stream}),
@@ -299,6 +334,24 @@ defmodule RokiWeb.SourcesLive do
      |> push_event("roki:player", %{mode: Atom.to_string(mode)})}
   end
 
+  # One click to the next episode, from here: its sources, the same release if it is there, and the
+  # best one starts by itself. Going on from an external player means this one was watched — the
+  # player cannot say so itself — so it is marked.
+  def handle_event("next", _params, %{assigns: %{next: {s, e, _tag}}} = socket) do
+    %{uuid: uuid, ctx: ctx, external: external, current: current, id: id} = socket.assigns
+    if external && uuid && ctx, do: Watch.mark_watched(uuid, ctx)
+
+    query =
+      case current do
+        {source, _} -> [auto: 1, prefer: source.hash]
+        _ -> [auto: 1]
+      end
+
+    {:noreply, push_navigate(socket, to: ~p"/sources/tv/#{id}/#{s}/#{e}?#{query}")}
+  end
+
+  def handle_event("next", _params, socket), do: {:noreply, socket}
+
   def handle_event("mark_watched", _params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
     if uuid && ctx, do: Watch.mark_watched(uuid, ctx)
@@ -343,20 +396,25 @@ defmodule RokiWeb.SourcesLive do
       current_path="/sources"
     >
       <div class="space-y-6">
-        <div>
-          <.link
-            navigate={back_path(@type, @id)}
-            class="text-sm text-base-content/60 hover:text-primary"
-          >
-            ← {if @title, do: @title.title, else: "Back"}
-          </.link>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-            Sources<span class="text-base-content/50">{now_playing(
-              @title || %{type: @type},
-              @season,
-              @episode
-            )}</span>
-          </h1>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-0 flex-1">
+            <.link
+              navigate={back_path(@type, @id)}
+              class="text-sm text-base-content/60 hover:text-primary"
+            >
+              ← {if @title, do: @title.title, else: "Back"}
+            </.link>
+            <h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+              Sources<span class="text-base-content/50">{now_playing(
+                @title || %{type: @type},
+                @season,
+                @episode
+              )}</span>
+            </h1>
+          </div>
+          <button :if={@next && @external == nil} phx-click="next" class="btn btn-sm gap-1.5">
+            Next episode · {elem(@next, 2)} <.icon name="hero-forward" class="h-4 w-4" />
+          </button>
         </div>
 
         <div :if={@uuid == nil} class="alert text-sm">
@@ -394,6 +452,7 @@ defmodule RokiWeb.SourcesLive do
           title={@title}
           season={@season}
           episode={@episode}
+          next={@next}
         />
 
         <.sources

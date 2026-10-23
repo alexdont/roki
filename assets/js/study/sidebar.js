@@ -143,6 +143,8 @@ export const StudySidebar = {
     this.subsList = this.el.querySelector("[data-role=subs-list]")
     this.subsLabel = this.el.querySelector("[data-role=subs-label]")
     this.backdrop = this.el.querySelector("[data-role=backdrop]")
+    this.nextBtn = this.el.querySelector("[data-role=next-btn]")
+    this.audioBtn = this.el.querySelector("[data-role=audio-btn]")
     this.wide = window.matchMedia("(min-width: 1024px)")
 
     // The card for a word: its own element, in the page (or in the stage while it is fullscreen).
@@ -568,6 +570,7 @@ export const StudySidebar = {
     // ── the two menus
     this.pops = {
       subs: {btn: $("[data-role=subs-btn]"), menu: $("[data-role=subs-menu]")},
+      audio: {btn: $("[data-role=audio-btn]"), menu: $("[data-role=audio-menu]")},
       settings: {btn: $("[data-role=settings-btn]"), menu: $("[data-role=settings-menu]")},
     }
     for (const [name, pop] of Object.entries(this.pops)) {
@@ -583,12 +586,23 @@ export const StudySidebar = {
     // Outside a menu closes it. The path is read at the click: a row that re-drew the menu is gone
     // from the page by the time this runs, and would look like an outside click.
     document.addEventListener("click", (e) => {
-      const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("study-pop") || n.matches("[data-role=subs-btn], [data-role=settings-btn]")))
+      const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("study-pop") || n.matches("[data-role=subs-btn], [data-role=audio-btn], [data-role=settings-btn]")))
       if (!inside) this.closePops()
     })
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { this.closePops(); if (!this.wide.matches) this.setSheet(false) }
     })
+
+    // ── the next episode: the page finds its sources and starts the best one
+    this.nextBtn.addEventListener("click", () => this.pushEvent("next", {}))
+
+    // ── audio tracks (a dual-audio release), on whichever player is in use
+    this.video.addEventListener("loadedmetadata", () => this.refreshAudio())
+    const native = this.video.audioTracks
+    if (native && native.addEventListener) {
+      native.addEventListener("addtrack", () => this.refreshAudio())
+      native.addEventListener("change", () => this.refreshAudio())
+    }
 
     // ── settings: timing (a file made for another cut), text size, study mode, peek
     const offsetLabel = $("[data-role=offset]")
@@ -946,6 +960,10 @@ export const StudySidebar = {
       this.playerUrl = p.url
       this.startMedia(p)
     }
+    this.nextBtn.hidden = !p.next
+    const label = this.nextBtn.querySelector("[data-role=next-label]")
+    if (label) label.textContent = p.next || ""
+    this.nextBtn.title = p.next ? `Play the next episode (${p.next})` : "Play the next episode"
     const key = JSON.stringify(p.tracks)
     if (key !== this.tracksKey) {
       this.tracksKey = key
@@ -961,7 +979,7 @@ export const StudySidebar = {
     this.clearMain()
     this.extras = []
     this.cache.clear()
-    this.audioWrap().hidden = true
+    this.resetAudio()
 
     if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
       const Hls = await loadHls()
@@ -975,7 +993,8 @@ export const StudySidebar = {
         liveDurationInfinity: false,
         startPosition: p.resume > 0 ? p.resume : -1,
       }))
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.setAudioTracks(hls))
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.refreshAudio())
+      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => this.refreshAudio())
       hls.loadSource(p.url)
       hls.attachMedia(v)
     } else {
@@ -1006,21 +1025,76 @@ export const StudySidebar = {
     }, 500)
   },
 
-  audioWrap() { return this.el.querySelector("[data-role=audio-wrap]") },
+  // ── audio tracks ───────────────────────────────────────────────────
 
-  setAudioTracks(hls) {
-    const wrap = this.audioWrap()
-    const sel = wrap.querySelector("select")
-    sel.textContent = ""
-    hls.audioTracks.forEach((t, i) => {
-      const o = document.createElement("option")
-      o.value = i
-      o.textContent = t.name || t.lang || `Track ${i + 1}`
-      sel.appendChild(o)
-    })
-    sel.value = hls.audioTrack
-    sel.onchange = () => (hls.audioTrack = Number(sel.value))
-    wrap.hidden = hls.audioTracks.length < 2
+  resetAudio() {
+    this.audioBtn.hidden = true
+    this.audioApplied = false
+    this.closePops && this.closePops()
+  },
+
+  // The audio tracks of what is playing — hls.js's, or the browser's own (Safari plays the
+  // stream natively) — as `[{i, name, active}]`.
+  audioList() {
+    const names = (t) => {
+      const lang = shortLang(t.lang || t.language)
+      const nice = {ja: "Japanese", en: "English", fr: "French", es: "Spanish", de: "German", it: "Italian", pt: "Portuguese", ru: "Russian", ko: "Korean", zh: "Chinese"}[lang]
+      return t.name || t.label || nice || t.lang || t.language || ""
+    }
+    if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length) {
+      return this.hls.audioTracks.map((t, i) => ({i, name: names(t) || `Track ${i + 1}`, active: i === this.hls.audioTrack}))
+    }
+    const native = this.video.audioTracks
+    if (native && native.length) {
+      return Array.from({length: native.length}, (_, i) => ({i, name: names(native[i]) || `Track ${i + 1}`, active: !!native[i].enabled}))
+    }
+    return []
+  },
+
+  setAudio(i) {
+    if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length) {
+      this.hls.audioTrack = i
+    } else if (this.video.audioTracks) {
+      for (let k = 0; k < this.video.audioTracks.length; k++) this.video.audioTracks[k].enabled = k === i
+    }
+    const t = this.audioList().find((x) => x.i === i)
+    if (t) store.set("audio", t.name)
+    this.refreshAudio()
+  },
+
+  // The button shows up when there is a choice (two tracks or more); the one you picked last time
+  // — by name — is switched to once, so the next episode sounds the same.
+  refreshAudio() {
+    const list = this.audioList()
+    this.audioBtn.hidden = list.length < 2
+    if (list.length < 2) return
+
+    if (!this.audioApplied) {
+      this.audioApplied = true
+      const want = store.get("audio")
+      const t = want && list.find((x) => x.name === want)
+      if (t && !t.active) { this.setAudio(t.i); return }
+    }
+
+    const active = list.find((x) => x.active) || list[0]
+    this.el.querySelector("[data-role=audio-label]").textContent = active.name
+
+    const box = this.el.querySelector("[data-role=audio-list]")
+    box.textContent = ""
+    for (const t of list) {
+      const row = document.createElement("button")
+      row.type = "button"
+      row.className = "sub-row"
+      const badge = document.createElement("span")
+      badge.className = "sub-badge" + (t.active ? "" : " second")
+      badge.textContent = t.active ? "✓" : ""
+      const name = document.createElement("span")
+      name.className = "sub-name"
+      name.textContent = t.name
+      row.append(badge, name)
+      row.addEventListener("click", () => { this.setAudio(t.i); this.closePops() })
+      box.appendChild(row)
+    }
   },
 
   // ── the subtitle tracks ────────────────────────────────────────────
@@ -1150,18 +1224,18 @@ export const StudySidebar = {
         const name = el("span", "sub-name", langOf(t))
         if (versionOf(t)) name.appendChild(el("span", "sub-sub", "  " + versionOf(t)))
         row.appendChild(name)
-        if (k > 0) {
-          const up = el("button", "btn btn-xs btn-ghost btn-square", "↑")
-          up.type = "button"
-          up.title = "Make this the main subtitles"
-          up.addEventListener("click", () => this.promote(this.tracks.indexOf(t)))
-          row.appendChild(up)
+        // Big enough to hit: move up, move down, take off.
+        const tool = (text, title, click, disabled) => {
+          const b = el("button", "btn btn-square btn-ghost h-11 min-h-0 w-11 text-lg" + (disabled ? " opacity-25" : ""), text)
+          b.type = "button"
+          b.title = title
+          b.disabled = !!disabled
+          b.addEventListener("click", click)
+          return b
         }
-        const x = el("button", "btn btn-xs btn-ghost btn-square", "✕")
-        x.type = "button"
-        x.title = "Turn this track off"
-        x.addEventListener("click", () => this.toggle(this.tracks.indexOf(t)))
-        row.appendChild(x)
+        row.appendChild(tool("↑", k === 1 ? "Make this the main subtitles" : "Move up", () => this.move(this.tracks.indexOf(t), -1), k === 0))
+        row.appendChild(tool("↓", "Move down", () => this.move(this.tracks.indexOf(t), 1), k === on.length - 1))
+        row.appendChild(tool("✕", "Turn this track off", () => this.toggle(this.tracks.indexOf(t)), false))
         box.appendChild(row)
       })
     }
@@ -1221,6 +1295,18 @@ export const StudySidebar = {
     const u = this.tracks[i].url
     const on = this.selection()
     this.setSelection(on.includes(u) ? on.filter((x) => x !== u) : [...on, u])
+  },
+
+  // One place up or down in the order (the first is the main one).
+  move(i, delta) {
+    const u = this.tracks[i].url
+    const on = this.selection()
+    const k = on.indexOf(u)
+    const to = k + delta
+    if (k < 0 || to < 0 || to >= on.length) return
+    on.splice(k, 1)
+    on.splice(to, 0, u)
+    this.setSelection(on)
   },
 
   promote(i) {

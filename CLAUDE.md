@@ -411,3 +411,12 @@ the original Japanese; each in its own async (`{:ext_subs, lang}`) appended to
 for the episode (they differ in timing), the one from the release's own group first, labelled by
 group. The matching MAL season is the ctx (`search_title` = romaji, `episode` = the episode of that
 MAL entry).
+
+**Next episode** (`Watch.next_episode/4`: the next one out in the season, else the first of the next season,
+with the "S2E1" tag). The player bar's **Next** button (watch page) sends `next`; the page goes to the next
+episode's watch address with `?prefer=<hash>` — a hint: the release that was playing is kept if it is among the
+first few checked (a season pack is), else the best starts. The sources page has the same for an external
+player: a button in the header and a big **Play next episode** in the open-in-VLC panel, going to
+`/sources/tv/…?auto=1&prefer=…`; pressing it there marks the current episode watched (an external player cannot
+report progress). **Audio** (`audioList/setAudio` in sidebar.js) works on hls.js and on a native `audioTracks`
+list, shows a bar button only when there are two or more, and remembers the choice by name.

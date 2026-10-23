@@ -86,6 +86,17 @@ defmodule RokiWeb.StudyComponents do
                 </button>
                 <button
                   type="button"
+                  data-role="audio-btn"
+                  hidden
+                  class="btn btn-sm gap-1.5"
+                  aria-haspopup="menu"
+                  title="Audio track"
+                >
+                  <.icon name="hero-speaker-wave" class="h-4 w-4 shrink-0" />
+                  <span data-role="audio-label" class="max-w-[7rem] truncate">Audio</span>
+                </button>
+                <button
+                  type="button"
                   data-role="settings-btn"
                   class="btn btn-sm gap-1.5"
                   aria-haspopup="menu"
@@ -96,6 +107,16 @@ defmodule RokiWeb.StudyComponents do
                 </button>
               </div>
               <div class="study-bar-group">
+                <button
+                  type="button"
+                  data-role="next-btn"
+                  hidden
+                  class="btn btn-sm btn-primary gap-1.5"
+                  title="Play the next episode"
+                >
+                  <.icon name="hero-forward" class="h-4 w-4" />
+                  <span>Next <span data-role="next-label" class="hidden sm:inline"></span></span>
+                </button>
                 <button
                   type="button"
                   data-role="lines-btn"
@@ -139,6 +160,21 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                 </div>
                 <div data-role="subs-list" class="study-pop-body"></div>
+              </div>
+
+              <div data-role="audio-menu" class="study-pop" role="menu" hidden>
+                <div class="study-pop-head">
+                  <span>Audio</span>
+                  <button
+                    type="button"
+                    data-role="pop-close"
+                    class="btn btn-xs btn-ghost btn-circle"
+                    aria-label="Close"
+                  >
+                    <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+                  </button>
+                </div>
+                <div data-role="audio-list" class="study-pop-body"></div>
               </div>
 
               <div data-role="settings-menu" class="study-pop" role="menu" hidden>
@@ -232,11 +268,6 @@ defmodule RokiWeb.StudyComponents do
                     </div>
                     <input type="checkbox" data-role="peek" class="toggle toggle-primary" />
                   </label>
-
-                  <div data-role="audio-wrap" hidden class="study-setting">
-                    <div class="font-medium">Audio</div>
-                    <select data-role="audio" class="select select-sm select-bordered max-w-[11rem]"></select>
-                  </div>
                 </div>
               </div>
             </div>

@@ -1125,6 +1125,39 @@ defmodule Roki.Watch do
   end
 
   @doc """
+  The episode after this one, `{season, episode, tag}` (TMDB's numbers, and the "S2E1" the pages
+  call it): the next one that is out in the season, else the first one out of the next season;
+  nil at the end (or when TMDB cannot say).
+  """
+  def next_episode(uuid, title, season, episode)
+      when is_integer(season) and is_integer(episode) do
+    pick = fn s ->
+      with {:ok, eps} <- episodes(title.id, s, uuid), do: Enum.find(eps, & &1.aired?)
+    end
+
+    found =
+      with {:ok, eps} <- episodes(title.id, season, uuid),
+           %{number: n} <- Enum.find(eps, &(&1.number > episode and &1.aired?)) do
+        {season, n}
+      else
+        _ ->
+          title.seasons
+          |> Enum.filter(&(&1.number > season))
+          |> Enum.sort_by(& &1.number)
+          |> Enum.find_value(fn s ->
+            case pick.(s.number) do
+              %{number: n} -> {s.number, n}
+              _ -> nil
+            end
+          end)
+      end
+
+    with {s, e} <- found, do: {s, e, episode_tag(uuid, title, s, e)}
+  end
+
+  def next_episode(_uuid, _title, _season, _episode), do: nil
+
+  @doc """
   An episode as the pages call it — "S2E1" — in the numbering of the season picker, so an
   anime whose TMDB season was split reads like the anime list does. Cheap for anything that
   is not split.

@@ -34,6 +34,7 @@ defmodule RokiWeb.WatchLive do
           season: season,
           episode: episode,
           hash: nil,
+          prefer: nil,
           uuid: uuid,
           linked?: uuid != nil and Roki.Laev.connected?(uuid),
           title: nil,
@@ -67,7 +68,11 @@ defmodule RokiWeb.WatchLive do
   @impl true
   def handle_params(params, _uri, socket) do
     hash = if params["h"] in [nil, ""], do: nil, else: String.slice(params["h"], 0, 64)
-    {:noreply, assign(socket, :hash, hash)}
+    # `prefer`: the release the previous episode played from — kept if the next one has it too.
+    prefer =
+      if params["prefer"] in [nil, ""], do: nil, else: String.slice(params["prefer"], 0, 64)
+
+    {:noreply, assign(socket, hash: hash, prefer: prefer)}
   end
 
   defp load(socket) do
@@ -79,7 +84,10 @@ defmodule RokiWeb.WatchLive do
   # episodes so the next one is known.
   defp resolve(socket) do
     token = socket.assigns.token + 1
-    %{uuid: uuid, title: title, season: season, episode: episode, hash: hash} = socket.assigns
+
+    %{uuid: uuid, title: title, season: season, episode: episode, hash: hash, prefer: prefer} =
+      socket.assigns
+
     parent = self()
 
     socket
@@ -87,7 +95,9 @@ defmodule RokiWeb.WatchLive do
     |> start_async(:resolve, fn ->
       with {:ok, res} <-
              Resolver.run(parent, token, uuid, title, season, episode, false, :browser),
-           {res, pair} <- locate(parent, token, uuid, res, hash, 3),
+           {res, pair} <-
+             locate(parent, token, uuid, res, hash || prefer, if(hash, do: 3, else: 1)),
+           pair = if(hash, do: pair, else: within_cap(res, pair)),
            {:ok, pair} <- choose(res, pair),
            {:ok, player} <- start(uuid, res.ctx, pair) do
         {:ok, token, res, pair, player}
@@ -116,6 +126,12 @@ defmodule RokiWeb.WatchLive do
         {res, pair}
     end
   end
+
+  # The release the last episode used (a hint, not a request) only counts when this player takes it.
+  defp within_cap(_res, nil), do: nil
+
+  defp within_cap(res, {source, _} = pair),
+    do: if(Laev.Sources.resolution_at_most?(source.resolution, res.cap), do: pair)
 
   defp choose(res, nil) do
     case pick(res) do
@@ -179,6 +195,7 @@ defmodule RokiWeb.WatchLive do
     socket =
       socket
       |> assign(player: data, current: pair, ctx: res.ctx, key: res.key)
+      |> with_next()
       |> name_the_release(source.hash)
 
     # What the release did not carry: their language, and for anime the original Japanese
@@ -217,8 +234,10 @@ defmodule RokiWeb.WatchLive do
 
   def handle_async({:ext_subs, _lang}, _other, socket), do: {:noreply, socket}
 
-  def handle_async(:episodes, {:ok, {:ok, eps}}, socket),
-    do: {:noreply, assign(socket, :episodes, eps)}
+  def handle_async(:episodes, {:ok, {:ok, eps}}, socket) do
+    socket = assign(socket, :episodes, eps)
+    {:noreply, socket |> assign(:up_next, next_episode(socket.assigns)) |> with_next()}
+  end
 
   def handle_async(:episodes, _other, socket), do: {:noreply, socket}
 
@@ -233,6 +252,16 @@ defmodule RokiWeb.WatchLive do
 
   defp external(uuid, ctx, play_id, lang, _source_name),
     do: Watch.external_subtitle(uuid, ctx, play_id, lang)
+
+  # The player's own "Next" button needs to know what the next episode is called.
+  defp with_next(
+         %{assigns: %{player: %{} = player, up_next: {s, e}, title: title, uuid: uuid}} = socket
+       )
+       when title != nil do
+    assign(socket, :player, Map.put(player, :next, Watch.episode_tag(uuid, title, s, e)))
+  end
+
+  defp with_next(socket), do: socket
 
   # The address names the release that is playing, so a reload — or a copy of it — plays the same.
   defp name_the_release(%{assigns: %{hash: nil}} = socket, hash),
@@ -270,13 +299,33 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
+  # The player's "Next": the next episode's sources are found and the best (the same release, if it
+  # has it) starts — one click, no page in between.
+  def handle_event("next", _params, %{assigns: %{up_next: {s, e}, id: id}} = socket) do
+    query =
+      case socket.assigns.current do
+        {source, _} -> [prefer: source.hash]
+        _ -> []
+      end
+
+    {:noreply, push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query}")}
+  end
+
+  def handle_event("next", _params, socket), do: {:noreply, socket}
+
   def handle_event("ended", _params, socket) do
     next = socket.assigns.up_next || next_episode(socket.assigns)
 
     with {season, episode} <- next,
          true <- socket.assigns.uuid && Watch.autoplay?(socket.assigns.uuid) do
+      query =
+        case socket.assigns.current do
+          {source, _} -> [prefer: source.hash]
+          _ -> []
+        end
+
       {:noreply,
-       push_navigate(socket, to: ~p"/watch/tv/#{socket.assigns.id}/#{season}/#{episode}")}
+       push_navigate(socket, to: ~p"/watch/tv/#{socket.assigns.id}/#{season}/#{episode}?#{query}")}
     else
       _ -> {:noreply, assign(socket, :up_next, next)}
     end
@@ -342,13 +391,6 @@ defmodule RokiWeb.WatchLive do
               )}</span>
             </h1>
           </div>
-          <.link
-            :if={@up_next}
-            navigate={next_path(assigns)}
-            class="btn btn-primary btn-sm"
-          >
-            Next episode →
-          </.link>
         </div>
 
         <div :if={@uuid == nil} class="alert text-sm">
@@ -391,6 +433,4 @@ defmodule RokiWeb.WatchLive do
     </Layouts.app>
     """
   end
-
-  defp next_path(%{id: id, up_next: {s, e}}), do: ~p"/watch/tv/#{id}/#{s}/#{e}"
 end

@@ -6,6 +6,8 @@ defmodule RokiWeb.WatchComponents do
   """
   use Phoenix.Component
 
+  import RokiWeb.CoreComponents, only: [icon: 1]
+
   alias Phoenix.LiveView.JS
   alias Roki.Watch
   alias Roki.Watch.Resolver
@@ -212,6 +214,7 @@ defmodule RokiWeb.WatchComponents do
   attr :title, :map, required: true
   attr :season, :any, default: nil
   attr :episode, :any, default: nil
+  attr :next, :any, default: nil
 
   def external_panel(assigns) do
     url = assigns.external.url
@@ -245,8 +248,14 @@ defmodule RokiWeb.WatchComponents do
         </p>
       </div>
 
+      <%!-- After watching: one tap to the next episode (this one is marked watched), which opens
+            in the same player by itself. --%>
+      <button :if={@next} phx-click="next" class="btn btn-primary btn-lg w-full gap-2 sm:w-auto">
+        Play next episode · {elem(@next, 2)} <.icon name="hero-forward" class="h-5 w-5" />
+      </button>
+
       <div class="flex flex-wrap gap-2">
-        <a :if={@external.launch} href={@external.launch} class="btn btn-primary">
+        <a :if={@external.launch} href={@external.launch} class={["btn", !@next && "btn-primary"]}>
           Open in {app_label(@external.app)}
         </a>
         <a href={@m3u} download={@m3u_name} class="btn">Download .m3u</a>
