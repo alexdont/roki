@@ -175,6 +175,9 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                 </div>
                 <div data-role="subs-list" class="study-pop-body"></div>
+                <%!-- OpenSubtitles: the files it has for what is playing, listed on request. Built by the hook. --%>
+                <div data-role="os-box" hidden class="shrink-0 space-y-2 border-t border-base-300 p-2">
+                </div>
                 <%!-- Always last: the release may lack the language wanted, and OpenSubtitles / Jimaku
                       are keys the user adds in Settings. Opens in a new tab so playback goes on. --%>
                 <a

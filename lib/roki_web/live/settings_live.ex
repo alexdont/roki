@@ -107,6 +107,8 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:busy, nil)
           |> assign(:error, nil)
           |> assign(:laev_key, nil)
+          |> assign(:os, %{key?: false, user: nil, login?: false})
+          |> assign(:os_msg, nil)
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
     end
@@ -127,6 +129,7 @@ defmodule RokiWeb.SettingsLive do
     |> start_async(:sync_status, fn -> Laev.sync_status(uuid) end)
     |> start_async(:web, fn -> Laev.web_settings(uuid) end)
     |> start_async(:mal, fn -> Laev.mal_status(uuid) end)
+    |> start_async(:os, fn -> Laev.os_login(uuid) end)
   end
 
   # ── events ─────────────────────────────────────────────────────────
@@ -201,6 +204,21 @@ defmodule RokiWeb.SettingsLive do
 
       {:error, {:rate_limited, secs}} ->
         {:noreply, put_result(socket, key, {:error, "slow down — try again in #{secs}s"})}
+    end
+  end
+
+  def handle_event("save_os", %{"os" => %{"user" => user, "pass" => pass}}, socket) do
+    uuid = socket.assigns.uuid
+
+    case RateLimit.check(:key_check, {:user, uuid}, 10, 60_000) do
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:os_msg, :checking)
+         |> start_async(:os_save, fn -> Laev.put_os_login(uuid, user, pass) end)}
+
+      {:error, {:rate_limited, secs}} ->
+        {:noreply, assign(socket, :os_msg, {:error, "slow down — try again in #{secs}s"})}
     end
   end
 
@@ -377,6 +395,25 @@ defmodule RokiWeb.SettingsLive do
   def handle_async({:check, key}, {:exit, _}, socket),
     do: {:noreply, put_result(socket, key, {:error, "check failed"})}
 
+  def handle_async(:os, {:ok, os}, socket), do: {:noreply, assign(socket, :os, os)}
+  def handle_async(:os, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:os_save, {:ok, :ok}, socket) do
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     socket
+     |> assign(:os_msg, {:ok, "Saved — OpenSubtitles files can be downloaded now."})
+     |> start_async(:os, fn -> Laev.os_login(uuid) end)
+     |> schedule_sync()}
+  end
+
+  def handle_async(:os_save, {:ok, {:error, why}}, socket),
+    do: {:noreply, assign(socket, :os_msg, {:error, why})}
+
+  def handle_async(:os_save, _other, socket),
+    do: {:noreply, assign(socket, :os_msg, {:error, "could not save"})}
+
   def handle_async({:replace, key}, {:ok, {:ok, detail}}, socket) do
     {:noreply,
      socket
@@ -516,6 +553,44 @@ defmodule RokiWeb.SettingsLive do
               checkable={k.key in @checkable}
             />
           </div>
+
+          <%!-- OpenSubtitles lists files with just the key above; handing one over needs the account. --%>
+          <form
+            :if={@os.key?}
+            id="os-login"
+            phx-submit="save_os"
+            class="space-y-2 pt-4"
+            autocomplete="off"
+          >
+            <div class="font-medium">OpenSubtitles account</div>
+            <p class="text-sm text-base-content/60">
+              To download the subtitle files the player lists, OpenSubtitles needs the login of your
+              account (free) as well as the key.
+              <span :if={@os.user} class="text-success">Saved for {@os.user}.</span>
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                name="os[user]"
+                value={@os.user}
+                placeholder="username"
+                autocomplete="off"
+                class="input input-bordered input-sm min-w-0 flex-1"
+              />
+              <input
+                type="password"
+                name="os[pass]"
+                placeholder="password"
+                autocomplete="new-password"
+                class="input input-bordered input-sm min-w-0 flex-1"
+              />
+              <button type="submit" class="btn btn-sm btn-primary" disabled={@os_msg == :checking}>
+                <span :if={@os_msg == :checking} class="loading loading-spinner loading-xs"></span>
+                Save
+              </button>
+            </div>
+            <p :if={match?({:ok, _}, @os_msg)} class="text-sm text-success">✓ {elem(@os_msg, 1)}</p>
+            <p :if={match?({:error, _}, @os_msg)} class="text-sm text-error">{elem(@os_msg, 1)}</p>
+          </form>
         </section>
 
         <.mal_section :if={@state == :ready} mal={@mal} />

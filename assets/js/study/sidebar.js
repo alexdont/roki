@@ -1022,6 +1022,12 @@ export const StudySidebar = {
     const label = this.nextBtn.querySelector("[data-role=next-label]")
     if (label) label.textContent = p.next || ""
     this.nextBtn.title = p.next ? `Play the next episode (${p.next})` : "Play the next episode"
+    const osKey = JSON.stringify([p.os, p.os_langs, p.key])
+    if (osKey !== this.osKey) {
+      this.osKey = osKey
+      this.os = {state: p.os || "off", langs: p.os_langs || [], lang: null, results: null, busy: false, error: null}
+      this.renderOs()
+    }
     const key = JSON.stringify(p.tracks)
     if (key !== this.tracksKey) {
       this.tracksKey = key
@@ -1183,12 +1189,101 @@ export const StudySidebar = {
 
     // Tracks arriving later (a provider's) do not undo what was picked by hand.
     if (!this.userChose) this.restoreOffVideo()
+    queueMicrotask(() => this.tryWant())
     this.apply(this.userChose ? this.selection() : this.restore(p.prefer))
 
     if (!this.tracks.length && !this.p.cues.length) {
       this.empty.hidden = false
       this.empty.textContent = "No subtitles came with this release."
     }
+  },
+
+  // A track that was just fetched (from OpenSubtitles) is turned on as soon as the page has it.
+  tryWant() {
+    const u = this.wantSelect
+    if (!u || !this.tracks.some((t) => t.url === u)) return
+    this.wantSelect = null
+    if (!this.selection().includes(u)) this.setSelection([...this.selection(), u])
+  },
+
+  // The OpenSubtitles box at the foot of the subtitles menu: a language, then the files it has for
+  // this episode (largest download count first); a click fetches one and turns it on.
+  renderOs() {
+    const box = this.el.querySelector("[data-role=os-box]")
+    if (!box) return
+    const os = this.os
+    box.textContent = ""
+    box.hidden = !os || os.state === "off"
+    if (box.hidden) return
+    const el = (tag, cls, text) => {
+      const e = document.createElement(tag)
+      if (cls) e.className = cls
+      if (text != null) e.textContent = text
+      return e
+    }
+    const name = (c) => { try { return new Intl.DisplayNames(["en"], {type: "language"}).of(c) } catch { return c } }
+
+    box.appendChild(el("div", "study-label", "OpenSubtitles"))
+    const chips = el("div", "flex flex-wrap gap-1.5")
+    for (const lang of os.langs) {
+      const b = el("button", "btn btn-xs rounded-full" + (os.lang === lang ? " btn-primary" : ""), name(lang))
+      b.type = "button"
+      b.addEventListener("click", () => this.osSearch(lang))
+      chips.appendChild(b)
+    }
+    box.appendChild(chips)
+    if (os.state === "search") {
+      box.appendChild(el("p", "text-xs text-warning", "Searching works; to download a file add your OpenSubtitles username and password in Settings."))
+    }
+    if (os.busy) box.appendChild(el("p", "text-xs opacity-60", os.lang && os.results === null ? "Searching…" : "Fetching…"))
+    if (os.error) box.appendChild(el("p", "text-xs text-error", os.error))
+    if (os.results) {
+      if (!os.results.length) box.appendChild(el("p", "text-xs opacity-60", `No ${name(os.lang)} subtitles found for this.`))
+      const list = el("div", "max-h-44 space-y-0.5 overflow-y-auto")
+      for (const r of os.results) {
+        const row = el("button", "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-base-200")
+        row.type = "button"
+        row.appendChild(el("span", "min-w-0 flex-1 truncate", r.release || `#${r.id}`))
+        row.appendChild(el("span", "shrink-0 tabular-nums opacity-50", `${r.downloads}↓`))
+        row.addEventListener("click", () => this.osPick(r))
+        list.appendChild(row)
+      }
+      box.appendChild(list)
+    }
+  },
+
+  osSearch(lang) {
+    const os = this.os
+    os.lang = lang
+    os.results = null
+    os.error = null
+    os.busy = true
+    this.renderOs()
+    this.pushEvent("os_search", {lang}, (reply) => {
+      if (this.os !== os || os.lang !== lang) return
+      os.busy = false
+      if (reply && reply.results) os.results = reply.results
+      else os.error = (reply && reply.error) || "OpenSubtitles did not answer."
+      this.renderOs()
+    })
+  },
+
+  osPick(r) {
+    const os = this.os
+    os.busy = true
+    os.error = null
+    this.renderOs()
+    this.pushEvent("os_pick", {id: r.id, lang: os.lang, release: r.release}, (reply) => {
+      if (this.os !== os) return
+      os.busy = false
+      if (reply && reply.track) {
+        this.wantSelect = reply.track.url
+        this.tryWant()
+      } else {
+        os.error = (reply && reply.error) || "OpenSubtitles would not give that file."
+      }
+      this.renderOs()
+    })
   },
 
   // Which of the tracks that are on stay off the picture: remembered by name and language like

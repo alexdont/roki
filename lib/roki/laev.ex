@@ -488,6 +488,68 @@ defmodule Roki.Laev do
     end)
   end
 
+  @doc """
+  The OpenSubtitles account: searching needs only the API key, but downloading a file is done
+  as a logged-in user. `%{key?: bool, user: name | nil, login?: bool}` (the password is never read back).
+  """
+  def os_login(uuid) do
+    run(uuid, fn ->
+      user = Laev.Scope.get(:opensubtitles_username)
+
+      %{
+        key?: Laev.OpenSubtitles.configured?(),
+        user: if(user in [nil, ""], do: nil, else: user),
+        login?: Laev.OpenSubtitles.can_download?()
+      }
+    end)
+  end
+
+  @doc "Save the OpenSubtitles login once the service accepts it. `:ok` or `{:error, why}`."
+  def put_os_login(uuid, user, pass) do
+    user = String.trim(user || "")
+    pass = String.trim(pass || "")
+
+    run(uuid, fn ->
+      with true <-
+             (user != "" and pass != "") || {:error, "enter both the username and the password"},
+           true <-
+             Laev.OpenSubtitles.configured?() || {:error, "add the OpenSubtitles API key first"},
+           :ok <- check_os_login(user, pass) do
+        Laev.Config.write([{"OPENSUBTITLES_USERNAME", user}, {"OPENSUBTITLES_PASSWORD", pass}])
+        Laev.Scope.set(:opensubtitles_username, user)
+        Laev.Scope.set(:opensubtitles_password, pass)
+        Roki.Stats.forget(uuid)
+        :ok
+      end
+    end)
+  end
+
+  defp check_os_login(user, pass) do
+    headers = [
+      {"api-key", Laev.Scope.get(:opensubtitles_api_key)},
+      {"user-agent", Laev.Scope.get(:opensubtitles_user_agent) || "laev v1.0"},
+      {"accept", "application/json"}
+    ]
+
+    case Req.post("https://api.opensubtitles.com/api/v1/login",
+           headers: headers,
+           json: %{username: user, password: pass},
+           receive_timeout: 15_000
+         ) do
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: s}} when s in [401, 403] ->
+        {:error, "OpenSubtitles did not accept that username and password"}
+
+      {:ok, %{status: s}} ->
+        {:error, "OpenSubtitles answered #{s}"}
+
+      {:error, _} ->
+        {:error, "could not reach OpenSubtitles"}
+    end
+  end
+
   @doc "Forget a saved key."
   def remove_key(uuid, key) do
     Roki.Stats.forget(uuid)

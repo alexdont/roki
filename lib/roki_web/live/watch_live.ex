@@ -157,6 +157,13 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
+  # The languages offered as OpenSubtitles choices: theirs first, then the usual few.
+  defp os_langs(prefer),
+    do:
+      Enum.uniq(
+        Enum.reject([prefer, "en", "fr", "ja", "es", "de", "pt", "it", "ru"], &(&1 in [nil, ""]))
+      )
+
   defp start(uuid, ctx, {source, stream}), do: Watch.start(uuid, ctx, source, stream)
 
   @impl true
@@ -195,7 +202,9 @@ defmodule RokiWeb.WatchLive do
       resume: player.resume_at,
       tracks: player.subtitles,
       prefer: prefer,
-      key: play_id
+      key: play_id,
+      os: Watch.os_state(uuid),
+      os_langs: os_langs(prefer)
     }
 
     if res.key, do: SourceCache.mark_good(uuid, res.key, source.hash)
@@ -327,6 +336,31 @@ defmodule RokiWeb.WatchLive do
 
   # The player's "Next": the next episode's sources are found and the best (the same release, if it
   # has it) starts — one click, no page in between.
+  # The OpenSubtitles choices for one language, listed on request from the subtitles menu.
+  def handle_event("os_search", %{"lang" => lang}, %{assigns: %{ctx: ctx, uuid: uuid}} = socket)
+      when is_binary(lang) and byte_size(lang) in 2..3 and ctx != nil do
+    reply =
+      case Watch.os_search(uuid, ctx, lang) do
+        {:ok, results} -> %{results: results}
+        {:error, why} -> %{error: why}
+      end
+
+    {:reply, reply, socket}
+  end
+
+  def handle_event("os_pick", %{"id" => id, "lang" => lang} = params, socket) do
+    %{uuid: uuid, player: player} = socket.assigns
+
+    case Watch.os_fetch(uuid, player.key, id, lang, params["release"]) do
+      {:ok, track} ->
+        player = %{player | tracks: Enum.uniq_by(player.tracks ++ [track], & &1.url)}
+        {:reply, %{track: track}, assign(socket, :player, player)}
+
+      {:error, why} ->
+        {:reply, %{error: why}, socket}
+    end
+  end
+
   def handle_event("next", _params, %{assigns: %{up_next: {s, e}, id: id}} = socket) do
     query =
       case socket.assigns.current do

@@ -13,7 +13,7 @@ defmodule RokiWeb.StreamController do
   # The plain playlist, the multi-audio master and its per-rendition playlists and segments
   # (ffmpeg names renditions s_0, s_Japanese …), single-audio segments, and subtitle tracks:
   # the ones in the release (sub0.vtt) and ones fetched from a provider (ext-fr.vtt).
-  @allowed ~r/^(playlist\.m3u8|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-\d)?\.vtt)$/
+  @allowed ~r/^(playlist\.m3u8|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
 
   def file(conn, %{"id" => id, "file" => file}) do
     cond do

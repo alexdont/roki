@@ -864,6 +864,90 @@ defmodule Roki.Watch do
   end
 
   @doc """
+  What the subtitle menu can offer from OpenSubtitles for this user: `:off` (no key), `:search`
+  (a key, so the choices can be listed, but downloading needs the account login too) or `:full`.
+  """
+  def os_state(uuid) do
+    Roki.Laev.run(uuid, fn ->
+      cond do
+        Laev.OpenSubtitles.can_download?() -> :full
+        Laev.OpenSubtitles.configured?() -> :search
+        true -> :off
+      end
+    end)
+  end
+
+  @doc "The OpenSubtitles files for what is playing, in one language: `{:ok, [%{id, release, downloads}]}`."
+  def os_search(uuid, ctx, lang) do
+    Roki.Laev.run(uuid, fn ->
+      query = ctx[:search_title] || ctx.title
+
+      opts =
+        case ctx[:type] do
+          "tv" ->
+            [
+              languages: lang,
+              query: query,
+              season_number: ctx[:season],
+              episode_number: ctx[:episode]
+            ]
+
+          _ ->
+            [languages: lang, query: query, tmdb_id: ctx[:tmdb_id]]
+        end
+
+      case Laev.OpenSubtitles.search(opts) do
+        {:ok, subs} ->
+          {:ok,
+           subs
+           |> Enum.uniq_by(& &1.file_id)
+           |> Enum.take(25)
+           |> Enum.map(&%{id: &1.file_id, release: &1.release, downloads: &1.downloads})}
+
+        {:error, _} ->
+          {:error, "OpenSubtitles did not answer. Try again in a moment."}
+      end
+    end)
+  rescue
+    _ -> {:error, "OpenSubtitles did not answer. Try again in a moment."}
+  end
+
+  @doc "Download one OpenSubtitles file for the player: `{:ok, track}` or `{:error, why}`."
+  def os_fetch(uuid, play_id, id, lang, release) when is_integer(id) do
+    Roki.Laev.run(uuid, fn ->
+      with true <-
+             Laev.OpenSubtitles.can_download?() ||
+               {:error, "Add your OpenSubtitles username and password in Settings to download."},
+           {:ok, srt} <- Laev.OpenSubtitles.download_srt(id) do
+        dir = Laev.Remux.dir(play_id)
+        File.mkdir_p!(dir)
+        file = "ext-#{String.slice(lang, 0, 3)}-os#{id}.vtt"
+        File.write!(Path.join(dir, file), Roki.Subtitles.to_vtt("#{id}.srt", srt))
+
+        {:ok,
+         %{
+           lang: lang,
+           label: "#{language(lang)} · OpenSubtitles · #{String.slice(release || "", 0, 70)}",
+           url: "/stream/#{play_id}/#{file}"
+         }}
+      else
+        {:error, {:opensubtitles_download, 406, _}} ->
+          {:error, "Your OpenSubtitles download quota for today is used up."}
+
+        {:error, msg} when is_binary(msg) ->
+          {:error, msg}
+
+        _ ->
+          {:error, "OpenSubtitles would not give that file. Try another."}
+      end
+    end)
+  rescue
+    _ -> {:error, "OpenSubtitles would not give that file. Try another."}
+  end
+
+  def os_fetch(_uuid, _play_id, _id, _lang, _release), do: {:error, "bad request"}
+
+  @doc """
   The languages worth fetching from a provider for what is playing, beyond what the release
   carries: the user's own, and — for anime, when a Jimaku key is set — the original Japanese.
   """
