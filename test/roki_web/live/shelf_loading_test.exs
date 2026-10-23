@@ -31,7 +31,8 @@ defmodule RokiWeb.ShelfLoadingTest do
     conn: conn
   } do
     {:ok, _view, html} = live(conn, "/shelftest/home")
-    assert html =~ "Connect laev"
+    assert html =~ "Set up your shelf"
+    assert html =~ "New here?"
     refute html =~ "aria-busy"
   end
 

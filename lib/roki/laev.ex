@@ -178,6 +178,78 @@ defmodule Roki.Laev do
     end)
   end
 
+  @doc """
+  First-time setup from the site: check the keys, make a laev key, connect with it (the server
+  provisions any well-formed key), keep the keys carried so the terminal app gets them too.
+  `keys` is `%{"RD_TOKEN" => …, "TORBOX_API_KEY" => …, "TMDB_API_KEY" => …}`; blanks are skipped.
+  Nothing is left behind on failure.
+  """
+  def setup(uuid, keys) do
+    keys = for {k, v} <- keys, (v = String.trim(v || "")) != "", into: %{}, do: {k, v}
+
+    cond do
+      not Map.has_key?(keys, "TMDB_API_KEY") ->
+        {:error, "A TMDB key is needed to find titles."}
+
+      not (Map.has_key?(keys, "RD_TOKEN") or Map.has_key?(keys, "TORBOX_API_KEY")) ->
+        {:error, "Add a Real-Debrid or TorBox key — one of them is needed to play anything."}
+
+      true ->
+        case check_all(uuid, keys) do
+          :ok -> create_account(uuid, keys)
+          error -> error
+        end
+    end
+  end
+
+  defp check_all(uuid, keys) do
+    run(uuid, fn ->
+      Enum.find_value(keys, :ok, fn {key, value} ->
+        case Settings.validate(key, value) do
+          {:ok, _} -> nil
+          {:error, why} -> {:error, "#{key_name(key)}: #{explain(why)}"}
+        end
+      end)
+    end)
+  end
+
+  defp key_name("RD_TOKEN"), do: "Real-Debrid"
+  defp key_name("TORBOX_API_KEY"), do: "TorBox"
+  defp key_name("TMDB_API_KEY"), do: "TMDB"
+
+  defp create_account(uuid, keys) do
+    token = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+    secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+
+    result =
+      with {:ok, _} <- connect(uuid, "laev_#{token}.#{secret}", carry_keys?: true),
+           :ok <- run(uuid, fn -> put_all(keys) end) do
+        sync(uuid)
+        :ok
+      end
+
+    case result do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        disconnect(uuid)
+        {:error, "Could not set up: " <> explain(reason)}
+    end
+  end
+
+  defp put_all(keys) do
+    Enum.reduce_while(keys, :ok, fn {k, v}, :ok ->
+      case Settings.put(k, v) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  @doc "The laev key to paste into the terminal app, for a connected account."
+  def sync_key(uuid), do: run(uuid, fn -> Laev.Scope.get(:sync_token) end)
+
   @doc "Pull, merge and push once."
   def sync(uuid) do
     result = run(uuid, &Sync.sync/0)

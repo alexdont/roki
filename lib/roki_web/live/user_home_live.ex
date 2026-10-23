@@ -88,6 +88,20 @@ defmodule RokiWeb.UserHomeLive do
     end
   end
 
+  def handle_event("setup", %{"setup" => p}, socket) do
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     socket
+     |> assign(error: nil, busy: "Checking your keys and setting you up…")
+     |> start_async(:connect, fn ->
+       case Laev.setup(uuid, Map.take(p, ~w(RD_TOKEN TORBOX_API_KEY TMDB_API_KEY))) do
+         :ok -> {:ok, :setup}
+         {:error, why} -> {:error, why}
+       end
+     end)}
+  end
+
   def handle_event("toggle_section", %{"id" => id}, socket) do
     open = socket.assigns.open
 
@@ -172,7 +186,12 @@ defmodule RokiWeb.UserHomeLive do
 
   def handle_async(:connect, {:ok, {:error, reason}}, socket),
     do:
-      {:noreply, assign(socket, busy: nil, error: "Could not connect: " <> Laev.explain(reason))}
+      {:noreply,
+       assign(socket,
+         busy: nil,
+         error:
+           if(is_binary(reason), do: reason, else: "Could not connect: " <> Laev.explain(reason))
+       )}
 
   def handle_async(:sync, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, busy: nil, error: "Sync failed: " <> Laev.explain(reason))}
@@ -218,12 +237,60 @@ defmodule RokiWeb.UserHomeLive do
     ~H"""
     <section class="mx-auto max-w-xl space-y-5 py-10">
       <div class="space-y-2 text-center">
-        <h1 class="text-2xl font-bold sm:text-3xl">Connect laev</h1>
+        <h1 class="text-2xl font-bold sm:text-3xl">Set up your shelf</h1>
         <p class="text-base-content/70">
-          Already use the <code>laev</code> terminal app? Paste your laev key and your watchlist,
-          history and settings are pulled in here. It's optional — your account works without it.
+          Set up your account here, or bring an existing one from the <code>laev</code> terminal app.
         </p>
       </div>
+
+      <form id="setup-form" phx-submit="setup" class="card bg-base-200 space-y-4 p-6">
+        <div>
+          <h2 class="text-lg font-semibold">New here? Set up in one step</h2>
+          <p class="text-sm text-base-content/60">
+            Add your keys and press Set up. Your account, watchlist and settings are created and
+            synced for you — you can connect the terminal app afterwards from Settings.
+          </p>
+        </div>
+        <label
+          :for={
+            {name, label, url, hint} <- [
+              {"RD_TOKEN", "Real-Debrid API token", "https://real-debrid.com/apitoken",
+               "one of these two"},
+              {"TORBOX_API_KEY", "TorBox API key", "https://torbox.app/settings", "one of these two"},
+              {"TMDB_API_KEY", "TMDB API key", "https://www.themoviedb.org/settings/api", "required"}
+            ]
+          }
+          class="block"
+        >
+          <span class="mb-1 flex items-baseline justify-between gap-2 text-sm">
+            <span class="font-medium">{label} <span class="text-base-content/50">({hint})</span></span>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener"
+              class="text-xs underline text-base-content/60"
+            >
+              where to get it
+            </a>
+          </span>
+          <input
+            type="password"
+            name={"setup[#{name}]"}
+            autocomplete="off"
+            spellcheck="false"
+            class="input input-bordered w-full font-mono"
+          />
+        </label>
+        <p :if={@error} class="alert alert-error text-sm">{@error}</p>
+        <button type="submit" class="btn btn-primary" disabled={@busy != nil}>
+          <span :if={@busy} class="loading loading-spinner loading-sm"></span>
+          {@busy || "Set up"}
+        </button>
+      </form>
+
+      <p class="text-center text-sm text-base-content/60">
+        Already use the laev terminal app? Paste its key instead:
+      </p>
 
       <.form for={@form} id="connect-form" phx-submit="connect" class="card bg-base-200 space-y-4 p-6">
         <label class="form-control w-full">
@@ -265,8 +332,6 @@ defmodule RokiWeb.UserHomeLive do
             class="input input-bordered input-sm mt-2 w-full"
           />
         </details>
-
-        <p :if={@error} class="alert alert-error text-sm">{@error}</p>
 
         <button type="submit" class="btn btn-primary" disabled={@busy != nil}>
           <span :if={@busy} class="loading loading-spinner loading-sm"></span>

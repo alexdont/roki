@@ -106,6 +106,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:server, nil)
           |> assign(:busy, nil)
           |> assign(:error, nil)
+          |> assign(:laev_key, nil)
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
     end
@@ -268,6 +269,11 @@ defmodule RokiWeb.SettingsLive do
        error: nil,
        busy: false
      })}
+  end
+
+  def handle_event("show_key", _params, socket) do
+    key = if socket.assigns.laev_key, do: nil, else: Laev.sync_key(socket.assigns.uuid)
+    {:noreply, assign(socket, :laev_key, key)}
   end
 
   def handle_event("disconnect", _params, socket) do
@@ -527,6 +533,35 @@ defmodule RokiWeb.SettingsLive do
               The sync server isn't answering right now.
             </p>
             <p :if={@sync == nil} class="text-base-content/50">Checking…</p>
+          </div>
+
+          <div class="space-y-2 text-sm">
+            <p class="text-base-content/70">
+              To use the terminal app with this account, install <code>laev</code>, choose
+              Settings → Cross-device sync, and paste your laev key there.
+            </p>
+            <button phx-click="show_key" class="btn btn-sm">
+              {if @laev_key, do: "Hide my laev key", else: "Show my laev key"}
+            </button>
+            <div :if={@laev_key} class="flex items-center gap-2">
+              <input
+                id="laev-key"
+                readonly
+                value={@laev_key}
+                onfocus="this.select()"
+                class="input input-bordered input-sm min-w-0 flex-1 font-mono"
+              />
+              <button
+                type="button"
+                class="btn btn-sm"
+                onclick="navigator.clipboard.writeText(document.getElementById('laev-key').value);this.textContent='Copied'"
+              >
+                Copy
+              </button>
+            </div>
+            <p :if={@laev_key} class="text-xs text-base-content/60">
+              Keep it private: it opens your synced history and, if you carry keys, your API keys.
+            </p>
           </div>
 
           <label class="flex cursor-pointer items-start gap-3">
