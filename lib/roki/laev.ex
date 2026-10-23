@@ -80,6 +80,9 @@ defmodule Roki.Laev do
     shows = Laev.Position.episode_marks()
 
     Enum.map(items, fn item ->
+      item =
+        if Laev.Watchlist.has?(item.type, item.id), do: Map.put(item, :saved, true), else: item
+
       case partial_text(item, anime, shows) do
         nil -> item
         text -> Map.put(item, :partial, text)

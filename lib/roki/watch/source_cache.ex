@@ -11,6 +11,10 @@ defmodule Roki.Watch.SourceCache do
   by default, 0 = off) are not served and are deleted when seen.
   """
 
+  # Bumped when what is stored changes meaning; older entries are not served. (2: a pack is only
+  # playable if the file picked in it really is the episode — earlier lists could hold the wrong one.)
+  @version 2
+
   def hours(web) do
     case web["sources_cache"] do
       "off" -> 0
@@ -23,6 +27,7 @@ defmodule Roki.Watch.SourceCache do
   def get(uuid, key, hours) when hours > 0 do
     with {:ok, bin} <- File.read(path(uuid, key)),
          %{at: at} = entry <- :erlang.binary_to_term(bin, [:safe]),
+         @version <- Map.get(entry, :v),
          true <- now() - at < hours * 3600 do
       entry
     else
@@ -37,7 +42,7 @@ defmodule Roki.Watch.SourceCache do
   def get(_uuid, _key, _hours), do: nil
 
   def put(uuid, key, playable, rest) do
-    write(uuid, key, %{at: now(), playable: playable, rest: rest, good: nil})
+    write(uuid, key, %{at: now(), v: @version, playable: playable, rest: rest, good: nil})
   end
 
   @doc "Remember which release started, so the next Play goes straight to it."

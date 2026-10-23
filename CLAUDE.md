@@ -436,3 +436,9 @@ answered go back to `rest` ("Load more", shown as "slow, set aside"). In the bro
 **prepared on the sources page** (`Watch.start` in `:prestart`, a "Getting the video ready" pop-up) *before* the
 watch page opens, which then reuses the running remux and plays at once — one wait, not two. A failure to prepare
 stays on the sources page with a message and the list.
+
+## Anime source numbering (resolver)
+- A pack named with a range not starting at 1 ("(13-25)") is probed with the TMDB episode number; other releases with the MAL-local one (`numbered_as/2`).
+- A pick is rejected when its file names another episode/cour (`S02E01`, `- 13v2`) or a pack has no file for the episode (`confirm_episode/3`).
+- `SourceCache` entries carry `v: 2`; bump `@version` when ranking/validation changes.
+- Posters show a bookmark when the title is on the saved list (`Roki.Laev.annotate` sets `:saved`).

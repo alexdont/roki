@@ -706,14 +706,28 @@ defmodule RokiWeb.TitleLive do
     [
       t.year,
       t.minutes && "#{t.minutes} min",
-      t.type == "tv" && length(t.seasons) > 0 &&
-        "#{length(t.seasons)} #{if length(t.seasons) == 1, do: "season", else: "seasons"}",
-      t.vote && t.vote > 0 && "★ #{Float.round(t.vote * 1.0, 1)}",
+      seasons_text(t),
+      episodes_text(t),
       t.genres != [] && Enum.join(Enum.take(t.genres, 3), ", ")
     ]
     |> Enum.filter(& &1)
     |> Enum.join(" · ")
   end
+
+  # Specials (season 0) are not counted: they are not the show's seasons or episodes.
+  defp seasons_text(%{type: "tv", seasons: seasons}) do
+    n = Enum.count(seasons, &(&1.number > 0))
+    n > 0 && "#{n} #{if n == 1, do: "season", else: "seasons"}"
+  end
+
+  defp seasons_text(_), do: false
+
+  defp episodes_text(%{type: "tv", seasons: seasons}) do
+    n = seasons |> Enum.filter(&(&1.number > 0)) |> Enum.map(&(&1.episodes || 0)) |> Enum.sum()
+    n > 0 && "#{n} #{if n == 1, do: "episode", else: "episodes"}"
+  end
+
+  defp episodes_text(_), do: false
 
   # "Start" for a film not begun, "Continue 59:39" once there is a position.
   defp play_label(secs) when is_integer(secs), do: "Continue #{clock(secs)}"

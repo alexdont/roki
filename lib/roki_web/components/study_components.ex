@@ -121,7 +121,7 @@ defmodule RokiWeb.StudyComponents do
                   type="button"
                   data-role="next-btn"
                   hidden
-                  class="btn btn-sm btn-primary btn-square sm:w-auto sm:gap-1.5 sm:px-3"
+                  class="btn btn-sm btn-square sm:w-auto sm:gap-1.5 sm:px-3"
                   title="Play the next episode"
                   aria-label="Next episode"
                 >

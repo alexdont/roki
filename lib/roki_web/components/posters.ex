@@ -74,6 +74,19 @@ defmodule RokiWeb.PosterComponents do
         >
           ✓ {@item[:partial]}
         </span>
+        <%!-- On your saved-for-later list. --%>
+        <span
+          :if={@item[:saved]}
+          title="Saved for later"
+          class={[
+            "absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-md bg-primary text-primary-content shadow-sm",
+            if(@item[:badge], do: "top-8", else: "top-1.5")
+          ]}
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+            <path d="M5 3a2 2 0 0 0-2 2v12.5a.5.5 0 0 0 .8.4L10 13l6.2 4.9a.5.5 0 0 0 .8-.4V5a2 2 0 0 0-2-2H5Z" />
+          </svg>
+        </span>
         <span
           :if={@item[:badge]}
           class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow"
