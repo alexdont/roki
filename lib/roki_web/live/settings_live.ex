@@ -500,7 +500,7 @@ defmodule RokiWeb.SettingsLive do
           </section>
         </form>
 
-        <section :if={@state == :ready} class="space-y-1">
+        <section :if={@state == :ready} id="connections" class="space-y-1 scroll-mt-4">
           <h2 class="text-xl font-semibold">Connections</h2>
           <p class="pb-2 text-sm text-base-content/60">
             Your API keys. A key is only saved once the service confirms it works, and it is never shown

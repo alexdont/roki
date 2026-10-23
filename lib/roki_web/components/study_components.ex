@@ -175,6 +175,17 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                 </div>
                 <div data-role="subs-list" class="study-pop-body"></div>
+                <%!-- Always last: the release may lack the language wanted, and OpenSubtitles / Jimaku
+                      are keys the user adds in Settings. Opens in a new tab so playback goes on. --%>
+                <a
+                  href="/phoenix_kit/en/profile/settings#connections"
+                  target="_blank"
+                  rel="noopener"
+                  class="btn btn-sm btn-ghost mx-2 mb-2 mt-1 justify-start gap-1.5 text-base-content/70"
+                >
+                  <.icon name="hero-plus-micro" class="h-4 w-4" /> Subtitle services
+                  <span class="text-xs opacity-60">OpenSubtitles, Jimaku</span>
+                </a>
               </div>
 
               <div data-role="audio-menu" class="study-pop" role="menu" hidden>
