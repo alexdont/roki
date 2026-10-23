@@ -43,7 +43,8 @@ defmodule Roki.Watch.Resolver do
   @doc "Check the next page of unchecked releases: `{:ok, token, playable, rest}`."
   def more(parent, token, uuid, ctx, rest, have, key, hours) do
     {page, rest} = Watch.probe_page(rest)
-    playable = probe_page(parent, token, uuid, ctx, page)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page)
+    rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
     if hours > 0, do: SourceCache.put(uuid, key, all, rest)
     {:ok, token, all, rest}
@@ -110,7 +111,8 @@ defmodule Roki.Watch.Resolver do
 
   defp probe_until_playable(parent, token, uuid, ctx, sources, acc) do
     {page, rest} = Watch.probe_page(sources)
-    playable = probe_page(parent, token, uuid, ctx, page)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page)
+    rest = late ++ rest
     ranked = Watch.attach_and_rank(uuid, acc ++ playable)
 
     cond do
@@ -123,9 +125,10 @@ defmodule Roki.Watch.Resolver do
   # One round of probing, 8 releases two at a time. Each answer is counted on the page as it
   # arrives; the task keeps the ones that play.
   defp probe_page(parent, token, uuid, ctx, page) do
-    {:ok, agent} = Agent.start_link(fn -> %{done: 0, ok: []} end)
+    {:ok, agent} = Agent.start_link(fn -> %{done: 0, ok: [], seen: []} end)
     total = length(page)
     send(parent, {:probe, token, 0, 0, total})
+    send(parent, {:candidates, token, Enum.map(page, &Roki.Watch.Checks.summary/1)})
 
     notify = fn {:result, idx, source, result} ->
       {done, ok} =
@@ -133,22 +136,71 @@ defmodule Roki.Watch.Resolver do
           ok =
             if match?({:ok, _}, result), do: [{idx, source, elem(result, 1)} | st.ok], else: st.ok
 
-          st = %{st | done: st.done + 1, ok: ok}
+          st = %{st | done: st.done + 1, ok: ok, seen: [source.hash | st.seen]}
           {{st.done, length(st.ok)}, st}
         end)
 
       send(parent, {:probe, token, done, ok, total})
+
+      state =
+        case result do
+          {:ok, _} -> :ok
+          other -> {:bad, Roki.Watch.Checks.why(other)}
+        end
+
+      send(parent, {:checked, token, source.hash, state})
     end
 
+    # Four at a time (laev's default is two): the releases are checked in half the waves.
     opts =
-      [notify: notify, episode: ctx.episode] ++ if(ctx.anime, do: [], else: [season: ctx.season])
+      [notify: notify, episode: ctx.episode, concurrency: 4] ++
+        if(ctx.anime, do: [], else: [season: ctx.season])
 
-    Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(Enum.with_index(page), opts) end)
+    task =
+      Task.async(fn ->
+        Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(Enum.with_index(page), opts) end)
+      end)
+
+    late = await_probes(task, agent, page, parent, token, nil)
 
     ok = Agent.get(agent, & &1.ok)
     Agent.stop(agent)
 
-    ok |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(fn {_i, source, stream} -> {source, stream} end)
+    {ok
+     |> Enum.sort_by(&elem(&1, 0))
+     |> Enum.map(fn {_i, source, stream} -> {source, stream} end), late}
+  end
+
+  # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
+  # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.
+  # (Eight releases used to take as long as the slowest of them, often twice the rest.)
+  @enough 5
+  @grace_ms 3_000
+
+  defp await_probes(task, agent, page, parent, token, first_ok_at) do
+    case Task.yield(task, 150) do
+      {:ok, _} ->
+        []
+
+      {:exit, _} ->
+        []
+
+      nil ->
+        st = Agent.get(agent, & &1)
+        ok = length(st.ok)
+        now = System.monotonic_time(:millisecond)
+        first = first_ok_at || if(ok > 0, do: now)
+
+        if ok >= @enough or (first && now - first >= @grace_ms) do
+          Task.shutdown(task, :brutal_kill)
+          seen = MapSet.new(st.seen)
+          late = Enum.reject(page, &MapSet.member?(seen, &1.hash))
+          for s <- late, do: send(parent, {:checked, token, s.hash, {:bad, "slow, set aside"}})
+          late
+        else
+          await_probes(task, agent, page, parent, token, first)
+        end
+    end
   end
 
   @doc "What to choose with nobody asked: the release that started last time, else the best."

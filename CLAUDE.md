@@ -426,3 +426,13 @@ the Subtitles button says the codes — `JA · EN · FR`, `+N` past three — an
 (each with ↑ ↓ ✕, 44 px) and small chips to add a language (one that has versions opens to them); duplicate names
 are numbered. **Previous / Next** (`Watch.previous_episode/4`, `next_episode/4`) are icon buttons beside Lines on
 the watch page, and on the sources page header and external panel.
+
+**Finding and starting a release** (sources page / watch page). The probe round streams what it is doing: `{:candidates, token,
+[Checks.summary]}` then `{:checked, token, hash, :ok | {:bad, why}}` per release (`Roki.Watch.Checks`), drawn by
+`WatchComponents.checks_list` — a spinner, a green tick, or grey with the reason — in the auto-start pop-up, under the
+progress line, and on the watch page's loading card. Releases are probed **four at a time** and the round does not
+wait for the slowest: at five that play (or three seconds after the first), `await_probes` stops, and the ones not
+answered go back to `rest` ("Load more", shown as "slow, set aside"). In the browser's mode the chosen release is
+**prepared on the sources page** (`Watch.start` in `:prestart`, a "Getting the video ready" pop-up) *before* the
+watch page opens, which then reuses the running remux and plays at once — one wait, not two. A failure to prepare
+stays on the sources page with a message and the list.

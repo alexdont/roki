@@ -61,8 +61,80 @@ defmodule RokiWeb.WatchComponents do
     """
   end
 
+  attr :checks, :list, default: []
+
+  @doc """
+  The releases being checked, one row each as they are tried: a spinner while it is asked, a green
+  tick when it plays, grey with the reason when it does not. So there is always something to see.
+  """
+  def checks_list(assigns) do
+    assigns =
+      assign(assigns,
+        good: Enum.count(assigns.checks, &(&1.state == :ok)),
+        done: Enum.count(assigns.checks, &(&1.state != :checking))
+      )
+
+    ~H"""
+    <div :if={@checks != []} class="space-y-1.5">
+      <div class="flex items-center justify-between text-xs text-base-content/60">
+        <span>Checking releases</span>
+        <span>
+          <span :if={@good > 0} class="font-semibold text-success">✓ {@good}</span>
+          {@done}/{length(@checks)}
+        </span>
+      </div>
+      <ul class="max-h-52 space-y-1 overflow-y-auto pr-0.5">
+        <li
+          :for={c <- @checks}
+          class={[
+            "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
+            c.state == :ok && "bg-success/15",
+            c.state == :checking && "bg-base-200",
+            match?({:bad, _}, c.state) && "opacity-45"
+          ]}
+        >
+          <span class="flex h-5 w-5 shrink-0 items-center justify-center">
+            <span :if={c.state == :checking} class="loading loading-spinner loading-xs"></span>
+            <.icon :if={c.state == :ok} name="hero-check-circle-solid" class="h-5 w-5 text-success" />
+            <.icon
+              :if={match?({:bad, _}, c.state)}
+              name="hero-x-circle"
+              class="h-5 w-5 text-base-content/50"
+            />
+          </span>
+          <span class={["min-w-0 flex-1 truncate", match?({:bad, _}, c.state) && "line-through"]}>
+            {c.name}
+          </span>
+          <span class="shrink-0 text-xs text-base-content/60">
+            {if match?({:bad, _}, c.state), do: elem(c.state, 1), else: c.resolution}
+          </span>
+        </li>
+      </ul>
+    </div>
+    """
+  end
+
+  attr :name, :string, required: true
+
+  @doc "The wait after a release is chosen: the video is being got ready, and then the page opens."
+  def starting(assigns) do
+    ~H"""
+    <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-6" id="starting">
+      <div class="w-full max-w-sm space-y-4 rounded-2xl bg-base-100 p-6 shadow-2xl">
+        <div class="flex items-center gap-3">
+          <span class="loading loading-spinner loading-md text-primary"></span>
+          <h2 class="text-lg font-bold">Getting the video ready</h2>
+        </div>
+        <p class="break-words text-sm text-base-content/70">{@name}</p>
+        <p class="text-xs text-base-content/50">The player opens as soon as it can play.</p>
+      </div>
+    </div>
+    """
+  end
+
   attr :probe, :any, default: nil
   attr :what, :string, default: nil
+  attr :checks, :list, default: []
 
   @doc """
   The pop-up while the best source is being found and started on its own. Cancel, a click
@@ -96,6 +168,7 @@ defmodule RokiWeb.WatchComponents do
               else: "Searching…"}
           </p>
         </div>
+        <.checks_list checks={@checks} />
         <button phx-click="cancel_auto" class="btn btn-block">Cancel — let me choose</button>
       </div>
     </div>

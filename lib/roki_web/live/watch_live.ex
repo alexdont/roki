@@ -11,7 +11,7 @@ defmodule RokiWeb.WatchLive do
   use RokiWeb, :live_view
 
   import RokiWeb.StudyComponents
-  import RokiWeb.WatchComponents, only: [now_playing: 3]
+  import RokiWeb.WatchComponents, only: [now_playing: 3, checks_list: 1]
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
@@ -42,6 +42,7 @@ defmodule RokiWeb.WatchLive do
           token: 0,
           status: "Starting…",
           probe: nil,
+          checks: [],
           ctx: nil,
           key: nil,
           current: nil,
@@ -92,7 +93,7 @@ defmodule RokiWeb.WatchLive do
     parent = self()
 
     socket
-    |> assign(token: token, failed: nil, player: nil)
+    |> assign(token: token, failed: nil, player: nil, checks: [])
     |> start_async(:resolve, fn ->
       with {:ok, res} <-
              Resolver.run(parent, token, uuid, title, season, episode, false, :browser),
@@ -100,6 +101,7 @@ defmodule RokiWeb.WatchLive do
              locate(parent, token, uuid, res, hash || prefer, if(hash, do: 3, else: 1)),
            pair = if(hash, do: pair, else: within_cap(res, pair)),
            {:ok, pair} <- choose(res, pair),
+           :ok <- announce(parent, token, "Getting the video ready…"),
            {:ok, player} <- start(uuid, res.ctx, pair) do
         {:ok, token, res, pair, player}
       else
@@ -133,6 +135,11 @@ defmodule RokiWeb.WatchLive do
 
   defp within_cap(res, {source, _} = pair),
     do: if(Laev.Sources.resolution_at_most?(source.resolution, res.cap), do: pair)
+
+  defp announce(parent, token, text) do
+    send(parent, {:status, token, text})
+    :ok
+  end
 
   defp choose(res, nil) do
     case pick(res) do
@@ -377,10 +384,16 @@ defmodule RokiWeb.WatchLive do
 
   @impl true
   def handle_info({:status, token, text}, %{assigns: %{token: token}} = socket),
-    do: {:noreply, assign(socket, status: text)}
+    do: {:noreply, assign(socket, status: text, probe: nil)}
 
   def handle_info({:probe, token, done, ok, total}, %{assigns: %{token: token}} = socket),
     do: {:noreply, assign(socket, probe: %{done: done, ok: ok, total: total})}
+
+  def handle_info({:candidates, token, list}, %{assigns: %{token: token}} = socket),
+    do: {:noreply, update(socket, :checks, &Roki.Watch.Checks.add(&1, list))}
+
+  def handle_info({:checked, token, hash, state}, %{assigns: %{token: token}} = socket),
+    do: {:noreply, update(socket, :checks, &Roki.Watch.Checks.mark(&1, hash, state))}
 
   def handle_info(_stale, socket), do: {:noreply, socket}
 
@@ -457,6 +470,7 @@ defmodule RokiWeb.WatchLive do
             value={if @probe && @probe.total > 0, do: @probe.done}
             max={if @probe && @probe.total > 0, do: @probe.total}
           ></progress>
+          <.checks_list checks={@checks} />
         </div>
 
         <.study_player :if={@player} player={@player} progress?={true} />

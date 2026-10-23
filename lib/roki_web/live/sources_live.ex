@@ -43,6 +43,9 @@ defmodule RokiWeb.SourcesLive do
           phase: :loading,
           status: "Starting…",
           probe: nil,
+          checks: [],
+          starting: nil,
+          start_error: nil,
           ctx: nil,
           playable: [],
           rest: [],
@@ -136,6 +139,8 @@ defmodule RokiWeb.SourcesLive do
       phase: :working,
       status: "Starting…",
       probe: nil,
+      checks: [],
+      start_error: nil,
       playable: [],
       rest: [],
       current: nil,
@@ -211,6 +216,22 @@ defmodule RokiWeb.SourcesLive do
       ),
       do: {:noreply, assign(socket, playable: playable, rest: rest, phase: :ready, busy?: false)}
 
+  def handle_async(:prestart, {:ok, {source, {:ok, _player}}}, socket),
+    do: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash))}
+
+  def handle_async(:prestart, {:ok, {_source, {:error, reason}}}, socket) do
+    {:noreply, assign(socket, starting: nil, current: nil, start_error: Resolver.failure(reason))}
+  end
+
+  def handle_async(:prestart, _other, socket),
+    do:
+      {:noreply,
+       assign(socket,
+         starting: nil,
+         current: nil,
+         start_error: "That one would not start. Pick another."
+       )}
+
   def handle_async(:next, {:ok, {_s, _e, _tag} = next}, socket),
     do: {:noreply, assign(socket, :next, next)}
 
@@ -265,8 +286,15 @@ defmodule RokiWeb.SourcesLive do
   defp preferred(_socket, _res), do: nil
 
   # The browser plays on its own page; an external player is opened from here.
-  defp start(%{assigns: %{mode: :browser}} = socket, {source, _stream}),
-    do: push_navigate(socket, to: watch_path(socket.assigns, source.hash))
+  # The browser's player is prepared *here*, before its page opens — so the page opens on a video
+  # that is already running instead of starting it, which was a second wait after the first.
+  defp start(%{assigns: %{mode: :browser}} = socket, {source, stream} = pair) do
+    %{uuid: uuid, ctx: ctx} = socket.assigns
+
+    socket
+    |> assign(starting: %{name: source.name}, current: pair, start_error: nil, auto: :done)
+    |> start_async(:prestart, fn -> {source, Watch.start(uuid, ctx, source, stream)} end)
+  end
 
   defp start(socket, pair), do: hand_over(socket, pair)
 
@@ -403,6 +431,12 @@ defmodule RokiWeb.SourcesLive do
   def handle_info({:probe, token, done, ok, total}, %{assigns: %{token: token}} = socket),
     do: {:noreply, assign(socket, probe: %{done: done, ok: ok, total: total})}
 
+  def handle_info({:candidates, token, list}, %{assigns: %{token: token}} = socket),
+    do: {:noreply, update(socket, :checks, &Roki.Watch.Checks.add(&1, list))}
+
+  def handle_info({:checked, token, hash, state}, %{assigns: %{token: token}} = socket),
+    do: {:noreply, update(socket, :checks, &Roki.Watch.Checks.mark(&1, hash, state))}
+
   def handle_info(_stale, socket), do: {:noreply, socket}
 
   # ── view ───────────────────────────────────────────────────────────
@@ -470,6 +504,8 @@ defmodule RokiWeb.SourcesLive do
           probe={@probe}
           text={@status}
         />
+        <.checks_list :if={@phase in [:loading, :working] and @auto != :pending} checks={@checks} />
+        <p :if={@start_error} class="alert alert-warning text-sm">{@start_error}</p>
         <p :if={@phase == :failed} class="alert alert-warning text-sm">{@failed}</p>
         <p
           :if={@phase == :ready and @playable != [] and @external == nil and @auto != :pending}
@@ -503,8 +539,11 @@ defmodule RokiWeb.SourcesLive do
       <.auto_start
         :if={@linked? and @auto == :pending and @phase in [:loading, :working] and @external == nil}
         probe={@probe}
+        checks={@checks}
         what={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
       />
+
+      <.starting :if={@starting} name={@starting.name} />
     </Layouts.app>
     """
   end
