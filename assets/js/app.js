@@ -22,6 +22,7 @@ import "phoenix_html"
 // Establish Phoenix Socket and LiveView configuration.
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
+import {MenuExtras} from "./menu_extras"
 import {hooks as colocatedHooks} from "phoenix-colocated/roki"
 import topbar from "../vendor/topbar"
 import {StudySidebar} from "./study/sidebar"
@@ -51,7 +52,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     player: storedPlayer() || "external",
     grid: storedGrid(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid},
+  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, MenuExtras},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.

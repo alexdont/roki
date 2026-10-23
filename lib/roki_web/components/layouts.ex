@@ -128,18 +128,29 @@ defmodule RokiWeb.Layouts do
           />
         </div>
 
-        <div class="hidden items-center gap-3 px-2 md:flex">
-          <.player_toggle />
-          <div class="hidden lg:block"><.theme_toggle /></div>
-        </div>
-
         <%!-- PhoenixKit's own account menu: avatar, Settings (which opens this site's settings
               page), admin, log out; or log in / register for a visitor. --%>
-        <div class="flex items-center pl-1">
+        <%!-- The player and theme switches live in that menu. The menu is PhoenixKit's and takes no
+              slot, so the hook moves these rows in under Settings (and back after a re-render). --%>
+        <div id="account-menu" phx-hook="MenuExtras" class="flex items-center pl-1">
           <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown
             scope={@scope}
             current_path={@current_path}
           />
+          <template data-role="menu-extras">
+            <li data-menu-extras class="mt-1 border-t border-base-300 pt-1">
+              <div class="flex items-center justify-between gap-3 !bg-transparent hover:!bg-transparent">
+                <span class="text-sm">Watch in</span>
+                <.player_toggle />
+              </div>
+            </li>
+            <li data-menu-extras>
+              <div class="flex items-center justify-between gap-3 !bg-transparent hover:!bg-transparent">
+                <span class="text-sm">Theme</span>
+                <.theme_toggle />
+              </div>
+            </li>
+          </template>
         </div>
 
         <%!-- On a phone the sections move into a panel under the header (not a small dropdown
@@ -202,10 +213,6 @@ defmodule RokiWeb.Layouts do
         </.link>
         <div class="flex cursor-not-allowed items-center justify-between rounded-lg px-4 py-3 text-base font-medium text-base-content/40">
           Manga <span class="badge badge-ghost badge-sm">soon</span>
-        </div>
-        <div class="mt-1 flex items-center justify-between gap-3 border-t border-base-300 px-4 pb-2 pt-3">
-          <.player_toggle />
-          <.theme_toggle />
         </div>
       </nav>
     </header>
