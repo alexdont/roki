@@ -216,39 +216,67 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                 </div>
                 <div class="study-pop-body space-y-1">
-                  <div class="study-setting">
+                  <div class="study-setting flex-wrap">
                     <div>
                       <div class="font-medium">Subtitle timing</div>
                       <div class="text-xs text-base-content/60">
-                        Earlier or later than the picture
+                        Earlier or later than the picture — click the number to type one
                       </div>
                     </div>
-                    <div class="join">
+                    <div class="join mx-auto">
                       <button
                         type="button"
-                        data-role="earlier"
-                        class="btn btn-sm btn-square join-item"
-                        aria-label="Earlier"
-                      >
-                        <.icon name="hero-minus-micro" class="h-4 w-4" />
-                      </button>
+                        data-role="nudge"
+                        data-step="-0.5"
+                        class="btn btn-sm join-item px-2 tabular-nums"
+                        aria-label="0.5 seconds earlier"
+                      >−0.5</button>
+                      <button
+                        type="button"
+                        data-role="nudge"
+                        data-step="-0.25"
+                        class="btn btn-sm join-item px-2 tabular-nums"
+                        aria-label="0.25 seconds earlier"
+                      >−0.25</button>
                       <button
                         type="button"
                         data-role="offset"
-                        class="btn btn-sm join-item w-16 px-1 tabular-nums"
-                        title="Click to reset"
+                        class="btn btn-sm join-item w-20 px-1 tabular-nums"
+                        title="Click to type an exact number of seconds"
                       >
                         0.0s
                       </button>
+                      <input
+                        type="text"
+                        inputmode="decimal"
+                        data-role="offset-input"
+                        hidden
+                        aria-label="Subtitle timing in seconds"
+                        class="input input-sm join-item w-20 px-1 text-center tabular-nums"
+                      />
                       <button
                         type="button"
-                        data-role="later"
-                        class="btn btn-sm btn-square join-item"
-                        aria-label="Later"
-                      >
-                        <.icon name="hero-plus-micro" class="h-4 w-4" />
-                      </button>
+                        data-role="nudge"
+                        data-step="0.25"
+                        class="btn btn-sm join-item px-2 tabular-nums"
+                        aria-label="0.25 seconds later"
+                      >+0.25</button>
+                      <button
+                        type="button"
+                        data-role="nudge"
+                        data-step="0.5"
+                        class="btn btn-sm join-item px-2 tabular-nums"
+                        aria-label="0.5 seconds later"
+                      >+0.5</button>
                     </div>
+                    <button
+                      type="button"
+                      data-role="offset-reset"
+                      hidden
+                      class="btn btn-xs btn-ghost w-full text-base-content/60"
+                    >
+                      Reset to 0
+                    </button>
                   </div>
 
                   <div class="study-setting">
@@ -304,6 +332,15 @@ defmodule RokiWeb.StudyComponents do
               <header class="study-head">
                 <span data-role="title" class="min-w-0 flex-1 truncate font-medium">Subtitles</span>
                 <span data-role="count" class="shrink-0 text-xs tabular-nums text-base-content/50"></span>
+                <button
+                  type="button"
+                  data-role="study-quick"
+                  class="btn btn-xs rounded-full"
+                  title="Study mode: pause after every line"
+                  aria-pressed="false"
+                >
+                  Study
+                </button>
                 <button
                   type="button"
                   data-role="compact"

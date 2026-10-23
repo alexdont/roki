@@ -611,16 +611,45 @@ export const StudySidebar = {
 
     // ── settings: timing (a file made for another cut), text size, study mode, peek
     const offsetLabel = $("[data-role=offset]")
+    const offsetInput = $("[data-role=offset-input]")
+    const offsetReset = $("[data-role=offset-reset]")
     this.setOffset = (value) => {
       this.offset = Math.round(value * 100) / 100
       offsetLabel.textContent = `${this.offset > 0 ? "+" : ""}${this.offset}s`
+      offsetReset.hidden = this.offset === 0
       store.set("offset:" + (this.mediaKey || ""), String(this.offset))
       this.overlayKey = ""
       this.tick()
     }
-    $("[data-role=later]").addEventListener("click", () => this.setOffset(this.offset + 0.25))
-    $("[data-role=earlier]").addEventListener("click", () => this.setOffset(this.offset - 0.25))
-    offsetLabel.addEventListener("click", () => this.setOffset(0))
+    for (const b of this.el.querySelectorAll("[data-role=nudge]")) {
+      b.addEventListener("click", () => this.setOffset(this.offset + parseFloat(b.dataset.step)))
+    }
+    offsetReset.addEventListener("click", () => this.setOffset(0))
+    // The number is a button that turns into a box: type seconds ("-1.3", "+0.4", "2"), Enter to
+    // set it, Escape to leave it as it was.
+    const closeInput = () => { offsetInput.hidden = true; offsetLabel.hidden = false }
+    offsetLabel.addEventListener("click", () => {
+      offsetLabel.hidden = true
+      offsetInput.hidden = false
+      offsetInput.value = String(this.offset)
+      offsetInput.focus()
+      offsetInput.select()
+    })
+    offsetInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const v = parseFloat(offsetInput.value.replace(",", ".").replace("−", "-"))
+        if (!Number.isNaN(v)) this.setOffset(Math.max(-600, Math.min(600, v)))
+        closeInput()
+      } else if (e.key === "Escape") {
+        e.stopPropagation()
+        closeInput()
+      }
+    })
+    offsetInput.addEventListener("blur", () => {
+      const v = parseFloat(offsetInput.value.replace(",", ".").replace("−", "-"))
+      if (!offsetInput.hidden && !Number.isNaN(v)) this.setOffset(Math.max(-600, Math.min(600, v)))
+      closeInput()
+    })
 
     const scaleLabel = $("[data-role=scale]")
     const setScale = (value) => {
@@ -637,15 +666,19 @@ export const StudySidebar = {
     // Pause after each line, with a replay of it (the round button on the picture).
     const study = $("[data-role=study]")
     const replay = $("[data-role=replay]")
+    const quick = $("[data-role=study-quick]")
     const setStudy = (on) => {
       this.study = on
       study.checked = on
+      quick.classList.toggle("btn-primary", on)
+      quick.setAttribute("aria-pressed", String(on))
       replay.hidden = !on
       store.set("study", on ? "1" : "0")
       this.pausedAt = -1
       this.watching = -1
     }
     study.addEventListener("change", () => setStudy(study.checked))
+    quick.addEventListener("click", () => setStudy(!this.study))
     replay.addEventListener("click", () => this.replay())
     setStudy(this.study)
 

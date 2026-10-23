@@ -14,7 +14,7 @@ defmodule RokiWeb.StudyLiveTest do
 
     for role <-
           ~w(list title count empty resume stage overlay subs-btn subs-list settings-btn audio-btn audio-menu prev-btn next-btn subs-off lines-btn
-                   theater fullscreen compact offset later earlier study replay peek backdrop
+                   theater fullscreen compact offset study-quick study replay peek backdrop
                    video-file video-url-form demo) do
       assert html =~ ~s(data-role="#{role}"), "missing data-role=#{role}"
     end
