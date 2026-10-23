@@ -200,8 +200,7 @@
 .study-trans { color: #e8e8e8; cursor: default; }
 .study-overlay .study-trans { font-size: calc(clamp(0.8rem, 2.2cqw, 1.7rem) * var(--cap-scale, 1)); pointer-events: auto; }
 .study-ui[data-peek="true"] .study-trans:not([data-revealed]) { filter: blur(0.35em); cursor: pointer; }
-.study-word { pointer-events: auto; cursor: help; border-radius: 0.2em; border-bottom: 1px dotted rgb(255 255 255 / 0.35); }
-.study-row .study-word { border-bottom-color: color-mix(in oklab, var(--color-base-content) 30%, transparent); }
+.study-word { pointer-events: auto; cursor: help; border-radius: 0.2em; }
 .study-word:hover, .study-word[data-on] { background: rgb(250 204 21 / 0.4); }
 
 /* The card for a word. Fixed to the window; while fullscreen it lives in the picture. */
