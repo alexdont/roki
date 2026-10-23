@@ -325,12 +325,20 @@ export const StudySidebar = {
       fillLine(line, this.p.cues[i].text, this.p.lang)
       this.overlay.appendChild(line)
     }
+    // The translation under a line is the one the side list pairs with it (they are separate
+    // files with their own timings, so each one's own "now" can be the next or previous line).
+    // Between primary lines there is nothing to pair with: each track then shows its own.
+    const paired = live.length ? live.map((i) => this.pairFor(this.p.cues[i])) : null
     this.extras.forEach((e, k) => {
-      if (!extraLive[k].length || this.offVideo.has(e.want)) return
+      if (this.offVideo.has(e.want)) return
+      // Several primary lines can be live at once and share a translation: each of its lines once.
+      const idx = paired ? [...new Set(paired.flatMap((row) => row[k]))].sort((x, y) => x - y) : extraLive[k]
+      const text = this.joinCues(k, idx)
+      if (!text) return
       const trans = document.createElement("div")
       trans.className = "study-trans study-line"
       trans.dataset.lang = e.lang
-      fillLine(trans, extraLive[k].map((i) => e.cues[i].text).join(" "), e.lang)
+      fillLine(trans, text, e.lang)
       this.overlay.appendChild(trans)
     })
   },
@@ -799,16 +807,31 @@ export const StudySidebar = {
   // three; failing that, any that overlap it by more than half of their own length. One entry
   // per track that has something.
   translationsFor(cue) {
-    const mid = (c) => (c.start + c.end) / 2
     const out = []
-    for (const e of this.extras) {
-      let hits = e.cues.filter((c) => mid(c) >= cue.start - 0.3 && mid(c) <= cue.end + 0.3)
-      if (!hits.length) {
-        hits = e.cues.filter((c) => Math.min(c.end, cue.end) - Math.max(c.start, cue.start) > (c.end - c.start) / 2)
-      }
-      if (hits.length) out.push({text: hits.slice(0, 3).map((c) => c.text).join(" "), lang: e.lang})
-    }
+    this.pairFor(cue).forEach((idx, k) => {
+      if (idx.length) out.push({text: this.joinCues(k, idx), lang: this.extras[k].lang})
+    })
     return out
+  },
+
+  joinCues(k, idx) {
+    return idx.map((i) => this.extras[k].cues[i].text).join(" ")
+  },
+
+  // The same, one list of cue numbers per extra track in order (empty where it has nothing): the
+  // pairing the side list shows, and the one the picture shows too, so the two never disagree.
+  pairFor(cue) {
+    const mid = (c) => (c.start + c.end) / 2
+    return this.extras.map((e) => {
+      let hits = []
+      e.cues.forEach((c, i) => { if (mid(c) >= cue.start - 0.3 && mid(c) <= cue.end + 0.3) hits.push(i) })
+      if (!hits.length) {
+        e.cues.forEach((c, i) => {
+          if (Math.min(c.end, cue.end) - Math.max(c.start, cue.start) > (c.end - c.start) / 2) hits.push(i)
+        })
+      }
+      return hits.slice(0, 3)
+    })
   },
 
   buildRows() {
