@@ -369,6 +369,12 @@ defmodule Roki.Watch do
     result
   end
 
+  @doc "Take a title off the saved-for-later list."
+  def unsave(uuid, type, id) do
+    Roki.Laev.run(uuid, fn -> Laev.Watchlist.remove(type, id) end)
+    library_changed(uuid)
+  end
+
   @doc "Put on hold (on the shelf's On hold row), or take it off. `:held | :released`."
   def toggle_hold(uuid, title) do
     result = Roki.Laev.run(uuid, fn -> Laev.Holds.toggle(title.type, title.id) end)

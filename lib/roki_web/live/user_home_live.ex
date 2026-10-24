@@ -126,6 +126,27 @@ defmodule RokiWeb.UserHomeLive do
     {:noreply, if(opening? and id == "completed", do: fetch_posters(socket), else: socket)}
   end
 
+  # Off the saved list: gone from the page at once, so the rest closes up and it is plain that it
+  # was removed.
+  def handle_event(
+        "unsave",
+        %{"type" => type, "id" => id},
+        %{assigns: %{data: %{} = data}} = socket
+      )
+      when type in ["movie", "tv"] do
+    case Integer.parse(id) do
+      {n, ""} ->
+        Roki.Watch.unsave(socket.assigns.uuid, type, n)
+        saved = Enum.reject(data.saved, &(&1.type == type and &1.id == n))
+        {:noreply, assign(socket, :data, %{data | saved: saved})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("unsave", _params, socket), do: {:noreply, socket}
+
   def handle_event("more_completed", _params, socket),
     do: {:noreply, socket |> update(:completed_shown, &(&1 + @completed_page)) |> fetch_posters()}
 
@@ -547,6 +568,7 @@ defmodule RokiWeb.UserHomeLive do
         id="saved"
         title="Saved"
         items={@data.saved}
+        unsave
         open={@open}
         cached_titles={@cached_titles}
       />
@@ -593,6 +615,10 @@ defmodule RokiWeb.UserHomeLive do
   attr :open, :any, required: true
   attr :cached_titles, :any, default: nil
 
+  attr :unsave, :boolean,
+    default: false,
+    doc: "a button on each poster that takes it off the list"
+
   defp fold(assigns) do
     assigns = assign(assigns, :shown, MapSet.member?(assigns.open, assigns.id))
 
@@ -612,8 +638,20 @@ defmodule RokiWeb.UserHomeLive do
         <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
       </button>
       <ul :if={@shown} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- @items} class="space-y-1">
+        <li :for={i <- @items} class="relative space-y-1">
           <.poster item={i} cached_titles={@cached_titles} compact />
+          <button
+            :if={@unsave}
+            type="button"
+            phx-click="unsave"
+            phx-value-type={i.type}
+            phx-value-id={i.id}
+            title="Remove from saved"
+            aria-label={"Remove #{i.title} from saved"}
+            class="btn btn-primary btn-xs btn-square absolute right-1.5 top-1.5 h-6 min-h-0 w-6 shadow"
+          >
+            <.icon name="hero-bookmark-solid" class="h-3.5 w-3.5" />
+          </button>
         </li>
       </ul>
     </section>
