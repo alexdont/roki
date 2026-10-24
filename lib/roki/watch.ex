@@ -647,13 +647,26 @@ defmodule Roki.Watch do
   release you can watch with your subtitles is not sunk as "wrong language" — and rank.
   Run in the user's scope.
   """
-  def attach_and_rank(uuid, playable) do
+  def attach_and_rank(uuid, playable, opts \\ []) do
     Roki.Laev.run(uuid, fn ->
       playable
-      |> Laev.Providers.attach_tracks()
+      |> attach_tracks(opts)
       |> Enum.map(fn {source, stream} -> {with_track_langs(source, stream), stream} end)
       |> rank_playable()
     end)
+  end
+
+  # Reading each file's audio and subtitle tracks from the debrid account costs about two seconds
+  # a round, and only decides anything when the language wanted is not English (the names, and
+  # the search results' own language tags, already rule out a wrong-language release for English).
+  # So when the caller is in a hurry and English is what is wanted, it is left out.
+  defp attach_tracks(playable, opts) do
+    in_a_hurry? = Keyword.get(opts, :fast, false)
+    english? = Laev.Config.lang() == "en" and Laev.Config.subs_lang() in [nil, "en"]
+
+    if in_a_hurry? and english?,
+      do: playable,
+      else: Laev.Providers.attach_tracks(playable)
   end
 
   defp with_track_langs(source, %{tracks: %{audio: audio, subs: subs}}) do
@@ -1133,8 +1146,42 @@ defmodule Roki.Watch do
   def autoplay?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.autoplay?/0)
 
   # A conversion that did not get going is stopped, not left to run its two hours.
-  defp ready(%{kind: :remux, remux_id: id}), do: Laev.Playback.ready(id, :fast, 180_000)
+  defp ready(%{kind: :remux, remux_id: id}), do: await_segments(id, 180_000)
   defp ready(_), do: :ok
+
+  # Playing can begin once the first two segments (about eight seconds) are written: the converter
+  # runs far ahead of playback, and laev's own wait is for four, polled every 0.3 s. A wait that
+  # runs out stops the conversion, as laev's does.
+  defp await_segments(id, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    wait_segments(id, deadline)
+  end
+
+  defp wait_segments(id, deadline) do
+    cond do
+      segments_ready?(id) ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        Laev.Remux.stop(id)
+        {:error, :timeout}
+
+      true ->
+        Process.sleep(150)
+        wait_segments(id, deadline)
+    end
+  end
+
+  defp segments_ready?(id) do
+    dir = Laev.Remux.dir(id)
+    # Several audio tracks: the video is in `s_0.m3u8`, under a master playlist.
+    file = if File.exists?(Path.join(dir, "master.m3u8")), do: "s_0.m3u8", else: "index.m3u8"
+
+    case File.read(Path.join(dir, file)) do
+      {:ok, pl} -> pl =~ "#EXT-X-ENDLIST" or length(String.split(pl, ".ts")) >= 3
+      _ -> false
+    end
+  end
 
   defp embedded_subtitles(%{kind: :remux, remux_id: id}) do
     # laev lists a track by its basename (`sub0`); ffmpeg writes, and the stream route serves,

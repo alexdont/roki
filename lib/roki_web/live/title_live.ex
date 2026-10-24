@@ -386,6 +386,14 @@ defmodule RokiWeb.TitleLive do
         {:ok, {:ok, title, resume, cached, lib, rating, secs, sections, play, mal}},
         socket
       ) do
+    # What Play would start is looked for now, while the page is read.
+    if socket.assigns.linked? do
+      case title.type do
+        "movie" -> Roki.Watch.Prefetch.warm(socket.assigns.uuid, title)
+        _ -> Roki.Watch.Prefetch.warm(socket.assigns.uuid, title, play.season, play.episode)
+      end
+    end
+
     socket =
       assign(socket,
         title: title,

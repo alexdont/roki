@@ -40,6 +40,10 @@ const storedPlayer = () => {
   try { return localStorage.getItem("roki:player") } catch { return null }
 }
 
+// What a device with no remembered choice starts with: the page says (new accounts: the browser).
+const defaultPlayer = () =>
+  document.querySelector("meta[name='roki-player-default']")?.getAttribute("content") || "external"
+
 const storedGrid = () => {
   try { return localStorage.getItem("roki:grid") } catch { return null }
 }
@@ -49,7 +53,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   params: () => ({
     _csrf_token: csrfToken,
     platform,
-    player: storedPlayer() || "external",
+    player: storedPlayer() || defaultPlayer(),
     grid: storedGrid(),
     place: placeParam(),
   }),

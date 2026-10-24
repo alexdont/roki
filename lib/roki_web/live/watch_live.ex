@@ -212,6 +212,8 @@ defmodule RokiWeb.WatchLive do
 
     if res.key, do: SourceCache.mark_good(uuid, res.key, source.hash)
 
+    Process.send_after(self(), :warm_next, 45_000)
+
     socket =
       socket
       |> assign(player: data, current: pair, ctx: res.ctx, key: res.key)
@@ -420,7 +422,18 @@ defmodule RokiWeb.WatchLive do
 
   defp next_episode(_), do: nil
 
+  # A little way into an episode, the one after it is looked for, so it starts at once.
   @impl true
+  def handle_info(
+        :warm_next,
+        %{assigns: %{up_next: {s, e}, title: %{} = title, uuid: uuid}} = socket
+      ) do
+    Roki.Watch.Prefetch.warm(uuid, title, s, e)
+    {:noreply, socket}
+  end
+
+  def handle_info(:warm_next, socket), do: {:noreply, socket}
+
   def handle_info({:status, token, text}, %{assigns: %{token: token}} = socket),
     do: {:noreply, assign(socket, status: text, probe: nil)}
 

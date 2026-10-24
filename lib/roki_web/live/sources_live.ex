@@ -103,6 +103,28 @@ defmodule RokiWeb.SourcesLive do
         do: socket,
         else: assign(socket, :prefer, String.slice(params["prefer"], 0, 64))
 
+    cond do
+      # Playing in the browser, the sources page has nothing to add: the watch page finds the
+      # release and starts it itself. Going straight there saves a whole page.
+      params["auto"] == "1" and connected?(socket) and socket.assigns.linked? and
+          socket.assigns.mode == :browser ->
+        {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns))}
+
+      true ->
+        auto_or_list(params, socket)
+    end
+  end
+
+  defp direct_watch_path(%{type: "movie", id: id, prefer: prefer}),
+    do: ~p"/watch/movie/#{id}?#{prefer_query(prefer)}"
+
+  defp direct_watch_path(%{type: "tv", id: id, season: s, episode: e, prefer: prefer}),
+    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{prefer_query(prefer)}"
+
+  defp prefer_query(nil), do: []
+  defp prefer_query(hash), do: [prefer: hash]
+
+  defp auto_or_list(params, socket) do
     if params["auto"] == "1" and connected?(socket),
       do:
         {:noreply,

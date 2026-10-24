@@ -7,6 +7,17 @@ defmodule RokiWeb.PlayerMode do
   """
   import Phoenix.LiveView, only: [attach_hook: 4, push_event: 3]
 
+  # Accounts made from this day on start with the browser player; earlier ones keep the external
+  # player (VLC) they have been using unless they chose otherwise. Either way the switch in the
+  # header, remembered per device, wins.
+  @browser_default_from ~U[2026-10-24 00:00:00Z]
+
+  @doc "The player a device with no remembered choice starts with, for this account: `\"browser\"` or `\"external\"`."
+  def default_for(%{inserted_at: %DateTime{} = at}),
+    do: if(DateTime.compare(at, @browser_default_from) == :lt, do: "external", else: "browser")
+
+  def default_for(_user), do: "external"
+
   def on_mount(:attach, _params, _session, socket) do
     {:cont, attach_hook(socket, :player_mode, :handle_event, &handle/3)}
   end

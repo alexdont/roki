@@ -32,7 +32,20 @@ defmodule Roki.Watch.Resolver do
          {:ok, res} <-
            from_cache(token, ctx, cap, key, cached)
            |> fresh_if_none(fn ->
-             search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?)
+             search(
+               parent,
+               token,
+               uuid,
+               title,
+               season,
+               episode,
+               ctx,
+               cap,
+               key,
+               hours,
+               force?,
+               mode
+             )
            end) do
       {:ok, res}
     else
@@ -69,7 +82,7 @@ defmodule Roki.Watch.Resolver do
   defp fresh_if_none(nil, fun), do: fun.()
   defp fresh_if_none(hit, _fun), do: hit
 
-  defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?) do
+  defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?, mode) do
     send(parent, {:status, token, "Searching for releases…"})
     Roki.Keys.record(uuid, :search)
 
@@ -77,7 +90,8 @@ defmodule Roki.Watch.Resolver do
            Watch.sources(title, season, episode, uuid, force?),
          sources = Watch.with_library(uuid, query, found),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
-         {:ok, playable, rest} <- probe_until_playable(parent, token, uuid, ctx, sources, []) do
+         {:ok, playable, rest} <-
+           probe_until_playable(parent, token, uuid, ctx, sources, [], mode) do
       if hours > 0, do: SourceCache.put(uuid, key, playable, rest)
 
       {:ok,
@@ -108,18 +122,20 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
-  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], []), do: {:error, :none_playable}
+  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _mode),
+    do: {:error, :none_playable}
 
-  defp probe_until_playable(parent, token, uuid, ctx, sources, acc) do
+  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, mode) do
     {page, rest} = Watch.probe_page(sources)
     {playable, late} = probe_page(parent, token, uuid, ctx, page)
     rest = late ++ rest
-    ranked = Watch.attach_and_rank(uuid, acc ++ playable)
+    # Starting in the browser is what is waited for: what is known from the names ranks it.
+    ranked = Watch.attach_and_rank(uuid, acc ++ playable, fast: mode == :browser)
 
     cond do
       ranked != [] -> {:ok, ranked, rest}
       rest == [] -> {:error, :none_playable}
-      true -> probe_until_playable(parent, token, uuid, ctx, rest, [])
+      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], mode)
     end
   end
 
@@ -153,9 +169,10 @@ defmodule Roki.Watch.Resolver do
       send(parent, {:checked, token, source.hash, state})
     end
 
-    # Four at a time (laev's default is two): the releases are checked in half the waves.
+    # A whole page at once (laev's default is two): the first release that plays is what counts,
+    # so they all race, and the answer comes with the quickest instead of after the waves.
     opts =
-      [notify: notify, ctx: ctx, concurrency: 4] ++
+      [notify: notify, ctx: ctx, concurrency: 8] ++
         if(ctx.anime, do: [], else: [season: ctx.season])
 
     # Releases are not all numbered alike, and what plays is not always what was asked for: laev
@@ -180,8 +197,10 @@ defmodule Roki.Watch.Resolver do
   # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
   # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.
   # (Eight releases used to take as long as the slowest of them, often twice the rest.)
-  @enough 5
-  @grace_ms 3_000
+  @enough 4
+  @grace_ms 1_000
+
+  defp ideal?(source), do: source.resolution == "1080p" and not Roki.Watch.heavy?(source)
 
   defp await_probes(task, agent, page, parent, token, first_ok_at) do
     case Task.yield(task, 150) do
@@ -197,7 +216,11 @@ defmodule Roki.Watch.Resolver do
         now = System.monotonic_time(:millisecond)
         first = first_ok_at || if(ok > 0, do: now)
 
-        if ok >= @enough or (first && now - first >= @grace_ms) do
+        # Four that play, or one that is already what would be picked (a 1080p release a browser
+        # reads as it is) — no point waiting for more — or one that played a moment ago.
+        ideal? = Enum.any?(st.ok, fn {_i, source, _stream} -> ideal?(source) end)
+
+        if ok >= @enough or ideal? or (first && now - first >= @grace_ms) do
           Task.shutdown(task, :brutal_kill)
           seen = MapSet.new(st.seen)
           late = Enum.reject(page, &MapSet.member?(seen, &1.hash))
