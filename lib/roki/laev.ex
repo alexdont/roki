@@ -712,6 +712,66 @@ defmodule Roki.Laev do
 
   defp aired?(_date, _today), do: false
 
+  @doc """
+  Everything this user has finished, newest first, as poster items — the record behind the
+  home page's Completed section. Dates come from laev (`dated?: false` means it has none and
+  the row must not claim one). Anime is marked by MyAnimeList entry; it is mapped to the TMDB
+  show and season it belongs to so the poster opens the right page. Posters come from the cards
+  laev already holds, so this makes no requests.
+  """
+  def completed(uuid) do
+    run(uuid, fn ->
+      rows = Laev.Shelf.completed() |> Enum.map(&completed_target/1)
+      keys = for {_row, {type, id, _season}} <- rows, type != nil, do: {type, id}
+      cards = Laev.Cards.get_many(Enum.uniq(keys))
+
+      Enum.map(rows, fn {row, {type, id, season}} ->
+        card = type && Map.get(cards, {type, id})
+
+        %{
+          type: type,
+          id: id,
+          season: season,
+          mal_id: row.mal_id,
+          title: row.title,
+          poster: card && poster(card["poster_path"]),
+          anime: row.kind == :anime,
+          at: row.at,
+          dated?: row.dated?
+        }
+      end)
+    end)
+  end
+
+  @doc """
+  Posters for the finished titles being shown that laev has no card for yet: read from TMDB
+  once each (laev remembers the card), eight at a time. `%{{type, id} => poster_url}`.
+  """
+  def completed_posters(uuid, items) do
+    keys =
+      for %{type: type, id: id, poster: nil} <- items, type != nil, uniq: true, do: {type, id}
+
+    if keys == [] do
+      %{}
+    else
+      run(uuid, fn ->
+        keys
+        |> Laev.Shelf.load_cards(fn _ -> :ok end)
+        |> Map.new(fn {key, card} -> {key, poster(card["poster_path"])} end)
+      end)
+    end
+  end
+
+  defp completed_target(%{type: "mal", mal_id: mal} = row) do
+    case Laev.AnimeMap.tmdb(mal) do
+      {"tv", id, season} -> {row, {"tv", id, season}}
+      {"movie", id} -> {row, {"movie", id, nil}}
+      _ -> {row, {nil, nil, nil}}
+    end
+  end
+
+  defp completed_target(%{type: type, id: id} = row), do: {row, {type, id, nil}}
+
   # `seen: true` greys a title out — laev's own "watched" rule, from the synced marks.
   defp mark_seen(items) do
     seen = seen_keys(items)

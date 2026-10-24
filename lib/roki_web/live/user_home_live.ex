@@ -10,6 +10,8 @@ defmodule RokiWeb.UserHomeLive do
   """
   use RokiWeb, :live_view
 
+  @completed_page 100
+
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
@@ -41,6 +43,8 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:open, MapSet.new())
           |> assign(:stats, nil)
           |> assign(:pulse, nil)
+          |> assign(:completed, nil)
+          |> assign(:completed_shown, @completed_page)
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
@@ -68,6 +72,16 @@ defmodule RokiWeb.UserHomeLive do
     uuid = socket.assigns.uuid
     start_async(socket, :overview, fn -> Laev.overview(uuid) end)
   end
+
+  # Posters for the part of Completed on screen: titles laev has never drawn have none yet, and
+  # reading them is a TMDB request each, once — so only the rows shown, not all of them.
+  defp fetch_posters(%{assigns: %{completed: items}} = socket) when is_list(items) do
+    uuid = socket.assigns.uuid
+    shown = Enum.take(items, socket.assigns.completed_shown)
+    start_async(socket, :completed_posters, fn -> Laev.completed_posters(uuid, shown) end)
+  end
+
+  defp fetch_posters(socket), do: socket
 
   # ── events ─────────────────────────────────────────────────────────
 
@@ -104,14 +118,16 @@ defmodule RokiWeb.UserHomeLive do
 
   def handle_event("toggle_section", %{"id" => id}, socket) do
     open = socket.assigns.open
+    opening? = not MapSet.member?(open, id)
 
-    {:noreply,
-     assign(
-       socket,
-       :open,
-       if(MapSet.member?(open, id), do: MapSet.delete(open, id), else: MapSet.put(open, id))
-     )}
+    socket =
+      assign(socket, :open, if(opening?, do: MapSet.put(open, id), else: MapSet.delete(open, id)))
+
+    {:noreply, if(opening? and id == "completed", do: fetch_posters(socket), else: socket)}
   end
+
+  def handle_event("more_completed", _params, socket),
+    do: {:noreply, socket |> update(:completed_shown, &(&1 + @completed_page)) |> fetch_posters()}
 
   def handle_event("sync", _params, socket) do
     uuid = socket.assigns.uuid
@@ -137,6 +153,7 @@ defmodule RokiWeb.UserHomeLive do
      socket
      |> assign(state: :ready, data: data, busy: nil)
      |> start_async(:eps, fn -> Laev.episode_progress(uuid, watchlist_items(data)) end)
+     |> start_async(:completed, fn -> Laev.completed(uuid) end)
      |> start_async(:stats, fn -> Roki.Stats.summary(uuid) end)
      |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)}
   end
@@ -158,6 +175,29 @@ defmodule RokiWeb.UserHomeLive do
   end
 
   def handle_async(:eps, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:completed, {:ok, items}, socket) when is_list(items),
+    do:
+      {:noreply,
+       socket
+       |> assign(:completed, items)
+       |> then(&if(MapSet.member?(&1.assigns.open, "completed"), do: fetch_posters(&1), else: &1))}
+
+  def handle_async(:completed, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:completed_posters, {:ok, posters}, %{assigns: %{completed: items}} = socket)
+      when is_map(posters) and is_list(items) do
+    items =
+      Enum.map(items, fn i ->
+        if i.poster == nil and posters[{i.type, i.id}],
+          do: %{i | poster: posters[{i.type, i.id}]},
+          else: i
+      end)
+
+    {:noreply, assign(socket, :completed, items)}
+  end
+
+  def handle_async(:completed_posters, _other, socket), do: {:noreply, socket}
 
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
 
@@ -222,6 +262,8 @@ defmodule RokiWeb.UserHomeLive do
         open={@open}
         stats={@stats}
         pulse={@pulse}
+        completed={@completed}
+        completed_shown={@completed_shown}
         username={@username}
         cached_titles={@cached_titles}
       />
@@ -414,6 +456,8 @@ defmodule RokiWeb.UserHomeLive do
   attr :open, :any, default: nil
   attr :stats, :any, default: nil
   attr :pulse, :any, default: nil
+  attr :completed, :any, default: nil
+  attr :completed_shown, :integer, default: 100
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
 
@@ -530,6 +574,13 @@ defmodule RokiWeb.UserHomeLive do
         open={@open}
         cached_titles={@cached_titles}
       />
+      <.completed
+        :if={@data && @completed not in [nil, []]}
+        items={@completed}
+        shown={@completed_shown}
+        open={MapSet.member?(@open, "completed")}
+        cached_titles={@cached_titles}
+      />
     </div>
     """
   end
@@ -567,6 +618,73 @@ defmodule RokiWeb.UserHomeLive do
       </ul>
     </section>
     """
+  end
+
+  # Everything the user has finished, newest first, a month at a time: a place to go back in
+  # time and see what they were watching then. Closed until opened, like the other folds, so
+  # its posters cost nothing until wanted; a hundred rows per page.
+  attr :items, :list, required: true
+  attr :shown, :integer, required: true
+  attr :open, :boolean, required: true
+  attr :cached_titles, :any, default: nil
+
+  defp completed(assigns) do
+    page = Enum.take(assigns.items, assigns.shown)
+
+    assigns =
+      assign(assigns,
+        groups: Enum.chunk_by(page, &month_of/1),
+        more: length(assigns.items) - length(page)
+      )
+
+    ~H"""
+    <section class="space-y-3" id="completed">
+      <button
+        phx-click="toggle_section"
+        phx-value-id="completed"
+        aria-expanded={to_string(@open)}
+        class="flex cursor-pointer items-center gap-2 text-xl font-semibold"
+      >
+        <.icon name="hero-chevron-right" class={["h-4 w-4 transition", @open && "rotate-90"]} />
+        Completed <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
+      </button>
+      <div :if={@open} class="space-y-6">
+        <div :for={group <- @groups} class="space-y-2">
+          <h3 class="text-sm font-medium text-base-content/60">{month_label(hd(group))}</h3>
+          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+            <li :for={i <- group} class="space-y-1">
+              <.poster item={i} cached_titles={@cached_titles} compact />
+              <div :if={i.dated?} class="text-xs text-base-content/50">{day_label(i)}</div>
+            </li>
+          </ul>
+        </div>
+        <button :if={@more > 0} phx-click="more_completed" class="btn btn-ghost btn-sm">
+          Show {min(@more, 100)} more
+        </button>
+      </div>
+    </section>
+    """
+  end
+
+  @months ~w(January February March April May June July August September October November December)
+
+  defp month_of(%{dated?: true, at: at}) do
+    d = DateTime.from_unix!(at)
+    {d.year, d.month}
+  end
+
+  defp month_of(_), do: :undated
+
+  defp month_label(item) do
+    case month_of(item) do
+      {y, m} -> "#{Enum.at(@months, m - 1)} #{y}"
+      :undated -> "No date"
+    end
+  end
+
+  defp day_label(%{at: at}) do
+    d = DateTime.from_unix!(at)
+    "#{String.slice(Enum.at(@months, d.month - 1), 0, 3)} #{d.day}"
   end
 
   attr :title, :string, required: true
