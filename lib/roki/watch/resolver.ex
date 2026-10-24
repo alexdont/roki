@@ -30,7 +30,7 @@ defmodule Roki.Watch.Resolver do
          ctx = Watch.ctx(uuid, title, season, episode),
          cap = Watch.ceiling(uuid, ctx, mode, web),
          {:ok, res} <-
-           from_cache(token, ctx, cap, key, cached)
+           from_cache(uuid, token, ctx, cap, key, cached)
            |> fresh_if_none(fn ->
              search(
                parent,
@@ -63,14 +63,16 @@ defmodule Roki.Watch.Resolver do
     {:ok, token, all, rest}
   end
 
-  defp from_cache(_token, _ctx, _cap, _key, nil), do: nil
+  defp from_cache(_uuid, _token, _ctx, _cap, _key, nil), do: nil
 
-  defp from_cache(token, ctx, cap, key, entry) do
+  defp from_cache(uuid, token, ctx, cap, key, entry) do
     {:ok,
      %{
        token: token,
        ctx: ctx,
-       playable: entry.playable,
+       # Ranked again as asked: the list was saved in whatever audio and subtitle language was
+       # set then, and a changed setting should not wait for the cache to expire.
+       playable: Roki.Laev.run(uuid, fn -> Watch.rank_playable(entry.playable) end),
        rest: entry.rest,
        cap: cap,
        key: key,

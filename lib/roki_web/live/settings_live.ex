@@ -56,8 +56,9 @@ defmodule RokiWeb.SettingsLive do
     "LAEV_SKIP" =>
       "Intros and credits: ask with a button, skip automatically, or leave alone. Not available on this site yet.",
     "LAEV_LANG" =>
-      "Preferred audio language, like en. Releases in other languages sink in the ranking.",
-    "LAEV_SUBS" => "Preferred subtitle language, like en. Blank follows the audio language.",
+      "Releases with this audio rank first; ones in another language sink. English by default.",
+    "LAEV_SUBS" =>
+      "The subtitle language looked for and shown first. English by default; Off turns subtitles off.",
     "LAEV_POSTERS" => "How the terminal app draws poster previews.",
     "LAEV_DOWNLOAD_DIR" => "Where the terminal app saves downloads.",
     "LAEV_MPV_ARGS" => "Extra arguments the terminal app passes to mpv."
@@ -66,7 +67,10 @@ defmodule RokiWeb.SettingsLive do
   # Only these three can be asked whether they work; the rest are saved as pasted.
   @checkable ~w(RD_TOKEN TORBOX_API_KEY TMDB_API_KEY)
 
-  @placeholders %{"LAEV_LANG" => "en", "LAEV_SUBS" => "same as audio"}
+  @placeholders %{}
+
+  # Settings that are one of the known languages, picked from a list rather than typed.
+  @language_keys ~w(LAEV_LANG LAEV_SUBS)
 
   @key_help %{
     "RD_TOKEN" => "https://real-debrid.com/apitoken",
@@ -710,9 +714,9 @@ defmodule RokiWeb.SettingsLive do
       <label for="d-player" class="min-w-0 sm:w-1/2">
         <span class="font-medium">Player on this device</span>
         <span class="block text-xs text-base-content/60">
-          What Play does on the title page. The external player (VLC) is the default: the full
-          release, any resolution, nothing converted on the server. "Browser" plays in the
-          browser, up to 1080p. Remembered in this browser, so each of your devices has its own.
+          What Play does on the title page. "Browser" plays here, up to 1080p. "External" hands the
+          full release to VLC or another app: any resolution, nothing converted on the server. New
+          accounts start on Browser. Remembered in this browser, so each of your devices has its own.
         </span>
       </label>
       <div class="flex items-center gap-2 sm:w-1/2">
@@ -770,8 +774,18 @@ defmodule RokiWeb.SettingsLive do
       assign(assigns,
         hint: @hints[assigns.s.key],
         placeholder: @placeholders[assigns.s.key] || "",
-        id: "s-" <> assigns.s.key
+        id: "s-" <> assigns.s.key,
+        language?: assigns.s.key in @language_keys
       )
+
+    assigns =
+      if assigns.language? do
+        # Unset means laev's own default: English.
+        current = Roki.Languages.normalize(assigns.s.value) || "en"
+        assign(assigns, current: current, choices: Roki.Languages.choices(current))
+      else
+        assigns
+      end
 
     ~H"""
     <div
@@ -797,8 +811,30 @@ defmodule RokiWeb.SettingsLive do
           <option :if={!@s.set?} value="" disabled selected>default</option>
           <option :for={o <- options(@s)} value={o} selected={@s.value == o}>{o}</option>
         </select>
+        <select
+          :if={@language?}
+          id={@id}
+          name={"s[#{@s.key}]"}
+          disabled={@locked}
+          class="select select-bordered w-full"
+        >
+          <option :if={@s.key == "LAEV_SUBS"} value="off" selected={@current == "off"}>
+            Off — no subtitles
+          </option>
+          <option :for={{code, label} <- @choices.extra} value={code} selected>{label}</option>
+          <optgroup label="Common">
+            <option :for={{code, label} <- @choices.common} value={code} selected={@current == code}>
+              {label}
+            </option>
+          </optgroup>
+          <optgroup label="All languages">
+            <option :for={{code, label} <- @choices.rest} value={code} selected={@current == code}>
+              {label}
+            </option>
+          </optgroup>
+        </select>
         <input
-          :if={@s.type == :text}
+          :if={@s.type == :text and not @language?}
           id={@id}
           name={"s[#{@s.key}]"}
           type="text"
