@@ -19,6 +19,8 @@ const FOLLOW_RESUME_MS = 5000
 // How long a word must be hovered before the video stops and the card opens (a sweep of the
 // mouse across the line should not).
 const DWELL_MS = 300
+// How long a card stays once the pointer is on neither the word nor the card.
+const AWAY_MS = 1500
 
 // ── languages and words ───────────────────────────────────────────────
 
@@ -200,6 +202,13 @@ export const StudySidebar = {
     cancelAnimationFrame(this.raf)
     clearTimeout(this.dwellTimer)
     clearTimeout(this.leaveTimer)
+    clearInterval(this.watchTimer)
+    if (this.onMove) {
+      document.removeEventListener("mousemove", this.onMove)
+      document.removeEventListener("contextmenu", this.onAway)
+      document.documentElement.removeEventListener("mouseleave", this.onAway)
+      window.removeEventListener("blur", this.onAway)
+    }
     clearTimeout(this.resumeTimer)
     clearTimeout(this.progTimer)
     clearTimeout(this.seekWait)
@@ -374,17 +383,48 @@ export const StudySidebar = {
     this.tip.addEventListener("mouseenter", () => clearTimeout(this.leaveTimer))
     this.tip.addEventListener("mouseleave", () => this.wordLeave())
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") this.dismissTip() })
+
+    // Leaving a word is not always announced: a right click, a context menu, another window
+    // taking focus, or the pointer leaving the page can all swallow the "mouseout", and the card
+    // would then stay for good. So the pointer is also watched directly, and a card the pointer
+    // is not on (neither its word nor the card) goes after a moment, whatever else happened.
+    this.pointerOn = false
+    this.awaySince = 0
+    this.onMove = (e) => { this.pointerOn = !!(e.target.closest && e.target.closest(".study-word, .study-tip")) }
+    this.onAway = () => { this.pointerOn = false }
+    document.addEventListener("mousemove", this.onMove, {passive: true})
+    document.addEventListener("contextmenu", this.onAway)
+    document.documentElement.addEventListener("mouseleave", this.onAway)
+    window.addEventListener("blur", this.onAway)
+    this.watchTimer = setInterval(() => this.checkTip(), 300)
+  },
+
+  checkTip() {
+    if (!this.tipFor || this.pointerOn) {
+      this.awaySince = 0
+      return
+    }
+    this.awaySince = this.awaySince || Date.now()
+    if (Date.now() - this.awaySince >= AWAY_MS) {
+      this.awaySince = 0
+      this.dismissTip()
+    }
   },
 
   wordEnter(w) {
     clearTimeout(this.leaveTimer)
-    if (this.currentWord === w) return
+    this.pointerOn = true
+    // Already on its way (or already showing): nothing to start. Anything else — including a word
+    // left and come back to before its card opened — starts afresh.
+    if (this.currentWord === w && (this.tipFor === w || this.dwellTimer)) return
     clearTimeout(this.dwellTimer)
+    this.dwellTimer = null
     this.currentWord = w
     if (this.hovering) {
       this.showTip(w) // already reading: the next word at once
     } else {
       this.dwellTimer = setTimeout(() => {
+        this.dwellTimer = null
         if (this.currentWord !== w || !w.isConnected) return
         this.wasPlaying = !this.video.paused
         this.video.pause()
@@ -396,6 +436,9 @@ export const StudySidebar = {
 
   wordLeave() {
     clearTimeout(this.dwellTimer)
+    this.dwellTimer = null
+    // No card yet: nothing to close, and coming back to this word must be able to start again.
+    if (!this.tipFor) this.currentWord = null
     if (this.pinned) return
     this.leaveTimer = setTimeout(() => this.dismissTip(), 250)
   },
@@ -403,6 +446,7 @@ export const StudySidebar = {
   // Close the card; if the video was only stopped for the card, let it go on.
   dismissTip() {
     clearTimeout(this.dwellTimer)
+    this.dwellTimer = null
     clearTimeout(this.leaveTimer)
     this.hideTip()
     if (this.hovering && this.wasPlaying) this.video.play().catch(() => {})

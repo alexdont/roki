@@ -198,7 +198,7 @@ export function setupPeek() {
   if (!window.matchMedia("(hover: hover)").matches) return
 
   document.addEventListener("mouseover", (e) => {
-    const el = e.target.closest?.("[data-peek]")
+    const el = e.target.closest?.("[data-peek-title]")
     if (el && el === current) clearTimeout(hideTimer)
     if (!el || el === current || within(el, e.relatedTarget)) return
     hide()
@@ -216,13 +216,31 @@ export function setupPeek() {
   })
 
   document.addEventListener("mouseout", (e) => {
-    const el = e.target.closest?.("[data-peek]")
+    const el = e.target.closest?.("[data-peek-title]")
     if (el && el === current && !within(el, e.relatedTarget) && !within(card, e.relatedTarget)) hideSoon()
   })
 
   // The card itself: stays while the pointer is on it, goes shortly after it leaves, and its
   // buttons act on the title it describes.
   ensureCard()
+
+  // A right click or a context menu can swallow the "mouseout", leaving the card up for good: so
+  // the pointer is watched too, and a card it is not on (poster or card) goes after a moment.
+  let pointerOn = false
+  let awaySince = 0
+  document.addEventListener("mousemove", (e) => {
+    pointerOn = !!(e.target.closest && e.target.closest("[data-peek-title], .peek-card"))
+  }, {passive: true})
+  const away = () => { pointerOn = false }
+  document.addEventListener("contextmenu", away)
+  document.documentElement.addEventListener("mouseleave", away)
+  window.addEventListener("blur", away)
+  setInterval(() => {
+    if (!current || pointerOn) { awaySince = 0; return }
+    awaySince = awaySince || Date.now()
+    if (Date.now() - awaySince >= 1500) { awaySince = 0; hide() }
+  }, 300)
+
   card.addEventListener("mouseenter", () => clearTimeout(hideTimer))
   card.addEventListener("mouseleave", (e) => {
     if (!current || !within(current, e.relatedTarget)) hideSoon()
