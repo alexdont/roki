@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
+    <%!-- Installed to the home screen or as a desktop app it opens as its own window, without the
+          browser's back and reload buttons (manifest.webmanifest: display "standalone"). --%>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#ff6a13" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="roki" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href={~p"/images/apple-touch-icon.png"} />
     <meta
       name="roki-player-default"
       content={RokiWeb.PlayerMode.default_for(assigns[:phoenix_kit_current_user])}
