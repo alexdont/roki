@@ -638,8 +638,10 @@ defmodule RokiWeb.UserHomeLive do
         <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
       </button>
       <ul :if={@shown} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- @items} class="relative space-y-1">
+        <li :for={i <- @items} class="group/tile relative space-y-1">
           <.poster item={i} cached_titles={@cached_titles} compact />
+          <%!-- Everything here is saved, so no badge saying so: the button to take it off shows
+                only while the pointer is on the poster (always on a touch screen). --%>
           <button
             :if={@unsave}
             type="button"
@@ -648,7 +650,7 @@ defmodule RokiWeb.UserHomeLive do
             phx-value-id={i.id}
             title="Remove from saved"
             aria-label={"Remove #{i.title} from saved"}
-            class="btn btn-primary btn-xs btn-square absolute right-1.5 top-1.5 h-6 min-h-0 w-6 shadow"
+            class="btn btn-primary btn-xs btn-square absolute right-1.5 top-1.5 h-6 min-h-0 w-6 opacity-0 shadow transition group-hover/tile:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <.icon name="hero-bookmark-solid" class="h-3.5 w-3.5" />
           </button>

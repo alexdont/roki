@@ -125,6 +125,15 @@ async function act(el, what, button) {
   } catch (_e) {
     // leave the state as it was
   }
+  // On a list that is only saved titles, taking one off the card takes its tile off the page too.
+  if (what === "saved" && currentState && !currentState.saved) {
+    const unsave = el.closest("li")?.querySelector('button[phx-click="unsave"]')
+    if (unsave) {
+      hide()
+      unsave.click()
+      return
+    }
+  }
   if (currentState) {
     // The poster greys out like any watched title, without waiting for the page to refresh.
     el.closest("a")?.classList.toggle("opacity-50", currentState.watched)
