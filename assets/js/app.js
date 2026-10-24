@@ -83,6 +83,9 @@ window.addEventListener("phx:roki:scrollto", e => {
   if (el && box) box.scrollTop = el.offsetTop - box.offsetTop - 8
 })
 
+// Back and forward: grids restore the page count and scroll position they were left at.
+window.addEventListener("popstate", () => { window.__rokiPopAt = Date.now() })
+
 setupPeek()
 
 // Show progress bar on live navigation and form submits

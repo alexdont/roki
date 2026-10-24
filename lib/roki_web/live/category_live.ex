@@ -317,6 +317,7 @@ defmodule RokiWeb.CategoryLive do
         id="grid"
         phx-hook="FillGrid"
         data-more={to_string(@more?)}
+        data-page={@page}
         class={["grid gap-4", @grid]}
       >
         <li :for={i <- @items} class="space-y-1">

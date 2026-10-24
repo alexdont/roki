@@ -185,6 +185,7 @@ defmodule RokiWeb.SearchLive do
           id="grid"
           phx-hook="FillGrid"
           data-more={to_string(@shelf.more?)}
+          data-page={@shelf.page}
           class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
         >
           <li :for={i <- @shelf.items} class="space-y-1">
