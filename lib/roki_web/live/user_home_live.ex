@@ -571,6 +571,8 @@ defmodule RokiWeb.UserHomeLive do
         <p :if={@error} class="alert alert-error mt-2 text-sm">{@error}</p>
       </div>
 
+      <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
+
       <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
       <section :if={!@data} class="space-y-3" aria-busy="true">
         <div class="skeleton h-7 w-40 rounded"></div>
@@ -588,6 +590,7 @@ defmodule RokiWeb.UserHomeLive do
         title="Watchlist"
         count={length(@data.watchlist.behind)}
         items={@data.watchlist.behind}
+        empty="Nothing in progress. Start something and it waits here for you to pick it up."
         cached_titles={@cached_titles}
       />
       <.fold
@@ -595,6 +598,7 @@ defmodule RokiWeb.UserHomeLive do
         id="saved"
         title="Saved"
         items={@data.saved}
+        empty="Nothing saved yet. Hover a poster and press the bookmark to keep it for later."
         unsave
         open={@open}
         cached_titles={@cached_titles}
@@ -604,6 +608,7 @@ defmodule RokiWeb.UserHomeLive do
         id="caught_up"
         title="Caught up"
         items={@data.watchlist.caught_up}
+        empty="Shows where you have seen every episode so far wait here for the next one."
         open={@open}
         cached_titles={@cached_titles}
       />
@@ -612,6 +617,7 @@ defmodule RokiWeb.UserHomeLive do
         id="on_hold"
         title="On hold"
         items={@data.watchlist.on_hold}
+        empty="Put a show on hold from its page and it rests here, out of your way."
         open={@open}
         cached_titles={@cached_titles}
       />
@@ -620,17 +626,42 @@ defmodule RokiWeb.UserHomeLive do
         id="history"
         title="History"
         items={@data.continue}
+        empty="What you start watching shows up here."
         open={@open}
         cached_titles={@cached_titles}
       />
       <.completed
-        :if={@data && @completed not in [nil, []]}
+        :if={@data && @completed != nil}
         items={@completed}
         shown={@completed_shown}
         open={MapSet.member?(@open, "completed")}
         cached_titles={@cached_titles}
       />
     </div>
+    """
+  end
+
+  defp empty_shelf?(data) do
+    data.watchlist.behind == [] and data.watchlist.caught_up == [] and
+      data.watchlist.on_hold == [] and data.saved == [] and data.continue == []
+  end
+
+  # An account with nothing yet: say so, and point at where things come from.
+  defp no_data_yet(assigns) do
+    ~H"""
+    <section class="rounded-box border border-dashed border-base-300 px-5 py-6 text-center">
+      <h2 class="text-lg font-semibold">No data yet</h2>
+      <p class="mx-auto mt-1 max-w-md text-sm text-base-content/60">
+        Watch something and this page fills in — what you are in the middle of, what you saved, what you
+        finished. Pick a place to start:
+      </p>
+      <div class="mt-4 flex flex-wrap justify-center gap-2">
+        <.link navigate={~p"/home"} class="btn btn-primary btn-sm">Featured</.link>
+        <.link navigate={~p"/movies"} class="btn btn-sm">Movies</.link>
+        <.link navigate={~p"/shows"} class="btn btn-sm">Shows</.link>
+        <.link navigate={~p"/anime"} class="btn btn-sm">Anime</.link>
+      </div>
+    </section>
     """
   end
 
@@ -646,16 +677,23 @@ defmodule RokiWeb.UserHomeLive do
     default: false,
     doc: "a button on each poster that takes it off the list"
 
+  attr :empty, :string,
+    default: nil,
+    doc: "what to say, once opened, while there is nothing in it"
+
   defp fold(assigns) do
     assigns = assign(assigns, :shown, MapSet.member?(assigns.open, assigns.id))
 
     ~H"""
-    <section :if={@items != []} class="space-y-3">
+    <section class="space-y-3">
       <button
         phx-click="toggle_section"
         phx-value-id={@id}
         aria-expanded={to_string(@shown)}
-        class="flex cursor-pointer items-center gap-2 text-xl font-semibold"
+        class={[
+          "flex cursor-pointer items-center gap-2 text-xl font-semibold",
+          @items == [] && "text-base-content/60"
+        ]}
       >
         <.icon
           name="hero-chevron-right"
@@ -664,7 +702,11 @@ defmodule RokiWeb.UserHomeLive do
         {@title}
         <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
       </button>
-      <ul :if={@shown} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+      <p :if={@shown and @items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
+      <ul
+        :if={@shown and @items != []}
+        class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+      >
         <li :for={i <- @items} class="space-y-1">
           <.poster item={i} cached_titles={@cached_titles} compact />
           <%!-- No badge: everything here is saved. Taking a title off in its hover card clicks this
@@ -708,12 +750,18 @@ defmodule RokiWeb.UserHomeLive do
         phx-click="toggle_section"
         phx-value-id="completed"
         aria-expanded={to_string(@open)}
-        class="flex cursor-pointer items-center gap-2 text-xl font-semibold"
+        class={[
+          "flex cursor-pointer items-center gap-2 text-xl font-semibold",
+          @items == [] && "text-base-content/60"
+        ]}
       >
         <.icon name="hero-chevron-right" class={["h-4 w-4 transition", @open && "rotate-90"]} />
         Completed <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
       </button>
-      <div :if={@open} class="space-y-6">
+      <p :if={@open and @items == []} class="text-sm text-base-content/50">
+        Everything you finish watching is kept here, newest first.
+      </p>
+      <div :if={@open and @items != []} class="space-y-6">
         <div :for={group <- @groups} class="space-y-2">
           <h3 class="text-sm font-medium text-base-content/60">{month_label(hd(group))}</h3>
           <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
@@ -756,15 +804,20 @@ defmodule RokiWeb.UserHomeLive do
   attr :count, :integer, default: nil
   attr :cached_titles, :any, default: nil
   attr :items, :list, required: true
+  attr :empty, :string, default: nil, doc: "what to say while there is nothing in it"
 
   defp poster_row(assigns) do
     ~H"""
-    <section :if={@items != []} class="space-y-3">
-      <h2 class="text-xl font-semibold">
+    <section class="space-y-3">
+      <h2 class={["text-xl font-semibold", @items == [] && "text-base-content/60"]}>
         {@title}
-        <span :if={@count} class="text-sm font-normal text-base-content/60">{@count}</span>
+        <span class="text-sm font-normal text-base-content/60">{@count}</span>
       </h2>
-      <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+      <p :if={@items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
+      <ul
+        :if={@items != []}
+        class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+      >
         <li :for={i <- @items} class="space-y-1">
           <.poster item={i} cached_titles={@cached_titles} compact />
         </li>
