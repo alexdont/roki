@@ -531,8 +531,22 @@ defmodule Roki.Watch do
     if fresh?, do: TTLCache.delete({:sources, title.type, title.id, season, episode})
 
     TTLCache.fetch({:sources, title.type, title.id, season, episode}, @sources_ttl, fn ->
-      Roki.Laev.public(uuid, fn -> search_sources(title, season, episode) end)
+      isolated(fn -> Roki.Laev.public(uuid, fn -> search_sources(title, season, episode) end) end)
     end)
+  end
+
+  # The search asks several sites at once, and one of them being slow or dropping the connection
+  # kills the request it was made in — which, run in the page's own process, took the page's
+  # search down with it ("no sources") for what is only a flaky upstream. So it runs on its own,
+  # may be asked again once, and a failure is an answer (`:search_failed`), never remembered.
+  defp isolated(fun, attempts \\ 2) do
+    task = Task.Supervisor.async_nolink(Roki.TaskSupervisor, fun)
+
+    case Task.yield(task, 45_000) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      _ when attempts > 1 -> isolated(fun, attempts - 1)
+      _ -> {:error, :search_failed}
+    end
   end
 
   defp search_sources(%{type: "movie"} = t, _season, _episode) do

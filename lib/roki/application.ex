@@ -17,6 +17,8 @@ defmodule Roki.Application do
       # request budgets, and a short cache in front of them (see Roki.Search).
       {Roki.RateLimit, clean_period: :timer.minutes(10)},
       Roki.TTLCache,
+      # Where work that can crash (searching other sites) runs, apart from whoever asked for it.
+      {Task.Supervisor, name: Roki.TaskSupervisor},
       # Stops video conversions nobody is watching any more.
       {Phoenix.PubSub, name: Roki.PubSub},
       {Oban, Application.get_env(:roki, Oban)},

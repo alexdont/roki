@@ -310,6 +310,9 @@ defmodule Roki.Watch.Resolver do
     do:
       "The server is re-encoding other videos right now. Try again in a minute, or pick an h264 release."
 
+  def failure(:search_failed),
+    do: "The sites that list releases did not answer in time. Try again in a moment."
+
   def failure(:over_limit),
     do: "You have used today's plays. Try again tomorrow."
 
