@@ -942,7 +942,7 @@ defmodule RokiWeb.SettingsLive do
 
       <div :if={is_map(@mal.status) and not @mal.status.connected?} class="space-y-3">
         <p :if={not @mal.status.configured?} class="text-sm text-base-content/70">
-          Add your MyAnimeList client ID under Connections first.
+          MyAnimeList is not set up on this site yet. Add your MyAnimeList client ID under Connections first.
         </p>
 
         <div :if={@mal.status.configured?} class="space-y-3">

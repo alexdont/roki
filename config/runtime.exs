@@ -206,6 +206,13 @@ if (tmdb = System.get_env("TMDB_API_KEY")) not in [nil, ""] do
   config :laev, tmdb_key: tmdb
 end
 
+# MyAnimeList: the site's own app, shared by every account so nobody has to register one. Only
+# the app's identity is shared — each user still logs in to their own MyAnimeList and keeps their
+# own token. Optional: without it each user sets their own client id under Connections.
+config :roki,
+  mal_client_id: System.get_env("MAL_CLIENT_ID"),
+  mal_client_secret: System.get_env("MAL_CLIENT_SECRET")
+
 # ============================================
 # Test
 # ============================================

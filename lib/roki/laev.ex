@@ -28,11 +28,30 @@ defmodule Roki.Laev do
     Path.join(base_dir(), uuid)
   end
 
-  def run(uuid, fun), do: uuid |> dir() |> Laev.Scope.load() |> Laev.Scope.run(fun)
+  def run(uuid, fun), do: uuid |> dir() |> Laev.Scope.load(app_keys()) |> Laev.Scope.run(fun)
 
   @doc "Run inside the site's own scope — no user, only the server-wide TMDB key."
   def shared(fun),
-    do: Path.join(base_dir(), "_featured") |> Laev.Scope.load() |> Laev.Scope.run(fun)
+    do: Path.join(base_dir(), "_featured") |> Laev.Scope.load(app_keys()) |> Laev.Scope.run(fun)
+
+  @doc """
+  The keys the site itself provides to every account: its MyAnimeList app (`MAL_CLIENT_ID`, and
+  `MAL_CLIENT_SECRET` if the app has one). They win over anything in an account's own config, so
+  a stale or empty copy synced from a terminal can never shadow them. Empty when not configured.
+  """
+  def app_keys do
+    for {config_key, laev_key} <- [
+          mal_client_id: :mal_client_id,
+          mal_client_secret: :mal_client_secret
+        ],
+        value = Application.get_env(:roki, config_key),
+        value not in [nil, ""],
+        into: %{},
+        do: {laev_key, value}
+  end
+
+  @doc "Does the site provide the MyAnimeList app, so accounts need no client id of their own?"
+  def site_mal?, do: Map.has_key?(app_keys(), :mal_client_id)
 
   @doc "Has this account chosen to connect laev? (Nothing is created on disk to find out.)"
   def connected?(uuid), do: File.exists?(Path.join(dir(uuid), "config"))
@@ -334,7 +353,14 @@ defmodule Roki.Laev do
   defp web_path(uuid), do: Path.join(dir(uuid), "roki-web.json")
 
   @doc "Every laev setting with this user's value; secrets come back masked, never in full."
-  def settings(uuid), do: run(uuid, fn -> Settings.all(:browser) end)
+  def settings(uuid) do
+    all = run(uuid, fn -> Settings.all(:browser) end)
+
+    # The site's MyAnimeList app is not the user's to set.
+    if site_mal?(),
+      do: Enum.reject(all, &(&1.key in ["MAL_CLIENT_ID", "MAL_CLIENT_SECRET"])),
+      else: all
+  end
 
   @doc "Change one setting (`:ok` | `{:error, reason}`). Laev checks the key and the value."
   def put_setting(uuid, key, value), do: run(uuid, fn -> Settings.put(key, value) end)
