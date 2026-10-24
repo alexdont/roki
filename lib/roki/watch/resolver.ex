@@ -131,8 +131,6 @@ defmodule Roki.Watch.Resolver do
     send(parent, {:candidates, token, Enum.map(page, &Roki.Watch.Checks.summary/1)})
 
     notify = fn {:result, idx, source, result} ->
-      result = confirm_episode(result, source, ctx)
-
       {done, ok} =
         Agent.get_and_update(agent, fn st ->
           ok =
@@ -155,22 +153,16 @@ defmodule Roki.Watch.Resolver do
 
     # Four at a time (laev's default is two): the releases are checked in half the waves.
     opts =
-      [notify: notify, episode: ctx.episode, concurrency: 4] ++
+      [notify: notify, ctx: ctx, concurrency: 4] ++
         if(ctx.anime, do: [], else: [season: ctx.season])
 
-    # Releases are not all numbered alike: most name the episode of the season asked for, a season
-    # pack of an anime cour that TMDB merged names them 13…25. Each release is asked for the
-    # number it uses, so the right file is picked inside a pack.
-    groups =
-      page |> Enum.with_index() |> Enum.group_by(fn {source, _i} -> numbered_as(source, ctx) end)
+    # Releases are not all numbered alike, and what plays is not always what was asked for: laev
+    # asks each release for the episode number it uses and checks the file that comes back.
+    indexed = Enum.with_index(page)
 
     task =
       Task.async(fn ->
-        Roki.Laev.run(uuid, fn ->
-          for {episode, items} <- groups do
-            Laev.Providers.probe_sources(items, Keyword.put(opts, :episode, episode))
-          end
-        end)
+        Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(indexed, opts) end)
       end)
 
     late = await_probes(task, agent, page, parent, token, nil)
@@ -213,85 +205,6 @@ defmodule Roki.Watch.Resolver do
           await_probes(task, agent, page, parent, token, first)
         end
     end
-  end
-
-  # The episode number a release is numbered with. A pack named with a range that does not start at
-  # 1 — "(13-25)" — numbers its files across the whole TMDB season, so it is asked for the TMDB
-  # number (15), not the number inside its own cour (3). Everything else: the episode as
-  # `Watch.ctx` set it.
-  defp numbered_as(source, ctx) do
-    tmdb = ctx[:tmdb_episode]
-
-    with true <- is_integer(tmdb),
-         [_, a, b] <- Regex.run(~r/(\d{1,4})\s*[-~–]\s*(\d{1,4})/, source.name),
-         {a, b} = {String.to_integer(a), String.to_integer(b)},
-         true <- a > 1 and a <= b and tmdb in a..b do
-      tmdb
-    else
-      _ -> ctx.episode
-    end
-  end
-
-  # laev picks the *largest* file in a pack when none names the episode, and calls the pack
-  # playable: a "(13-25)" pack asked for episode 2 hands over "… - 13v2". A pack only counts if the
-  # file it picked says it is this episode.
-  defp confirm_episode({:ok, stream} = ok, source, ctx) do
-    name = stream[:filename]
-
-    cond do
-      not is_binary(name) ->
-        ok
-
-      wrong_numbering?(name, ctx) ->
-        {:error, "that release is another episode"}
-
-      pack?(source.name) and not names_episode?(name, source, ctx) ->
-        {:error, "that pack has no file for this episode"}
-
-      true ->
-        ok
-    end
-  end
-
-  defp confirm_episode(other, _source, _ctx), do: other
-
-  # A file that says "S02E01" is that episode whatever was asked for: a single-file release of
-  # another episode (or another cour — the first one has season 1, the later ones season 2…) plays
-  # fine and is not what was clicked.
-  defp wrong_numbering?(file, ctx) do
-    case Regex.run(~r/S(\d{1,2})\s*E(\d{1,4})/i, Path.basename(file)) do
-      [_, s, e] ->
-        s = String.to_integer(s)
-        e = String.to_integer(e)
-        wanted = [ctx.episode, ctx[:tmdb_episode]]
-
-        season_ok =
-          cond do
-            not ctx.anime -> s == ctx.season
-            ctx[:tmdb_episode] == ctx.episode -> s == 1
-            true -> s != 1
-          end
-
-        e not in wanted or not season_ok
-
-      _ ->
-        # fansub style: "Show - 13v2 (1080p)"
-        case ctx.anime && Regex.run(~r/ - (\d{1,4})(?:v\d)?(?=[\s.\[(]|$)/, Path.basename(file)) do
-          [_, e] -> String.to_integer(e) not in [ctx.episode, ctx[:tmdb_episode]]
-          _ -> false
-        end
-    end
-  end
-
-  defp pack?(name),
-    do: Regex.match?(~r/\bbatch|complete|\d+\s*[-~–]\s*\d+|\bS\d+\b(?!E)/i, name)
-
-  defp names_episode?(file, source, ctx) do
-    episode = numbered_as(source, ctx)
-    season = if ctx.anime, do: nil, else: ctx.season
-    # "- 13v2" is a re-release of episode 13: its "v2" is not an episode number.
-    file = Regex.replace(~r/(\d)v\d/i, file, "\\1")
-    Laev.FilePick.names_episode?(file, season, episode)
   end
 
   @doc "What to choose with nobody asked: the release that started last time, else the best."

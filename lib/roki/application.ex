@@ -18,7 +18,6 @@ defmodule Roki.Application do
       {Roki.RateLimit, clean_period: :timer.minutes(10)},
       Roki.TTLCache,
       # Stops video conversions nobody is watching any more.
-      Roki.Watch.Reaper,
       {Phoenix.PubSub, name: Roki.PubSub},
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)

@@ -197,7 +197,7 @@ defmodule Roki.Watch do
         marks = Laev.Position.anime_marks()
 
         title.seasons
-        |> Enum.map(&Roki.Watch.Anime.watched_in_season(title.id, &1.number, marks, &1.episodes))
+        |> Enum.map(&Laev.Anime.Parts.watched_in_season(title.id, &1.number, marks, &1.episodes))
         |> Enum.sum()
       else
         Laev.Position.episode_marks()
@@ -240,7 +240,7 @@ defmodule Roki.Watch do
             Laev.AnimeMap.mal_id("movie", title.id, nil)
 
           _ ->
-            Roki.Watch.Anime.first_entry(title.id)
+            Laev.Anime.Parts.first_entry(title.id)
         end
       end
 
@@ -451,7 +451,7 @@ defmodule Roki.Watch do
     # `mal-<id>-e<n>`); `tmdb_episode` keeps TMDB's own number for the page.
     {mal, local} =
       case (title.anime? and title.type == "tv") &&
-             Roki.Watch.Anime.locate(title.id, season, episode) do
+             Laev.Anime.Parts.locate(title.id, season, episode) do
         {mal, local} -> {mal, local}
         _ -> {nil, episode}
       end
@@ -500,7 +500,7 @@ defmodule Roki.Watch do
   # An anime season: its releases are fansub groups numbering by the anime's own episode
   # count, found by title and by Kitsu / AniDB id, never by "S02E05".
   defp search_sources(%{type: "tv", anime?: true} = t, season, episode) do
-    located = season && Roki.Watch.Anime.locate(t.id, season, episode)
+    located = season && Laev.Anime.Parts.locate(t.id, season, episode)
 
     if located do
       {mal, local} = located
@@ -711,18 +711,7 @@ defmodule Roki.Watch do
   end
 
   @doc "Whether playing this release means re-encoding it here (its video is not h264)."
-  def heavy?({source, _stream}), do: heavy?(source)
-  def heavy?(%{codec: codec}) when codec in ["h265", "av1"], do: true
-  def heavy?(_), do: false
-
-  # ffmpeg processes alive right now (a copy is light; a re-encode is not).
-  defp encoders_running do
-    case System.cmd("pgrep", ["-c", "-x", "ffmpeg"], stderr_to_stdout: true) do
-      {n, _} -> n |> String.trim() |> String.to_integer()
-    end
-  rescue
-    _ -> 0
-  end
+  defdelegate heavy?(source), to: Laev.Playback
 
   @doc """
   What plays when the release goes to the user's own player (VLC, mpv): nothing is decoded
@@ -798,16 +787,9 @@ defmodule Roki.Watch do
   so the title shows up in the user's History and as the thing to continue.
   """
   def start(uuid, ctx, source, stream) do
-    cond do
-      # A 4K re-encode on software never keeps up with playing, and takes every core trying.
-      heavy?(source) and not Sources.resolution_at_most?(source.resolution, @transcode_cap) ->
-        {:error, :too_heavy}
-
-      heavy?(source) and encoders_running() >= @max_encoders ->
-        {:error, :busy}
-
-      true ->
-        do_start(uuid, ctx, source, stream)
+    # A 4K re-encode on software never keeps up with playing, and takes every core trying.
+    with :ok <- Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
+      do_start(uuid, ctx, source, stream)
     end
   end
 
@@ -815,7 +797,7 @@ defmodule Roki.Watch do
     Roki.Laev.run(uuid, fn ->
       with {:ok, src} <- Laev.Playback.browser_source(ctx, stream, title: ctx.title),
            true <- src.playable || {:error, src[:reason] || :not_playable},
-           :ok <- ready_or_stop(src) do
+           :ok <- ready(src) do
         save_resume(ctx, source)
 
         {:ok,
@@ -880,7 +862,7 @@ defmodule Roki.Watch do
         {:ok,
          %{
            label: "#{language(lang)} · #{source}",
-           vtt: Roki.Subtitles.to_vtt(Path.basename(path), body)
+           vtt: Laev.Subtitles.to_vtt(Path.basename(path), body)
          }}
       else
         _ -> :none
@@ -901,13 +883,7 @@ defmodule Roki.Watch do
   (a key, so the choices can be listed, but downloading needs the account login too) or `:full`.
   """
   def os_state(uuid) do
-    Roki.Laev.run(uuid, fn ->
-      cond do
-        Laev.OpenSubtitles.can_download?() -> :full
-        Laev.OpenSubtitles.configured?() -> :search
-        true -> :off
-      end
-    end)
+    Roki.Laev.run(uuid, &Laev.OpenSubtitles.state/0)
   end
 
   @doc "The OpenSubtitles files for what is playing, in one language: `{:ok, [%{id, release, downloads}]}`."
@@ -922,29 +898,14 @@ defmodule Roki.Watch do
 
   defp os_search_live(uuid, ctx, lang) do
     Roki.Laev.run(uuid, fn ->
-      query = ctx[:search_title] || ctx.title
-
-      opts =
-        case ctx[:type] do
-          "tv" ->
-            [
-              languages: lang,
-              query: query,
-              season_number: ctx[:season],
-              episode_number: ctx[:episode]
-            ]
-
-          _ ->
-            [languages: lang, query: query, tmdb_id: ctx[:tmdb_id]]
-        end
-
-      case Laev.OpenSubtitles.search(opts) do
-        {:ok, subs} ->
+      case Laev.SubtitleFetch.candidates(ctx, lang, 25) do
+        {:ok, found} ->
           {:ok,
-           subs
-           |> Enum.uniq_by(& &1.file_id)
-           |> Enum.take(25)
-           |> Enum.map(&%{id: &1.file_id, release: &1.release, downloads: &1.downloads})}
+           for(
+             c <- found,
+             c.provider == :opensubtitles,
+             do: Map.take(c, [:id, :release, :downloads])
+           )}
 
         {:error, _} ->
           {:error, "OpenSubtitles did not answer. Try again in a moment."}
@@ -984,7 +945,7 @@ defmodule Roki.Watch do
              Laev.OpenSubtitles.can_download?() ||
                {:error, "Add your OpenSubtitles username and password in Settings to download."},
            {:ok, srt} <- Laev.OpenSubtitles.download_srt(id) do
-        vtt = Roki.Subtitles.to_vtt("#{id}.srt", srt)
+        vtt = Laev.Subtitles.to_vtt("#{id}.srt", srt)
         Roki.SubCache.put_file(id, vtt)
         {:ok, vtt}
       else
@@ -1058,15 +1019,9 @@ defmodule Roki.Watch do
       query = ctx[:search_title] || ctx.title
 
       with true <- Laev.Jimaku.configured?(),
-           {:ok, [_ | _] = entries} <- Laev.Jimaku.search(query),
-           entry = jimaku_entry(entries, query),
-           {:ok, files} <- Laev.Jimaku.files(entry["id"], ctx[:episode]) do
+           {:ok, [_ | _] = files} <- Laev.Jimaku.candidates(query, ctx[:episode], source_name, 5) do
         tracks =
           files
-          |> Enum.filter(&jimaku_japanese?/1)
-          |> Enum.sort_by(&{jimaku_rank(&1["name"], source_name), &1["name"]})
-          |> Enum.uniq_by(&jimaku_base/1)
-          |> Enum.take(5)
           |> Enum.with_index()
           |> Enum.flat_map(fn {file, i} -> jimaku_track(file, i, play_id) end)
 
@@ -1077,47 +1032,6 @@ defmodule Roki.Watch do
     end)
   rescue
     _ -> :none
-  end
-
-  # The entry named exactly what was asked (Jimaku lists a show's seasons as separate entries and
-  # puts the first season first, whichever was searched for).
-  defp jimaku_entry(entries, query) do
-    q = String.downcase(query)
-    Enum.find(entries, &(String.downcase(&1["name"] || "") == q)) || hd(entries)
-  end
-
-  defp jimaku_japanese?(%{"name" => name}) do
-    subtitle_file?(name) and not String.contains?(name, ["CHS", "CHT", ".zh", ".en", ".eng"]) and
-      (String.contains?(name, [".ja", "JPN", "jpn"]) or
-         String.match?(name, ~r/[\x{3040}-\x{30ff}\x{4e00}-\x{9fff}]/u) or
-         not String.match?(name, ~r/\.(en|eng|fr|es|pt|de|it|ru|ar|id|vi|th)[\].]/i))
-  end
-
-  defp jimaku_japanese?(_), do: false
-
-  defp subtitle_file?(name),
-    do: String.downcase(Path.extname(name)) in [".srt", ".ass", ".ssa", ".vtt"]
-
-  defp jimaku_base(%{"name" => name}),
-    do: name |> Path.rootname() |> String.replace(~r/\.(jpn|ja)$/i, "")
-
-  # Same group as the release first; then the broadcast and the big fansub groups, whose timing
-  # follows the rips; streaming cuts (Netflix, Amazon, [cc]/[sdh] captions) last; srt before ass.
-  defp jimaku_rank(name, source_name) do
-    n = String.downcase(name)
-
-    group =
-      with [_, g] <- Regex.run(~r/^\[([^\]]+)\]/, to_string(source_name)), do: String.downcase(g)
-
-    base =
-      cond do
-        is_binary(group) and String.contains?(n, group) -> 0
-        String.contains?(n, ["nanako", "tbs", "subsplease", "erai", "judas"]) -> 1
-        String.contains?(n, ["netflix", "amazon", "[cc]", "[sdh]", "crunchyroll"]) -> 3
-        true -> 2
-      end
-
-    base * 2 + if(String.ends_with?(n, ".srt"), do: 0, else: 1)
   end
 
   defp jimaku_label(name) do
@@ -1139,10 +1053,10 @@ defmodule Roki.Watch do
     end
   end
 
-  defp jimaku_track(%{"name" => name, "url" => url}, i, play_id) do
+  defp jimaku_track(%{name: name, url: url}, i, play_id) do
     with {:ok, %{status: 200, body: body}} when is_binary(body) <-
            Req.get(url, receive_timeout: 15_000, retry: :transient, max_retries: 1),
-         vtt when is_binary(vtt) <- Roki.Subtitles.to_vtt(name, body) do
+         vtt when is_binary(vtt) <- Laev.Subtitles.to_vtt(name, body) do
       dir = Laev.Remux.dir(play_id)
       File.mkdir_p!(dir)
       file = if i == 0, do: "ext-ja.vtt", else: "ext-ja-#{i + 1}.vtt"
@@ -1167,17 +1081,6 @@ defmodule Roki.Watch do
   def autoplay?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.autoplay?/0)
 
   # A conversion that did not get going is stopped, not left to run its two hours.
-  defp ready_or_stop(src) do
-    case ready(src) do
-      :ok ->
-        :ok
-
-      other ->
-        if src.kind == :remux, do: Laev.Remux.stop(src.remux_id)
-        other
-    end
-  end
-
   defp ready(%{kind: :remux, remux_id: id}), do: Laev.Playback.ready(id, :fast, 180_000)
   defp ready(_), do: :ok
 
@@ -1268,7 +1171,7 @@ defmodule Roki.Watch do
 
       parts =
         if title.anime? and s.number > 0,
-          do: Roki.Watch.Anime.parts(title.id, s.number, s.episodes),
+          do: Laev.Anime.Parts.parts(title.id, s.number, s.episodes),
           else: []
 
       case parts do
@@ -1623,6 +1526,8 @@ defmodule Roki.Watch do
   def why(:no_provider), do: "no debrid account connected"
   def why(:no_sources), do: "no releases found"
   def why(:timeout), do: "timed out"
+  def why(:another_episode), do: "that release is another episode"
+  def why(:no_file_for_episode), do: "that pack has no file for this episode"
   def why({:expired, detail}), do: "your debrid subscription isn't active (#{detail})"
   def why(other) when is_binary(other), do: other
   def why(other), do: "unavailable (#{inspect(other, limit: 3, printable_limit: 60)})"

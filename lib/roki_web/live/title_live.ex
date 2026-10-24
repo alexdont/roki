@@ -1188,18 +1188,11 @@ defmodule RokiWeb.TitleLive do
         ids = Laev.AnimeMap.mal_ids(kind, t.id)
 
         first =
-          if is_integer(entry),
-            do: entry,
-            else:
-              if(kind == "movie",
-                do: List.first(ids),
-                else:
-                  Enum.find(
-                    ids,
-                    List.first(ids),
-                    &match?({"tv", _, s} when s in [nil, 1], Laev.AnimeMap.tmdb(&1))
-                  )
-              )
+          cond do
+            is_integer(entry) -> entry
+            kind == "movie" -> List.first(ids)
+            true -> Laev.Anime.Parts.first_entry(t.id)
+          end
 
         if is_integer(first),
           do: [{"Open on MyAnimeList", "https://myanimelist.net/anime/#{first}"}],

@@ -113,14 +113,8 @@ defmodule RokiWeb.SyncApiController do
 
   defp if_match(conn) do
     case get_req_header(conn, "if-match") do
-      [value | _] ->
-        value
-        |> String.trim()
-        |> String.replace_prefix("W/", "")
-        |> String.trim("\"")
-
-      [] ->
-        nil
+      [] -> nil
+      values -> Laev.SyncServer.parse_if_match(values)
     end
   end
 

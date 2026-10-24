@@ -185,67 +185,30 @@ defmodule Roki.Laev do
   Nothing is left behind on failure.
   """
   def setup(uuid, keys) do
-    keys = for {k, v} <- keys, (v = String.trim(v || "")) != "", into: %{}, do: {k, v}
+    Roki.Stats.forget(uuid)
 
-    cond do
-      not Map.has_key?(keys, "TMDB_API_KEY") ->
+    case run(uuid, fn -> Laev.Setup.first_run(keys) end) do
+      {:ok, _} ->
+        :ok
+
+      {:error, :tmdb_key_required} ->
         {:error, "A TMDB key is needed to find titles."}
 
-      not (Map.has_key?(keys, "RD_TOKEN") or Map.has_key?(keys, "TORBOX_API_KEY")) ->
+      {:error, :debrid_key_required} ->
         {:error, "Add a Real-Debrid or TorBox key — one of them is needed to play anything."}
 
-      true ->
-        case check_all(uuid, keys) do
-          :ok -> create_account(uuid, keys)
-          error -> error
-        end
-    end
-  end
+      {:error, {key, why}} when is_binary(key) ->
+        {:error, "#{key_name(key)}: #{explain(why)}"}
 
-  defp check_all(uuid, keys) do
-    run(uuid, fn ->
-      Enum.find_value(keys, :ok, fn {key, value} ->
-        case Settings.validate(key, value) do
-          {:ok, _} -> nil
-          {:error, why} -> {:error, "#{key_name(key)}: #{explain(why)}"}
-        end
-      end)
-    end)
+      {:error, reason} ->
+        {:error, "Could not set up: " <> explain(reason)}
+    end
   end
 
   defp key_name("RD_TOKEN"), do: "Real-Debrid"
   defp key_name("TORBOX_API_KEY"), do: "TorBox"
   defp key_name("TMDB_API_KEY"), do: "TMDB"
-
-  defp create_account(uuid, keys) do
-    token = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
-    secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
-
-    result =
-      with {:ok, _} <- connect(uuid, "laev_#{token}.#{secret}", carry_keys?: true),
-           :ok <- run(uuid, fn -> put_all(keys) end) do
-        sync(uuid)
-        :ok
-      end
-
-    case result do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        disconnect(uuid)
-        {:error, "Could not set up: " <> explain(reason)}
-    end
-  end
-
-  defp put_all(keys) do
-    Enum.reduce_while(keys, :ok, fn {k, v}, :ok ->
-      case Settings.put(k, v) do
-        :ok -> {:cont, :ok}
-        error -> {:halt, error}
-      end
-    end)
-  end
+  defp key_name(other), do: other
 
   @doc "The laev key to paste into the terminal app, for a connected account."
   def sync_key(uuid), do: run(uuid, fn -> Laev.Scope.get(:sync_token) end)
@@ -476,19 +439,17 @@ defmodule Roki.Laev do
   said about the account (plan, days left), or `{:error, why}` with nothing saved.
   """
   def replace_key(uuid, key, value) do
-    value = String.trim(value)
-
-    run(uuid, fn ->
-      with true <- value != "" or {:error, "paste the key first"},
-           {:ok, detail} <- Settings.validate(key, value),
-           :ok <- Settings.put(key, value) do
+    case run(uuid, fn -> Laev.Setup.replace_key(key, value) end) do
+      {:ok, detail} ->
         Roki.Stats.forget(uuid)
         {:ok, detail}
-      else
-        {:error, reason} -> {:error, reason}
-        other -> other
-      end
-    end)
+
+      {:error, :empty} ->
+        {:error, "paste the key first"}
+
+      other ->
+        other
+    end
   end
 
   @doc """
@@ -513,56 +474,13 @@ defmodule Roki.Laev do
     pass = String.trim(pass || "")
 
     run(uuid, fn ->
-      with true <-
-             (user != "" and pass != "") || {:error, "enter both the username and the password"},
-           true <-
-             Laev.OpenSubtitles.configured?() || {:error, "add the OpenSubtitles API key first"},
-           true <-
-             not String.contains?(user, "@") or
-               {:error, "OpenSubtitles wants your username, not your email address"},
-           :ok <- check_os_login(user, pass) do
-        Laev.Config.write([{"OPENSUBTITLES_USERNAME", user}, {"OPENSUBTITLES_PASSWORD", pass}])
-        Laev.Scope.set(:opensubtitles_username, user)
-        Laev.Scope.set(:opensubtitles_password, pass)
+      with :ok <- Laev.OpenSubtitles.verify_login(user, pass),
+           :ok <- Settings.put("OPENSUBTITLES_USERNAME", user),
+           :ok <- Settings.put("OPENSUBTITLES_PASSWORD", pass) do
         Roki.Stats.forget(uuid)
         :ok
       end
     end)
-  end
-
-  defp check_os_login(user, pass) do
-    headers = [
-      {"api-key", Laev.Scope.get(:opensubtitles_api_key)},
-      {"user-agent", Laev.Scope.get(:opensubtitles_user_agent) || "laev v1.0"},
-      {"accept", "application/json"}
-    ]
-
-    case Req.post("https://api.opensubtitles.com/api/v1/login",
-           headers: headers,
-           json: %{username: user, password: pass},
-           receive_timeout: 15_000
-         ) do
-      {:ok, %{status: 200}} ->
-        :ok
-
-      {:ok, %{status: 400}} ->
-        {:error, "OpenSubtitles wants your username, not your email address"}
-
-      {:ok, %{status: 429}} ->
-        {:error, "OpenSubtitles says too many login attempts — wait a minute and try again"}
-
-      {:ok, %{status: s}} when s in [401, 403] ->
-        {:error, "OpenSubtitles did not accept that username and password"}
-
-      {:ok, %{status: s, body: %{"message" => m}}} when is_binary(m) ->
-        {:error, "OpenSubtitles answered #{s}: #{String.trim(m)}"}
-
-      {:ok, %{status: s}} ->
-        {:error, "OpenSubtitles answered #{s}"}
-
-      {:error, _} ->
-        {:error, "could not reach OpenSubtitles"}
-    end
   end
 
   @doc "Forget a saved key."

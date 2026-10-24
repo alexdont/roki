@@ -1,7 +1,7 @@
 defmodule Roki.SubtitlesTest do
   use ExUnit.Case, async: true
 
-  alias Roki.Subtitles
+  alias Laev.Subtitles
 
   @srt "1\n00:00:01,000 --> 00:00:03,500\nBonjour\n\n2\n00:00:04,000 --> 00:00:06,000\nÀ bientôt\n"
 
