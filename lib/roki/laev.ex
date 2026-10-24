@@ -58,8 +58,15 @@ defmodule Roki.Laev do
   connected. Call from inside the scope when you already have one.
   """
   def seen_keys(items) do
-    for i <- items, seen?(i), into: MapSet.new(), do: {i.type, i.id}
+    for i <- items, seen?(i), not started_beyond_map?(i), into: MapSet.new(), do: {i.type, i.id}
   end
+
+  # Laev calls an anime seen when every MyAnimeList entry it knows is. A season it does not know
+  # yet, with episodes already marked, means there is more of the show to watch.
+  defp started_beyond_map?(%{type: "tv", id: id}) when is_integer(id),
+    do: Laev.AnimeMap.mal_ids("tv", id) != [] and unmapped_marks(id) > 0
+
+  defp started_beyond_map?(_item), do: false
 
   def seen_keys(uuid, items) do
     if uuid && connected?(uuid), do: run(uuid, fn -> seen_keys(items) end), else: MapSet.new()
@@ -98,18 +105,40 @@ defmodule Roki.Laev do
         shows |> Map.get({"tv", id}, %{}) |> Map.values() |> Enum.sum() |> episodes_text()
 
       mals ->
+        # A season MyAnimeList has no entry for (the cross-id list lags behind new seasons) is
+        # marked per episode on TMDB's side: started there, the title is not finished.
+        extra = unmapped_marks(id)
         done = Enum.count(mals, &(Laev.Position.mark_state(%{mal_id: &1}) == :watched))
         eps = mals |> Enum.map(&Map.get(anime, &1, 0)) |> Enum.sum()
 
         cond do
-          done == length(mals) -> nil
-          done > 0 -> "#{done} season#{if done > 1, do: "s"} watched"
-          true -> episodes_text(eps)
+          done == length(mals) and extra > 0 ->
+            "#{done} season#{if done > 1, do: "s"} + #{episodes_text(extra)}"
+
+          done == length(mals) ->
+            nil
+
+          done > 0 ->
+            "#{done} season#{if done > 1, do: "s"} watched"
+
+          true ->
+            episodes_text(eps)
         end
     end
   end
 
   defp partial_text(_item, _anime, _shows), do: nil
+
+  # Episodes marked in seasons of an anime that the cross-id list has no MyAnimeList entry for.
+  defp unmapped_marks(id) do
+    Laev.Position.episode_marks()
+    |> Map.get({"tv", id}, %{})
+    |> Enum.filter(fn {season, _n} ->
+      is_integer(season) and season > 0 and Laev.Anime.Parts.parts(id, season) == []
+    end)
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.sum()
+  end
 
   defp episodes_text(n) when n > 0, do: "#{n} ep#{if n > 1, do: "s"} watched"
   defp episodes_text(_), do: nil

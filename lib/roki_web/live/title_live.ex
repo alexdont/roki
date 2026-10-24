@@ -137,6 +137,7 @@ defmodule RokiWeb.TitleLive do
        when is_integer(s) and is_integer(e) do
     case Watch.locate_section(sections, s, e) do
       {%{mal: mal}, _} when is_integer(mal) -> mal
+      {_section, _} when length(sections) > 1 -> :none
       _ -> nil
     end
   end
@@ -144,19 +145,26 @@ defmodule RokiWeb.TitleLive do
   defp play_mal(_title, _sections, _play), do: nil
 
   # The season picked on the episodes page is the one the link and the rating are about.
-  defp follow_section(%{assigns: %{title: %{anime?: true}, rate_mal: current}} = socket, %{
-         mal: mal
-       })
-       when is_integer(mal) and mal != current do
-    %{uuid: uuid, title: title, linked?: linked?} = socket.assigns
-    socket = assign(socket, :rate_mal, mal)
+  defp follow_section(
+         %{assigns: %{title: %{anime?: true}, sections: sections}} = socket,
+         %{mal: section_mal}
+       )
+       when length(sections) > 1 do
+    mal = section_mal || :none
 
-    if linked? do
+    if mal == socket.assigns.rate_mal do
       socket
-      |> assign(:rating, %{socket.assigns.rating | state: :loading, value: nil})
-      |> start_async(:rating_load, fn -> Watch.my_rating(uuid, title, mal) end)
     else
-      socket
+      %{uuid: uuid, title: title, linked?: linked?} = socket.assigns
+      socket = assign(socket, :rate_mal, mal)
+
+      if linked? do
+        socket
+        |> assign(:rating, %{socket.assigns.rating | state: :loading, value: nil})
+        |> start_async(:rating_load, fn -> Watch.my_rating(uuid, title, mal) end)
+      else
+        socket
+      end
     end
   end
 
@@ -172,7 +180,8 @@ defmodule RokiWeb.TitleLive do
     %{resume: resume, req_section: req, sections: sections} = socket.assigns
 
     wanted =
-      find_section(sections, req) || resumed_section(sections, resume) || List.first(sections)
+      find_section(sections, req) || resumed_section(sections, resume) ||
+        play_section(sections, socket.assigns[:play]) || List.first(sections)
 
     cond do
       wanted == nil ->
@@ -207,6 +216,14 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp resumed_section(_sections, _resume), do: nil
+
+  # Where Play would go — the newest season with something left to watch — when nothing was left
+  # half-played: opening the episodes list lands there, not on season one.
+  defp play_section(sections, %{season: s, episode: e}) when is_integer(s) and is_integer(e) do
+    with {sec, _local} <- Watch.locate_section(sections, s, e), do: sec
+  end
+
+  defp play_section(_sections, _play), do: nil
 
   defp load_episodes(socket, %{} = sec) do
     %{id: id, uuid: uuid, title: title, linked?: linked?, sections: sections} = socket.assigns
@@ -1190,13 +1207,23 @@ defmodule RokiWeb.TitleLive do
         first =
           cond do
             is_integer(entry) -> entry
+            entry == :none -> nil
             kind == "movie" -> List.first(ids)
             true -> Laev.Anime.Parts.first_entry(t.id)
           end
 
-        if is_integer(first),
-          do: [{"Open on MyAnimeList", "https://myanimelist.net/anime/#{first}"}],
-          else: []
+        cond do
+          is_integer(first) ->
+            [{"Open on MyAnimeList", "https://myanimelist.net/anime/#{first}"}]
+
+          # The season is not in the cross-id list yet: search for it by name.
+          entry == :none ->
+            q = URI.encode_www_form(t.title || "")
+            [{"Search on MyAnimeList", "https://myanimelist.net/anime.php?q=#{q}"}]
+
+          true ->
+            []
+        end
       else
         []
       end

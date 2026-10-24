@@ -236,6 +236,10 @@ defmodule Roki.Watch do
           _ when is_integer(entry) ->
             entry
 
+          # A season with no MyAnimeList entry: rated on TMDB, not under the first season's.
+          _ when entry == :none ->
+            nil
+
           "movie" ->
             Laev.AnimeMap.mal_id("movie", title.id, nil)
 
@@ -1437,7 +1441,13 @@ defmodule Roki.Watch do
     Roki.Laev.run(uuid, fn ->
       if title.anime? do
         marks = Laev.Position.anime_marks()
-        Map.new(sections, &{&1.key, (&1.mal && Map.get(marks, &1.mal, 0)) || 0})
+        by_season = Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{})
+
+        # A season with no MyAnimeList entry is marked per episode on TMDB's side.
+        Map.new(sections, fn sec ->
+          {sec.key,
+           if(sec.mal, do: Map.get(marks, sec.mal, 0), else: Map.get(by_season, sec.season, 0))}
+        end)
       else
         by_season = Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{})
         Map.new(sections, &{&1.key, Map.get(by_season, &1.season, 0)})
