@@ -20,7 +20,7 @@ defmodule Roki.Watch.Resolver do
   :cached_at :good` (`cached_at`/`good` are nil for a fresh search). `force?` (Retry) ignores the
   cached releases and the shared search list.
   """
-  def run(parent, token, uuid, title, season, episode, force?, mode) do
+  def run(parent, token, uuid, title, season, episode, force?, mode, quick? \\ false) do
     key = key(title.type, title.id, season, episode)
     web = Roki.Laev.web_settings(uuid)
     hours = SourceCache.hours(web)
@@ -44,7 +44,7 @@ defmodule Roki.Watch.Resolver do
                key,
                hours,
                force?,
-               mode
+               quick?
              )
            end) do
       {:ok, res}
@@ -84,7 +84,7 @@ defmodule Roki.Watch.Resolver do
   defp fresh_if_none(nil, fun), do: fun.()
   defp fresh_if_none(hit, _fun), do: hit
 
-  defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?, mode) do
+  defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?, quick?) do
     send(parent, {:status, token, "Searching for releases…"})
     Roki.Keys.record(uuid, :search)
 
@@ -93,7 +93,7 @@ defmodule Roki.Watch.Resolver do
          sources = Watch.with_library(uuid, query, found),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, playable, rest} <-
-           probe_until_playable(parent, token, uuid, ctx, sources, [], mode) do
+           probe_until_playable(parent, token, uuid, ctx, sources, [], quick?) do
       if hours > 0, do: SourceCache.put(uuid, key, playable, rest)
 
       {:ok,
@@ -124,26 +124,26 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
-  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _mode),
+  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _quick?),
     do: {:error, :none_playable}
 
-  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, mode) do
+  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?) do
     {page, rest} = Watch.probe_page(sources)
-    {playable, late} = probe_page(parent, token, uuid, ctx, page)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?)
     rest = late ++ rest
     # Starting in the browser is what is waited for: what is known from the names ranks it.
-    ranked = Watch.attach_and_rank(uuid, acc ++ playable, fast: mode == :browser)
+    ranked = Watch.attach_and_rank(uuid, acc ++ playable, fast: quick?)
 
     cond do
       ranked != [] -> {:ok, ranked, rest}
       rest == [] -> {:error, :none_playable}
-      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], mode)
+      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], quick?)
     end
   end
 
   # One round of probing, 8 releases two at a time. Each answer is counted on the page as it
   # arrives; the task keeps the ones that play.
-  defp probe_page(parent, token, uuid, ctx, page) do
+  defp probe_page(parent, token, uuid, ctx, page, quick? \\ false) do
     {:ok, agent} = Agent.start_link(fn -> %{done: 0, ok: [], seen: []} end)
     total = length(page)
     Roki.Keys.record(uuid, :probe, max(total, 1))
@@ -174,7 +174,7 @@ defmodule Roki.Watch.Resolver do
     # A whole page at once (laev's default is two): the first release that plays is what counts,
     # so they all race, and the answer comes with the quickest instead of after the waves.
     opts =
-      [notify: notify, ctx: ctx, concurrency: 8] ++
+      [notify: notify, ctx: ctx, concurrency: if(quick?, do: 8, else: 4)] ++
         if(ctx.anime, do: [], else: [season: ctx.season])
 
     # Releases are not all numbered alike, and what plays is not always what was asked for: laev
@@ -186,7 +186,7 @@ defmodule Roki.Watch.Resolver do
         Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(indexed, opts) end)
       end)
 
-    late = await_probes(task, agent, page, parent, token, nil)
+    late = await_probes(task, agent, page, parent, token, nil, quick?)
 
     ok = Agent.get(agent, & &1.ok)
     Agent.stop(agent)
@@ -199,12 +199,15 @@ defmodule Roki.Watch.Resolver do
   # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
   # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.
   # (Eight releases used to take as long as the slowest of them, often twice the rest.)
-  @enough 4
-  @grace_ms 1_000
+  @enough 5
+  @grace_ms 3_000
+  # Starting to play wants one release that works, not a list: it stops sooner.
+  @quick_enough 4
+  @quick_grace_ms 1_000
 
   defp ideal?(source), do: source.resolution == "1080p" and not Roki.Watch.heavy?(source)
 
-  defp await_probes(task, agent, page, parent, token, first_ok_at) do
+  defp await_probes(task, agent, page, parent, token, first_ok_at, quick?) do
     case Task.yield(task, 150) do
       {:ok, _} ->
         []
@@ -220,16 +223,18 @@ defmodule Roki.Watch.Resolver do
 
         # Four that play, or one that is already what would be picked (a 1080p release a browser
         # reads as it is) — no point waiting for more — or one that played a moment ago.
-        ideal? = Enum.any?(st.ok, fn {_i, source, _stream} -> ideal?(source) end)
+        ideal? = quick? and Enum.any?(st.ok, fn {_i, source, _stream} -> ideal?(source) end)
+        enough = if quick?, do: @quick_enough, else: @enough
+        grace = if quick?, do: @quick_grace_ms, else: @grace_ms
 
-        if ok >= @enough or ideal? or (first && now - first >= @grace_ms) do
+        if ok >= enough or ideal? or (first && now - first >= grace) do
           Task.shutdown(task, :brutal_kill)
           seen = MapSet.new(st.seen)
           late = Enum.reject(page, &MapSet.member?(seen, &1.hash))
-          for s <- late, do: send(parent, {:checked, token, s.hash, {:bad, "slow, set aside"}})
+          for s <- late, do: send(parent, {:checked, token, s.hash, {:later, "not waited for"}})
           late
         else
-          await_probes(task, agent, page, parent, token, first)
+          await_probes(task, agent, page, parent, token, first, quick?)
         end
     end
   end

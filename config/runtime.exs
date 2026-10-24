@@ -183,19 +183,14 @@ end
 # Development
 # ============================================
 if config_env() == :dev do
-  # Reload browser tabs when matching files change.
+  # This server is also the live site, so a saved file must not reload anybody's open page
+  # (no `patterns`), and the server's log — which carries other people's requests and sessions —
+  # must not be mirrored into every visitor's browser console (`web_console_logger`).
+  # Code still recompiles on the next request.
   config :roki, RokiWeb.Endpoint,
     live_reload: [
-      web_console_logger: true,
-      patterns: [
-        # Static assets, except user uploads
-        ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$"E,
-        # Gettext translations
-        ~r"priv/gettext/.*\.po$"E,
-        # Router, Controllers, LiveViews and LiveComponents
-        ~r"lib/roki_web/router\.ex$"E,
-        ~r"lib/roki_web/(controllers|live|components)/.*\.(ex|heex)$"E
-      ]
+      web_console_logger: false,
+      patterns: []
     ]
 end
 

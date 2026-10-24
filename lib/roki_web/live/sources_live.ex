@@ -286,7 +286,9 @@ defmodule RokiWeb.SourcesLive do
       case preferred(socket, res) ||
              Resolver.pick(res.playable, res.cap, res.good, socket.assigns.mode) do
         {:play, pair} -> socket |> assign(auto: :done) |> start(pair)
-        {_source, _stream} = pair -> socket |> assign(auto: :done) |> start(pair)
+        # A release that was kept from the last episode: a {source, stream} pair as it is.
+        {%{} = _source, %{} = _stream} = pair -> socket |> assign(auto: :done) |> start(pair)
+        # Nothing to pick without asking (`{:ask, why}`): the releases are listed to choose from.
         _ -> assign(socket, auto: :off)
       end
     else

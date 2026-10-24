@@ -1,7 +1,7 @@
 defmodule Roki.Watch.Checks do
   @moduledoc """
   The releases being checked, as the page shows them: each one `:checking`, then `:ok` or
-  `{:bad, why}`. The probe task sends `{:candidates, token, list}` when a round starts and
+  `{:bad, why}` — or `{:later, note}` for one not waited for because enough others already played. The probe task sends `{:candidates, token, list}` when a round starts and
   `{:checked, token, hash, state}` as each answer comes in; a page keeps the list with these.
   """
 

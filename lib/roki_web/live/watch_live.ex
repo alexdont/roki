@@ -96,7 +96,7 @@ defmodule RokiWeb.WatchLive do
     |> assign(token: token, failed: nil, player: nil, checks: [])
     |> start_async(:resolve, fn ->
       with {:ok, res} <-
-             Resolver.run(parent, token, uuid, title, season, episode, false, :browser),
+             Resolver.run(parent, token, uuid, title, season, episode, false, :browser, true),
            {res, pair} <-
              locate(parent, token, uuid, res, hash || prefer, if(hash, do: 3, else: 1)),
            pair = if(hash, do: pair, else: within_cap(res, pair)),

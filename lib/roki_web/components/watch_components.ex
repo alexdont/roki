@@ -90,7 +90,8 @@ defmodule RokiWeb.WatchComponents do
             "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
             c.state == :ok && "bg-success/15",
             c.state == :checking && "bg-base-200",
-            match?({:bad, _}, c.state) && "opacity-45"
+            match?({:bad, _}, c.state) && "opacity-45",
+            match?({:later, _}, c.state) && "bg-base-200/60"
           ]}
         >
           <span class="flex h-5 w-5 shrink-0 items-center justify-center">
@@ -101,12 +102,19 @@ defmodule RokiWeb.WatchComponents do
               name="hero-x-circle"
               class="h-5 w-5 text-base-content/50"
             />
+            <.icon
+              :if={match?({:later, _}, c.state)}
+              name="hero-clock"
+              class="h-5 w-5 text-base-content/40"
+            />
           </span>
           <span class={["min-w-0 flex-1 truncate", match?({:bad, _}, c.state) && "line-through"]}>
             {c.name}
           </span>
           <span class="shrink-0 text-xs text-base-content/60">
-            {if match?({:bad, _}, c.state), do: elem(c.state, 1), else: c.resolution}
+            {if match?({:bad, _}, c.state) or match?({:later, _}, c.state),
+              do: elem(c.state, 1),
+              else: c.resolution}
           </span>
         </li>
       </ul>
