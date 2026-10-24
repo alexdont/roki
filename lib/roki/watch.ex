@@ -837,7 +837,9 @@ defmodule Roki.Watch do
   """
   def start(uuid, ctx, source, stream) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
-    with :ok <- Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
+    with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+         :ok <- Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
+      Roki.Keys.record(uuid, :play)
       do_start(uuid, ctx, source, stream)
     end
   end
@@ -993,6 +995,7 @@ defmodule Roki.Watch do
       with true <-
              Laev.OpenSubtitles.can_download?() ||
                {:error, "Add your OpenSubtitles username and password in Settings to download."},
+           _ <- Roki.Keys.record(uuid, :subtitle),
            {:ok, srt} <- Laev.OpenSubtitles.download_srt(id) do
         vtt = Laev.Subtitles.to_vtt("#{id}.srt", srt)
         Roki.SubCache.put_file(id, vtt)

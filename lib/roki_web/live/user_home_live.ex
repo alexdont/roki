@@ -36,6 +36,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:page_title, "Home")
           |> assign(:username, username)
           |> assign(:uuid, uuid)
+          |> assign(:granted, Roki.Keys.granted?(uuid))
           |> assign(:state, if(Laev.connected?(uuid), do: :loading, else: :not_connected))
           |> assign(:data, nil)
           |> assign(:busy, nil)
@@ -48,11 +49,16 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
-        {:ok,
-         if(connected?(socket) and socket.assigns.state == :loading,
-           do: load(socket),
-           else: socket
-         )}
+        socket =
+          cond do
+            not connected?(socket) -> socket
+            socket.assigns.state == :loading -> load(socket)
+            # An account that uses the site's keys has nothing to fill in: it is set up here.
+            socket.assigns.granted -> start_granted_setup(socket)
+            true -> socket
+          end
+
+        {:ok, socket}
     end
   end
 
@@ -60,6 +66,14 @@ defmodule RokiWeb.UserHomeLive do
     do: String.downcase(mine) == String.downcase(requested)
 
   defp same_user?(_, _), do: false
+
+  defp start_granted_setup(socket) do
+    uuid = socket.assigns.uuid
+
+    socket
+    |> assign(busy: "Setting up your account…")
+    |> start_async(:connect, fn -> Laev.setup_granted(uuid) end)
+  end
 
   # First load / after connecting: the skeleton shows until the shelf arrives.
   defp load(socket) do
@@ -273,7 +287,20 @@ defmodule RokiWeb.UserHomeLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}/home"}
     >
-      <.connect_card :if={@state == :not_connected} form={@form} busy={@busy} error={@error} />
+      <.connect_card
+        :if={@state == :not_connected and not @granted}
+        form={@form}
+        busy={@busy}
+        error={@error}
+      />
+
+      <p
+        :if={@state == :not_connected and @granted}
+        class="flex items-center justify-center gap-3 py-24 text-base-content/60"
+      >
+        <span :if={@busy} class="loading loading-spinner"></span>
+        {@busy || @error || "Setting up your account…"}
+      </p>
 
       <.shelf
         :if={@state in [:loading, :ready]}

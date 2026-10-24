@@ -12,6 +12,20 @@ config :swoosh, api_client: Swoosh.ApiClient.Finch
 # Sync keys travel in the address and as a `token` parameter; never print them.
 config :phoenix, :filter_parameters, ["password", "token"]
 
+# The admin tab "API access": who uses the owner's keys (Roki.Keys, RokiWeb.Admin.KeyAccessLive).
+config :phoenix_kit, :admin_dashboard_tabs, [
+  %{
+    id: :admin_api_access,
+    label: "API access",
+    icon: "hero-key",
+    path: "/admin/api-access",
+    permission: "users",
+    priority: 130,
+    group: :admin_main,
+    live_view: {RokiWeb.Admin.KeyAccessLive, :index}
+  }
+]
+
 config :phoenix_kit,
   parent_app_name: :roki,
   parent_module: Roki,

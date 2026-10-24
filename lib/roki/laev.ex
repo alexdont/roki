@@ -28,7 +28,13 @@ defmodule Roki.Laev do
     Path.join(base_dir(), uuid)
   end
 
-  def run(uuid, fun), do: uuid |> dir() |> Laev.Scope.load(app_keys()) |> Laev.Scope.run(fun)
+  def run(uuid, fun) do
+    dir = dir(uuid)
+    # Keys lent by the site owner (Roki.Keys) are added to this request's scope only, and only
+    # where the account has none of its own.
+    lent = Roki.Keys.overrides(uuid, Laev.Config.read_dir(dir))
+    dir |> Laev.Scope.load(Map.merge(lent, app_keys())) |> Laev.Scope.run(fun)
+  end
 
   @doc "Run inside the site's own scope — no user, only the server-wide TMDB key."
   def shared(fun),
@@ -258,6 +264,20 @@ defmodule Roki.Laev do
   defp key_name("TMDB_API_KEY"), do: "TMDB"
   defp key_name(other), do: other
 
+  @doc """
+  Set up an account that uses the site's keys: nothing to ask, so a laev key is made and the
+  account connected to it. The keys themselves are not saved anywhere of its own and are never
+  carried in its synced files.
+  """
+  def setup_granted(uuid) do
+    Roki.Stats.forget(uuid)
+
+    with {:ok, summary} <- connect(uuid, Laev.Setup.generate_key(), carry_keys?: false) do
+      sync(uuid)
+      {:ok, summary}
+    end
+  end
+
   @doc "The laev key to paste into the terminal app, for a connected account."
   def sync_key(uuid), do: run(uuid, fn -> Laev.Scope.get(:sync_token) end)
 
@@ -355,6 +375,9 @@ defmodule Roki.Laev do
   @doc "Every laev setting with this user's value; secrets come back masked, never in full."
   def settings(uuid) do
     all = run(uuid, fn -> Settings.all(:browser) end)
+
+    # An account using the site's keys has none of its own to show or change.
+    all = if Roki.Keys.granted?(uuid), do: Enum.reject(all, &(&1.group == :keys)), else: all
 
     # The site's MyAnimeList app is not the user's to set.
     if site_mal?(),

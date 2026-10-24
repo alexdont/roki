@@ -71,6 +71,7 @@ defmodule Roki.Watch.Resolver do
 
   defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?) do
     send(parent, {:status, token, "Searching for releases…"})
+    Roki.Keys.record(uuid, :search)
 
     with {:ok, %{query: query, sources: found}} <-
            Watch.sources(title, season, episode, uuid, force?),
@@ -127,6 +128,7 @@ defmodule Roki.Watch.Resolver do
   defp probe_page(parent, token, uuid, ctx, page) do
     {:ok, agent} = Agent.start_link(fn -> %{done: 0, ok: [], seen: []} end)
     total = length(page)
+    Roki.Keys.record(uuid, :probe, max(total, 1))
     send(parent, {:probe, token, 0, 0, total})
     send(parent, {:candidates, token, Enum.map(page, &Roki.Watch.Checks.summary/1)})
 
@@ -252,6 +254,9 @@ defmodule Roki.Watch.Resolver do
   def failure(:busy),
     do:
       "The server is re-encoding other videos right now. Try again in a minute, or pick an h264 release."
+
+  def failure(:over_limit),
+    do: "You have used today's plays. Try again tomorrow."
 
   def failure(:timeout),
     do: "Preparing the video took too long. Try again, or pick another release."
