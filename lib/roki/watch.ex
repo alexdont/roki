@@ -360,7 +360,8 @@ defmodule Roki.Watch do
           id: title.id,
           title: title.title,
           year: title.year,
-          poster: title.poster_path
+          # Laev keeps a full image address here (it draws the poster from it), not TMDB's path.
+          poster: title.poster_path && "https://image.tmdb.org/t/p/w342" <> title.poster_path
         })
       end)
 
