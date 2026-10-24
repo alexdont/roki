@@ -374,10 +374,14 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   pointer-events: auto;
 }
 .peek-actions { display: flex; gap: 0.4rem; margin-top: 0.7rem; }
+.peek-ico { display: block; width: 1.35rem; height: 1.35rem; }
 .peek-btn {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  padding: 0.3rem 0.5rem;
+  padding: 0.4rem 0.5rem;
   border-radius: 0.5rem;
   font-size: 0.72rem;
   font-weight: 500;
@@ -391,6 +395,10 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   color: var(--color-success-content);
   background: var(--color-success);
   border-color: transparent;
+}
+.peek-btn[data-what="saved"][data-on="true"] {
+  color: var(--color-primary-content);
+  background: var(--color-primary);
 }
 .peek-btn:disabled { opacity: 0.6; cursor: default; }
 .peek-title { font-weight: 600; font-size: 0.95rem; line-height: 1.25; }

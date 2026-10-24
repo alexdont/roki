@@ -85,17 +85,28 @@ function actionRow(el) {
   const row = document.createElement("div")
   row.className = "peek-actions"
   const series = el.dataset.peek.startsWith("tv/")
+  // The same icons and colours as the buttons on the title page; the words are the tooltip.
   const buttons = [
-    ["saved", currentState.saved, "Saved", "Save for later"],
-    ["watched", currentState.watched, series ? "Completed" : "Watched", series ? "Mark completed" : "Mark watched"],
+    ["saved", currentState.saved, "bookmark", "Saved for later (click to remove)", "Save for later"],
+    [
+      "watched",
+      currentState.watched,
+      "check-circle",
+      series ? "Completed (click to mark as not watched)" : "Watched (click to mark as not watched)",
+      series ? "Mark as completed" : "Mark as watched",
+    ],
   ]
-  for (const [what, on, onText, offText] of buttons) {
+  for (const [what, on, icon, onLabel, offLabel] of buttons) {
     const b = document.createElement("button")
     b.type = "button"
     b.className = "peek-btn"
     b.dataset.on = String(on)
     b.dataset.what = what
-    b.textContent = `${on ? "✓ " : ""}${on ? onText : offText}`
+    b.title = on ? onLabel : offLabel
+    b.setAttribute("aria-label", b.title)
+    const ico = document.createElement("span")
+    ico.className = `peek-ico ${on ? `hero-${icon}-solid` : `hero-${icon}`}`
+    b.appendChild(ico)
     row.appendChild(b)
   }
   return row
@@ -212,7 +223,7 @@ export function setupPeek() {
     if (button && current && !button.disabled) act(current, button.dataset.what, button)
   })
 
-  const inCard = (e) => card && card.contains(e.target)
+  const inCard = (e) => within(card, e.target)
   for (const ev of ["scroll", "wheel", "click", "phx:page-loading-start"]) {
     window.addEventListener(ev, (e) => { if (!inCard(e)) hide() }, {passive: true, capture: true})
   }

@@ -702,83 +702,82 @@ defmodule RokiWeb.TitleLive do
   attr :busy, :boolean, default: false
   attr :rating, :map, required: true
 
-  # What the terminal app has on a title: watched (and back), saved for later, on hold.
+  # The icon classes below are built from a name, which Tailwind cannot see, so they are spelled
+  # out here: hero-bookmark hero-bookmark-solid hero-pause-circle hero-pause-circle-solid
+  # hero-check-circle hero-check-circle-solid
+  # What the terminal app has on a title: saved for later, on hold, watched (and back) — as icons,
+  # the same ones and the same colours as the hover card on a poster; the words are the tooltip.
   defp library_buttons(assigns) do
     ~H"""
     <div class="flex flex-col gap-2 sm:gap-3">
-      <button
-        phx-click="toggle_saved"
-        class={[
-          "btn h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-left text-xs leading-tight sm:h-12 sm:gap-2.5 sm:px-4 sm:text-sm",
-          @lib.saved? && "btn-primary"
-        ]}
-        title={if @lib.saved?, do: "Click to remove it from saved", else: "Keep it for later"}
-      >
-        <.icon
-          name={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
-          class="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
+      <div class="flex gap-2 sm:gap-3">
+        <.lib_icon
+          event="toggle_saved"
+          on={@lib.saved?}
+          icon="bookmark"
+          on_class="btn-primary"
+          label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
         />
-        {if @lib.saved?, do: "Saved for later", else: "Save for later"}
-      </button>
-
-      <button
-        :if={not @title.anime?}
-        phx-click="toggle_hold"
-        class={[
-          "btn h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-left text-xs leading-tight sm:h-12 sm:gap-2.5 sm:px-4 sm:text-sm",
-          @lib.held? && "btn-warning"
-        ]}
-        title={
-          if @lib.held?, do: "Click to take it off hold", else: "Put it down without finishing it"
-        }
-      >
-        <.icon
-          name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
-          class="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
+        <.lib_icon
+          :if={not @title.anime?}
+          event="toggle_hold"
+          on={@lib.held?}
+          icon="pause-circle"
+          on_class="btn-warning"
+          label={if @lib.held?, do: "On hold (click to take it off)", else: "Put on hold"}
         />
-        {if @lib.held?, do: "On hold", else: "Put on hold"}
-      </button>
-
-      <%!-- A film is watched or not; a series is "all watched" or not (episodes below one by one).
-            The same button marks and unmarks. --%>
-      <button
-        phx-click="toggle_watched"
-        disabled={@busy}
-        class={[
-          "btn h-auto min-h-10 w-full justify-start gap-2 px-3 py-2 text-left text-xs leading-tight sm:h-12 sm:gap-2.5 sm:px-4 sm:text-sm",
-          watched_state?(@title, @lib) && "btn-success"
-        ]}
-        title={
-          if watched_state?(@title, @lib),
-            do: "Click to mark as not watched",
-            else: "Mark every episode watched and move it to Completed"
-        }
-      >
-        <span :if={@busy} class="loading loading-spinner loading-xs"></span>
-        <.icon
-          :if={!@busy}
-          name={
-            if watched_state?(@title, @lib), do: "hero-check-circle-solid", else: "hero-check-circle"
+        <%!-- A film is watched or not; a series is completed or not (episodes below one by one).
+              The same button marks and unmarks. --%>
+        <.lib_icon
+          event="toggle_watched"
+          on={watched_state?(@title, @lib)}
+          icon="check-circle"
+          on_class="btn-success"
+          busy={@busy}
+          label={
+            if watched_state?(@title, @lib),
+              do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
+              else: watched_label(@title, @lib)
           }
-          class="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
         />
-        {watched_label(@title, @lib)}
-      </button>
+      </div>
 
       <%!-- TMDB's average, and — once you have rated it — yours beside it in another colour. --%>
       <button
         phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-        class="btn h-auto min-h-10 w-full justify-between gap-2 px-3 py-2 text-xs sm:h-12 sm:px-4 sm:text-sm"
-        title="Rate it on TMDB"
+        class="btn h-auto min-h-10 w-full justify-center gap-3 px-3 py-2 text-xs sm:h-12 sm:px-4 sm:text-sm"
+        title={if @rating.value, do: "Your rating — click to change it", else: "Rate it on TMDB"}
+        aria-label="Rate it"
       >
         <span class="flex items-center gap-1.5">
           <.icon name="hero-star-solid" class="h-4 w-4 shrink-0 text-warning sm:h-5 sm:w-5" />
           <span class="font-semibold text-warning">{avg_text(@title)}</span>
         </span>
-        <span :if={@rating.value} class="font-semibold text-info">You {fmt_rating(@rating.value)}</span>
-        <span :if={!@rating.value} class="text-base-content/60">Rate</span>
+        <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
       </button>
     </div>
+    """
+  end
+
+  attr :event, :string, required: true
+  attr :on, :boolean, required: true
+  attr :icon, :string, required: true
+  attr :on_class, :string, required: true
+  attr :label, :string, required: true
+  attr :busy, :boolean, default: false
+
+  defp lib_icon(assigns) do
+    ~H"""
+    <button
+      phx-click={@event}
+      disabled={@busy}
+      class={["btn h-12 min-h-0 flex-1 px-0", @on && @on_class]}
+      title={@label}
+      aria-label={@label}
+    >
+      <span :if={@busy} class="loading loading-spinner loading-sm"></span>
+      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-6 w-6" />
+    </button>
     """
   end
 
