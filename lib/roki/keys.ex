@@ -44,6 +44,10 @@ defmodule Roki.Keys do
     end
   rescue
     _ -> nil
+  catch
+    # The database not being there (a test without one, a restart) is "no grant", never a crash
+    # of whatever was only trying to build a scope.
+    :exit, _ -> nil
   end
 
   def grant(_), do: nil
