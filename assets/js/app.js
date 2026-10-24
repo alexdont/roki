@@ -27,7 +27,7 @@ import {hooks as colocatedHooks} from "phoenix-colocated/roki"
 import topbar from "../vendor/topbar"
 import {StudySidebar} from "./study/sidebar"
 import {setupPeek} from "./peek"
-import {FillGrid} from "./fill_grid"
+import {FillGrid, placeParam} from "./fill_grid"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 // Which player this device uses. Remembered here, not on the server: a phone wants its own
@@ -51,6 +51,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     platform,
     player: storedPlayer() || "external",
     grid: storedGrid(),
+    place: placeParam(),
   }),
   hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, MenuExtras},
 })

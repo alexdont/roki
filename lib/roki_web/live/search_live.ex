@@ -27,6 +27,8 @@ defmodule RokiWeb.SearchLive do
      |> assign(:client, RokiWeb.Client.key(socket, uuid))
      |> assign(:q, "")
      |> assign(:shelf, empty())
+     |> assign(:place, RokiWeb.Place.from_params(socket))
+     |> assign(:place_y, nil)
      |> assign(:franchises, [])
      |> assign(:seen, MapSet.new())
      |> assign(:error, nil)}
@@ -48,12 +50,22 @@ defmodule RokiWeb.SearchLive do
 
       true ->
         {:noreply,
-         socket |> assign(q: q, franchises: [], seen: MapSet.new(), error: nil) |> fetch(1, true)}
+         socket
+         |> assign(q: q, franchises: [], seen: MapSet.new(), error: nil)
+         |> take_place()
+         |> fetch(1, true)}
     end
   end
 
+  # Back from a result: every page that was loaded, at once.
+  defp take_place(%{assigns: %{place: %{pages: pages, y: y}}} = socket),
+    do: assign(socket, place: nil, place_y: y, restore_pages: pages)
+
+  defp take_place(socket), do: assign(socket, :restore_pages, nil)
+
   defp fetch(socket, page, fresh?) do
     %{q: q, uuid: uuid, client: client} = socket.assigns
+    last = if fresh?, do: socket.assigns[:restore_pages] || page, else: page
 
     shelf =
       if fresh?,
@@ -62,12 +74,36 @@ defmodule RokiWeb.SearchLive do
 
     socket
     |> assign(:shelf, shelf)
-    |> start_async(:search, fn -> {q, page, Roki.Search.search(client, uuid, q, page)} end)
+    |> start_async(:search, fn -> {q, last, search_pages(client, uuid, q, last)} end)
+  end
+
+  # One page, or pages `1..last` joined (items in order, the franchises of the first page).
+  defp search_pages(client, uuid, q, 1), do: Roki.Search.search(client, uuid, q, 1)
+
+  defp search_pages(client, uuid, q, last) do
+    results = RokiWeb.Place.pages(last, &Roki.Search.search(client, uuid, q, &1))
+
+    case Enum.find(results, &(not match?({:ok, _, _, _, _}, &1))) do
+      nil ->
+        items = Enum.flat_map(results, fn {:ok, items, _, _, _} -> items end)
+        {:ok, _, more?, _, _} = List.last(results)
+        {:ok, _, _, franchises, _} = hd(results)
+
+        seen =
+          Enum.reduce(results, MapSet.new(), fn {:ok, _, _, _, s}, acc -> MapSet.union(acc, s) end)
+
+        {:ok, items, more?, franchises, seen}
+
+      error ->
+        error
+    end
   end
 
   @impl true
   def handle_event("search", %{"q" => q}, socket),
     do: {:noreply, push_patch(socket, to: ~p"/search?#{[q: q]}")}
+
+  def handle_event("placed", _params, socket), do: {:noreply, assign(socket, :place_y, nil)}
 
   def handle_event("more", _params, socket) do
     case socket.assigns.shelf do
@@ -186,6 +222,7 @@ defmodule RokiWeb.SearchLive do
           phx-hook="FillGrid"
           data-more={to_string(@shelf.more?)}
           data-page={@shelf.page}
+          data-restore-y={@place_y}
           class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
         >
           <li :for={i <- @shelf.items} class="space-y-1">

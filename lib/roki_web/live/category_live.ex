@@ -37,6 +37,8 @@ defmodule RokiWeb.CategoryLive do
        season: nil,
        season_count: 12,
        season_error: nil,
+       place: RokiWeb.Place.from_params(socket),
+       place_y: nil,
        size: stored_size(socket),
        items: [],
        page: 0,
@@ -72,18 +74,34 @@ defmodule RokiWeb.CategoryLive do
        do:
          socket
          |> assign(items: [], page: 0, more?: false, loading?: true, error: nil)
-         |> fetch(1),
+         |> fetch_first(),
        else: socket
      )}
   end
 
-  defp fetch(socket, n) do
-    %{kind: kind, sort: sort, season: season, uuid: uuid} = socket.assigns
+  # The first load. Coming back with the back button it is every page that was loaded, at once,
+  # so the list appears whole and the scroll position can be restored in one step.
+  defp fetch_first(%{assigns: %{place: %{pages: pages, y: y}}} = socket) do
+    socket |> assign(place: nil, place_y: y) |> fetch(1, pages)
+  end
 
-    start_async(socket, {:page, {sort, season}, n}, fn ->
-      case Browse.page(kind, sort, n, uuid, season) do
-        {:ok, items, more?} ->
-          {:ok, n, Roki.Laev.annotate(uuid, items), more?, Roki.Laev.seen_keys(uuid, items)}
+  defp fetch_first(socket), do: fetch(socket, 1)
+
+  defp fetch(socket, n, upto \\ nil) do
+    %{kind: kind, sort: sort, season: season, uuid: uuid} = socket.assigns
+    last = upto || n
+
+    start_async(socket, {:page, {sort, season}, last}, fn ->
+      results =
+        if last > n,
+          do: RokiWeb.Place.pages(last, &Browse.page(kind, sort, &1, uuid, season)),
+          else: [Browse.page(kind, sort, n, uuid, season)]
+
+      case Enum.find(results, &(not match?({:ok, _, _}, &1))) do
+        nil ->
+          items = Enum.flat_map(results, fn {:ok, items, _more?} -> items end)
+          {:ok, _, more?} = List.last(results)
+          {:ok, last, Roki.Laev.annotate(uuid, items), more?, Roki.Laev.seen_keys(uuid, items)}
 
         error ->
           error
@@ -96,6 +114,9 @@ defmodule RokiWeb.CategoryLive do
     do: {:noreply, socket |> assign(:loading?, true) |> fetch(socket.assigns.page + 1)}
 
   def handle_event("more", _params, socket), do: {:noreply, socket}
+
+  # The grid has been scrolled to where the reader was; the position is not needed again.
+  def handle_event("placed", _params, socket), do: {:noreply, assign(socket, :place_y, nil)}
 
   # Order and size live in the address, so a view can be linked to and the back button works.
   def handle_event("sort", %{"sort" => sort}, socket),
@@ -318,6 +339,7 @@ defmodule RokiWeb.CategoryLive do
         phx-hook="FillGrid"
         data-more={to_string(@more?)}
         data-page={@page}
+        data-restore-y={@place_y}
         class={["grid gap-4", @grid]}
       >
         <li :for={i <- @items} class="space-y-1">
