@@ -57,6 +57,7 @@ defmodule RokiWeb.Router do
       live "/watch/movie/:id", WatchLive, :movie
       live "/watch/tv/:id/:season/:episode", WatchLive, :episode
       live "/study", StudyLive, :index
+      live "/notes/laev", NotesLive, :index
       live "/lists", ListsLive, :index
       live "/lists/:slug", ListLive, :show
       live "/:username/home", UserHomeLive, :index
