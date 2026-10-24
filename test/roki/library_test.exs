@@ -70,7 +70,7 @@ defmodule Roki.Watch.LibraryTest do
   test "saving writes the title laev's saved list reads back" do
     Watch.toggle_saved(@uuid, movie())
 
-    assert [%{"type" => "movie", "tmdb_id" => 603, "title" => "The Matrix", "poster" => "/m.jpg"}] =
+    assert [%{"type" => "movie", "tmdb_id" => 603, "title" => "The Matrix", "poster" => "https://image.tmdb.org/t/p/w342/m.jpg"}] =
              Roki.Laev.run(@uuid, fn -> Laev.Watchlist.all() end)
   end
 
