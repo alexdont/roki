@@ -7,6 +7,14 @@ const cache = new Map()
 let card = null
 let timer = null
 let current = null
+let hideTimer = null
+let currentInfo
+let currentState = null
+
+// relatedTarget is null or not even a node (leaving the window): not inside anything.
+const within = (node, other) => !!node && other instanceof Node && node.contains(other)
+
+const csrf = () => document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || ""
 
 function ensureCard() {
   if (card) return card
@@ -64,7 +72,63 @@ function render(el, info) {
   else if (info?.date) c.appendChild(line("peek-released", released(info.date, el.dataset.peek)))
   if (el.dataset.peekCached) c.appendChild(line("peek-cached", "⚡ sources cached — plays right away"))
 
+  const actions = actionRow(el)
+  if (actions) c.appendChild(actions)
+
   place(el)
+}
+
+// Save for later / mark watched, straight from the card. Shown once the server has said where the
+// title stands for this account (nothing for a guest or an account without a shelf).
+function actionRow(el) {
+  if (!currentState) return null
+  const row = document.createElement("div")
+  row.className = "peek-actions"
+  const series = el.dataset.peek.startsWith("tv/")
+  const buttons = [
+    ["saved", currentState.saved, "Saved", "Save for later"],
+    ["watched", currentState.watched, series ? "Completed" : "Watched", series ? "Mark completed" : "Mark watched"],
+  ]
+  for (const [what, on, onText, offText] of buttons) {
+    const b = document.createElement("button")
+    b.type = "button"
+    b.className = "peek-btn"
+    b.dataset.on = String(on)
+    b.dataset.what = what
+    b.textContent = `${on ? "✓ " : ""}${on ? onText : offText}`
+    row.appendChild(b)
+  }
+  return row
+}
+
+async function act(el, what, button) {
+  button.disabled = true
+  button.textContent = "…"
+  try {
+    const res = await fetch(`/library/${el.dataset.peek}/${what}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"x-csrf-token": csrf(), accept: "application/json"},
+    })
+    if (res.ok) currentState = await res.json()
+  } catch (_e) {
+    // leave the state as it was
+  }
+  if (currentState) {
+    // The poster greys out like any watched title, without waiting for the page to refresh.
+    el.closest("a")?.classList.toggle("opacity-50", currentState.watched)
+    el.querySelector("img")?.classList.toggle("grayscale", currentState.watched)
+  }
+  if (current === el) render(el, currentInfo)
+}
+
+async function loadState(key) {
+  try {
+    const res = await fetch(`/library/${key}`, {credentials: "same-origin", cache: "no-store"})
+    return res.ok ? await res.json() : null
+  } catch (_e) {
+    return null
+  }
 }
 
 // Beside the poster, on whichever side has room, kept inside the window.
@@ -97,8 +161,17 @@ async function load(key) {
 
 function hide() {
   clearTimeout(timer)
+  clearTimeout(hideTimer)
   current = null
+  currentState = null
   if (card) card.dataset.show = "false"
+}
+
+// Leaving the poster hides the card a moment later, so the pointer can cross to the card (it has
+// buttons) without it vanishing; coming onto the poster or the card cancels it.
+function hideSoon() {
+  clearTimeout(hideTimer)
+  hideTimer = setTimeout(hide, 220)
 }
 
 export function setupPeek() {
@@ -106,23 +179,41 @@ export function setupPeek() {
 
   document.addEventListener("mouseover", (e) => {
     const el = e.target.closest?.("[data-peek]")
-    if (!el || el === current || el.contains(e.relatedTarget)) return
+    if (el && el === current) clearTimeout(hideTimer)
+    if (!el || el === current || within(el, e.relatedTarget)) return
     hide()
     current = el
     timer = setTimeout(async () => {
       const key = el.dataset.peek
-      render(el, cache.has(key) ? cache.get(key) : undefined)
-      const info = await load(key)
-      if (current === el) render(el, info)
+      currentInfo = cache.has(key) ? cache.get(key) : undefined
+      render(el, currentInfo)
+      const [info, state] = await Promise.all([load(key), loadState(key)])
+      if (current !== el) return
+      currentInfo = info
+      currentState = state
+      render(el, info)
     }, DELAY_MS)
   })
 
   document.addEventListener("mouseout", (e) => {
     const el = e.target.closest?.("[data-peek]")
-    if (el && el === current && !el.contains(e.relatedTarget)) hide()
+    if (el && el === current && !within(el, e.relatedTarget) && !within(card, e.relatedTarget)) hideSoon()
   })
 
+  // The card itself: stays while the pointer is on it, goes shortly after it leaves, and its
+  // buttons act on the title it describes.
+  ensureCard()
+  card.addEventListener("mouseenter", () => clearTimeout(hideTimer))
+  card.addEventListener("mouseleave", (e) => {
+    if (!current || !within(current, e.relatedTarget)) hideSoon()
+  })
+  card.addEventListener("click", (e) => {
+    const button = e.target.closest?.("button[data-what]")
+    if (button && current && !button.disabled) act(current, button.dataset.what, button)
+  })
+
+  const inCard = (e) => card && card.contains(e.target)
   for (const ev of ["scroll", "wheel", "click", "phx:page-loading-start"]) {
-    window.addEventListener(ev, hide, {passive: true, capture: true})
+    window.addEventListener(ev, (e) => { if (!inCard(e)) hide() }, {passive: true, capture: true})
   }
 }

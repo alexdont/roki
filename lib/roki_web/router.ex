@@ -13,6 +13,10 @@ defmodule RokiWeb.Router do
     plug PhoenixKitWeb.Plugs.Integration
   end
 
+  pipeline :csrf do
+    plug :protect_from_forgery
+  end
+
   pipeline :session_user do
     plug :fetch_session
     plug PhoenixKitWeb.Users.Auth, :fetch_phoenix_kit_current_user
@@ -23,11 +27,18 @@ defmodule RokiWeb.Router do
 
     get "/stream/:id/:file", StreamController, :file
     get "/peek/:type/:id", PeekController, :show
+    get "/library/:type/:id", LibraryController, :show
     get "/dict/:lang", DictController, :show
     # PhoenixKit's own account page (profile picture, name, email, password) is the account
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.
     get "/account/services", AccountController, :services
+  end
+
+  scope "/", RokiWeb do
+    pipe_through [:session_user, :csrf]
+
+    post "/library/:type/:id/:what", LibraryController, :toggle
   end
 
   pipeline :api do

@@ -371,7 +371,28 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .peek-card[data-show="true"] {
   opacity: 1;
   transform: none;
+  pointer-events: auto;
 }
+.peek-actions { display: flex; gap: 0.4rem; margin-top: 0.7rem; }
+.peek-btn {
+  flex: 1;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--color-base-content);
+  background: color-mix(in oklab, var(--color-base-content) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent);
+}
+.peek-btn:hover { background: color-mix(in oklab, var(--color-base-content) 16%, transparent); }
+.peek-btn[data-on="true"] {
+  color: var(--color-success-content);
+  background: var(--color-success);
+  border-color: transparent;
+}
+.peek-btn:disabled { opacity: 0.6; cursor: default; }
 .peek-title { font-weight: 600; font-size: 0.95rem; line-height: 1.25; }
 .peek-facts { margin-top: 0.15rem; font-size: 0.75rem; opacity: 0.65; }
 .peek-genres { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
