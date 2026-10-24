@@ -316,6 +316,8 @@ export const StudySidebar = {
     this.overlayKey = key
     if (!this.hovering) this.hideTip()
     this.overlay.textContent = ""
+    // The card was for a word that has just been taken off the screen.
+    if (this.tipFor && !this.tipFor.isConnected) this.dismissTip()
     if (!this.p.url) return
 
     for (const i of this.offVideo.has(this.p.want) ? [] : live) {
@@ -383,7 +385,7 @@ export const StudySidebar = {
       this.showTip(w) // already reading: the next word at once
     } else {
       this.dwellTimer = setTimeout(() => {
-        if (this.currentWord !== w) return
+        if (this.currentWord !== w || !w.isConnected) return
         this.wasPlaying = !this.video.paused
         this.video.pause()
         this.hovering = true
@@ -412,6 +414,12 @@ export const StudySidebar = {
 
   async showTip(word) {
     const text = word.dataset.lemma || word.textContent
+    // A word that is no longer on screen (its line has moved on) or has no text has nothing to
+    // say, and a card for it has nowhere to sit but the corner of the picture.
+    if (!word.isConnected || !text.trim()) {
+      this.hideTip()
+      return
+    }
     this.tipFor = word
     for (const el of this.el.querySelectorAll("[data-on]")) delete el.dataset.on
     word.dataset.on = "true"
@@ -419,7 +427,7 @@ export const StudySidebar = {
     this.fillTip(word, text, null)
     const lang = this.langOf(word)
     const result = await this.define(lang, text)
-    if (this.tipFor === word) this.fillTip(word, text, result)
+    if (this.tipFor === word && word.isConnected) this.fillTip(word, text, result)
   },
 
   // Which track's language a word on screen belongs to: the line (or list row text) it is in.
@@ -483,6 +491,10 @@ export const StudySidebar = {
   // the picture when fullscreen, the window otherwise.
   placeTip(word) {
     const tip = this.tip
+    if (!word.isConnected) {
+      this.hideTip()
+      return
+    }
     const inStage = tip.parentElement === this.stage
     const box = inStage
       ? this.stage.getBoundingClientRect()
