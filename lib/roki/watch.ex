@@ -184,30 +184,63 @@ defmodule Roki.Watch do
         saved?: Laev.Watchlist.has?(title.type, title.id),
         held?: not title.anime? and Laev.Holds.held?(title.type, title.id),
         watched?: title.type == "movie" and Laev.Position.finished?(ctx),
-        all_watched?: title.type == "tv" and series_done?(title)
+        # "Completed": the series' own mark, which is what puts it in the Completed section.
+        # Every episode watched without it is "caught up" — still on the watchlist.
+        all_watched?: title.type == "tv" and completed?(title)
       }
     end)
   end
 
-  defp series_done?(title) do
-    total = title |> aired_seasons() |> Enum.map(&(&1.episodes || 0)) |> Enum.sum()
+  # What makes a series completed, as laev keeps it: a mark on the show itself — separate from
+  # its episodes, which only say what was watched — and for anime one on each MyAnimeList entry
+  # (the entry is what the Completed list shows). A season MyAnimeList has no entry for gets the
+  # show's mark as well, so the show cannot be completed with that season left out.
+  defp title_marks(%{type: "tv"} = title) do
+    show = %{type: "tv", tmdb_id: title.id, season: nil, episode: nil}
 
-    watched =
-      if title.anime? do
-        marks = Laev.Position.anime_marks()
+    if title.anime? do
+      entries = for mal <- Laev.AnimeMap.mal_ids("tv", title.id), do: %{mal_id: mal}
 
-        title.seasons
-        |> Enum.map(&Laev.Anime.Parts.watched_in_season(title.id, &1.number, marks, &1.episodes))
-        |> Enum.sum()
-      else
-        Laev.Position.episode_marks()
-        |> Map.get({"tv", title.id}, %{})
-        |> Map.values()
-        |> Enum.sum()
-      end
+      unmapped? =
+        Enum.any?(aired_seasons(title), &(Laev.Anime.Parts.parts(title.id, &1.number) == []))
 
-    total > 0 and watched >= total
+      if unmapped? or entries == [], do: [show | entries], else: entries
+    else
+      [show]
+    end
   end
+
+  defp title_marks(_title), do: []
+
+  defp completed?(title) do
+    case title_marks(title) do
+      [] -> false
+      marks -> Enum.all?(marks, &Laev.Position.finished?/1)
+    end
+  end
+
+  defp set_completed(uuid, title, completed?) do
+    Roki.Laev.run(uuid, fn ->
+      for mark <- title_marks(title), do: Laev.Position.set_watched(mark, completed?)
+    end)
+  end
+
+  # Unmarking an episode takes the series out of Completed; marking the last episode of an anime
+  # entry completes that entry, as finishing it in the terminal does.
+  defp follow_episodes(uuid, title, ctxs, true) do
+    Roki.Laev.run(uuid, fn ->
+      marks = Laev.Position.anime_marks()
+
+      for mal <- ctxs |> Enum.map(& &1[:mal_id]) |> Enum.filter(&is_integer/1) |> Enum.uniq(),
+          total = Laev.Anime.episodes(mal),
+          is_integer(total) and total > 0 and Map.get(marks, mal, 0) >= total,
+          do: Laev.Position.set_watched(%{mal_id: mal}, true)
+    end)
+
+    _ = title
+  end
+
+  defp follow_episodes(uuid, title, _ctxs, false), do: set_completed(uuid, title, false)
 
   defp aired_seasons(title) do
     today = Date.utc_today()
@@ -352,6 +385,7 @@ defmodule Roki.Watch do
       end)
 
     if watched?, do: scrobble(uuid, [ctx])
+    if title.type == "tv", do: follow_episodes(uuid, title, [ctx], watched?)
 
     library_changed(uuid)
   end
@@ -368,6 +402,7 @@ defmodule Roki.Watch do
       end)
 
     if watched?, do: scrobble(uuid, ctxs)
+    if title.type == "tv", do: follow_episodes(uuid, title, ctxs, watched?)
 
     library_changed(uuid)
   end
@@ -382,6 +417,9 @@ defmodule Roki.Watch do
           do: {s.number, e.number}
 
     set_many_watched(uuid, title, pairs, watched?)
+    # The whole series, from the button under the poster: completed or not completed.
+    set_completed(uuid, title, watched?)
+    library_changed(uuid)
   end
 
   # Anime is kept on MyAnimeList: once an episode is watched, that entry's list count follows,

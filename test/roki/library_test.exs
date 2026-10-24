@@ -74,18 +74,29 @@ defmodule Roki.Watch.LibraryTest do
              Roki.Laev.run(@uuid, fn -> Laev.Watchlist.all() end)
   end
 
-  test "a series is all watched when every episode that is out has a mark" do
+  test "a series is completed by its own mark, not by its episodes" do
     refute Watch.library(@uuid, show()).all_watched?
 
-    # season 0 (specials) and a season that has not aired do not count
-    Watch.set_many_watched(@uuid, show(), [{1, 1}], true)
+    # every episode that is out marked: caught up, still on the watchlist, not completed
+    Watch.set_many_watched(@uuid, show(), [{1, 1}, {1, 2}], true)
     refute Watch.library(@uuid, show()).all_watched?
+    refute Enum.any?(Roki.Laev.run(@uuid, &Laev.Position.finished_titles/0), &(&1.type == "tv"))
 
-    Watch.set_many_watched(@uuid, show(), [{1, 2}], true)
+    # the mark under the poster: the show itself, which is what Completed lists
+    Roki.Laev.run(@uuid, fn ->
+      Laev.Position.set_watched(
+        %{type: "tv", tmdb_id: show().id, season: nil, episode: nil},
+        true
+      )
+    end)
+
     assert Watch.library(@uuid, show()).all_watched?
+    assert Enum.any?(Roki.Laev.run(@uuid, &Laev.Position.finished_titles/0), &(&1.type == "tv"))
 
+    # taking one episode back takes the series out of Completed
     Watch.set_watched(@uuid, show(), 1, 2, false)
     refute Watch.library(@uuid, show()).all_watched?
+    refute Enum.any?(Roki.Laev.run(@uuid, &Laev.Position.finished_titles/0), &(&1.type == "tv"))
   end
 
   test "anime has no hold and no whole-series mark: its status lives on MyAnimeList" do

@@ -751,7 +751,7 @@ defmodule RokiWeb.TitleLive do
         title={
           if watched_state?(@title, @lib),
             do: "Click to mark as not watched",
-            else: "Mark it as watched"
+            else: "Mark every episode watched and move it to Completed"
         }
       >
         <span :if={@busy} class="loading loading-spinner loading-xs"></span>
@@ -800,8 +800,8 @@ defmodule RokiWeb.TitleLive do
 
   defp watched_label(%{type: "movie"}, %{watched?: true}), do: "Watched"
   defp watched_label(%{type: "movie"}, _lib), do: "Mark watched"
-  defp watched_label(_title, %{all_watched?: true}), do: "All watched"
-  defp watched_label(_title, _lib), do: "Mark all watched"
+  defp watched_label(_title, %{all_watched?: true}), do: "Completed"
+  defp watched_label(_title, _lib), do: "Mark as completed"
 
   defp meta(t) do
     [
@@ -1308,7 +1308,7 @@ defmodule RokiWeb.TitleLive do
               icon="check-circle"
               label={
                 if watched_state?(@title, @lib),
-                  do: "Watched (tap to unmark)",
+                  do: "Completed (tap to unmark)",
                   else: watched_label(@title, @lib)
               }
               on_class="btn-success"
