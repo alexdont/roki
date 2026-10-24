@@ -90,7 +90,7 @@ defmodule Roki.Watch.Resolver do
 
     with {:ok, %{query: query, sources: found}} <-
            Watch.sources(title, season, episode, uuid, force?),
-         sources = Watch.with_library(uuid, query, found),
+         sources = Watch.with_library(uuid, query, found) |> prioritise(ctx),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, playable, rest} <-
            probe_until_playable(parent, token, uuid, ctx, sources, [], quick?) do
@@ -110,6 +110,31 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
+  # What is checked first matters: a search for a series returns what the uploaders posted for the
+  # whole show, so the first page of releases can be all other episodes (S02E04 for episode 5,
+  # "- 15" for episode 3), each rightly turned down once checked, while the releases that name this
+  # episode wait their turn. So: releases that name the episode first, then packs that may hold it,
+  # then the rest — and a release that names a different episode is not checked at all. Order inside
+  # each group is the ranking it already had.
+  defp prioritise(sources, %{episode: episode} = ctx) when is_integer(episode) do
+    {other, mine} =
+      Enum.split_with(sources, fn s ->
+        not Laev.Episodes.pack?(s.name) and Laev.Episodes.wrong_numbering?(s.name, ctx)
+      end)
+
+    tier = fn s ->
+      cond do
+        Laev.Episodes.names_episode?(s.name, s.name, ctx) -> 0
+        Laev.Episodes.pack?(s.name) -> 1
+        true -> 2
+      end
+    end
+
+    Enum.sort_by(mine, tier) ++ other
+  end
+
+  defp prioritise(sources, _ctx), do: sources
+
   # Strict mode: releases above the ceiling are not even checked.
   defp within_ceiling(uuid, sources, cap) do
     strict? = Roki.Laev.run(uuid, &Laev.Config.strict_resolution?/0)
@@ -128,7 +153,7 @@ defmodule Roki.Watch.Resolver do
     do: {:error, :none_playable}
 
   defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?) do
-    {page, rest} = Watch.probe_page(sources)
+    {page, rest} = Watch.probe_page(sources, if(quick?, do: 8, else: 12))
     {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?)
     rest = late ++ rest
     # Starting in the browser is what is waited for: what is known from the names ranks it.
@@ -199,8 +224,8 @@ defmodule Roki.Watch.Resolver do
   # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
   # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.
   # (Eight releases used to take as long as the slowest of them, often twice the rest.)
-  @enough 5
-  @grace_ms 3_000
+  @enough 8
+  @grace_ms 6_000
   # Starting to play wants one release that works, not a list: it stops sooner.
   @quick_enough 4
   @quick_grace_ms 1_000

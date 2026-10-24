@@ -636,7 +636,7 @@ defmodule Roki.Watch do
   end
 
   @doc "One round of releases to probe, with a share of every resolution tier, and the rest."
-  def probe_page(sources), do: Sources.probe_page(sources, @probe_page)
+  def probe_page(sources, size \\ @probe_page), do: Sources.probe_page(sources, size)
 
   @doc "Order probed `{source, stream}` pairs best first (laev's ranking: cached, resolution, size)."
   def rank_playable(pairs), do: Sources.rank_playable(pairs)
