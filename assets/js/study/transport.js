@@ -51,9 +51,15 @@ export function bindTransport(root, video, stage) {
   const hover = document.createElement("div")
   hover.className = "study-hover"
   hover.hidden = true
-  hover.innerHTML = '<span class="study-hover-time"></span><span class="study-hover-mark"></span>'
-  seek.parentElement.appendChild(hover)
+  hover.innerHTML = '<span class="study-hover-time"></span>'
+  // The mark lives in a clip laid exactly over the bar, so it is cut by the bar's rounded ends.
+  const clip = document.createElement("div")
+  clip.className = "study-hover-clip"
+  clip.hidden = true
+  clip.innerHTML = '<span class="study-hover-mark"></span>'
+  seek.parentElement.append(clip, hover)
   const hoverTime = hover.firstChild
+  const mark = clip.firstChild
   seek.addEventListener("pointermove", (e) => {
     const total = duration()
     if (!total || e.pointerType === "touch") return
@@ -64,10 +70,13 @@ export function bindTransport(root, video, stage) {
     hover.style.left = `${x + (box.left - row.left)}px`
     hover.style.top = `${box.top - row.top}px`
     hover.style.height = `${box.height}px`
+    Object.assign(clip.style, {left: `${box.left - row.left}px`, top: `${box.top - row.top}px`, width: `${box.width}px`, height: `${box.height}px`})
+    mark.style.left = `${x}px`
+    clip.hidden = false
     hoverTime.textContent = formatTime((x / box.width) * total)
     hover.hidden = false
   })
-  seek.addEventListener("pointerleave", () => { hover.hidden = true })
+  seek.addEventListener("pointerleave", () => { hover.hidden = true; clip.hidden = true })
 
   seek.addEventListener("input", () => {
     dragging = true
