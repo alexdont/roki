@@ -617,22 +617,27 @@ export const StudySidebar = {
       const BOTTOM = 88
       const TOP = 72
       let pointerY = null
+      let overTip = false // on the word's translation card, which may reach down over the bar
       let wakeUntil = 0
       let started = false
       const wake = (ms = 2500) => { wakeUntil = Math.max(wakeUntil, Date.now() + ms) }
       this.video.addEventListener("playing", () => { started = true })
       const evaluate = () => {
         const r = main.getBoundingClientRect()
-        const inBottom = pointerY !== null && pointerY >= r.bottom - BOTTOM && pointerY <= r.bottom
-        const inTop = pointerY !== null && pointerY >= r.top && pointerY <= r.top + TOP
+        const inBottom = !overTip && pointerY !== null && pointerY >= r.bottom - BOTTOM && pointerY <= r.bottom
+        const inTop = !overTip && pointerY !== null && pointerY >= r.top && pointerY <= r.top + TOP
         const menu = !!this.el.querySelector(".study-pop:not([hidden])")
         const recent = Date.now() < wakeUntil
         const idle = !started || this.video.ended
         main.dataset.controls = inBottom || menu || recent || idle ? "on" : "off"
         this.stage.dataset.top = inTop || recent || idle ? "on" : "off"
       }
-      this.el.addEventListener("pointermove", (e) => { pointerY = e.clientY; evaluate() }, {passive: true})
-      this.el.addEventListener("pointerleave", () => { pointerY = null; evaluate() })
+      this.el.addEventListener("pointermove", (e) => {
+        pointerY = e.clientY
+        overTip = !!(e.target.closest && e.target.closest(".study-tip:not([hidden])"))
+        evaluate()
+      }, {passive: true})
+      this.el.addEventListener("pointerleave", () => { pointerY = null; overTip = false; evaluate() })
       this.el.addEventListener("pointerdown", (e) => { pointerY = e.clientY; if (e.pointerType === "touch") wake(3000); evaluate() }, {passive: true})
       document.addEventListener("keydown", () => { wake(); evaluate() })
       this.el.addEventListener("roki:wake", () => { wake(); evaluate() })
