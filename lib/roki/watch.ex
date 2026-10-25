@@ -25,6 +25,7 @@ defmodule Roki.Watch do
 
   @details_ttl 12 * 60 * 60
   @episodes_ttl 6 * 60 * 60
+  @few_sources 12
   @sources_ttl 10 * 60
 
   # How many releases one probe round checks (laev's own page size).
@@ -599,8 +600,25 @@ defmodule Roki.Watch do
           &extra_sources(Sources.episode_query(Sources.query_title(&1), season, episode))
         )
 
-      {:ok, %{query: q, sources: finish(found ++ extra, t, :tv)}}
+      packs =
+        if length(found) + length(extra) < @few_sources,
+          do: season_packs(primary, season),
+          else: []
+
+      {:ok, %{query: q, sources: finish(found ++ extra ++ packs, t, :tv)}}
     end
+  end
+
+  # An episode few releases are named for (a later episode of a season released in parts is often
+  # only inside the whole-season download) is also looked for among the season packs; the file
+  # picker takes the episode out of the one that has it.
+  defp season_packs(title, season) do
+    n = String.pad_leading(Integer.to_string(season || 1), 2, "0")
+    pack = ~r/\bS0?#{season || 1}\b(?![ ._-]?E\d)|\bseason[ ._]?0?#{season || 1}\b/i
+    single = ~r/\bS\d+[ ._-]?E\d+/i
+
+    extra_sources(join([Sources.query_title(title), "S#{n}"]))
+    |> Enum.filter(&(&1.name =~ pack and not (&1.name =~ single)))
   end
 
   defp search(query, torrentio) do
