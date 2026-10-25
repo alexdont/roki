@@ -63,6 +63,27 @@ const liveSocket = new LiveSocket("/live", Socket, {
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
 window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "smooth", block: "center"}))
 
+// The rating slider: the word and the colour of the score under the thumb. The same scale as
+// `score_word/1` and `score_color/1` in title_live.ex.
+const SCORE_WORDS = ["", "absolute trash", "garbage", "truly bad", "not good", "passable",
+  "it's alright", "pretty decent", "really good", "banger", "masterpiece"]
+function scoreColor(v) {
+  const s = Math.min(10, Math.max(1, v))
+  const [h, sat, l] = s <= 7 ? [(s - 1) / 6 * 130, 75, 46]
+    : [130 - (s - 7) / 3 * 85, 75 + (s - 7) / 3 * 20, 46 + (s - 7) / 3 * 6]
+  return `hsl(${Math.round(h)} ${Math.round(sat)}% ${Math.round(l)}%)`
+}
+window.rokiScore = input => {
+  const v = Number(input.value)
+  const color = scoreColor(v)
+  const out = document.getElementById("rate-out")
+  const word = document.getElementById("rate-word")
+  out.textContent = v % 1 === 0 ? String(v) : v.toFixed(1)
+  word.textContent = SCORE_WORDS[Math.min(10, Math.max(1, Math.round(v)))]
+  out.style.color = word.style.color = color
+  input.style.setProperty("--thumb", color)
+}
+
 // Play on an external player: the server found the release and says where to open it.
 window.addEventListener("phx:roki:launch", e => { window.location.href = e.detail.url })
 

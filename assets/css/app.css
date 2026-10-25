@@ -416,3 +416,35 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .peek-cached { margin-top: 0.35rem; font-size: 0.7rem; color: var(--color-success); }
 .peek-due { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--color-error); }
 .peek-released { margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.55; }
+
+
+/* The rating slider: a red-to-green-to-gold track, the thumb in the colour of the score. */
+.rate-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: var(--track);
+  outline-offset: 4px;
+}
+.rate-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.75rem;
+  width: 1.75rem;
+  border-radius: 9999px;
+  background: var(--thumb);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+}
+.rate-range::-moz-range-thumb {
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 9999px;
+  background: var(--thumb);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+}
+.rate-range::-moz-range-track {
+  background: transparent;
+}

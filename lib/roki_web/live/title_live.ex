@@ -817,6 +817,42 @@ defmodule RokiWeb.TitleLive do
   defp provider_name(:mal), do: "MyAnimeList"
   defp provider_name(_), do: "TMDB"
 
+  # What a score means, in laev's own words (its terminal rating prompt), and the colour it is
+  # drawn in: red at the bottom through green at 7 to gold at 10. `assets/js/app.js` (`rokiScore`)
+  # does the same while the slider moves.
+  @score_words %{
+    10 => "masterpiece",
+    9 => "banger",
+    8 => "really good",
+    7 => "pretty decent",
+    6 => "it's alright",
+    5 => "passable",
+    4 => "not good",
+    3 => "truly bad",
+    2 => "garbage",
+    1 => "absolute trash"
+  }
+
+  defp score_word(v) when is_number(v),
+    do: Map.fetch!(@score_words, v |> Float.round() |> trunc() |> max(1) |> min(10))
+
+  defp score_color(v) when is_number(v) do
+    s = v |> max(1) |> min(10)
+
+    {hue, sat, light} =
+      if s <= 7,
+        do: {(s - 1) / 6 * 130, 75, 46},
+        else: {130 - (s - 7) / 3 * 85, 75 + (s - 7) / 3 * 20, 46 + (s - 7) / 3 * 6}
+
+    "hsl(#{round(hue)} #{round(sat)}% #{round(light)}%)"
+  end
+
+  defp score_track do
+    # The slider runs 0.5 to 10, so a score sits at (score - 0.5) / 9.5 along it.
+    stops = Enum.map_join(1..10, ", ", &"#{score_color(&1)} #{round((&1 - 0.5) / 9.5 * 100)}%")
+    "linear-gradient(90deg, #{stops})"
+  end
+
   defp fmt_rating(v) when is_number(v) do
     if v == trunc(v),
       do: Integer.to_string(trunc(v)),
@@ -1424,7 +1460,7 @@ defmodule RokiWeb.TitleLive do
     ~H"""
     <div
       id="about-sheet"
-      class="fixed inset-0 z-[70] hidden items-end bg-black/50"
+      class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50"
       phx-window-keydown={JS.hide(to: "#about-sheet")}
       phx-key="escape"
     >
@@ -1566,12 +1602,12 @@ defmodule RokiWeb.TitleLive do
     ~H"""
     <div
       id="rate-sheet"
-      class="fixed inset-0 z-[70] hidden items-end bg-black/50 sm:items-center sm:justify-center"
+      class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50 sm:items-center sm:justify-center"
       phx-window-keydown={JS.hide(to: "#rate-sheet")}
       phx-key="escape"
     >
       <div
-        class="w-full rounded-t-2xl bg-base-100 p-5 pb-8 shadow-2xl sm:max-w-sm sm:rounded-2xl sm:pb-5"
+        class="w-full rounded-t-2xl bg-base-100 p-5 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-sm sm:rounded-2xl sm:pb-5"
         phx-click-away={JS.hide(to: "#rate-sheet")}
       >
         <div class="flex items-start gap-3">
@@ -1608,7 +1644,18 @@ defmodule RokiWeb.TitleLive do
           class="mt-4 space-y-4"
         >
           <div class="text-center">
-            <span id="rate-out" class="text-4xl font-bold text-info">{fmt_rating(@rating.value || 7)}</span>
+            <p
+              id="rate-word"
+              class="text-sm font-semibold uppercase tracking-wider"
+              style={"color: #{score_color(@rating.value || 7)}"}
+            >
+              {score_word(@rating.value || 7)}
+            </p>
+            <span
+              id="rate-out"
+              class="text-5xl font-bold"
+              style={"color: #{score_color(@rating.value || 7)}"}
+            >{fmt_rating(@rating.value || 7)}</span>
             <span class="text-lg text-base-content/50"> / 10</span>
           </div>
           <input
@@ -1618,8 +1665,9 @@ defmodule RokiWeb.TitleLive do
             max="10"
             step={if @rating.provider == :mal, do: "1", else: "0.5"}
             value={@rating.value || 7}
-            oninput="document.getElementById('rate-out').textContent = Number(this.value) % 1 === 0 ? String(Number(this.value)) : Number(this.value).toFixed(1)"
-            class="range range-info w-full"
+            oninput="rokiScore(this)"
+            style={"--thumb: #{score_color(@rating.value || 7)}; --track: #{score_track()}"}
+            class="rate-range w-full"
             aria-label="Your rating"
           />
           <div class="flex gap-2">
