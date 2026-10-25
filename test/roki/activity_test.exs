@@ -72,4 +72,11 @@ defmodule Roki.ActivityTest do
     assert [run] = Activity.group(events)
     assert run.kind == "finished" and run.count == 3 and run.binge?
   end
+
+  test "how far in a started entry is, as a clock" do
+    assert Activity.watched_text(%{kind: "started", seconds: 1412}) == "23:32"
+    assert Activity.watched_text(%{kind: "started", seconds: 3909}) == "1:05:09"
+    assert Activity.watched_text(%{kind: "finished", seconds: 1412}) == nil
+    assert Activity.watched_text(%{kind: "started", seconds: nil}) == nil
+  end
 end

@@ -203,6 +203,9 @@ defmodule RokiWeb.FeaturedLive do
                   {Roki.Activity.verb(run)}
                   <span class="font-semibold">{run.title}</span>
                 </p>
+                <p :if={Roki.Activity.watched_text(run)} class="text-xs text-base-content/70">
+                  {Roki.Activity.watched_text(run)} watched
+                </p>
                 <p class="mt-0.5 text-xs text-base-content/50">{ago(run.at)}</p>
               </div>
             </.link>

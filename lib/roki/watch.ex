@@ -1290,6 +1290,16 @@ defmodule Roki.Watch do
           {:ok, true}
         end
       )
+
+      # How far in it is, kept current for the strip (at most once every half minute).
+      Roki.TTLCache.fetch(
+        {:progress, uuid, ctx[:type], ctx[:tmdb_id], ctx[:season], ctx[:episode]},
+        30,
+        fn ->
+          Roki.Activity.started(uuid, Roki.Activity.describe_ctx(ctx), trunc(position))
+          {:ok, true}
+        end
+      )
     end
 
     :ok

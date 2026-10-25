@@ -55,6 +55,53 @@ defmodule Roki.Activity do
 
   def record(_uuid, _ctx, _kind), do: :ok
 
+  @doc """
+  A start with how far in it is (`seconds`): the first time it crosses ten minutes it is added, and
+  after that the same entry just follows the playhead (and rises to the top again). The open pages
+  hear about it when it is new and then once a minute of progress.
+  """
+  def started(uuid, %{} = what, seconds)
+      when is_integer(seconds) and seconds >= @started_after_s do
+    Task.start(fn ->
+      {:ok, uuid_bin} = Ecto.UUID.dump(uuid)
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      key = [uuid_bin, what.type, what.tmdb_id, what.season, what.episode]
+
+      %{rows: rows} =
+        Repo.query!(
+          """
+          select id, seconds from roki_activity
+           where user_uuid = $1 and type = $2 and tmdb_id = $3
+             and season is not distinct from $4 and episode is not distinct from $5
+             and kind = 'started' and at > $6
+           order by id desc limit 1
+          """,
+          key ++ [DateTime.add(now, -12 * 3600)]
+        )
+
+      case rows do
+        [] ->
+          insert(uuid, Map.put(what, :seconds, seconds), "started")
+
+        [[id, old]] ->
+          Repo.query!("update roki_activity set seconds = $1, at = $2 where id = $3", [
+            seconds,
+            now,
+            id
+          ])
+
+          if div(old || 0, 60) != div(seconds, 60),
+            do: Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
+      end
+    end)
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  def started(_uuid, _what, _seconds), do: :ok
+
   @doc "Insert one entry (`%{type, tmdb_id, title, poster, season, episode}`) unless it is a repeat."
   def insert(uuid, %{} = what, kind) when kind in ["started", "finished"] do
     Task.start(fn ->
@@ -86,8 +133,8 @@ defmodule Roki.Activity do
       unless dup? do
         Repo.query!(
           """
-          insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind, seconds)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           """,
           [
             uuid_bin,
@@ -98,7 +145,8 @@ defmodule Roki.Activity do
             what.title,
             what.poster,
             now,
-            kind
+            kind,
+            Map.get(what, :seconds)
           ]
         )
 
@@ -146,17 +194,17 @@ defmodule Roki.Activity do
 
       seen = if length(seen) <= 3, do: seen, else: []
 
-      started =
-        for {k, d, o} <- changed,
-            secs(d) >= @started_after_s,
-            secs(old_data(o)) < @started_after_s,
-            do: k
+      started = for {k, d, _o} <- changed, secs(d) >= @started_after_s, do: {k, secs(d)}
 
-      for {kind, keys} <- [{"finished", done ++ seen}, {"started", started}],
-          key <- Enum.take(keys, 10),
+      for key <- Enum.take(done ++ seen, 10),
           what = describe(uuid, key, resume),
           not recent_title?(uuid, what.type, what.tmdb_id, 1800) do
-        insert(uuid, what, kind)
+        insert(uuid, what, "finished")
+      end
+
+      for {key, seconds} <- Enum.take(started, 10),
+          what = describe(uuid, key, resume) do
+        started(uuid, what, seconds)
       end
     end
 
@@ -175,9 +223,6 @@ defmodule Roki.Activity do
   end
 
   defp secs(_), do: 0
-
-  defp old_data(%{"data" => d, "deleted" => false}), do: d
-  defp old_data(_), do: nil
 
   # A position key (`movie-ID`, `tv-ID-sSeE`, `tv-ID-eE`, `mal-ID-eE`) as something to show.
   defp describe(uuid, key, resume) do
@@ -267,6 +312,18 @@ defmodule Roki.Activity do
     Map.get(map, token)
   end
 
+  @doc "A play context as what the activity functions take."
+  def describe_ctx(%{type: type, tmdb_id: id, title: title} = ctx) do
+    %{
+      type: type,
+      tmdb_id: id,
+      title: title,
+      poster: poster_url(ctx[:poster_path]),
+      season: if(type == "tv", do: ctx[:season]),
+      episode: if(type == "tv", do: ctx[:tmdb_episode] || ctx[:episode])
+    }
+  end
+
   defp poster_url(nil), do: nil
   defp poster_url(path), do: Laev.Tmdb.poster_url(path, "w185")
 
@@ -281,7 +338,7 @@ defmodule Roki.Activity do
       Repo.query!(
         """
         select a.user_uuid::text, coalesce(nullif(u.username, ''), 'someone'), a.type, a.tmdb_id,
-               a.season, a.episode, a.title, a.poster, a.at, a.kind
+               a.season, a.episode, a.title, a.poster, a.at, a.kind, a.seconds
           from roki_activity a
           left join phoenix_kit_users u on u.uuid = a.user_uuid
          where a.at > $1
@@ -292,7 +349,7 @@ defmodule Roki.Activity do
       ).rows
 
     rows
-    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at, kind] ->
+    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at, kind, seconds] ->
       %{
         user: user,
         username: name,
@@ -303,7 +360,8 @@ defmodule Roki.Activity do
         title: title,
         poster: poster,
         at: to_utc(at),
-        kind: kind
+        kind: kind,
+        seconds: seconds
       }
     end)
     |> group()
@@ -367,9 +425,25 @@ defmodule Roki.Activity do
       episode: last.episode,
       at: last.at,
       kind: kind,
+      seconds: if(kind == "started", do: last[:seconds]),
       binge?: kind == "finished" and last.type == "tv" and count >= 3
     }
   end
+
+  @doc "\"23:32\" or \"1:05:09\": how far in a started entry is, or nil."
+  def watched_text(%{kind: "started", seconds: s}) when is_integer(s) and s > 0 do
+    {h, rest} = {div(s, 3600), rem(s, 3600)}
+    m = div(rest, 60)
+    sec = rem(rest, 60)
+
+    if h > 0,
+      do: "#{h}:#{pad(m)}:#{pad(sec)}",
+      else: "#{m}:#{pad(sec)}"
+  end
+
+  def watched_text(_), do: nil
+
+  defp pad(n), do: n |> Integer.to_string() |> String.pad_leading(2, "0")
 
   @doc "The sentence for a run, without the name: \"binged 25 episodes of\", \"started S2E4 of\"…"
   def verb(%{type: "movie", kind: "started"}), do: "started"
