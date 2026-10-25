@@ -29,14 +29,30 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:seen, MapSet.new())
       |> assign(:upcoming, %{})
       |> assign(:uuid, uuid(socket))
+      |> assign(:activity, if(uuid(socket), do: nil, else: []))
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
   end
 
+  # Who finished what, newest first. Only for people signed in (it names other people); it stays
+  # up to date: a finish anywhere tells every open page.
+  defp load_activity(socket) do
+    if socket.assigns.uuid,
+      do: start_async(socket, :activity, fn -> Roki.Activity.recent(14) end),
+      else: socket
+  end
+
+  @impl true
+  def handle_info(:activity, socket), do: {:noreply, load_activity(socket)}
+  def handle_info(_other, socket), do: {:noreply, socket}
+
   defp start(socket) do
     %{uuid: uuid, lists: lists} = socket.assigns
     socket = Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1))
+
+    if uuid, do: Phoenix.PubSub.subscribe(Roki.PubSub, Roki.Activity.topic())
+    socket = load_activity(socket)
 
     # How far through each list a signed-in user is — static data, so it never waits on TMDB.
     if uuid,
@@ -94,11 +110,27 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async({:dates, _kind, _page}, _other, socket), do: {:noreply, socket}
 
+  def handle_async(:activity, {:ok, runs}, socket),
+    do: {:noreply, assign(socket, :activity, runs)}
+
+  def handle_async(:activity, _other, socket), do: {:noreply, socket}
+
   def handle_async(:progress, {:ok, lists}, socket), do: {:noreply, assign(socket, :lists, lists)}
   def handle_async(:progress, {:exit, _reason}, socket), do: {:noreply, socket}
 
   def handle_async({:page, kind}, {:exit, reason}, socket),
     do: {:noreply, failed(socket, kind, reason)}
+
+  defp ago(%DateTime{} = at) do
+    s = DateTime.diff(DateTime.utc_now(), at)
+
+    cond do
+      s < 90 -> "just now"
+      s < 3600 -> "#{div(s, 60)} min ago"
+      s < 86_400 -> "#{div(s, 3600)} h ago"
+      true -> "#{div(s, 86_400)} d ago"
+    end
+  end
 
   defp failed(socket, kind, reason) do
     socket
@@ -144,6 +176,39 @@ defmodule RokiWeb.FeaturedLive do
       </section>
 
       <h1 :if={!@visitor?} class="text-2xl font-bold tracking-tight sm:text-3xl">Featured</h1>
+
+      <%!-- What people finished lately, newest on the left. Room is kept while it loads. --%>
+      <section :if={@activity != []} class="space-y-2" aria-label="Recent activity">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">
+          Recent activity
+        </h2>
+        <div :if={@activity == nil} class="skeleton h-24 w-full rounded-box"></div>
+        <ul :if={@activity} class="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+          <li :for={run <- @activity} class="shrink-0">
+            <.link
+              navigate={~p"/title/#{run.type}/#{run.tmdb_id}"}
+              class="flex h-24 w-64 gap-3 rounded-box bg-base-200 p-2 transition hover:bg-base-300"
+            >
+              <img
+                :if={run.poster}
+                src={run.poster}
+                alt=""
+                loading="lazy"
+                class="aspect-[2/3] h-full rounded-md bg-base-300 object-cover"
+              />
+              <div :if={!run.poster} class="aspect-[2/3] h-full rounded-md bg-base-300"></div>
+              <div class="min-w-0 flex-1 text-sm leading-snug">
+                <p class="line-clamp-3">
+                  <span class="font-semibold">{run.username}</span>
+                  {Roki.Activity.verb(run)}
+                  <span class="font-semibold">{run.title}</span>
+                </p>
+                <p class="mt-0.5 text-xs text-base-content/50">{ago(run.at)}</p>
+              </div>
+            </.link>
+          </li>
+        </ul>
+      </section>
 
       <div
         :if={@loading? and @error == nil}

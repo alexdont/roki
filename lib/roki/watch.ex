@@ -826,6 +826,7 @@ defmodule Roki.Watch do
       Laev.Position.set_watched(ctx, true)
       Laev.Sync.live_push()
     end)
+    |> tap(fn _ -> Roki.Activity.record(uuid, ctx) end)
   end
 
   @doc """
@@ -1262,7 +1263,12 @@ defmodule Roki.Watch do
       if finished? and not before?, do: Laev.Sync.live_push()
       {:finished, finished? and not before?}
     end)
-    |> tap(fn {:finished, new?} -> if new?, do: scrobble(uuid, [ctx]) end)
+    |> tap(fn {:finished, new?} ->
+      if new? do
+        scrobble(uuid, [ctx])
+        Roki.Activity.record(uuid, ctx)
+      end
+    end)
   end
 
   @doc "Where playback should resume, in seconds (0 = from the start)."
