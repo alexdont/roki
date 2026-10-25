@@ -597,3 +597,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-hover-clip { position: absolute; z-index: 3; overflow: hidden; border-radius: 9999px; pointer-events: none; }
 .study-hover-mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; }
 .study-hover-time { position: absolute; left: 0; bottom: calc(100% + 0.3rem); transform: translateX(-50%); padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: rgb(0 0 0 / 0.8); color: #fff; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The end time stays at the right end now that the hover mark's elements follow it in the row. */
+.study-timeline [data-role=cur] { left: 0; }
+.study-timeline [data-role=dur] { right: 0; left: auto; }
