@@ -7,6 +7,9 @@ defmodule Roki.Application do
 
   @impl true
   def start(_type, _args) do
+    Roki.Laev.snapshot_env()
+    Roki.Laev.scrub_env()
+
     children = [
       {Finch, [name: Swoosh.Finch]},
       RokiWeb.Telemetry,

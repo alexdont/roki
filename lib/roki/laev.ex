@@ -34,7 +34,47 @@ defmodule Roki.Laev do
     # where the account has none of its own.
     lent = Roki.Keys.overrides(uuid, Laev.Config.read_dir(dir))
     # (A study session's languages are laev scope overrides, which win over any of this.)
-    dir |> Laev.Scope.load(Map.merge(lent, app_keys())) |> Laev.Scope.run(fun)
+    try do
+      dir |> Laev.Scope.load(Map.merge(lent, app_keys())) |> Laev.Scope.run(fun)
+    after
+      scrub_env()
+    end
+  end
+
+  # The site's own settings, as the application started with them.
+  @site_env [:tmdb_key, :mal_client_id, :mal_client_secret]
+
+  @doc "Remember the site's own laev settings; `scrub_env/0` puts them back. Called once at start."
+  def snapshot_env do
+    :persistent_term.put(
+      {__MODULE__, :site_env},
+      for(k <- @site_env, v = Application.get_env(:laev, k), into: %{}, do: {k, v})
+    )
+  end
+
+  @doc """
+  Take every personal laev setting back out of the application environment.
+
+  Laev writes the keys it restores from a sync into the *application* environment as well as the
+  user's own, which is what every account falls back to when it has no key of its own. Left
+  alone, whoever syncs their keys first hands them to everybody: one account's TMDB session
+  (their ratings), debrid and TorBox keys. Nothing here reads that environment on purpose, so it
+  is kept empty except for the site's own settings.
+  """
+  def scrub_env do
+    site = :persistent_term.get({__MODULE__, :site_env}, %{})
+
+    for key <- Map.values(Laev.Config.keys()) do
+      want = Map.get(site, key)
+
+      cond do
+        Application.get_env(:laev, key) == want -> :ok
+        is_nil(want) -> Application.delete_env(:laev, key)
+        true -> Application.put_env(:laev, key, want)
+      end
+    end
+
+    :ok
   end
 
   @doc "Run inside the site's own scope — no user, only the server-wide TMDB key."
