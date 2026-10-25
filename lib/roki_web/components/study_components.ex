@@ -75,7 +75,7 @@ defmodule RokiWeb.StudyComponents do
         id="study-ui"
         phx-update="ignore"
         data-theater="false"
-        data-panel="open"
+        data-panel={if @immersive? and !@study?, do: "closed", else: "open"}
         data-sheet="closed"
         class="study-ui"
       >

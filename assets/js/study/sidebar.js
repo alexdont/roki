@@ -200,6 +200,8 @@ export const StudySidebar = {
   // LiveView only ever changes `data-player` on the root (the video and the rest are ignored
   // regions), so every update lands here.
   updated() {
+    // A patch that lands on the player's markup must not bring back the server's default list state.
+    if (this.panelState && this.ui && this.ui.dataset.panel !== this.panelState) this.setPanel(this.panelState)
     this.readPlayer()
   },
 
@@ -682,6 +684,7 @@ export const StudySidebar = {
       this.syncBackdrop()
     }
     this.setPanel = (state) => {
+      this.panelState = state
       this.ui.dataset.panel = state
       const small = state === "compact"
       compact.title = small ? "Larger" : "Smaller"
