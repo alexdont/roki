@@ -570,3 +570,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-bar2 .study-volume:hover { height: 0.65rem; }
 .study-bar2 .study-volume::-webkit-slider-thumb { width: 0.3rem; height: 1.05rem; border-radius: 0.1rem; background: #fff; box-shadow: none; }
 .study-bar2 .study-volume::-moz-range-thumb { width: 0.3rem; height: 1.05rem; border-radius: 0.1rem; background: #fff; }
+
+/* No handle on the timeline or the volume bar: where the colour ends is where you are. */
+.study-timeline .study-seek::-webkit-slider-thumb, .study-bar2 .study-volume::-webkit-slider-thumb { width: 0; height: 0; background: transparent; border: 0; box-shadow: none; }
+.study-timeline .study-seek::-moz-range-thumb, .study-bar2 .study-volume::-moz-range-thumb { width: 0; height: 0; background: transparent; border: 0; box-shadow: none; }
