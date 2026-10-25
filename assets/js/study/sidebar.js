@@ -206,6 +206,7 @@ export const StudySidebar = {
   },
 
   destroyed() {
+    if (this.panelWatch) this.panelWatch.disconnect()
     cancelAnimationFrame(this.raf)
     clearTimeout(this.dwellTimer)
     clearTimeout(this.leaveTimer)
@@ -703,6 +704,16 @@ export const StudySidebar = {
       else this.setSheet(this.ui.dataset.sheet !== "open")
     }
     lines.addEventListener("click", toggleList)
+    $("[data-role=lines-close]").addEventListener("click", () => {
+      if (this.wide.matches) this.setPanel("closed")
+      else this.setSheet(false)
+    })
+    // Only the buttons change the list's state: a server patch that rewrites the attribute (as
+    // picking subtitles used to) is put straight back.
+    this.panelWatch = new MutationObserver(() => {
+      if (this.panelState && this.ui.dataset.panel !== this.panelState) this.ui.dataset.panel = this.panelState
+    })
+    this.panelWatch.observe(this.ui, {attributes: true, attributeFilter: ["data-panel"]})
     compact.addEventListener("click", () => this.setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
     // The full-screen player remembers the list for a study session and for a plain watch
     // separately: a study session starts with it open and a plain watch with it closed, and after

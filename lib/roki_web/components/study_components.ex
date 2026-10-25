@@ -358,6 +358,15 @@ defmodule RokiWeb.StudyComponents do
           <aside class="study-side">
             <div class="study-box">
               <header class="study-head">
+                <button
+                  type="button"
+                  data-role="lines-close"
+                  class="btn btn-xs btn-ghost btn-square"
+                  title="Close the list"
+                  aria-label="Close the list"
+                >
+                  <.icon name="hero-x-mark" class="h-4 w-4" />
+                </button>
                 <span data-role="title" class="min-w-0 flex-1 truncate font-medium">Subtitles</span>
                 <span data-role="count" class="shrink-0 text-xs tabular-nums text-base-content/50"></span>
                 <button
