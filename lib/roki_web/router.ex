@@ -29,6 +29,8 @@ defmodule RokiWeb.Router do
     get "/peek/:type/:id", PeekController, :show
     get "/library/:type/:id", LibraryController, :show
     get "/dict/:lang", DictController, :show
+    get "/hevc-test", PageController, :hevc_test
+    get "/images/hevc-test", PageController, :hevc_test
     # PhoenixKit's own account page (profile picture, name, email, password) is the account
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.
