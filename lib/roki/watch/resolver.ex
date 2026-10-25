@@ -84,12 +84,13 @@ defmodule Roki.Watch.Resolver do
     {playable, late} = probe_page(parent, token, uuid, ctx, page, false, light?)
     rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
-    if hours > 0 and not light?, do: SourceCache.put(uuid, key, all, rest)
+    if hours > 0, do: SourceCache.put(uuid, key, all, rest, light?)
     {:ok, token, all, rest}
   end
 
   # A saved list made for another player: only its light releases, and none left means search again.
   defp lighten(nil, _light?), do: nil
+  defp lighten(%{light: true}, false), do: nil
   defp lighten(entry, false), do: entry
 
   defp lighten(entry, true) do
@@ -147,8 +148,8 @@ defmodule Roki.Watch.Resolver do
          {:ok, sources} <- only_light(sources, light?),
          {:ok, playable, rest} <-
            probe_until_playable(parent, token, uuid, ctx, sources, [], quick?, light?) do
-      # (A list made for the browser alone is left out of the saved ones: it is missing the heavy releases.)
-      if hours > 0 and not light?, do: SourceCache.put(uuid, key, playable, rest)
+      # (A list made for a browser that may not re-encode is saved as such: it lacks the heavy releases.)
+      if hours > 0, do: SourceCache.put(uuid, key, playable, rest, light?)
 
       {:ok,
        %{

@@ -47,9 +47,27 @@ defmodule Roki.Watch.SourceCache do
 
   def get(_uuid, _key, _hours), do: nil
 
-  def put(uuid, key, playable, rest) do
-    write(uuid, key, %{at: now(), v: @version, playable: playable, rest: rest, good: nil})
+  @doc """
+  Save the checked releases. `light?` marks a list made for a browser that may not re-encode: it
+  is missing the heavy releases, so it never replaces a full list and only serves the same kind.
+  """
+  def put(uuid, key, playable, rest, light? \\ false) do
+    if light? and get(uuid, key, 1_000_000) |> full?() do
+      :ok
+    else
+      write(uuid, key, %{
+        at: now(),
+        v: @version,
+        playable: playable,
+        rest: rest,
+        good: nil,
+        light: light?
+      })
+    end
   end
+
+  defp full?(%{} = entry), do: not Map.get(entry, :light, false)
+  defp full?(_), do: false
 
   @doc "Remember which release started, so the next Play goes straight to it."
   def mark_good(uuid, key, hash) do
