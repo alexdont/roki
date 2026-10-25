@@ -120,7 +120,10 @@ defmodule RokiWeb.SettingsLive do
 
   defp device_player(socket) do
     params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
-    if params["player"] == "browser", do: "browser", else: "external"
+
+    if params["player"] == "browser" and RokiWeb.PlayerMode.allowed?(socket),
+      do: "browser",
+      else: "external"
   end
 
   defp load(socket) do
@@ -143,6 +146,7 @@ defmodule RokiWeb.SettingsLive do
   # `roki:player` event writes it), read back from the socket params on connect.
   def handle_event("change", %{"_target" => ["d", "player"], "d" => %{"player" => mode}}, socket)
       when mode in ["external", "browser"] do
+    mode = if RokiWeb.PlayerMode.allowed?(socket), do: mode, else: "external"
     Process.send_after(self(), {:clear_saved, "device_player"}, 2_000)
 
     {:noreply,

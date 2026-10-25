@@ -874,7 +874,8 @@ defmodule Roki.Watch do
   """
   def start(uuid, ctx, source, stream) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
-    with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+    with true <- Roki.Keys.browser?(uuid) || {:error, :browser_not_allowed},
+         true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
          :ok <- release_previous(uuid),
          :ok <- allowed(source) do
       Roki.Keys.record(uuid, :play)

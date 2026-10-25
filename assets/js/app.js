@@ -53,7 +53,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   params: () => ({
     _csrf_token: csrfToken,
     platform,
-    player: storedPlayer() || defaultPlayer(),
+    player: document.querySelector("meta[name='roki-browser-locked']") ? "external" : storedPlayer() || defaultPlayer(),
     grid: storedGrid(),
     place: placeParam(),
   }),

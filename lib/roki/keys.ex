@@ -52,6 +52,14 @@ defmodule Roki.Keys do
 
   def grant(_), do: nil
 
+  @doc """
+  May this account play in the browser? A browser play can make the server convert the video, which
+  is the heavy part of it, so it is for the owner and the accounts they allowed; everyone else
+  uses an external player (VLC, mpv), which costs the server nothing.
+  """
+  def browser?(uuid) when is_binary(uuid), do: config().owner_uuid == uuid or grant(uuid) != nil
+  def browser?(_), do: false
+
   def granted?(uuid), do: grant(uuid) != nil
 
   defp load_grant(uuid) do

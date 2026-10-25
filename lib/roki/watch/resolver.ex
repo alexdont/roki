@@ -422,6 +422,10 @@ defmodule Roki.Watch.Resolver do
   def failure(:search_failed),
     do: "The sites that list releases did not answer in time. Try again in a moment."
 
+  def failure(:browser_not_allowed),
+    do:
+      "Watching in the browser isn't switched on for this account. Use an external player (VLC, mpv)."
+
   def failure(:over_limit),
     do: "You have used today's plays. Try again tomorrow."
 
