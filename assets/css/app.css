@@ -577,3 +577,13 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 
 /* The bar runs nearly edge to edge: a small margin, not a wide one. */
 .study-controls { padding-left: 0.4rem; padding-right: 0.4rem; }
+
+
+/* Immersive: the bar lies over the bottom of the picture and is gone while you watch. The lines sit
+   just above the strip the pointer has to enter to bring it back. */
+.study-immersive .study-controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding-top: 1.6rem; background: linear-gradient(to top, rgb(0 0 0 / 0.92) 55%, transparent); transition: opacity 0.2s ease, transform 0.2s ease; }
+.study-immersive .study-main[data-controls="off"] .study-controls { opacity: 0; transform: translateY(0.4rem); pointer-events: none; }
+.study-immersive .study-stage .study-overlay, .study-immersive .study-stage[data-active] .study-overlay { bottom: 5.6rem; }
+.study-immersive .study-replay { bottom: 6.5rem; }
+.study-immersive .study-stage[data-top="off"] .study-close { opacity: 0; pointer-events: none; }
+.study-immersive .study-stage[data-top="on"] .study-close { opacity: 1; pointer-events: auto; }

@@ -208,6 +208,7 @@ export const StudySidebar = {
     clearTimeout(this.dwellTimer)
     clearTimeout(this.leaveTimer)
     clearInterval(this.watchTimer)
+    clearInterval(this.wakeTimer)
     if (this.onMove) {
       document.removeEventListener("mousemove", this.onMove)
       document.removeEventListener("contextmenu", this.onAway)
@@ -603,6 +604,37 @@ export const StudySidebar = {
     const immersive = this.el.dataset.immersive === "true"
     if (immersive) {
       bindTransport(this.el, this.video, this.stage)
+
+      // Nothing sits over the picture while it plays: the bar shows only when the pointer goes
+      // into the strip at the very bottom (below the lines, which sit just above it), the close
+      // button only in the strip along the top. Hovering the lines never brings them up. They also
+      // show before the first play, when it ends, while a menu is open, for a moment after a key
+      // or a tap, and always on a touch screen's tap.
+      const main = this.el.querySelector(".study-main")
+      const BOTTOM = 88
+      const TOP = 72
+      let pointerY = null
+      let wakeUntil = 0
+      let started = false
+      const wake = (ms = 2500) => { wakeUntil = Math.max(wakeUntil, Date.now() + ms) }
+      this.video.addEventListener("playing", () => { started = true })
+      const evaluate = () => {
+        const r = main.getBoundingClientRect()
+        const inBottom = pointerY !== null && pointerY >= r.bottom - BOTTOM && pointerY <= r.bottom
+        const inTop = pointerY !== null && pointerY >= r.top && pointerY <= r.top + TOP
+        const menu = !!this.el.querySelector(".study-pop:not([hidden])")
+        const recent = Date.now() < wakeUntil
+        const idle = !started || this.video.ended
+        main.dataset.controls = inBottom || menu || recent || idle ? "on" : "off"
+        this.stage.dataset.top = inTop || recent || idle ? "on" : "off"
+      }
+      this.el.addEventListener("pointermove", (e) => { pointerY = e.clientY; evaluate() }, {passive: true})
+      this.el.addEventListener("pointerleave", () => { pointerY = null; evaluate() })
+      this.el.addEventListener("pointerdown", (e) => { pointerY = e.clientY; if (e.pointerType === "touch") wake(3000); evaluate() }, {passive: true})
+      document.addEventListener("keydown", () => { wake(); evaluate() })
+      this.el.addEventListener("roki:wake", () => { wake(); evaluate() })
+      this.wakeTimer = setInterval(evaluate, 250)
+      evaluate()
       $("[data-role=close]").addEventListener("click", () => {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
         if (history.length > 1) history.back()

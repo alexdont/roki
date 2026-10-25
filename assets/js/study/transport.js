@@ -75,6 +75,7 @@ export function bindTransport(root, video, stage) {
 
   // Keys, unless something is being typed in.
   document.addEventListener("keydown", (e) => {
+    root.dispatchEvent(new CustomEvent("roki:wake"))
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && e.target.type !== "range") return
     if (!root.isConnected) return
