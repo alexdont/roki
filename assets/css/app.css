@@ -466,8 +466,8 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-immersive .study-stage:not([data-active]) .study-close { opacity: 0; pointer-events: none; }
 .study-label-pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 0.5rem; background: rgb(0 0 0 / 0.55); padding: 0.3rem 0.65rem; font-size: 0.85rem; font-weight: 600; }
 
-.study-transport { display: flex; align-items: center; gap: 0.6rem; background: #0b0b0d; padding: 0.4rem 0.75rem 0; }
-.study-time { min-width: 2.6rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; color: rgb(255 255 255 / 0.8); text-align: center; }
+.study-transport { display: flex; align-items: center; gap: 0.6rem; background: #0b0b0d; padding: 0.5rem 0.75rem; }
+.study-clock { min-width: 2.6rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; color: rgb(255 255 255 / 0.8); text-align: center; }
 .study-range { -webkit-appearance: none; appearance: none; height: 0.3rem; cursor: pointer; border-radius: 9999px; background: linear-gradient(90deg, var(--color-primary) var(--p, 0%), rgb(255 255 255 / 0.25) var(--p, 0%)); }
 .study-range:hover { height: 0.42rem; }
 .study-range:disabled { opacity: 0.4; cursor: default; }
@@ -476,8 +476,14 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0.9rem; height: 0.9rem; border-radius: 9999px; background: #fff; box-shadow: 0 0 3px rgb(0 0 0 / 0.6); }
 .study-range::-moz-range-thumb { width: 0.9rem; height: 0.9rem; border: 0; border-radius: 9999px; background: #fff; }
 
-.study-immersive .study-bar { background: #0b0b0d; padding: 0.35rem 0.75rem 0.6rem; }
+/* The menus ride in the picture's top right, with the close button: one bar along the bottom
+   (the timeline) and nothing else under the picture. They show with the pointer, like it. */
+.study-immersive .study-main { position: relative; }
+.study-immersive .study-bar { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 5; justify-content: flex-end; transition: opacity 0.25s; }
+.study-immersive .study-main:has(.study-stage:not([data-active])):not(:has(.study-pop:not([hidden]))) .study-bar { opacity: 0; pointer-events: none; }
+.study-immersive .study-bar .btn { background: rgb(0 0 0 / 0.55); }
 .study-immersive .study-bar .btn, .study-immersive .study-transport .btn { border-color: transparent; background: rgb(255 255 255 / 0.1); color: #fff; box-shadow: none; }
+.study-immersive .study-bar .btn { background: rgb(0 0 0 / 0.55); }
 .study-immersive .study-bar .btn:hover, .study-immersive .study-transport .btn:hover, .study-immersive .study-close .btn:hover { background: rgb(255 255 255 / 0.22); }
 .study-immersive .study-bar .btn.btn-primary { background: var(--color-primary); color: var(--color-primary-content); }
 .study-immersive .study-close .btn { border-color: transparent; background: rgb(0 0 0 / 0.55); color: #fff; box-shadow: none; }
@@ -493,3 +499,19 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 }
 /* The list and the menus keep the site's own colours: only the bar and the picture are black. */
 .study-immersive .study-box, .study-immersive .study-pop, .study-immersive .study-tip { color: var(--color-base-content); }
+
+/* The list and the menus are as dark as the player. */
+.study-immersive .study-box, .study-immersive .study-pop, .study-immersive .study-tip {
+  --color-base-100: #141416;
+  --color-base-200: #1b1b1e;
+  --color-base-300: #2a2a2f;
+  --color-base-content: #f1f1f3;
+  color: var(--color-base-content);
+}
+.study-immersive .study-box { border-color: #2a2a2f; }
+@media (min-width: 640px) {
+  .study-immersive .study-pop { top: calc(100% + 0.4rem); bottom: auto; left: auto; right: 0; }
+}
+@media (max-width: 639px) {
+  .study-label-pill { display: none; }
+}

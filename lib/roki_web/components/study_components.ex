@@ -109,7 +109,7 @@ defmodule RokiWeb.StudyComponents do
                 <span data-icon="play"><.icon name="hero-play-solid" class="h-5 w-5" /></span>
                 <span data-icon="pause" class="hidden"><.icon name="hero-pause-solid" class="h-5 w-5" /></span>
               </button>
-              <span data-role="cur" class="study-time">0:00</span>
+              <span data-role="cur" class="study-clock">0:00</span>
               <input
                 type="range"
                 data-role="seek"
@@ -120,7 +120,7 @@ defmodule RokiWeb.StudyComponents do
                 class="study-range study-seek"
                 aria-label="Seek"
               />
-              <span data-role="dur" class="study-time">0:00</span>
+              <span data-role="dur" class="study-clock">0:00</span>
               <button type="button" data-role="mute" class="btn btn-sm btn-square" aria-label="Mute">
                 <span data-icon="on"><.icon name="hero-speaker-wave" class="h-5 w-5" /></span>
                 <span data-icon="off" class="hidden"><.icon
@@ -138,6 +138,15 @@ defmodule RokiWeb.StudyComponents do
                 class="study-range study-volume"
                 aria-label="Volume"
               />
+              <button
+                type="button"
+                data-role="fullscreen"
+                class="btn btn-sm btn-square"
+                title="Fullscreen, with the subtitles"
+                aria-label="Fullscreen"
+              >
+                <.icon name="hero-arrows-pointing-out" class="h-5 w-5" />
+              </button>
             </div>
 
             <div class="study-bar">
@@ -216,6 +225,7 @@ defmodule RokiWeb.StudyComponents do
                   <.icon name="hero-film" class="h-4 w-4" />
                 </button>
                 <button
+                  :if={!@immersive?}
                   type="button"
                   data-role="fullscreen"
                   class="btn btn-sm btn-square"
