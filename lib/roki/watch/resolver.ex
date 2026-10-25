@@ -113,10 +113,32 @@ defmodule Roki.Watch.Resolver do
 
   # The shared list is ranked for no one in particular; a study session ranks it for its languages
   # so the releases in them are the ones checked first.
+  # Studying happens in the browser, where 4K is a software re-encode that never keeps up: nothing
+  # above 1080p is looked at at all.
   defp in_study_order(sources, uuid) do
-    if Roki.Study.active?(),
-      do: Roki.Laev.run(uuid, fn -> Laev.Sources.rank(sources) end),
-      else: sources
+    if Roki.Study.active?() do
+      Roki.Laev.run(uuid, fn ->
+        sources |> Laev.Sources.at_most("1080p") |> Laev.Sources.rank()
+      end)
+    else
+      sources
+    end
+  end
+
+  # Subtitles in the language but the speech in another is no help to someone learning it: a study
+  # session only keeps releases whose audio — as read from the file itself — has the language.
+  defp spoken_in_study_language(ranked) do
+    case Roki.Study.current() do
+      %{lang: lang} ->
+        want = Watch.short_code(lang)
+
+        Enum.filter(ranked, fn {source, _stream} ->
+          want in Enum.map(Map.get(source, :langs) || [], &Watch.short_code/1)
+        end)
+
+      _ ->
+        ranked
+    end
   end
 
   # What is checked first matters: a search for a series returns what the uploaders posted for the
@@ -166,7 +188,8 @@ defmodule Roki.Watch.Resolver do
     {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?)
     rest = late ++ rest
     # Starting in the browser is what is waited for: what is known from the names ranks it.
-    ranked = Watch.attach_and_rank(uuid, acc ++ playable, fast: quick?)
+    ranked =
+      Watch.attach_and_rank(uuid, acc ++ playable, fast: quick?) |> spoken_in_study_language()
 
     cond do
       ranked != [] -> {:ok, ranked, rest}
@@ -306,8 +329,13 @@ defmodule Roki.Watch.Resolver do
 
   def failure(:no_sources), do: "No releases were found for this."
 
-  def failure(:none_playable),
-    do: "None of the releases found can be played right now. Try again later, or another episode."
+  def failure(:none_playable) do
+    if Roki.Study.active?(),
+      do:
+        "No 1080p release with the audio in the language you chose was found for this one. Try another episode, or another language.",
+      else:
+        "None of the releases found can be played right now. Try again later, or another episode."
+  end
 
   def failure({:above_ceiling, n, cap}),
     do:

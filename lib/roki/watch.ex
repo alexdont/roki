@@ -697,7 +697,8 @@ defmodule Roki.Watch do
     in_a_hurry? = Keyword.get(opts, :fast, false)
     english? = Laev.Config.lang() == "en" and Laev.Config.subs_lang() in [nil, "en"]
 
-    if in_a_hurry? and english?,
+    # A study session needs the real audio of every release, whatever the language.
+    if in_a_hurry? and english? and not Roki.Study.active?(),
       do: playable,
       else: Laev.Providers.attach_tracks(playable)
   end
