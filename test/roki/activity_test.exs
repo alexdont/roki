@@ -14,6 +14,7 @@ defmodule Roki.ActivityTest do
         episode: at_min,
         title: "Show #{id}",
         poster: nil,
+        kind: "finished",
         at: DateTime.add(~U[2026-10-25 12:00:00Z], at_min * 60)
       },
       extra
@@ -46,10 +47,29 @@ defmodule Roki.ActivityTest do
 
   test "the sentence for one episode, two, and a film" do
     assert [one] = Activity.group([ev("a", 1, 1, %{season: 2, episode: 4})])
-    assert Activity.verb(one) == "watched S2E4 of"
+    assert Activity.verb(one) == "finished S2E4 of"
     assert [two] = Activity.group([ev("a", 1, 1), ev("a", 1, 2)])
-    assert Activity.verb(two) == "watched 2 episodes of"
+    assert Activity.verb(two) == "finished 2 episodes of"
     assert [film] = Activity.group([ev("a", 9, 1, %{type: "movie", season: nil, episode: nil})])
-    assert Activity.verb(film) == "watched"
+    assert Activity.verb(film) == "finished"
+  end
+
+  test "only starting something is a start, however many times it was opened" do
+    started = %{kind: "started"}
+    assert [run] = Activity.group([ev("a", 1, 1, %{season: 1, episode: 4} |> Map.merge(started))])
+    assert Activity.verb(run) == "started S1E4 of" and run.kind == "started"
+
+    assert [film] =
+             Activity.group([
+               ev("a", 9, 1, %{type: "movie", season: nil, episode: nil, kind: "started"})
+             ])
+
+    assert Activity.verb(film) == "started"
+  end
+
+  test "starting the next episode after finishing some does not hide the finished ones" do
+    events = [ev("a", 1, 1), ev("a", 1, 2), ev("a", 1, 3), ev("a", 1, 4, %{kind: "started"})]
+    assert [run] = Activity.group(events)
+    assert run.kind == "finished" and run.count == 3 and run.binge?
   end
 end

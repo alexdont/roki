@@ -22,9 +22,16 @@ defmodule Roki.Activity do
 
   def topic, do: @topic
 
-  @doc "Remember a finished episode or film (from a play context), and tell the open pages."
-  def record(uuid, %{type: type, tmdb_id: id, title: title} = ctx)
-      when is_binary(uuid) and type in ["movie", "tv"] and is_integer(id) and is_binary(title) do
+  @doc """
+  Remember that an episode or film was started (`"started"`) or finished (`"finished"`), from a
+  play context, and tell the open pages. Opening a title and closing it again is not activity:
+  a start is recorded only when playing begins.
+  """
+  def record(uuid, ctx, kind \\ "finished")
+
+  def record(uuid, %{type: type, tmdb_id: id, title: title} = ctx, kind)
+      when is_binary(uuid) and type in ["movie", "tv"] and is_integer(id) and is_binary(title) and
+             kind in ["started", "finished"] do
     Task.start(fn ->
       season = if type == "tv", do: ctx[:season]
       episode = if type == "tv", do: ctx[:tmdb_episode] || ctx[:episode]
@@ -37,18 +44,18 @@ defmodule Roki.Activity do
           select 1 from roki_activity
            where user_uuid = $1 and type = $2 and tmdb_id = $3
              and season is not distinct from $4 and episode is not distinct from $5
-             and at > $6 limit 1
+             and kind = $7 and at > $6 limit 1
           """,
-          [uuid_bin, type, id, season, episode, DateTime.add(now, -@dup_s)]
+          [uuid_bin, type, id, season, episode, DateTime.add(now, -@dup_s), kind]
         ).num_rows > 0
 
       unless dup? do
         Repo.query!(
           """
-          insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at)
-          values ($1, $2, $3, $4, $5, $6, $7, $8)
+          insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           """,
-          [uuid_bin, type, id, season, episode, title, poster_url(ctx[:poster_path]), now]
+          [uuid_bin, type, id, season, episode, title, poster_url(ctx[:poster_path]), now, kind]
         )
 
         Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
@@ -60,7 +67,7 @@ defmodule Roki.Activity do
     _ -> :ok
   end
 
-  def record(_uuid, _ctx), do: :ok
+  def record(_uuid, _ctx, _kind), do: :ok
 
   defp poster_url(nil), do: nil
   defp poster_url(path), do: Laev.Tmdb.poster_url(path, "w185")
@@ -76,7 +83,7 @@ defmodule Roki.Activity do
       Repo.query!(
         """
         select a.user_uuid::text, coalesce(nullif(u.username, ''), 'someone'), a.type, a.tmdb_id,
-               a.season, a.episode, a.title, a.poster, a.at
+               a.season, a.episode, a.title, a.poster, a.at, a.kind
           from roki_activity a
           left join phoenix_kit_users u on u.uuid = a.user_uuid
          where a.at > $1
@@ -87,7 +94,7 @@ defmodule Roki.Activity do
       ).rows
 
     rows
-    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at] ->
+    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at, kind] ->
       %{
         user: user,
         username: name,
@@ -97,7 +104,8 @@ defmodule Roki.Activity do
         episode: episode,
         title: title,
         poster: poster,
-        at: to_utc(at)
+        at: to_utc(at),
+        kind: kind
       }
     end)
     |> group()
@@ -142,9 +150,13 @@ defmodule Roki.Activity do
     |> Enum.map(&run/1)
   end
 
+  # One run. Finished episodes are what it is about (and what a binge counts); a run with none —
+  # only starts — is a start, of the last thing begun.
   defp run(evs) do
-    last = List.last(evs)
-    count = length(evs)
+    finished = Enum.filter(evs, &(&1.kind == "finished"))
+    {kind, shown} = if finished == [], do: {"started", evs}, else: {"finished", finished}
+    last = List.last(shown)
+    count = shown |> Enum.uniq_by(&{&1.season, &1.episode}) |> length()
 
     %{
       username: last.username,
@@ -152,21 +164,23 @@ defmodule Roki.Activity do
       tmdb_id: last.tmdb_id,
       title: last.title,
       poster: Enum.find_value(Enum.reverse(evs), & &1.poster),
-      count: count,
+      count: if(kind == "started", do: 1, else: count),
       season: last.season,
       episode: last.episode,
       at: last.at,
-      binge?: last.type == "tv" and count >= 3
+      kind: kind,
+      binge?: kind == "finished" and last.type == "tv" and count >= 3
     }
   end
 
-  @doc "The sentence for a run, without the name: \"binged 25 episodes of\"/\"watched\"."
-  def verb(%{type: "movie"}), do: "watched"
+  @doc "The sentence for a run, without the name: \"binged 25 episodes of\", \"started S2E4 of\"…"
+  def verb(%{type: "movie", kind: "started"}), do: "started"
+  def verb(%{type: "movie"}), do: "finished"
   def verb(%{binge?: true, count: n}), do: "binged #{n} episodes of"
-  def verb(%{count: 2}), do: "watched 2 episodes of"
+  def verb(%{kind: "finished", count: 2}), do: "finished 2 episodes of"
 
-  def verb(%{season: s, episode: e}) when is_integer(s) and is_integer(e),
-    do: "watched S#{s}E#{e} of"
+  def verb(%{kind: kind, season: s, episode: e}) when is_integer(s) and is_integer(e),
+    do: "#{kind} S#{s}E#{e} of"
 
-  def verb(_), do: "watched"
+  def verb(%{kind: kind}), do: kind
 end

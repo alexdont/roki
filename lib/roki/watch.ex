@@ -818,6 +818,7 @@ defmodule Roki.Watch do
         resume_at: Laev.Position.saved_position(ctx) || 0
       }
     end)
+    |> tap(fn _ -> Roki.Activity.record(uuid, ctx, "started") end)
   end
 
   @doc "Mark this episode or film watched (an external player cannot report progress)."
@@ -872,7 +873,12 @@ defmodule Roki.Watch do
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
          :ok <- Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
       Roki.Keys.record(uuid, :play)
+
       do_start(uuid, ctx, source, stream)
+      |> tap(fn
+        {:ok, _} -> Roki.Activity.record(uuid, ctx, "started")
+        _ -> :ok
+      end)
     end
   end
 
