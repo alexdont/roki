@@ -591,3 +591,8 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 /* The bar belongs to the picture's column: beside the list it ends where the picture ends, and with
    the list away it runs the full width. */
 .study-immersive .study-main { position: relative; }
+
+/* Where a click on the timeline would land: a thin white mark, the time above it. */
+.study-hover { position: absolute; top: 0; width: 0; z-index: 3; pointer-events: none; }
+.study-hover-mark { position: absolute; left: -1px; top: -0.2rem; bottom: -0.2rem; width: 2px; border-radius: 1px; background: #fff; box-shadow: 0 0 2px rgb(0 0 0 / 0.6); }
+.study-hover-time { position: absolute; left: 0; bottom: calc(100% + 0.3rem); transform: translateX(-50%); padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: rgb(0 0 0 / 0.8); color: #fff; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }

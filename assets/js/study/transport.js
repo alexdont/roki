@@ -47,6 +47,28 @@ export function bindTransport(root, video, stage) {
   for (const ev of ["play", "pause", "ended"]) video.addEventListener(ev, showPlaying)
   for (const ev of ["timeupdate", "durationchange", "loadedmetadata", "seeked"]) video.addEventListener(ev, showTime)
 
+  // Pointing at the timeline shows a thin white mark where a click would land, and the time there.
+  const hover = document.createElement("div")
+  hover.className = "study-hover"
+  hover.hidden = true
+  hover.innerHTML = '<span class="study-hover-time"></span><span class="study-hover-mark"></span>'
+  seek.parentElement.appendChild(hover)
+  const hoverTime = hover.firstChild
+  seek.addEventListener("pointermove", (e) => {
+    const total = duration()
+    if (!total || e.pointerType === "touch") return
+    const box = seek.getBoundingClientRect()
+    const x = Math.max(0, Math.min(box.width, e.clientX - box.left))
+    // Placed from the bar's own box, so it sits on the bar whatever the padding around it.
+    const row = seek.parentElement.getBoundingClientRect()
+    hover.style.left = `${x + (box.left - row.left)}px`
+    hover.style.top = `${box.top - row.top}px`
+    hover.style.height = `${box.height}px`
+    hoverTime.textContent = formatTime((x / box.width) * total)
+    hover.hidden = false
+  })
+  seek.addEventListener("pointerleave", () => { hover.hidden = true })
+
   seek.addEventListener("input", () => {
     dragging = true
     const total = duration()
