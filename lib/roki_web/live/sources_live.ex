@@ -106,13 +106,21 @@ defmodule RokiWeb.SourcesLive do
     cond do
       # Playing in the browser, the sources page has nothing to add: the watch page finds the
       # release and starts it itself. Going straight there saves a whole page.
-      params["auto"] == "1" and connected?(socket) and socket.assigns.linked? and
-          socket.assigns.mode == :browser ->
+      auto?(params, socket) and socket.assigns.linked? and socket.assigns.mode == :browser ->
         {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns))}
 
       true ->
         auto_or_list(params, socket)
     end
+  end
+
+  # `?auto=1` asks once, for the page that was opened with it. A page that rejoins (the phone
+  # woke up, the connection dropped — coming back from the external player does exactly this)
+  # joins with the address it first loaded, which still has `auto=1`; LiveView counts the joins
+  # (`_mounts`), so only the first one starts anything.
+  defp auto?(params, socket) do
+    params["auto"] == "1" and connected?(socket) and
+      Map.get(get_connect_params(socket) || %{}, "_mounts", 0) == 0
   end
 
   defp direct_watch_path(%{type: "movie", id: id, prefer: prefer}),
@@ -125,7 +133,7 @@ defmodule RokiWeb.SourcesLive do
   defp prefer_query(hash), do: [prefer: hash]
 
   defp auto_or_list(params, socket) do
-    if params["auto"] == "1" and connected?(socket),
+    if auto?(params, socket),
       do:
         {:noreply,
          socket
