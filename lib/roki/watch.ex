@@ -875,6 +875,7 @@ defmodule Roki.Watch do
   def start(uuid, ctx, source, stream) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+         :ok <- release_previous(uuid),
          :ok <- Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
       Roki.Keys.record(uuid, :play)
 
@@ -882,12 +883,34 @@ defmodule Roki.Watch do
     end
   end
 
+  # One player per person: starting something else ends the conversion left from the last one,
+  # which would otherwise sit on an encoder slot (and the CPU) for ten idle minutes.
+  defp release_previous(uuid) do
+    key = {:remux, uuid}
+
+    case Roki.TTLCache.fetch(key, 3 * 3600, fn -> :none end) do
+      {:ok, id} when is_binary(id) -> Laev.Remux.stop(id)
+      _ -> :ok
+    end
+
+    Roki.TTLCache.delete(key)
+    :ok
+  end
+
+  defp remember_remux(uuid, %{kind: :remux, remux_id: id}) do
+    Roki.TTLCache.delete({:remux, uuid})
+    Roki.TTLCache.fetch({:remux, uuid}, 3 * 3600, fn -> {:ok, id} end)
+  end
+
+  defp remember_remux(_uuid, _src), do: :ok
+
   defp do_start(uuid, ctx, source, stream) do
     Roki.Laev.run(uuid, fn ->
       with {:ok, src} <- Laev.Playback.browser_source(ctx, stream, title: ctx.title),
            true <- src.playable || {:error, src[:reason] || :not_playable},
            :ok <- ready(src) do
         save_resume(ctx, source)
+        remember_remux(uuid, src)
 
         {:ok,
          %{
