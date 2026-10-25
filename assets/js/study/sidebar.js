@@ -890,7 +890,9 @@ export const StudySidebar = {
     setPeek(this.peek)
     this.el.addEventListener("click", (e) => {
       const trans = e.target.closest && e.target.closest(".study-trans")
-      if (trans) trans.toggleAttribute("data-revealed")
+      // Dragging across a word to select it also ends in a click: that must not blur the line again.
+      const picked = window.getSelection && window.getSelection().toString().trim() !== ""
+      if (trans && !picked) trans.toggleAttribute("data-revealed")
     })
   },
 
