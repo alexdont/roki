@@ -56,6 +56,7 @@ defmodule RokiWeb.WatchLive do
           player: nil,
           failed: nil,
           failed_reason: nil,
+          skip: [],
           heavy_ok: false,
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           episodes: nil,
@@ -102,6 +103,9 @@ defmodule RokiWeb.WatchLive do
       socket.assigns
 
     heavy_ok = socket.assigns.heavy_ok
+    # Releases that did not work for this episode are left out, a chosen one included.
+    skip = socket.assigns.skip
+    hash = if hash in skip, do: nil, else: hash
 
     parent = self()
 
@@ -123,6 +127,7 @@ defmodule RokiWeb.WatchLive do
                  true,
                  heavy_ok
                ),
+             res = without(parent, token, uuid, heavy_ok, res, skip),
              {res, pair} <-
                locate(
                  parent,
@@ -136,7 +141,8 @@ defmodule RokiWeb.WatchLive do
              pair = if(hash, do: pair, else: within_cap(res, pair)),
              {:ok, pair} <- choose(res, pair),
              :ok <- announce(parent, token, "Getting the video ready…"),
-             {:ok, player} <- start(uuid, res.ctx, pair) do
+             {:ok, pair, player} <-
+               start_or_next(parent, token, uuid, res, pair, hash == nil, skip, 4) do
           {:ok, token, res, pair, player}
         else
           {:error, ^token, reason} -> {:error, token, reason}
@@ -144,6 +150,74 @@ defmodule RokiWeb.WatchLive do
         end
       end)
     )
+  end
+
+  # What did not work before is left out; when that is all that was checked, look at more.
+  defp without(_parent, _token, _uuid, _heavy_ok, res, []), do: res
+
+  defp without(parent, token, uuid, heavy_ok, res, skip) do
+    keep = Enum.reject(res.playable, fn {source, _} -> source.hash in skip end)
+    res = %{res | playable: keep}
+
+    if keep == [] and res.rest != [] do
+      hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
+
+      {:ok, _token, all, rest} =
+        Resolver.more(
+          parent,
+          token,
+          uuid,
+          res.ctx,
+          res.rest,
+          [],
+          res.key,
+          hours,
+          Resolver.light?(:browser, uuid, heavy_ok)
+        )
+
+      without(parent, token, uuid, heavy_ok, %{res | playable: all, rest: rest}, skip)
+    else
+      res
+    end
+  end
+
+  # Start the release; when it will not (its host is silent, it needs more than this account may
+  # use) and the choice was ours rather than the user's, go on with the next best instead of
+  # stopping. The ones that failed are told to the page so a retry leaves them out.
+  @unskippable [:busy, :over_limit, :no_provider]
+  defp start_or_next(parent, token, uuid, res, {source, _} = pair, auto?, tried, left) do
+    case start(uuid, res.ctx, pair) do
+      {:ok, player} ->
+        {:ok, pair, player}
+
+      {:error, reason} ->
+        tried = [source.hash | tried]
+        send(parent, {:tried, token, tried})
+        next = if auto? and left > 0 and skippable?(reason), do: next_pair(res, tried)
+
+        if next do
+          announce(parent, token, "That release didn't work — trying another…")
+          start_or_next(parent, token, uuid, res, next, auto?, tried, left - 1)
+        else
+          {:error, reason}
+        end
+    end
+  end
+
+  defp skippable?(reason) when reason in @unskippable, do: false
+  defp skippable?({:busy, _}), do: false
+  defp skippable?({:expired, _}), do: false
+  defp skippable?(_), do: true
+
+  defp next_pair(res, tried) do
+    left = Enum.reject(res.playable, fn {source, _} -> source.hash in tried end)
+
+    case Enum.filter(left, fn {source, _} ->
+           Laev.Sources.resolution_at_most?(source.resolution, res.cap)
+         end) do
+      [] -> nil
+      within -> pick(%{res | playable: within})
+    end
   end
 
   # A shared address names a release. It may not be among the first ones checked, so look further
@@ -497,6 +571,12 @@ defmodule RokiWeb.WatchLive do
       else: {:noreply, socket}
   end
 
+  # Look again leaving out the releases that did not work.
+  def handle_event("try_another", _params, %{assigns: %{skip: [_ | _]}} = socket),
+    do: {:noreply, resolve(socket)}
+
+  def handle_event("try_another", _params, socket), do: {:noreply, socket}
+
   def handle_event("ended", _params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
     if uuid && ctx, do: Task.start(fn -> Watch.ended(uuid, ctx) end)
@@ -544,6 +624,9 @@ defmodule RokiWeb.WatchLive do
   end
 
   def handle_info(:warm_next, socket), do: {:noreply, socket}
+
+  def handle_info({:tried, token, hashes}, %{assigns: %{token: token}} = socket),
+    do: {:noreply, update(socket, :skip, &Enum.uniq(&1 ++ hashes))}
 
   def handle_info({:status, token, text}, %{assigns: %{token: token}} = socket),
     do: {:noreply, assign(socket, status: text, probe: nil)}
@@ -621,7 +704,17 @@ defmodule RokiWeb.WatchLive do
         <div :if={@failed} class="space-y-3">
           <p class="alert alert-warning text-sm">{@failed}</p>
           <.heavy_offer :if={@failed_reason == :no_light and @heavy_allowed?} />
-          <.link navigate={sources_path(assigns)} class="btn">Choose another source</.link>
+          <div class="flex flex-wrap gap-2">
+            <button
+              :if={@skip != [] and @failed_reason != :no_light}
+              type="button"
+              phx-click="try_another"
+              class="btn btn-primary"
+            >
+              Try another source
+            </button>
+            <.link navigate={sources_path(assigns)} class="btn">Choose another source</.link>
+          </div>
         </div>
 
         <div
