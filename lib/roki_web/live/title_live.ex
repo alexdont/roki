@@ -834,7 +834,7 @@ defmodule RokiWeb.TitleLive do
   }
 
   defp score_word(v) when is_number(v),
-    do: Map.fetch!(@score_words, v |> Float.round() |> trunc() |> max(1) |> min(10))
+    do: Map.fetch!(@score_words, v |> round() |> max(1) |> min(10))
 
   defp score_color(v) when is_number(v) do
     s = v |> max(1) |> min(10)
