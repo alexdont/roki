@@ -16,6 +16,12 @@ defmodule Roki.Watch.SourceCache do
   @version 2
 
   def hours(web) do
+    # A study session finds releases for its own languages: neither read from nor saved in the
+    # list kept for the account's settings.
+    if Roki.Study.active?(), do: 0, else: configured_hours(web)
+  end
+
+  defp configured_hours(web) do
     case web["sources_cache"] do
       "off" -> 0
       h when is_binary(h) -> String.to_integer(h)

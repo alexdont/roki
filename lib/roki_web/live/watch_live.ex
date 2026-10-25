@@ -26,8 +26,16 @@ defmodule RokiWeb.WatchLive do
       scope = socket.assigns[:phoenix_kit_current_scope]
       uuid = if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
 
+      # Study mode (`?study=1`): this title in the languages remembered for it, the account's own
+      # settings untouched. Everything this page runs in is bound to them.
+      study = if params["study"] == "1" and uuid, do: Roki.Study.get(uuid, type, n)
+      # Only in the live process: the page's first (static) render runs in a connection's process,
+      # which is reused for other requests.
+      if connected?(socket), do: Roki.Study.bind(Roki.Study.overrides(study))
+
       socket =
         assign(socket,
+          study: study,
           page_title: "Watch",
           type: type,
           id: n,
@@ -79,7 +87,7 @@ defmodule RokiWeb.WatchLive do
 
   defp load(socket) do
     %{type: type, id: id, uuid: uuid} = socket.assigns
-    start_async(socket, :title, fn -> Watch.title(type, id, uuid) end)
+    start_async(socket, :title, Roki.Study.wrap(fn -> Watch.title(type, id, uuid) end))
   end
 
   # The title is known: find the release, start it, and (for a series) fetch the season's
@@ -94,21 +102,24 @@ defmodule RokiWeb.WatchLive do
 
     socket
     |> assign(token: token, failed: nil, player: nil, checks: [])
-    |> start_async(:resolve, fn ->
-      with {:ok, res} <-
-             Resolver.run(parent, token, uuid, title, season, episode, false, :browser, true),
-           {res, pair} <-
-             locate(parent, token, uuid, res, hash || prefer, if(hash, do: 3, else: 1)),
-           pair = if(hash, do: pair, else: within_cap(res, pair)),
-           {:ok, pair} <- choose(res, pair),
-           :ok <- announce(parent, token, "Getting the video ready…"),
-           {:ok, player} <- start(uuid, res.ctx, pair) do
-        {:ok, token, res, pair, player}
-      else
-        {:error, ^token, reason} -> {:error, token, reason}
-        {:error, reason} -> {:error, token, reason}
-      end
-    end)
+    |> start_async(
+      :resolve,
+      Roki.Study.wrap(fn ->
+        with {:ok, res} <-
+               Resolver.run(parent, token, uuid, title, season, episode, false, :browser, true),
+             {res, pair} <-
+               locate(parent, token, uuid, res, hash || prefer, if(hash, do: 3, else: 1)),
+             pair = if(hash, do: pair, else: within_cap(res, pair)),
+             {:ok, pair} <- choose(res, pair),
+             :ok <- announce(parent, token, "Getting the video ready…"),
+             {:ok, player} <- start(uuid, res.ctx, pair) do
+          {:ok, token, res, pair, player}
+        else
+          {:error, ^token, reason} -> {:error, token, reason}
+          {:error, reason} -> {:error, token, reason}
+        end
+      end)
+    )
   end
 
   # A shared address names a release. It may not be among the first ones checked, so look further
@@ -226,9 +237,13 @@ defmodule RokiWeb.WatchLive do
       for lang <- Watch.external_langs(uuid, res.ctx, player.subtitles ++ saved),
           reduce: socket do
         acc ->
-          start_async(acc, {:ext_subs, lang}, fn ->
-            {token, external(uuid, res.ctx, play_id, lang, source.name)}
-          end)
+          start_async(
+            acc,
+            {:ext_subs, lang},
+            Roki.Study.wrap(fn ->
+              {token, external(uuid, res.ctx, play_id, lang, source.name)}
+            end)
+          )
       end
 
     {:noreply, socket}
@@ -374,7 +389,8 @@ defmodule RokiWeb.WatchLive do
         _ -> []
       end
 
-    {:noreply, push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query}")}
+    {:noreply,
+     push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}")}
   end
 
   def handle_event("next", _params, socket), do: {:noreply, socket}
@@ -386,7 +402,8 @@ defmodule RokiWeb.WatchLive do
         _ -> []
       end
 
-    {:noreply, push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query}")}
+    {:noreply,
+     push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}")}
   end
 
   def handle_event("previous", _params, socket), do: {:noreply, socket}
@@ -403,7 +420,9 @@ defmodule RokiWeb.WatchLive do
         end
 
       {:noreply,
-       push_navigate(socket, to: ~p"/watch/tv/#{socket.assigns.id}/#{season}/#{episode}?#{query}")}
+       push_navigate(socket,
+         to: ~p"/watch/tv/#{socket.assigns.id}/#{season}/#{episode}?#{query ++ study_q(socket)}"
+       )}
     else
       _ -> {:noreply, assign(socket, :up_next, next)}
     end
@@ -450,10 +469,16 @@ defmodule RokiWeb.WatchLive do
 
   # ── view ───────────────────────────────────────────────────────────
 
-  defp watch_path(%{type: "movie", id: id}, hash), do: ~p"/watch/movie/#{id}?#{[h: hash]}"
+  # Study mode goes on in the next episode's address, and on a renamed one.
+  defp study_q(%{assigns: assigns}), do: study_q(assigns)
+  defp study_q(%{study: %{}}), do: [study: 1]
+  defp study_q(_), do: []
 
-  defp watch_path(%{type: "tv", id: id, season: s, episode: e}, hash),
-    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[h: hash]}"
+  defp watch_path(%{type: "movie", id: id} = a, hash),
+    do: ~p"/watch/movie/#{id}?#{[h: hash] ++ study_q(a)}"
+
+  defp watch_path(%{type: "tv", id: id, season: s, episode: e} = a, hash),
+    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[h: hash] ++ study_q(a)}"
 
   defp sources_path(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 

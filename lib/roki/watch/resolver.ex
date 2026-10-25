@@ -90,7 +90,8 @@ defmodule Roki.Watch.Resolver do
 
     with {:ok, %{query: query, sources: found}} <-
            Watch.sources(title, season, episode, uuid, force?),
-         sources = Watch.with_library(uuid, query, found) |> prioritise(ctx),
+         sources =
+           Watch.with_library(uuid, query, found) |> in_study_order(uuid) |> prioritise(ctx),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, playable, rest} <-
            probe_until_playable(parent, token, uuid, ctx, sources, [], quick?) do
@@ -108,6 +109,14 @@ defmodule Roki.Watch.Resolver do
          good: nil
        }}
     end
+  end
+
+  # The shared list is ranked for no one in particular; a study session ranks it for its languages
+  # so the releases in them are the ones checked first.
+  defp in_study_order(sources, uuid) do
+    if Roki.Study.active?(),
+      do: Roki.Laev.run(uuid, fn -> Laev.Sources.rank(sources) end),
+      else: sources
   end
 
   # What is checked first matters: a search for a series returns what the uploaders posted for the
@@ -207,9 +216,11 @@ defmodule Roki.Watch.Resolver do
     indexed = Enum.with_index(page)
 
     task =
-      Task.async(fn ->
-        Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(indexed, opts) end)
-      end)
+      Task.async(
+        Roki.Study.wrap(fn ->
+          Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(indexed, opts) end)
+        end)
+      )
 
     late = await_probes(task, agent, page, parent, token, nil, quick?)
 

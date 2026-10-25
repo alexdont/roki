@@ -49,6 +49,7 @@ defmodule RokiWeb.TitleLive do
         rate_mal: nil,
         rating_error: nil,
         similar: [],
+        study: nil,
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -265,6 +266,24 @@ defmodule RokiWeb.TitleLive do
   def handle_event("play", _params, %{assigns: %{id: id}} = socket),
     do: {:noreply, push_navigate(socket, to: ~p"/title/tv/#{id}/episodes")}
 
+  # Study mode: remember the languages for this title and open it in the browser player with them.
+  def handle_event("study_go", %{"lang" => lang, "subs" => subs}, socket) do
+    %{uuid: uuid, type: type, id: id, play: play} = socket.assigns
+
+    if uuid && socket.assigns.linked? do
+      Roki.Study.put(uuid, type, id, lang, subs)
+
+      path =
+        if type == "movie",
+          do: ~p"/watch/movie/#{id}?#{[study: 1]}",
+          else: ~p"/watch/tv/#{id}/#{play.season}/#{play.episode}?#{[study: 1]}"
+
+      {:noreply, push_navigate(socket, to: path)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("select_season", %{"season" => key}, socket),
     do:
       {:noreply, push_patch(socket, to: ~p"/title/tv/#{socket.assigns.id}/episodes?#{[s: key]}")}
@@ -414,6 +433,7 @@ defmodule RokiWeb.TitleLive do
     {:noreply,
      socket
      |> start_async(:similar, fn -> Roki.Similar.for_title(uuid, title.type, title.id) end)
+     |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title) end)
      |> select()}
   end
 
@@ -421,6 +441,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :similar, cards)}
 
   def handle_async(:similar, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:study, {:ok, %{} = choice}, socket),
+    do: {:noreply, assign(socket, :study, choice)}
+
+  def handle_async(:study, _other, socket), do: {:noreply, socket}
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, :title_error, reason || true)}
@@ -539,6 +564,7 @@ defmodule RokiWeb.TitleLive do
 
         <.hero
           mal={@rate_mal}
+          study={@study}
           rating={@rating}
           title={@title}
           play={@play}
@@ -552,6 +578,8 @@ defmodule RokiWeb.TitleLive do
           lib_busy={@lib_busy}
           cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
         />
+
+        <.study_sheet :if={@linked? and @study} title={@title} study={@study} />
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
@@ -661,6 +689,7 @@ defmodule RokiWeb.TitleLive do
   attr :lib_busy, :boolean, default: false
   attr :rating, :map, required: true
   attr :mal, :any, default: nil
+  attr :study, :map, default: nil
 
   defp hero(assigns) do
     ~H"""
@@ -712,6 +741,15 @@ defmodule RokiWeb.TitleLive do
               busy?={match?({:working, _}, @phase)}
               class="h-12 w-full text-lg sm:h-14 sm:w-auto sm:min-w-[15rem] sm:text-xl"
             />
+            <button
+              :if={@linked? and @study}
+              type="button"
+              phx-click={JS.show(to: "#study-sheet", display: "flex")}
+              class="btn btn-outline hidden h-12 gap-2 lg:inline-flex sm:h-14"
+              title="Watch this in languages you choose, leaving your settings alone"
+            >
+              <.icon name="hero-academic-cap" class="h-5 w-5" /> Study
+            </button>
             <span
               :if={@cached?}
               class="badge badge-success badge-outline gap-1"
@@ -816,6 +854,20 @@ defmodule RokiWeb.TitleLive do
   # 8.0 → "8", 8.5 → "8.5"
   defp provider_name(:mal), do: "MyAnimeList"
   defp provider_name(_), do: "TMDB"
+
+  # The languages the Study dialog starts on: the ones remembered for this title, else the
+  # account's own settings.
+  defp study_choice(uuid, title) do
+    case Roki.Study.get(uuid, title.type, title.id) do
+      %{"lang" => lang, "subs" => subs} ->
+        %{lang: lang, subs: subs}
+
+      nil ->
+        Roki.Laev.run(uuid, fn ->
+          %{lang: Laev.Config.lang(), subs: Laev.Config.subs_lang() || "off"}
+        end)
+    end
+  end
 
   # What a score means, in laev's own words (its terminal rating prompt), and the colour it is
   # drawn in: red at the bottom through green at 7 to gold at 10. `assets/js/app.js` (`rokiScore`)
@@ -1589,6 +1641,91 @@ defmodule RokiWeb.TitleLive do
       <span :if={@rating.value} class="text-sm font-bold text-info">You {fmt_rating(@rating.value)}</span>
       <span :if={!@rating.value} class="text-xs font-normal text-base-content/60">Rate</span>
     </button>
+    """
+  end
+
+  attr :title, :map, required: true
+  attr :study, :map, required: true
+
+  # Study mode, from a desktop: which languages to watch this title in, without touching the
+  # account's settings. What was chosen last time is already filled in.
+  defp study_sheet(assigns) do
+    assigns =
+      assign(assigns,
+        audio: Roki.Languages.choices(assigns.study.lang),
+        subs: Roki.Languages.choices(assigns.study.subs)
+      )
+
+    ~H"""
+    <div
+      id="study-sheet"
+      class="fixed inset-0 z-[70] !m-0 hidden items-center justify-center bg-black/50"
+      phx-window-keydown={JS.hide(to: "#study-sheet")}
+      phx-key="escape"
+    >
+      <form
+        id="study-form"
+        phx-submit="study_go"
+        phx-click-away={JS.hide(to: "#study-sheet")}
+        class="w-full max-w-md space-y-4 rounded-2xl bg-base-100 p-6 shadow-2xl"
+      >
+        <div class="flex items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-lg font-bold leading-tight">Study {@title.title}</h2>
+            <p class="text-sm text-base-content/60">
+              Watch this one in the languages below. Your settings stay as they are; the choice is
+              remembered for this title.
+            </p>
+          </div>
+          <button
+            type="button"
+            phx-click={JS.hide(to: "#study-sheet")}
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="h-5 w-5" />
+          </button>
+        </div>
+
+        <label class="block space-y-1">
+          <span class="text-sm font-medium">Audio language</span>
+          <select name="lang" class="select select-bordered w-full">
+            <.language_options choices={@audio} current={@study.lang} />
+          </select>
+        </label>
+
+        <label class="block space-y-1">
+          <span class="text-sm font-medium">Subtitle language</span>
+          <select name="subs" class="select select-bordered w-full">
+            <option value="off" selected={@study.subs == "off"}>Off — no subtitles</option>
+            <.language_options choices={@subs} current={@study.subs} />
+          </select>
+        </label>
+
+        <button type="submit" class="btn btn-primary w-full">
+          <.icon name="hero-magnifying-glass" class="h-5 w-5" /> Search and play
+        </button>
+      </form>
+    </div>
+    """
+  end
+
+  attr :choices, :map, required: true
+  attr :current, :string, required: true
+
+  defp language_options(assigns) do
+    ~H"""
+    <option :for={{code, label} <- @choices.extra} value={code} selected>{label}</option>
+    <optgroup label="Common">
+      <option :for={{code, label} <- @choices.common} value={code} selected={@current == code}>
+        {label}
+      </option>
+    </optgroup>
+    <optgroup label="All languages">
+      <option :for={{code, label} <- @choices.rest} value={code} selected={@current == code}>
+        {label}
+      </option>
+    </optgroup>
     """
   end
 
