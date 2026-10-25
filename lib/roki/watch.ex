@@ -1351,6 +1351,31 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  The player reached the end of the video: it counts as watched even if the progress reports
+  never put the playhead close enough to the length (an HLS stream's length is only known at
+  the end). Does nothing when it is already marked.
+  """
+  def ended(uuid, ctx) do
+    new? =
+      Roki.Laev.run(uuid, fn ->
+        if Laev.Position.finished?(ctx) do
+          false
+        else
+          Laev.Position.set_watched(ctx, true)
+          Laev.Sync.live_push()
+          true
+        end
+      end)
+
+    if new? do
+      scrobble(uuid, [ctx])
+      Roki.Activity.record(uuid, ctx)
+    end
+
+    new?
+  end
+
   # Ten minutes in is "started" (once per episode: the guard keeps the 5-second progress ticks off the
   # database).
   defp note_started(uuid, ctx, position) do

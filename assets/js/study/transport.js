@@ -42,7 +42,14 @@ export function bindTransport(root, video, stage) {
   }
 
   play.addEventListener("click", toggle)
-  video.addEventListener("click", toggle)
+  // A click that only closes a menu (audio, settings, subtitles…) must not also pause or play: whether one
+  // was open is noted as the press begins, before the click closes it.
+  let menuWasOpen = false
+  root.addEventListener("pointerdown", () => { menuWasOpen = !!root.querySelector(".study-pop:not([hidden])") }, true)
+  video.addEventListener("click", () => {
+    if (menuWasOpen) { menuWasOpen = false; return }
+    toggle()
+  })
   video.addEventListener("dblclick", () => $("[data-role=fullscreen]")?.click())
   for (const ev of ["play", "pause", "ended"]) video.addEventListener(ev, showPlaying)
   for (const ev of ["timeupdate", "durationchange", "loadedmetadata", "seeked"]) video.addEventListener(ev, showTime)

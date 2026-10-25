@@ -457,6 +457,9 @@ defmodule RokiWeb.WatchLive do
   def handle_event("previous", _params, socket), do: {:noreply, socket}
 
   def handle_event("ended", _params, socket) do
+    %{uuid: uuid, ctx: ctx} = socket.assigns
+    if uuid && ctx, do: Task.start(fn -> Watch.ended(uuid, ctx) end)
+
     next = socket.assigns.up_next || next_episode(socket.assigns)
 
     with {season, episode} <- next,
