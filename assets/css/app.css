@@ -587,3 +587,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-immersive .study-replay { bottom: 6.5rem; }
 .study-immersive .study-stage[data-top="off"] .study-close { opacity: 0; pointer-events: none; }
 .study-immersive .study-stage[data-top="on"] .study-close { opacity: 1; pointer-events: auto; }
+
+/* The bar belongs to the picture's column: beside the list it ends where the picture ends, and with
+   the list away it runs the full width. */
+.study-immersive .study-main { position: relative; }
