@@ -262,3 +262,9 @@ import_config "#{config_env()}.exs"
 #
 # ...but it is NOT translated. One string, shown to every visitor in every
 # language. That is what the presets above are for.
+
+# Streaming playlists and fMP4 segments get their proper types when served as plain files.
+config :mime, :types, %{
+  "application/vnd.apple.mpegurl" => ["m3u8"],
+  "video/iso.segment" => ["m4s"]
+}

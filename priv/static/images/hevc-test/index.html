@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>HEVC test</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.45 system-ui, sans-serif; margin: 0 auto; padding: 16px; max-width: 760px; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 22px 0 6px; }
+  p.note { margin: 2px 0 10px; opacity: .75; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { border-bottom: 1px solid #8884; padding: 4px 6px; text-align: left; vertical-align: top; }
+  .ok { color: #1a8a3a; font-weight: 600; } .no { color: #c0392b; font-weight: 600; } .meh { color: #b7791f; font-weight: 600; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #8886; background: #4f46e5; color: #fff; cursor: pointer; }
+  button.alt { background: transparent; color: inherit; }
+  .clip { margin: 14px 0; padding: 10px; border: 1px solid #8884; border-radius: 10px; }
+  video { width: 100%; max-height: 220px; background: #000; border-radius: 6px; display: block; margin: 6px 0; }
+  textarea { width: 100%; height: 190px; font: 12px/1.4 ui-monospace, monospace; box-sizing: border-box; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<h1>Can this browser decode HEVC itself?</h1>
+<p class="note">Takes about a minute. Press <b>Run all tests</b>, wait until it says done, then copy the box at the bottom and send it back. Do it once on each browser and device.</p>
+
+<div class="row">
+  <button id="run">Run all tests</button>
+  <button id="copy" class="alt">Copy results</button>
+  <span id="state"></span>
+</div>
+
+<h2>What the browser says</h2>
+<table id="caps"></table>
+
+<h2>Real playback</h2>
+<p class="note">Each clip is muted and plays for about 4 seconds. It must advance, show a picture (not black) and not drop many frames.</p>
+<div id="clips"></div>
+
+<h2>Results to send back</h2>
+<textarea id="out" readonly></textarea>
+
+<script src="/vendor/hls.min.js"></script>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s)
+  const log = []
+  const say = (line) => { log.push(line); $("#out").value = log.join("\n") }
+  const cls = (v) => (v === true || v === "probably" ? "ok" : v === "maybe" ? "meh" : "no")
+  const show = (v) => (v === true ? "yes" : v === false ? "no" : v === "" ? "no" : String(v))
+
+  // ── what the browser says ────────────────────────────────────────
+  const HEVC = 'video/mp4; codecs="hvc1.1.6.L93.B0"'
+  const HEVC4K = 'video/mp4; codecs="hvc1.1.6.L153.B0"'
+  const HEV1 = 'video/mp4; codecs="hev1.1.6.L93.B0"'
+  const HEVC10 = 'video/mp4; codecs="hvc1.2.4.L153.B0"'
+  const H264 = 'video/mp4; codecs="avc1.640028"'
+  const AV1 = 'video/mp4; codecs="av01.0.08M.08"'
+  const VP9 = 'video/webm; codecs="vp09.00.40.08"'
+  const AAC = 'audio/mp4; codecs="mp4a.40.2"'
+  const AC3 = 'audio/mp4; codecs="ac-3"'
+  const EAC3 = 'audio/mp4; codecs="ec-3"'
+  const OPUS = 'audio/mp4; codecs="opus"'
+  const FLAC = 'audio/mp4; codecs="flac"'
+  const MS = window.ManagedMediaSource || window.MediaSource
+  const items = [
+    ["User agent", navigator.userAgent.replace(/\s+/g, " ")],
+    ["MediaSource", !!window.MediaSource],
+    ["ManagedMediaSource (iPhone)", !!window.ManagedMediaSource],
+    ["WebCodecs VideoDecoder", !!window.VideoDecoder],
+    ["Native HLS", document.createElement("video").canPlayType("application/vnd.apple.mpegurl") || "no"],
+    ["HEVC 1080p  (hvc1)", [HEVC]], ["HEVC 4K  (hvc1 level 5.1)", [HEVC4K]], ["HEVC  (hev1 tag)", [HEV1]],
+    ["HEVC 10-bit", [HEVC10]], ["H.264", [H264]], ["AV1", [AV1]], ["VP9", [VP9, "webm"]],
+    ["AAC", [AAC]], ["AC-3", [AC3]], ["E-AC-3", [EAC3]], ["Opus", [OPUS]], ["FLAC", [FLAC]],
+  ]
+  const caps = $("#caps")
+  for (const [name, val] of items) {
+    let shown, kind
+    if (Array.isArray(val)) {
+      const mime = val[0]
+      const ms = MS && MS.isTypeSupported ? MS.isTypeSupported(mime) : false
+      const el = document.createElement("video").canPlayType(mime)
+      shown = `MSE: ${show(ms)}, element: ${show(el)}`
+      kind = ms || el ? "ok" : "no"
+    } else if (typeof val === "string" && name !== "Native HLS") { shown = val; kind = "" }
+    else { shown = show(val); kind = cls(val) }
+    caps.insertAdjacentHTML("beforeend", `<tr><td>${name}</td><td class="${kind}">${shown}</td></tr>`)
+    say(`${name}: ${shown}`)
+  }
+
+  async function decodingInfo(label, cfg) {
+    let text
+    try {
+      const r = await navigator.mediaCapabilities.decodingInfo(cfg)
+      text = `supported=${r.supported} smooth=${r.smooth} powerEfficient=${r.powerEfficient}`
+    } catch (e) { text = "error: " + e.message }
+    caps.insertAdjacentHTML("beforeend", `<tr><td>${label}</td><td>${text}</td></tr>`)
+    say(`${label}: ${text}`)
+  }
+  const mc = (contentType, w, h, extra = {}) => ({
+    type: "media-source",
+    video: { contentType, width: w, height: h, bitrate: 20e6, framerate: 30, ...extra },
+  })
+  const capsDone = (async () => {
+    if (!navigator.mediaCapabilities) { say("MediaCapabilities: not available"); return }
+    await decodingInfo("Decode HEVC 1080p", mc(HEVC, 1920, 1080))
+    await decodingInfo("Decode HEVC 4K", mc(HEVC4K, 3840, 2160))
+    await decodingInfo("Decode HEVC 4K 10-bit HDR10", mc(HEVC10, 3840, 2160, { transferFunction: "pq", colorGamut: "rec2020" }))
+    await decodingInfo("Decode H.264 4K", mc('video/mp4; codecs="avc1.640033"', 3840, 2160))
+  })()
+
+  // ── real playback ────────────────────────────────────────────────
+  const CLIPS = [
+    { id: "h264", name: "H.264 1080p (control)", src: "h264-1080.mp4" },
+    { id: "hevc", name: "HEVC 1080p, plain file", src: "hevc1080.mp4" },
+    { id: "hevc4k", name: "HEVC 4K, plain file", src: "hevc2160.mp4" },
+    { id: "hls", name: "HEVC 1080p through HLS (how roki streams)", src: "hls/index.m3u8", hls: true },
+  ]
+  const holder = $("#clips")
+  for (const c of CLIPS) {
+    holder.insertAdjacentHTML("beforeend",
+      `<div class="clip"><b>${c.name}</b><video id="v-${c.id}" muted playsinline controls preload="none"></video>
+       <div class="row"><button class="alt" data-id="${c.id}">Play this one</button><span id="r-${c.id}"></span></div></div>`)
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  function picture(v) {
+    try {
+      const c = document.createElement("canvas")
+      c.width = 32; c.height = 18
+      const x = c.getContext("2d", { willReadFrequently: true })
+      x.drawImage(v, 0, 0, 32, 18)
+      const d = x.getImageData(0, 0, 32, 18).data
+      let sum = 0
+      for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2]
+      return sum > 400
+    } catch (e) { return null }
+  }
+
+  async function play(c) {
+    const v = $("#v-" + c.id), out = $("#r-" + c.id)
+    const set = (t, k) => { out.textContent = t; out.className = k || "" }
+    set("loading…")
+    let hls = null
+    try {
+      if (c.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
+        if (!window.Hls || !Hls.isSupported()) { set("FAIL: no HLS support", "no"); say(`${c.name}: FAIL no HLS support`); return }
+        hls = new Hls()
+        const errs = []
+        hls.on(Hls.Events.ERROR, (_, d) => errs.push(`${d.type}/${d.details}${d.fatal ? " FATAL" : ""}`))
+        hls.loadSource(c.src); hls.attachMedia(v)
+        v._errs = errs
+      } else {
+        v.src = c.src
+      }
+      v.currentTime = 0
+      const started = v.play()
+      if (started) await started.catch((e) => { throw new Error("play() refused: " + e.name) })
+      await sleep(4500)
+      const t = v.currentTime
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null
+      const pic = picture(v)
+      const dims = `${v.videoWidth}x${v.videoHeight}`
+      const dropped = q ? `${q.droppedVideoFrames}/${q.totalVideoFrames} dropped` : "dropped: n/a"
+      const moving = t > 2.5
+      const ok = moving && v.videoWidth > 0 && pic !== false
+      const err = v.error ? ` mediaError=${v.error.code}` : ""
+      const herr = v._errs && v._errs.length ? ` hls=[${v._errs.join(",")}]` : ""
+      const line = `${ok ? "PASS" : "FAIL"} advanced ${t.toFixed(1)}s, ${dims}, picture=${pic === null ? "unknown" : pic ? "yes" : "BLACK"}, ${dropped}${err}${herr}`
+      set(line, ok ? "ok" : "no")
+      say(`${c.name}: ${line}`)
+    } catch (e) {
+      set("FAIL: " + e.message, "no")
+      say(`${c.name}: FAIL ${e.message}`)
+    } finally {
+      v.pause()
+      if (hls) hls.destroy()
+    }
+  }
+
+  holder.addEventListener("click", (e) => {
+    const id = e.target.dataset && e.target.dataset.id
+    const c = CLIPS.find((x) => x.id === id)
+    if (c) play(c)
+  })
+  $("#run").addEventListener("click", async () => {
+    $("#run").disabled = true
+    $("#state").textContent = "running…"
+    await capsDone
+    for (const c of CLIPS) await play(c)
+    $("#state").textContent = "done — copy the box below"
+    $("#run").disabled = false
+  })
+  $("#copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("#out").value); $("#state").textContent = "copied" }
+    catch (e) { $("#out").select(); $("#state").textContent = "select + copy the box" }
+  })
+})()
+</script>
+</body>
+</html>
