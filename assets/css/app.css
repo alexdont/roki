@@ -574,3 +574,6 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 /* No handle on the timeline or the volume bar: where the colour ends is where you are. */
 .study-timeline .study-seek::-webkit-slider-thumb, .study-bar2 .study-volume::-webkit-slider-thumb { width: 0; height: 0; background: transparent; border: 0; box-shadow: none; }
 .study-timeline .study-seek::-moz-range-thumb, .study-bar2 .study-volume::-moz-range-thumb { width: 0; height: 0; background: transparent; border: 0; box-shadow: none; }
+
+/* The bar runs nearly edge to edge: a small margin, not a wide one. */
+.study-controls { padding-left: 0.4rem; padding-right: 0.4rem; }
