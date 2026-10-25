@@ -204,6 +204,11 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
+  # A release that never answers (a host that hangs) must not hold the page for ever: after this
+  # long the round ends with what it has, and the ones still silent are given up on.
+  @deadline_ms 45_000
+  @quick_deadline_ms 30_000
+
   # One round of probing, 8 releases two at a time. Each answer is counted on the page as it
   # arrives; the task keeps the ones that play.
   defp probe_page(parent, token, uuid, ctx, page, quick? \\ false) do
@@ -251,7 +256,10 @@ defmodule Roki.Watch.Resolver do
         end)
       )
 
-    late = await_probes(task, agent, page, parent, token, nil, quick?)
+    deadline =
+      System.monotonic_time(:millisecond) + if(quick?, do: @quick_deadline_ms, else: @deadline_ms)
+
+    late = await_probes(task, agent, page, parent, token, nil, quick?, deadline)
 
     ok = Agent.get(agent, & &1.ok)
     Agent.stop(agent)
@@ -272,7 +280,7 @@ defmodule Roki.Watch.Resolver do
 
   defp ideal?(source), do: source.resolution == "1080p" and not Roki.Watch.heavy?(source)
 
-  defp await_probes(task, agent, page, parent, token, first_ok_at, quick?) do
+  defp await_probes(task, agent, page, parent, token, first_ok_at, quick?, deadline) do
     case Task.yield(task, 150) do
       {:ok, _} ->
         []
@@ -292,15 +300,60 @@ defmodule Roki.Watch.Resolver do
         enough = if quick?, do: @quick_enough, else: @enough
         grace = if quick?, do: @quick_grace_ms, else: @grace_ms
 
-        if ok >= enough or ideal? or (first && now - first >= grace) do
+        if now >= deadline do
           Task.shutdown(task, :brutal_kill)
           seen = MapSet.new(st.seen)
-          late = Enum.reject(page, &MapSet.member?(seen, &1.hash))
-          for s <- late, do: send(parent, {:checked, token, s.hash, {:later, "not waited for"}})
-          late
+
+          for s <- page,
+              not MapSet.member?(seen, s.hash),
+              do: send(parent, {:checked, token, s.hash, {:bad, "no answer in time"}})
+
+          []
         else
-          await_probes(task, agent, page, parent, token, first, quick?)
+          check_enough(
+            task,
+            agent,
+            page,
+            parent,
+            token,
+            first,
+            quick?,
+            deadline,
+            st,
+            ok,
+            now,
+            enough,
+            grace,
+            ideal?
+          )
         end
+    end
+  end
+
+  defp check_enough(
+         task,
+         agent,
+         page,
+         parent,
+         token,
+         first,
+         quick?,
+         deadline,
+         st,
+         ok,
+         now,
+         enough,
+         grace,
+         ideal?
+       ) do
+    if ok >= enough or ideal? or (first && now - first >= grace) do
+      Task.shutdown(task, :brutal_kill)
+      seen = MapSet.new(st.seen)
+      late = Enum.reject(page, &MapSet.member?(seen, &1.hash))
+      for s <- late, do: send(parent, {:checked, token, s.hash, {:later, "not waited for"}})
+      late
+    else
+      await_probes(task, agent, page, parent, token, first, quick?, deadline)
     end
   end
 
