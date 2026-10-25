@@ -284,6 +284,7 @@ defmodule Roki.Watch.Resolver do
       # For an account that may not have a video re-encoded: a release whose name does not say what
       # the video is gets its real codec read here, and one that would need re-encoding is dropped
       # now rather than offered and refused later.
+      result = scene_retry(result, source, idx, ctx)
       result = if light?, do: needs_reencode(source, result), else: result
 
       {done, ok} =
@@ -378,6 +379,42 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
+  # A pack named for one numbering can hold its files under another ("Lupin S01 Part 1-2" has the
+  # sixth episode as S02E01): when the file that came back names a different episode, or there is no
+  # file for it, the pack is asked again as the numbering of the part, and the first that fits wins.
+  defp scene_retry({:error, why} = result, source, index, %{scene: [_ | _] = numbers} = ctx)
+       when why in [:another_episode, :no_file_for_episode] do
+    if range?(source.name) do
+      me = self()
+
+      Enum.find_value(numbers, result, fn {s, e} ->
+        other = Enum.find_value(numbers, fn {_, n} -> if n != e, do: n end)
+        alt = %{ctx | season: s, episode: e, tmdb_episode: other || e}
+
+        notify = fn
+          {:result, _, _, r} -> send(me, {:scene_retry, r})
+          _ -> :ok
+        end
+
+        Laev.Providers.probe_sources(
+          [{source, index}],
+          probe_opts([notify: notify, concurrency: 1], alt)
+        )
+
+        receive do
+          {:scene_retry, {:ok, _} = ok} -> ok
+          {:scene_retry, _} -> nil
+        after
+          60_000 -> nil
+        end
+      end)
+    else
+      result
+    end
+  end
+
+  defp scene_retry(result, _source, _index, _ctx), do: result
+
   # A pack or a range of episodes, not a single one.
   defp range?(name) when is_binary(name) do
     Laev.Episodes.pack?(name) or Regex.match?(~r/\bS\d+[ ._-]?E\d+\s*[-–~]\s*E?\d+/i, name)
@@ -386,7 +423,11 @@ defmodule Roki.Watch.Resolver do
   defp range?(_name), do: false
 
   defp names_season?(name, season) when is_binary(name) and is_integer(season),
-    do: Regex.match?(~r/\bS0?#{season}(?!\d)|\bseason[ ._]?0?#{season}(?!\d)/i, name)
+    do:
+      Regex.match?(
+        ~r/(?<![A-Za-z0-9])S0?#{season}(?!\d)|\bseason[ ._]?0?#{season}(?!\d)/i,
+        name
+      )
 
   defp names_season?(_name, _season), do: false
 
