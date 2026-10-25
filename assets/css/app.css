@@ -193,15 +193,15 @@
   max-width: 100%;
   padding: 0.1em 0.5em;
   border-radius: 0.35em;
-  background: rgb(0 0 0 / 0.66);
-  color: #fff;
+  background: rgb(0 0 0 / var(--cap-bg, 0.66));
+  color: color-mix(in srgb, var(--cap-color, #fff) var(--cap-text, 100%), transparent);
   font-size: calc(clamp(0.9rem, 2.7cqw, 2.1rem) * var(--cap-scale, 1));
   line-height: 1.4;
   white-space: pre-line;
-  text-shadow: 0 1px 2px #000;
+  text-shadow: var(--cap-edge, 0 1px 2px #000);
 }
 /* The other tracks, under the line being studied: smaller, softer. */
-.study-trans { color: #e8e8e8; cursor: default; }
+.study-trans { color: color-mix(in srgb, color-mix(in srgb, var(--cap-color, #fff) 88%, #888) var(--cap-text, 100%), transparent); cursor: default; }
 .study-overlay .study-trans { font-size: calc(clamp(0.8rem, 2.2cqw, 1.7rem) * var(--cap-scale, 1)); pointer-events: auto; }
 .study-ui[data-peek="true"] .study-trans:not([data-revealed]) { filter: blur(0.35em); cursor: pointer; }
 .study-word { pointer-events: auto; cursor: help; border-radius: 0.2em; }
@@ -476,14 +476,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0.9rem; height: 0.9rem; border-radius: 9999px; background: #fff; box-shadow: 0 0 3px rgb(0 0 0 / 0.6); }
 .study-range::-moz-range-thumb { width: 0.9rem; height: 0.9rem; border: 0; border-radius: 9999px; background: #fff; }
 
-/* The menus ride in the picture's top right, with the close button: one bar along the bottom
-   (the timeline) and nothing else under the picture. They show with the pointer, like it. */
-.study-immersive .study-main { position: relative; }
-.study-immersive .study-bar { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 5; justify-content: flex-end; transition: opacity 0.25s; }
-.study-immersive .study-main:has(.study-stage:not([data-active])):not(:has(.study-pop:not([hidden]))) .study-bar { opacity: 0; pointer-events: none; }
-.study-immersive .study-bar .btn { background: rgb(0 0 0 / 0.55); }
 .study-immersive .study-bar .btn, .study-immersive .study-transport .btn { border-color: transparent; background: rgb(255 255 255 / 0.1); color: #fff; box-shadow: none; }
-.study-immersive .study-bar .btn { background: rgb(0 0 0 / 0.55); }
 .study-immersive .study-bar .btn:hover, .study-immersive .study-transport .btn:hover, .study-immersive .study-close .btn:hover { background: rgb(255 255 255 / 0.22); }
 .study-immersive .study-bar .btn.btn-primary { background: var(--color-primary); color: var(--color-primary-content); }
 .study-immersive .study-close .btn { border-color: transparent; background: rgb(0 0 0 / 0.55); color: #fff; box-shadow: none; }
@@ -509,9 +502,42 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   color: var(--color-base-content);
 }
 .study-immersive .study-box { border-color: #2a2a2f; }
-@media (min-width: 640px) {
-  .study-immersive .study-pop { top: calc(100% + 0.4rem); bottom: auto; left: auto; right: 0; }
-}
 @media (max-width: 639px) {
   .study-label-pill { display: none; }
 }
+
+/* The bar under the picture, the way a player does it: the timeline along the top of it, then one
+   row — play, volume, the episode and Next on the left; audio, settings, subtitles, the list and
+   fullscreen on the right. */
+.study-controls { background: #0b0b0d; padding: 0.15rem 0.9rem 0.55rem; }
+.study-timeline { display: flex; align-items: center; gap: 0.7rem; padding: 0.35rem 0; }
+.study-bar2 { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.study-bar2 .study-bar-group { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.study-bar2 [hidden], .study-bar2 .study-bar-group > [hidden] { display: none !important; }
+.study-bar2 .btn { border-color: transparent; background: rgb(255 255 255 / 0.1); color: #fff; box-shadow: none; }
+.study-bar2 .btn:hover { background: rgb(255 255 255 / 0.22); }
+.study-bar2 .btn.btn-primary { background: var(--color-primary); color: var(--color-primary-content); }
+.study-bar2 .study-volume { width: 4.5rem; }
+.study-ep-label { min-width: 0; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-bar2 .study-pop { left: auto; right: 0; }
+.study-bar2 [data-role="ep-menu"] { left: 0; right: auto; }
+@media (max-width: 639px) {
+  .study-bar2 .study-volume, .study-bar2 [data-role="mute"] { display: none; }
+  .study-ep-label { max-width: 7rem; }
+}
+
+/* The colour choices for the lines. */
+.study-swatch { width: 1.6rem; height: 1.6rem; border-radius: 9999px; border: 2px solid rgb(255 255 255 / 0.25); cursor: pointer; }
+.study-swatch[data-on] { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary); }
+.study-swatch-input { width: 1.9rem; height: 1.9rem; padding: 0; border: 0; border-radius: 9999px; background: none; cursor: pointer; }
+
+/* The timeline, as a player draws it: a tall bar the width of the screen, the time so far at its
+   left end and the length at its right end, written on the bar. */
+.study-timeline { position: relative; display: block; padding: 0.4rem 0 0.3rem; }
+.study-timeline .study-seek { display: block; width: 100%; height: 1.5rem; border-radius: 0.3rem; background: linear-gradient(90deg, var(--color-primary) var(--p, 0%), rgb(255 255 255 / 0.22) var(--p, 0%)); }
+.study-timeline .study-seek:hover { height: 1.5rem; }
+.study-timeline .study-clock { position: absolute; top: 50%; z-index: 1; transform: translateY(-50%); min-width: 0; padding: 0 0.55rem; font-size: 0.85rem; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 0.7); pointer-events: none; }
+.study-timeline .study-clock:first-child { left: 0; }
+.study-timeline .study-clock:last-child { right: 0; }
+.study-timeline .study-seek::-webkit-slider-thumb { width: 0.35rem; height: 1.5rem; border-radius: 0.15rem; background: #fff; box-shadow: none; }
+.study-timeline .study-seek::-moz-range-thumb { width: 0.35rem; height: 1.5rem; border-radius: 0.15rem; background: #fff; }

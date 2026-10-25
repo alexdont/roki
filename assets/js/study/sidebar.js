@@ -37,6 +37,10 @@ const SHORT = {
 const LOOKUP = new Set(["ja", "fr", "es", "de", "it", "pt", "ru", "ko", "zh", "nl", "pl", "tr", "sv", "ar"])
 const shortLang = (code) => SHORT[String(code || "").toLowerCase()] || ""
 
+// The languages offered for the audio of a title (the full-screen player's audio menu).
+const AUDIO_LANGS = [["en", "English"], ["fr", "French"], ["ja", "Japanese"], ["es", "Spanish"],
+  ["de", "German"], ["it", "Italian"], ["pt", "Portuguese"], ["ru", "Russian"], ["ko", "Korean"], ["zh", "Chinese"]]
+
 const store = {
   get(key) { try { return localStorage.getItem("roki:study:" + key) } catch { return null } },
   set(key, value) { try { localStorage.setItem("roki:study:" + key, value) } catch {} },
@@ -610,13 +614,16 @@ export const StudySidebar = {
     const theater = $("[data-role=theater]")
     const setTheater = (on) => {
       this.ui.dataset.theater = on ? "true" : "false"
-      theater.setAttribute("aria-pressed", String(on))
-      theater.classList.toggle("btn-primary", on)
+      if (theater) {
+        theater.setAttribute("aria-pressed", String(on))
+        theater.classList.toggle("btn-primary", on)
+      }
       store.set("theater", on ? "1" : "0")
       if (this.tipFor) this.placeTip(this.tipFor)
     }
-    theater.addEventListener("click", () => setTheater(this.ui.dataset.theater !== "true"))
-    setTheater(store.get("theater") === "1")
+    // (The full-screen player has no theater button: it is theater already.)
+    if (theater) theater.addEventListener("click", () => setTheater(this.ui.dataset.theater !== "true"))
+    setTheater(!immersive && store.get("theater") === "1")
 
     // Fullscreen is the picture with its subtitles (the card goes in with it), not the bare video.
     $("[data-role=fullscreen]").addEventListener("click", () => {
@@ -647,7 +654,7 @@ export const StudySidebar = {
       const small = state === "compact"
       compact.title = small ? "Larger" : "Smaller"
       compact.setAttribute("aria-label", small ? "Make the list larger" : "Make the list smaller")
-      if (!immersive) store.set("panel", state)
+      store.set(this.panelKey, state)
       if (state !== "closed") showList()
       reflect()
     }
@@ -662,13 +669,14 @@ export const StudySidebar = {
     }
     lines.addEventListener("click", toggleList)
     compact.addEventListener("click", () => this.setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
-    // The full-screen player starts the way it was asked for: a study session with the list of
-    // lines open, a plain watch without it (one press of Lines). Not remembered between plays.
-    const savedPanel = store.get("panel")
-    this.setPanel(
-      immersive ? (this.el.dataset.study === "true" ? "open" : "closed")
-        : ["open", "compact", "closed"].includes(savedPanel) ? savedPanel : "open"
-    )
+    // The full-screen player remembers the list for a study session and for a plain watch
+    // separately: a study session starts with it open and a plain watch with it closed, and after
+    // that each starts the way it was last left.
+    const studying = this.el.dataset.study === "true"
+    this.panelKey = !immersive ? "panel" : studying ? "panel-study" : "panel-watch"
+    const savedPanel = store.get(this.panelKey)
+    const firstTime = immersive ? (studying ? "open" : "closed") : "open"
+    this.setPanel(["open", "compact", "closed"].includes(savedPanel) ? savedPanel : firstTime)
     this.wide.addEventListener("change", reflect)
 
     // ── the two menus
@@ -677,6 +685,7 @@ export const StudySidebar = {
       audio: {btn: $("[data-role=audio-btn]"), menu: $("[data-role=audio-menu]")},
       settings: {btn: $("[data-role=settings-btn]"), menu: $("[data-role=settings-menu]")},
     }
+    if ($("[data-role=ep-btn]")) this.pops.eps = {btn: $("[data-role=ep-btn]"), menu: $("[data-role=ep-menu]")}
     for (const [name, pop] of Object.entries(this.pops)) {
       pop.btn.addEventListener("click", (e) => {
         e.stopPropagation()
@@ -690,7 +699,7 @@ export const StudySidebar = {
     // Outside a menu closes it. The path is read at the click: a row that re-drew the menu is gone
     // from the page by the time this runs, and would look like an outside click.
     document.addEventListener("click", (e) => {
-      const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("study-pop") || n.matches("[data-role=subs-btn], [data-role=audio-btn], [data-role=settings-btn]")))
+      const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("study-pop") || n.matches("[data-role=subs-btn], [data-role=audio-btn], [data-role=settings-btn], [data-role=ep-btn]")))
       if (!inside) this.closePops()
     })
     document.addEventListener("keydown", (e) => {
@@ -764,6 +773,46 @@ export const StudySidebar = {
     scaleLabel.addEventListener("click", () => setScale(1))
     setScale(this.scale)
 
+    // How the lines look: colour, how solid the text and the box behind it are, the edge. Kept for
+    // every video in this browser (like the size above), applied as variables on the player.
+    const EDGES = {
+      none: "none",
+      shadow: "0 1px 2px #000, 0 0 5px rgb(0 0 0 / 0.8)",
+      outline: "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px #000",
+    }
+    const CAP_DEFAULT = {color: "#ffffff", text: 100, bg: 66, edge: "shadow"}
+    let caps = {...CAP_DEFAULT}
+    try { caps = {...CAP_DEFAULT, ...JSON.parse(store.get("caption") || "{}")} } catch {}
+    if (!EDGES[caps.edge]) caps.edge = CAP_DEFAULT.edge
+    const colorInput = $("[data-role=cap-color]")
+    const textRange = $("[data-role=cap-text]")
+    const bgRange = $("[data-role=cap-bg]")
+    const applyCaps = (save = true) => {
+      this.ui.style.setProperty("--cap-color", caps.color)
+      this.ui.style.setProperty("--cap-text", `${caps.text}%`)
+      this.ui.style.setProperty("--cap-bg", String(caps.bg / 100))
+      this.ui.style.setProperty("--cap-edge", EDGES[caps.edge])
+      colorInput.value = caps.color
+      textRange.value = caps.text
+      bgRange.value = caps.bg
+      $("[data-role=cap-text-out]").textContent = `${caps.text}%`
+      $("[data-role=cap-bg-out]").textContent = `${caps.bg}%`
+      for (const b of this.el.querySelectorAll("[data-role=cap-swatch]"))
+        b.toggleAttribute("data-on", b.dataset.color === caps.color)
+      for (const b of this.el.querySelectorAll("[data-role=cap-edge]"))
+        b.classList.toggle("btn-primary", b.dataset.edge === caps.edge)
+      if (save) store.set("caption", JSON.stringify(caps))
+    }
+    for (const b of this.el.querySelectorAll("[data-role=cap-swatch]"))
+      b.addEventListener("click", () => { caps.color = b.dataset.color; applyCaps() })
+    colorInput.addEventListener("input", () => { caps.color = colorInput.value; applyCaps() })
+    textRange.addEventListener("input", () => { caps.text = Number(textRange.value); applyCaps() })
+    bgRange.addEventListener("input", () => { caps.bg = Number(bgRange.value); applyCaps() })
+    for (const b of this.el.querySelectorAll("[data-role=cap-edge]"))
+      b.addEventListener("click", () => { caps.edge = b.dataset.edge; applyCaps() })
+    $("[data-role=cap-reset]").addEventListener("click", () => { caps = {...CAP_DEFAULT}; applyCaps() })
+    applyCaps(false)
+
     // Pause after each line, with a replay of it (the round button on the picture).
     const study = $("[data-role=study]")
     const replay = $("[data-role=replay]")
@@ -799,8 +848,37 @@ export const StudySidebar = {
     })
   },
 
+  // The season's episodes, from what the page put on the root; a pick goes to the server.
+  buildEpisodes() {
+    const box = this.el.querySelector("[data-role=ep-list]")
+    let eps = []
+    try { eps = JSON.parse(this.el.dataset.episodes || "[]") } catch {}
+    box.textContent = ""
+    let now = null
+    for (const e of eps) {
+      const row = document.createElement("button")
+      row.type = "button"
+      row.className = "sub-row"
+      row.disabled = !e.ok
+      const badge = document.createElement("span")
+      badge.className = "sub-badge" + (e.now ? "" : " second")
+      badge.textContent = e.now ? "▶" : ""
+      const name = document.createElement("span")
+      name.className = "sub-name"
+      name.textContent = `${e.n}. ${e.name || "Episode " + e.n}`
+      row.append(badge, name)
+      if (!e.ok) row.style.opacity = "0.4"
+      if (e.now) now = row
+      else row.addEventListener("click", () => { this.closePops(); this.pushEvent("goto", {episode: e.n}) })
+      box.appendChild(row)
+    }
+    if (!eps.length) box.textContent = "No episode list for this one."
+    if (now) requestAnimationFrame(() => { box.scrollTop = now.offsetTop - box.clientHeight / 2 })
+  },
+
   openPop(name) {
     const pop = this.pops[name]
+    if (name === "eps") this.buildEpisodes()
     this.dismissTip()
     pop.menu.hidden = false
     pop.btn.setAttribute("aria-expanded", "true")
@@ -1237,8 +1315,12 @@ export const StudySidebar = {
   // — by name — is switched to once, so the next episode sounds the same.
   refreshAudio() {
     const list = this.audioList()
-    this.audioBtn.hidden = list.length < 2
-    if (list.length < 2) return
+    const immersive = this.el.dataset.immersive === "true"
+    this.audioBtn.hidden = list.length < 2 && !immersive
+    if (list.length < 2) {
+      if (immersive) this.buildAudioMenu(list)
+      return
+    }
 
     if (!this.audioApplied) {
       this.audioApplied = true
@@ -1252,6 +1334,12 @@ export const StudySidebar = {
     label.textContent = this.audioCode(active)
     this.audioBtn.title = `Audio: ${active.name}`
 
+    this.buildAudioMenu(list)
+  },
+
+  // The release's own audio tracks, and — in the full-screen player — the other languages: a pick
+  // finds this episode again with that audio (see "audio_lang" on the page).
+  buildAudioMenu(list) {
     const box = this.el.querySelector("[data-role=audio-list]")
     box.textContent = ""
     for (const t of list) {
@@ -1269,6 +1357,22 @@ export const StudySidebar = {
       code.textContent = this.audioCode(t)
       row.append(badge, name, code)
       row.addEventListener("click", () => { this.setAudio(t.i); this.closePops() })
+      box.appendChild(row)
+    }
+    if (this.el.dataset.immersive !== "true") return
+    const head = document.createElement("div")
+    head.className = "study-label"
+    head.textContent = "Find it in another language"
+    box.appendChild(head)
+    for (const [code, name] of AUDIO_LANGS) {
+      const row = document.createElement("button")
+      row.type = "button"
+      row.className = "sub-row"
+      const label = document.createElement("span")
+      label.className = "sub-name"
+      label.textContent = name
+      row.append(label)
+      row.addEventListener("click", () => { this.closePops(); this.pushEvent("audio_lang", {lang: code}) })
       box.appendChild(row)
     }
   },

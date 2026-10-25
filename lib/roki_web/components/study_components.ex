@@ -33,14 +33,28 @@ defmodule RokiWeb.StudyComponents do
     default: false,
     doc: "a study session: the list of lines starts open (a plain watch starts without it)"
 
-  attr :label, :string, default: nil, doc: "what is playing, beside the close button (immersive)"
+  attr :label, :string, default: nil, doc: "what is playing, in the bar (immersive)"
+
+  attr :episodes, :list,
+    default: [],
+    doc: "the season's episodes, `%{number:, name:, aired?:}`, for the episode menu (immersive)"
+
+  attr :current, :integer, default: nil, doc: "the episode that is playing"
   attr :home, :string, default: "/home", doc: "where closing goes when there is no page behind"
 
   slot :controls,
     doc: "extra controls above the video (the /study page puts its file pickers here)"
 
   def study_player(assigns) do
-    assigns = assign(assigns, :data, if(assigns.player, do: Jason.encode!(assigns.player)))
+    assigns =
+      assign(assigns,
+        data: if(assigns.player, do: Jason.encode!(assigns.player)),
+        eps_json:
+          Jason.encode!(
+            for e <- assigns.episodes,
+                do: %{n: e.number, name: e.name, ok: e.aired?, now: e.number == assigns.current}
+          )
+      )
 
     ~H"""
     <div
@@ -51,6 +65,7 @@ defmodule RokiWeb.StudyComponents do
       data-progress={to_string(@progress?)}
       data-immersive={to_string(@immersive?)}
       data-study={to_string(@study?)}
+      data-episodes={@eps_json}
       data-home={@home}
       class={if @immersive?, do: "study-immersive", else: "space-y-3"}
     >
@@ -84,7 +99,6 @@ defmodule RokiWeb.StudyComponents do
                 >
                   <.icon name="hero-x-mark" class="h-5 w-5" />
                 </button>
-                <span :if={@label} class="study-label-pill">{@label}</span>
               </div>
               <div data-role="overlay" class="study-overlay"></div>
               <button
@@ -99,57 +113,158 @@ defmodule RokiWeb.StudyComponents do
               </button>
             </div>
 
-            <div :if={@immersive?} class="study-transport">
-              <button
-                type="button"
-                data-role="play"
-                class="btn btn-sm btn-square"
-                aria-label="Play or pause"
-              >
-                <span data-icon="play"><.icon name="hero-play-solid" class="h-5 w-5" /></span>
-                <span data-icon="pause" class="hidden"><.icon name="hero-pause-solid" class="h-5 w-5" /></span>
-              </button>
-              <span data-role="cur" class="study-clock">0:00</span>
-              <input
-                type="range"
-                data-role="seek"
-                min="0"
-                max="1000"
-                value="0"
-                step="1"
-                class="study-range study-seek"
-                aria-label="Seek"
-              />
-              <span data-role="dur" class="study-clock">0:00</span>
-              <button type="button" data-role="mute" class="btn btn-sm btn-square" aria-label="Mute">
-                <span data-icon="on"><.icon name="hero-speaker-wave" class="h-5 w-5" /></span>
-                <span data-icon="off" class="hidden"><.icon
-                  name="hero-speaker-x-mark"
-                  class="h-5 w-5"
-                /></span>
-              </button>
-              <input
-                type="range"
-                data-role="volume"
-                min="0"
-                max="1"
-                step="0.05"
-                value="1"
-                class="study-range study-volume"
-                aria-label="Volume"
-              />
-              <button
-                type="button"
-                data-role="fullscreen"
-                class="btn btn-sm btn-square"
-                title="Fullscreen, with the subtitles"
-                aria-label="Fullscreen"
-              >
-                <.icon name="hero-arrows-pointing-out" class="h-5 w-5" />
-              </button>
+            <div :if={@immersive?} class="study-controls">
+              <div class="study-timeline">
+                <span data-role="cur" class="study-clock">0:00</span>
+                <input
+                  type="range"
+                  data-role="seek"
+                  min="0"
+                  max="1000"
+                  value="0"
+                  step="1"
+                  class="study-range study-seek"
+                  aria-label="Seek"
+                />
+                <span data-role="dur" class="study-clock">0:00</span>
+              </div>
+
+              <div class="study-bar2">
+                <div class="study-bar-group">
+                  <button
+                    type="button"
+                    data-role="play"
+                    class="btn btn-sm btn-square"
+                    aria-label="Play or pause"
+                  >
+                    <span data-icon="play"><.icon name="hero-play-solid" class="h-5 w-5" /></span>
+                    <span data-icon="pause" class="hidden">
+                      <.icon name="hero-pause-solid" class="h-5 w-5" />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    data-role="mute"
+                    class="btn btn-sm btn-square"
+                    aria-label="Mute"
+                  >
+                    <span data-icon="on"><.icon name="hero-speaker-wave" class="h-5 w-5" /></span>
+                    <span data-icon="off" class="hidden">
+                      <.icon name="hero-speaker-x-mark" class="h-5 w-5" />
+                    </span>
+                  </button>
+                  <input
+                    type="range"
+                    data-role="volume"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="1"
+                    class="study-range study-volume"
+                    aria-label="Volume"
+                  />
+                  <button
+                    type="button"
+                    data-role="ep-btn"
+                    class="btn btn-sm gap-1.5"
+                    aria-haspopup="menu"
+                    title="Episodes"
+                  >
+                    <span class="study-ep-label">{@label}</span>
+                    <.icon :if={@episodes != []} name="hero-queue-list" class="h-4 w-4 shrink-0" />
+                  </button>
+                  <button
+                    type="button"
+                    data-role="prev-btn"
+                    hidden
+                    class="btn btn-sm btn-square"
+                    title="Play the previous episode"
+                    aria-label="Previous episode"
+                  >
+                    <.icon name="hero-backward" class="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    data-role="next-btn"
+                    hidden
+                    class="btn btn-sm gap-1.5"
+                    title="Play the next episode"
+                    aria-label="Next episode"
+                  >
+                    <span class="hidden sm:inline">Next <span data-role="next-label"></span></span>
+                    <.icon name="hero-forward" class="h-4 w-4" />
+                  </button>
+                </div>
+                <div class="study-bar-group">
+                  <button
+                    type="button"
+                    data-role="audio-btn"
+                    class="btn btn-sm gap-1.5"
+                    aria-haspopup="menu"
+                    title="Audio"
+                  >
+                    <.icon name="hero-speaker-wave" class="h-4 w-4 shrink-0" />
+                    <span data-role="audio-label" class="font-semibold">Audio</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-role="settings-btn"
+                    class="btn btn-sm btn-square"
+                    aria-haspopup="menu"
+                    title="Timing, text size, study mode"
+                    aria-label="Settings"
+                  >
+                    <.icon name="hero-cog-6-tooth" class="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    data-role="subs-btn"
+                    class="btn btn-sm gap-1.5"
+                    aria-haspopup="menu"
+                  >
+                    <.icon name="hero-chat-bubble-bottom-center-text" class="h-4 w-4 shrink-0" />
+                    <span data-role="subs-label" class="max-w-[9rem] truncate">Subtitles</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-role="lines-btn"
+                    class="btn btn-sm gap-1.5"
+                    aria-pressed="false"
+                  >
+                    <.icon name="hero-queue-list" class="h-4 w-4" />
+                    <span class="hidden sm:inline">Lines</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-role="fullscreen"
+                    class="btn btn-sm btn-square"
+                    title="Fullscreen, with the subtitles"
+                    aria-label="Fullscreen"
+                  >
+                    <.icon name="hero-arrows-pointing-out" class="h-5 w-5" />
+                  </button>
+                </div>
+
+                <.menus />
+
+                <div data-role="ep-menu" class="study-pop" role="menu" hidden>
+                  <div class="study-pop-head">
+                    <span>Episodes</span>
+                    <button
+                      type="button"
+                      data-role="pop-close"
+                      class="btn btn-xs btn-ghost btn-circle"
+                      aria-label="Close"
+                    >
+                      <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div data-role="ep-list" class="study-pop-body"></div>
+                </div>
+              </div>
             </div>
 
-            <div class="study-bar">
+            <div :if={!@immersive?} class="study-bar">
               <div class="study-bar-group">
                 <button
                   type="button"
@@ -236,175 +351,7 @@ defmodule RokiWeb.StudyComponents do
                 </button>
               </div>
 
-              <%!-- Which tracks are on, in order, and the languages to add. Built by the hook. --%>
-              <div data-role="subs-menu" class="study-pop" role="menu" hidden>
-                <div class="study-pop-head">
-                  <span>Subtitles</span>
-                  <button type="button" data-role="subs-off" class="btn btn-xs btn-ghost ml-auto mr-1">
-                    Turn off
-                  </button>
-                  <button
-                    type="button"
-                    data-role="pop-close"
-                    class="btn btn-xs btn-ghost btn-circle"
-                    aria-label="Close"
-                  >
-                    <.icon name="hero-x-mark-micro" class="h-4 w-4" />
-                  </button>
-                </div>
-                <div data-role="subs-list" class="study-pop-body"></div>
-                <%!-- OpenSubtitles: the files it has for what is playing, listed on request. Built by the hook. --%>
-                <div data-role="os-box" hidden class="shrink-0 space-y-2 border-t border-base-300 p-2">
-                </div>
-                <%!-- Always last: the release may lack the language wanted, and OpenSubtitles / Jimaku
-                      are keys the user adds in Settings. Opens in a new tab so playback goes on. --%>
-                <a
-                  href="/account/services#connections"
-                  target="_blank"
-                  rel="noopener"
-                  class="btn btn-sm btn-ghost mx-2 mb-2 mt-1 justify-start gap-1.5 text-base-content/70"
-                >
-                  <.icon name="hero-plus-micro" class="h-4 w-4" /> Subtitle services
-                  <span class="text-xs opacity-60">OpenSubtitles, Jimaku</span>
-                </a>
-              </div>
-
-              <div data-role="audio-menu" class="study-pop" role="menu" hidden>
-                <div class="study-pop-head">
-                  <span>Audio</span>
-                  <button
-                    type="button"
-                    data-role="pop-close"
-                    class="btn btn-xs btn-ghost btn-circle"
-                    aria-label="Close"
-                  >
-                    <.icon name="hero-x-mark-micro" class="h-4 w-4" />
-                  </button>
-                </div>
-                <div data-role="audio-list" class="study-pop-body"></div>
-              </div>
-
-              <div data-role="settings-menu" class="study-pop" role="menu" hidden>
-                <div class="study-pop-head">
-                  <span>Settings</span>
-                  <button
-                    type="button"
-                    data-role="pop-close"
-                    class="btn btn-xs btn-ghost btn-circle"
-                    aria-label="Close"
-                  >
-                    <.icon name="hero-x-mark-micro" class="h-4 w-4" />
-                  </button>
-                </div>
-                <div class="study-pop-body space-y-1">
-                  <div class="study-setting flex-wrap">
-                    <div>
-                      <div class="font-medium">Subtitle timing</div>
-                      <div class="text-xs text-base-content/60">
-                        Earlier or later than the picture — click the number to type one
-                      </div>
-                    </div>
-                    <div class="join mx-auto">
-                      <button
-                        type="button"
-                        data-role="nudge"
-                        data-step="-0.5"
-                        class="btn btn-sm join-item px-2 tabular-nums"
-                        aria-label="0.5 seconds earlier"
-                      >−0.5</button>
-                      <button
-                        type="button"
-                        data-role="nudge"
-                        data-step="-0.25"
-                        class="btn btn-sm join-item px-2 tabular-nums"
-                        aria-label="0.25 seconds earlier"
-                      >−0.25</button>
-                      <button
-                        type="button"
-                        data-role="offset"
-                        class="btn btn-sm join-item w-20 px-1 tabular-nums"
-                        title="Click to type an exact number of seconds"
-                      >
-                        0.0s
-                      </button>
-                      <input
-                        type="text"
-                        inputmode="decimal"
-                        data-role="offset-input"
-                        hidden
-                        aria-label="Subtitle timing in seconds"
-                        class="input input-sm join-item w-20 px-1 text-center tabular-nums"
-                      />
-                      <button
-                        type="button"
-                        data-role="nudge"
-                        data-step="0.25"
-                        class="btn btn-sm join-item px-2 tabular-nums"
-                        aria-label="0.25 seconds later"
-                      >+0.25</button>
-                      <button
-                        type="button"
-                        data-role="nudge"
-                        data-step="0.5"
-                        class="btn btn-sm join-item px-2 tabular-nums"
-                        aria-label="0.5 seconds later"
-                      >+0.5</button>
-                    </div>
-                    <button
-                      type="button"
-                      data-role="offset-reset"
-                      hidden
-                      class="btn btn-xs btn-ghost w-full text-base-content/60"
-                    >
-                      Reset to 0
-                    </button>
-                  </div>
-
-                  <div class="study-setting">
-                    <div class="font-medium">Text size</div>
-                    <div class="join">
-                      <button
-                        type="button"
-                        data-role="smaller-text"
-                        class="btn btn-sm join-item"
-                        aria-label="Smaller text"
-                      >A<span class="text-[0.6rem]">−</span></button>
-                      <button
-                        type="button"
-                        data-role="scale"
-                        class="btn btn-sm join-item w-16 px-1 tabular-nums"
-                        title="Click to reset"
-                      >
-                        100%
-                      </button>
-                      <button
-                        type="button"
-                        data-role="bigger-text"
-                        class="btn btn-sm join-item"
-                        aria-label="Bigger text"
-                      >A<span class="text-[0.6rem]">+</span></button>
-                    </div>
-                  </div>
-
-                  <label class="study-setting cursor-pointer">
-                    <div>
-                      <div class="font-medium">Study mode</div>
-                      <div class="text-xs text-base-content/60">Pause after every line</div>
-                    </div>
-                    <input type="checkbox" data-role="study" class="toggle toggle-primary" />
-                  </label>
-
-                  <label class="study-setting cursor-pointer">
-                    <div>
-                      <div class="font-medium">Peek</div>
-                      <div class="text-xs text-base-content/60">
-                        Hide translations until you click
-                      </div>
-                    </div>
-                    <input type="checkbox" data-role="peek" class="toggle toggle-primary" />
-                  </label>
-                </div>
-              </div>
+              <.menus />
             </div>
           </div>
 
@@ -452,6 +399,260 @@ defmodule RokiWeb.StudyComponents do
         </div>
 
         <div data-role="backdrop" class="study-backdrop" hidden></div>
+      </div>
+    </div>
+    """
+  end
+
+  # The three menus the buttons of the bar open (subtitles, audio, settings), built by the hook.
+  defp menus(assigns) do
+    ~H"""
+    <%!-- Which tracks are on, in order, and the languages to add. Built by the hook. --%>
+    <div data-role="subs-menu" class="study-pop" role="menu" hidden>
+      <div class="study-pop-head">
+        <span>Subtitles</span>
+        <button type="button" data-role="subs-off" class="btn btn-xs btn-ghost ml-auto mr-1">
+          Turn off
+        </button>
+        <button
+          type="button"
+          data-role="pop-close"
+          class="btn btn-xs btn-ghost btn-circle"
+          aria-label="Close"
+        >
+          <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+        </button>
+      </div>
+      <div data-role="subs-list" class="study-pop-body"></div>
+      <%!-- OpenSubtitles: the files it has for what is playing, listed on request. Built by the hook. --%>
+      <div data-role="os-box" hidden class="shrink-0 space-y-2 border-t border-base-300 p-2"></div>
+      <%!-- Always last: the release may lack the language wanted, and OpenSubtitles / Jimaku
+              are keys the user adds in Settings. Opens in a new tab so playback goes on. --%>
+      <a
+        href="/account/services#connections"
+        target="_blank"
+        rel="noopener"
+        class="btn btn-sm btn-ghost mx-2 mb-2 mt-1 justify-start gap-1.5 text-base-content/70"
+      >
+        <.icon name="hero-plus-micro" class="h-4 w-4" /> Subtitle services
+        <span class="text-xs opacity-60">OpenSubtitles, Jimaku</span>
+      </a>
+    </div>
+
+    <div data-role="audio-menu" class="study-pop" role="menu" hidden>
+      <div class="study-pop-head">
+        <span>Audio</span>
+        <button
+          type="button"
+          data-role="pop-close"
+          class="btn btn-xs btn-ghost btn-circle"
+          aria-label="Close"
+        >
+          <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+        </button>
+      </div>
+      <div data-role="audio-list" class="study-pop-body"></div>
+    </div>
+
+    <div data-role="settings-menu" class="study-pop" role="menu" hidden>
+      <div class="study-pop-head">
+        <span>Settings</span>
+        <button
+          type="button"
+          data-role="pop-close"
+          class="btn btn-xs btn-ghost btn-circle"
+          aria-label="Close"
+        >
+          <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+        </button>
+      </div>
+      <div class="study-pop-body space-y-1">
+        <div class="study-setting flex-wrap">
+          <div>
+            <div class="font-medium">Subtitle timing</div>
+            <div class="text-xs text-base-content/60">
+              Earlier or later than the picture — click the number to type one
+            </div>
+          </div>
+          <div class="join mx-auto">
+            <button
+              type="button"
+              data-role="nudge"
+              data-step="-0.5"
+              class="btn btn-sm join-item px-2 tabular-nums"
+              aria-label="0.5 seconds earlier"
+            >−0.5</button>
+            <button
+              type="button"
+              data-role="nudge"
+              data-step="-0.25"
+              class="btn btn-sm join-item px-2 tabular-nums"
+              aria-label="0.25 seconds earlier"
+            >−0.25</button>
+            <button
+              type="button"
+              data-role="offset"
+              class="btn btn-sm join-item w-20 px-1 tabular-nums"
+              title="Click to type an exact number of seconds"
+            >
+              0.0s
+            </button>
+            <input
+              type="text"
+              inputmode="decimal"
+              data-role="offset-input"
+              hidden
+              aria-label="Subtitle timing in seconds"
+              class="input input-sm join-item w-20 px-1 text-center tabular-nums"
+            />
+            <button
+              type="button"
+              data-role="nudge"
+              data-step="0.25"
+              class="btn btn-sm join-item px-2 tabular-nums"
+              aria-label="0.25 seconds later"
+            >+0.25</button>
+            <button
+              type="button"
+              data-role="nudge"
+              data-step="0.5"
+              class="btn btn-sm join-item px-2 tabular-nums"
+              aria-label="0.5 seconds later"
+            >+0.5</button>
+          </div>
+          <button
+            type="button"
+            data-role="offset-reset"
+            hidden
+            class="btn btn-xs btn-ghost w-full text-base-content/60"
+          >
+            Reset to 0
+          </button>
+        </div>
+
+        <div class="study-setting">
+          <div class="font-medium">Text size</div>
+          <div class="join">
+            <button
+              type="button"
+              data-role="smaller-text"
+              class="btn btn-sm join-item"
+              aria-label="Smaller text"
+            >A<span class="text-[0.6rem]">−</span></button>
+            <button
+              type="button"
+              data-role="scale"
+              class="btn btn-sm join-item w-16 px-1 tabular-nums"
+              title="Click to reset"
+            >
+              100%
+            </button>
+            <button
+              type="button"
+              data-role="bigger-text"
+              class="btn btn-sm join-item"
+              aria-label="Bigger text"
+            >A<span class="text-[0.6rem]">+</span></button>
+          </div>
+        </div>
+
+        <div class="study-setting flex-wrap">
+          <div class="font-medium">Subtitle look</div>
+          <button
+            type="button"
+            data-role="cap-reset"
+            class="btn btn-xs btn-ghost text-base-content/60"
+          >
+            Reset
+          </button>
+          <div class="flex w-full flex-wrap items-center gap-1.5">
+            <button
+              :for={c <- ~w(#ffffff #ffe14d #67e8f9 #86efac #f9a8d4 #fdba74)}
+              type="button"
+              data-role="cap-swatch"
+              data-color={c}
+              class="study-swatch"
+              style={"background: #{c}"}
+              aria-label={"Text colour #{c}"}
+            ></button>
+            <input
+              type="color"
+              data-role="cap-color"
+              value="#ffffff"
+              class="study-swatch-input"
+              aria-label="Pick a text colour"
+              title="Any colour"
+            />
+          </div>
+          <label class="flex w-full items-center gap-3 text-sm">
+            <span class="w-24 shrink-0">Text opacity</span>
+            <input
+              type="range"
+              data-role="cap-text"
+              min="20"
+              max="100"
+              step="5"
+              value="100"
+              class="range range-xs flex-1"
+            />
+            <span data-role="cap-text-out" class="w-10 text-right tabular-nums">100%</span>
+          </label>
+          <label class="flex w-full items-center gap-3 text-sm">
+            <span class="w-24 shrink-0">Background</span>
+            <input
+              type="range"
+              data-role="cap-bg"
+              min="0"
+              max="100"
+              step="5"
+              value="66"
+              class="range range-xs flex-1"
+            />
+            <span data-role="cap-bg-out" class="w-10 text-right tabular-nums">66%</span>
+          </label>
+          <div class="flex w-full items-center gap-3 text-sm">
+            <span class="w-24 shrink-0">Edge</span>
+            <div class="join">
+              <button type="button" data-role="cap-edge" data-edge="none" class="btn btn-sm join-item">
+                None
+              </button>
+              <button
+                type="button"
+                data-role="cap-edge"
+                data-edge="shadow"
+                class="btn btn-sm join-item"
+              >
+                Shadow
+              </button>
+              <button
+                type="button"
+                data-role="cap-edge"
+                data-edge="outline"
+                class="btn btn-sm join-item"
+              >
+                Outline
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <label class="study-setting cursor-pointer">
+          <div>
+            <div class="font-medium">Study mode</div>
+            <div class="text-xs text-base-content/60">Pause after every line</div>
+          </div>
+          <input type="checkbox" data-role="study" class="toggle toggle-primary" />
+        </label>
+
+        <label class="study-setting cursor-pointer">
+          <div>
+            <div class="font-medium">Peek</div>
+            <div class="text-xs text-base-content/60">
+              Hide translations until you click
+            </div>
+          </div>
+          <input type="checkbox" data-role="peek" class="toggle toggle-primary" />
+        </label>
       </div>
     </div>
     """

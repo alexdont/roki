@@ -382,6 +382,48 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
+  # A pick from the player's episode menu.
+  def handle_event(
+        "goto",
+        %{"episode" => n},
+        %{assigns: %{type: "tv", id: id, season: s}} = socket
+      )
+      when is_integer(n) do
+    query =
+      case socket.assigns.current do
+        {source, _} -> [prefer: source.hash]
+        _ -> []
+      end
+
+    {:noreply,
+     push_navigate(socket,
+       to: ~p"/watch/tv/#{id}/#{s}/#{n}?#{query ++ study_q(socket)}",
+       replace: true
+     )}
+  end
+
+  # A pick from the audio menu: this title in that language from now on (a study session for it),
+  # the subtitle language as it is for this page. The same episode, found again.
+  def handle_event("audio_lang", %{"lang" => lang}, %{assigns: %{uuid: uuid}} = socket)
+      when is_binary(lang) and not is_nil(uuid) do
+    %{type: type, id: id} = socket.assigns
+
+    subs =
+      case socket.assigns.study do
+        %{"subs" => subs} -> subs
+        _ -> Watch.preferred_subs(uuid) || "off"
+      end
+
+    Roki.Study.put(uuid, type, id, lang, subs)
+
+    path =
+      if type == "movie",
+        do: ~p"/watch/movie/#{id}?#{[study: 1]}",
+        else: ~p"/watch/tv/#{id}/#{socket.assigns.season}/#{socket.assigns.episode}?#{[study: 1]}"
+
+    {:noreply, push_navigate(socket, to: path, replace: true)}
+  end
+
   def handle_event("next", _params, %{assigns: %{up_next: {s, e}, id: id}} = socket) do
     query =
       case socket.assigns.current do
@@ -564,6 +606,8 @@ defmodule RokiWeb.WatchLive do
       progress?={true}
       immersive?={true}
       study?={@study != nil}
+      episodes={if is_list(@episodes), do: @episodes, else: []}
+      current={@episode}
       label={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
       home={if @title, do: ~p"/title/#{@type}/#{@id}", else: ~p"/home"}
     />
