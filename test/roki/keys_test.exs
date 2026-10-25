@@ -58,6 +58,20 @@ defmodule Roki.KeysTest do
     assert Keys.overrides(@friend, %{}) == %{tmdb_key: "owner-tmdb"}
   end
 
+  test "keys are allowed one at a time, and the browser separately" do
+    Keys.set_access!(@friend, %{keys: ["RD_TOKEN"], browser: false})
+    assert Keys.overrides(@friend, %{}) == %{rd_token: "owner-rd-token"}
+    refute Keys.browser?(@friend)
+
+    Keys.set_access!(@friend, %{keys: [], browser: true})
+    assert Keys.overrides(@friend, %{}) == %{}
+    assert Keys.browser?(@friend)
+
+    Keys.set_access!(@friend, %{keys: [], browser: false})
+    refute Keys.browser?(@friend)
+    assert Keys.all_grants()[@friend] == nil
+  end
+
   test "taking the grant away takes the keys away" do
     Keys.grant!(@friend)
     assert map_size(Keys.overrides(@friend, %{})) > 0

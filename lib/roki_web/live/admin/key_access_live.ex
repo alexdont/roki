@@ -68,6 +68,7 @@ defmodule RokiWeb.Admin.KeyAccessLive do
 
     assign(socket,
       config: config,
+      grants: grants,
       rows: rows,
       owner_has: owner_has,
       owner: Enum.find(users, &(&1.uuid == config.owner_uuid)),
@@ -97,6 +98,20 @@ defmodule RokiWeb.Admin.KeyAccessLive do
     {:noreply, load(socket)}
   end
 
+  def handle_event("toggle_key", %{"uuid" => uuid, "perm" => perm}, socket) do
+    g = socket.assigns.grants[uuid] || %{keys: [], browser: false}
+    keys = if perm in g.keys, do: List.delete(g.keys, perm), else: g.keys ++ [perm]
+    Keys.set_access!(uuid, %{keys: keys, browser: g.browser})
+    unless Roki.Laev.connected?(uuid), do: Task.start(fn -> Roki.Laev.setup_granted(uuid) end)
+    {:noreply, load(socket)}
+  end
+
+  def handle_event("toggle_browser", %{"uuid" => uuid}, socket) do
+    g = socket.assigns.grants[uuid] || %{keys: [], browser: false}
+    Keys.set_access!(uuid, %{keys: g.keys, browser: not g.browser})
+    {:noreply, load(socket)}
+  end
+
   def handle_event("revoke", %{"uuid" => uuid}, socket) do
     Keys.revoke!(uuid)
     {:noreply, load(socket)}
@@ -114,7 +129,8 @@ defmodule RokiWeb.Admin.KeyAccessLive do
   end
 
   def handle_event("share", params, socket) do
-    shared = for name <- Keys.shareable(), params[name] == "true", do: name
+    on = for {id, _, _} <- Keys.permissions(), params[id] == "true", do: id
+    shared = Keys.names_for(on)
     Keys.save_config!(socket.assigns.config.owner_uuid, shared)
     {:noreply, load(socket)}
   end
@@ -168,20 +184,20 @@ defmodule RokiWeb.Admin.KeyAccessLive do
         </p>
         <form phx-change="share" class="flex flex-wrap gap-x-6 gap-y-2">
           <label
-            :for={name <- Roki.Keys.shareable()}
+            :for={{id, label, names} <- Roki.Keys.permissions()}
             class="flex cursor-pointer items-center gap-2 text-sm"
           >
-            <input type="hidden" name={name} value="false" />
+            <input type="hidden" name={id} value="false" />
             <input
               type="checkbox"
-              name={name}
+              name={id}
               value="true"
-              checked={name in @config.shared}
+              checked={Enum.all?(names, &(&1 in @config.shared))}
               class="checkbox checkbox-sm"
             />
-            {@labels[name]}
+            {label}
             <span
-              :if={not Map.has_key?(@owner_has, Laev.Config.keys()[name])}
+              :if={Enum.any?(names, &(not Map.has_key?(@owner_has, Laev.Config.keys()[&1])))}
               class="text-xs text-warning"
             >
               (not set)
@@ -195,7 +211,14 @@ defmodule RokiWeb.Admin.KeyAccessLive do
           <thead>
             <tr>
               <th>Account</th>
-              <th>Access</th>
+              <th :for={{_id, label, _} <- Roki.Keys.permissions()} class="text-center">{label}</th>
+              <th
+                class="text-center"
+                title="May play in the browser (the server may convert the video)"
+              >
+                Browser
+              </th>
+              <th></th>
               <th title="Plays a day; blank for no cap">Daily plays</th>
               <th class="text-right">Today</th>
               <th class="text-right">7 days</th>
@@ -210,29 +233,61 @@ defmodule RokiWeb.Admin.KeyAccessLive do
                 <div class="font-medium">{r.user.email}</div>
                 <div class="text-xs text-base-content/50">{r.user.username}</div>
               </td>
-              <td>
+              <td :for={{id, label, names} <- Roki.Keys.permissions()} class="text-center">
+                <span :if={r.owner?} class="text-base-content/40">—</span>
+                <button
+                  :if={!r.owner?}
+                  phx-click="toggle_key"
+                  phx-value-uuid={r.user.uuid}
+                  phx-value-perm={id}
+                  disabled={not Enum.all?(names, &(&1 in @config.shared))}
+                  class={[
+                    "btn btn-xs w-14",
+                    r.grant && id in r.grant.keys && "btn-success",
+                    !(r.grant && id in r.grant.keys) && "btn-outline btn-error"
+                  ]}
+                  title={"#{label}: " <> if(r.grant && id in r.grant.keys, do: "allowed — click to disable", else: "off — click to allow")}
+                >
+                  {if r.grant && id in r.grant.keys, do: "on", else: "off"}
+                </button>
+              </td>
+              <td class="text-center">
                 <span :if={r.owner?} class="badge badge-ghost">owner</span>
                 <button
-                  :if={!r.owner? and r.grant}
-                  phx-click="revoke"
+                  :if={!r.owner?}
+                  phx-click="toggle_browser"
                   phx-value-uuid={r.user.uuid}
-                  data-confirm={"Take the keys away from #{r.user.email}?"}
-                  class="btn btn-xs btn-success"
-                  title="Click to take access away"
+                  class={[
+                    "btn btn-xs w-14",
+                    r.grant && r.grant.browser && "btn-success",
+                    !(r.grant && r.grant.browser) && "btn-outline btn-error"
+                  ]}
+                  title={"Browser player: " <> if(r.grant && r.grant.browser, do: "allowed — click to disable", else: "off (external player only) — click to allow")}
                 >
-                  <.icon name="hero-check" class="h-3.5 w-3.5" /> Allowed
+                  {if r.grant && r.grant.browser, do: "on", else: "off"}
                 </button>
+              </td>
+              <td class="whitespace-nowrap">
                 <button
                   :if={!r.owner? and !r.grant}
                   phx-click="grant"
                   phx-value-uuid={r.user.uuid}
-                  class="btn btn-xs btn-outline"
+                  class="btn btn-xs btn-ghost"
                 >
-                  Allow
+                  Allow all
+                </button>
+                <button
+                  :if={!r.owner? and r.grant}
+                  phx-click="revoke"
+                  phx-value-uuid={r.user.uuid}
+                  data-confirm={"Take everything away from #{r.user.email}?"}
+                  class="btn btn-xs btn-ghost"
+                >
+                  Remove all
                 </button>
               </td>
               <td>
-                <form :if={r.grant} phx-change="cap" phx-debounce="600">
+                <form :if={r.grant && r.grant.keys != []} phx-change="cap" phx-debounce="600">
                   <input type="hidden" name="uuid" value={r.user.uuid} />
                   <input
                     type="number"

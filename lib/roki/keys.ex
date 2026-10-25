@@ -27,6 +27,24 @@ defmodule Roki.Keys do
   @weights %{"search" => 2, "probe" => 1, "play" => 5, "subtitle" => 3}
 
   def shareable, do: @shareable
+
+  # What an account can be allowed, one by one: a permission and the config keys it covers.
+  @permissions [
+    {"RD_TOKEN", "Real-Debrid", ~w(RD_TOKEN)},
+    {"TORBOX_API_KEY", "TorBox", ~w(TORBOX_API_KEY)},
+    {"TMDB_API_KEY", "TMDB", ~w(TMDB_API_KEY)},
+    {"OPENSUBTITLES", "OpenSubtitles",
+     ~w(OPENSUBTITLES_API_KEY OPENSUBTITLES_USERNAME OPENSUBTITLES_PASSWORD)},
+    {"JIMAKU_API_KEY", "Jimaku", ~w(JIMAKU_API_KEY)}
+  ]
+
+  @doc "`[{permission, label, config names}]` — the keys that can be allowed to an account one at a time."
+  def permissions, do: @permissions
+
+  @doc "The config names behind a list of permissions."
+  def names_for(perms),
+    do: for({id, _, names} <- @permissions, id in perms, name <- names, do: name)
+
   def kinds, do: Map.keys(@weights)
 
   defp grants, do: "roki_key_grants"
@@ -57,10 +75,14 @@ defmodule Roki.Keys do
   is the heavy part of it, so it is for the owner and the accounts they allowed; everyone else
   uses an external player (VLC, mpv), which costs the server nothing.
   """
-  def browser?(uuid) when is_binary(uuid), do: config().owner_uuid == uuid or grant(uuid) != nil
+  def browser?(uuid) when is_binary(uuid) do
+    config().owner_uuid == uuid or match?(%{browser: true}, grant(uuid))
+  end
+
   def browser?(_), do: false
 
-  def granted?(uuid), do: grant(uuid) != nil
+  @doc "Does this account use any of the owner's keys?"
+  def granted?(uuid), do: match?(%{keys: [_ | _]}, grant(uuid))
 
   defp load_grant(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
@@ -68,35 +90,52 @@ defmodule Roki.Keys do
     found =
       from(g in grants(),
         where: g.user_uuid == ^bin,
-        select: %{daily_plays: g.daily_plays, note: g.note}
+        select: %{daily_plays: g.daily_plays, note: g.note, keys: g.keys, browser: g.browser}
       )
       |> Repo.one()
 
     {:ok, found || false}
   end
 
-  @doc "Let this account use the owner's keys."
+  @doc "Let this account use all of the owner's keys and play in the browser."
   def grant!(uuid, daily_plays \\ nil) do
-    {:ok, bin} = Ecto.UUID.dump(uuid)
+    set_access!(uuid, %{keys: for({id, _, _} <- @permissions, do: id), browser: true})
 
-    Repo.insert_all(
-      grants(),
-      [
-        %{
-          user_uuid: bin,
-          granted_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          daily_plays: daily_plays
-        }
-      ],
-      on_conflict: {:replace, [:daily_plays]},
-      conflict_target: [:user_uuid]
-    )
+    if daily_plays, do: set_daily_plays!(uuid, daily_plays)
+    :ok
+  end
+
+  @doc """
+  Set what an account may use: `keys` (permission ids, see `permissions/0`) and `browser`.
+  An account left with neither has no row at all.
+  """
+  def set_access!(uuid, %{keys: keys, browser: browser}) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    keys = Enum.filter(keys, &(&1 in Enum.map(@permissions, fn {id, _, _} -> id end)))
+
+    if keys == [] and not browser do
+      Repo.delete_all(from(g in grants(), where: g.user_uuid == ^bin))
+    else
+      Repo.insert_all(
+        grants(),
+        [
+          %{
+            user_uuid: bin,
+            granted_at: DateTime.utc_now() |> DateTime.truncate(:second),
+            keys: keys,
+            browser: browser
+          }
+        ],
+        on_conflict: {:replace, [:keys, :browser]},
+        conflict_target: [:user_uuid]
+      )
+    end
 
     forget(uuid)
     :ok
   end
 
-  @doc "Take the keys back."
+  @doc "Take everything back: the keys and the browser player."
   def revoke!(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     Repo.delete_all(from(g in grants(), where: g.user_uuid == ^bin))
@@ -114,10 +153,12 @@ defmodule Roki.Keys do
 
   defp forget(uuid), do: TTLCache.delete({:key_grant, uuid})
 
-  @doc "Every account with a grant: `%{uuid => %{daily_plays, granted_at}}`."
+  @doc "Every account with any access: `%{uuid => %{daily_plays, granted_at, keys, browser}}`."
   def all_grants do
     from(g in grants(),
-      select: {g.user_uuid, %{daily_plays: g.daily_plays, granted_at: g.granted_at}}
+      select:
+        {g.user_uuid,
+         %{daily_plays: g.daily_plays, granted_at: g.granted_at, keys: g.keys, browser: g.browser}}
     )
     |> Repo.all()
     |> Map.new(fn {bin, g} -> {Ecto.UUID.load!(bin), g} end)
@@ -186,9 +227,19 @@ defmodule Roki.Keys do
   """
   def overrides(uuid, own) do
     cond do
-      grant(uuid) == nil -> %{}
-      config().owner_uuid == uuid -> %{}
-      true -> for {k, v} <- owner_keys(), own[k] in [nil, ""], into: %{}, do: {k, v}
+      not granted?(uuid) ->
+        %{}
+
+      config().owner_uuid == uuid ->
+        %{}
+
+      true ->
+        allowed =
+          for name <- names_for(grant(uuid).keys),
+              atom = Map.get(Laev.Config.keys(), name),
+              do: atom
+
+        for {k, v} <- owner_keys(), k in allowed, own[k] in [nil, ""], into: %{}, do: {k, v}
     end
   rescue
     _ -> %{}
