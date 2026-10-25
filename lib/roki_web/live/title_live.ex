@@ -48,6 +48,7 @@ defmodule RokiWeb.TitleLive do
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
+        similar: [],
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -408,8 +409,18 @@ defmodule RokiWeb.TitleLive do
         page_title: title.title
       )
 
-    {:noreply, select(socket)}
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     socket
+     |> start_async(:similar, fn -> Roki.Similar.for_title(uuid, title.type, title.id) end)
+     |> select()}
   end
+
+  def handle_async(:similar, {:ok, {:ok, cards}}, socket),
+    do: {:noreply, assign(socket, :similar, cards)}
+
+  def handle_async(:similar, _other, socket), do: {:noreply, socket}
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, :title_error, reason || true)}
@@ -543,6 +554,16 @@ defmodule RokiWeb.TitleLive do
         />
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
+
+        <%!-- A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
+        <section :if={@similar != []} class="hidden space-y-3 sm:block" aria-label="More like this">
+          <h2 class="text-lg font-semibold">More like this</h2>
+          <ul class="grid grid-cols-3 gap-4 md:grid-cols-4 lg:grid-cols-6">
+            <li :for={i <- Enum.take(@similar, 12)}>
+              <RokiWeb.PosterComponents.poster item={i} />
+            </li>
+          </ul>
+        </section>
 
         <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
         <div :if={!@locked?} class="h-36 sm:hidden" aria-hidden="true"></div>
