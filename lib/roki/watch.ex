@@ -498,6 +498,8 @@ defmodule Roki.Watch do
   defp build_ctx(title, season, episode) do
     # An anime episode is keyed by its MAL entry and the number inside that entry (laev's
     # `mal-<id>-e<n>`); `tmdb_episode` keeps TMDB's own number for the page.
+    learn_parts(title)
+
     {mal, local} =
       case (title.anime? and title.type == "tv") &&
              Laev.Anime.Parts.locate(title.id, season, episode) do
@@ -519,6 +521,22 @@ defmodule Roki.Watch do
       mal_id: mal
     }
   end
+
+  # Where an episode of a merged season lies depends on how long each MyAnimeList entry is, and a
+  # length is only known to an account whose list has the entry. Without it the first cour is
+  # skipped and every episode is looked for under the second one's numbering (episode 7 of 25 as
+  # "S02E07", the 19th as "19"). Asked once per entry, from the site's own MAL app; needs a scope.
+  defp learn_parts(%{anime?: true, type: "tv", id: id}) do
+    for mal <- Laev.AnimeMap.mal_ids("tv", id), Laev.Anime.episodes(mal) == nil do
+      Laev.Anime.learn(mal)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp learn_parts(_title), do: :ok
 
   # ── 2. sources ─────────────────────────────────────────────────────
 
@@ -563,6 +581,7 @@ defmodule Roki.Watch do
   # An anime season: its releases are fansub groups numbering by the anime's own episode
   # count, found by title and by Kitsu / AniDB id, never by "S02E05".
   defp search_sources(%{type: "tv", anime?: true} = t, season, episode) do
+    learn_parts(t)
     located = season && Laev.Anime.Parts.locate(t.id, season, episode)
 
     if located do
@@ -1277,6 +1296,7 @@ defmodule Roki.Watch do
   end
 
   defp build_sections(title) do
+    learn_parts(title)
     main = Enum.count(title.seasons, &(&1.number > 0))
 
     Enum.flat_map(title.seasons, fn s ->
