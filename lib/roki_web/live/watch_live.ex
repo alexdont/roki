@@ -390,7 +390,10 @@ defmodule RokiWeb.WatchLive do
       end
 
     {:noreply,
-     push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}")}
+     push_navigate(socket,
+       to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}",
+       replace: true
+     )}
   end
 
   def handle_event("next", _params, socket), do: {:noreply, socket}
@@ -403,7 +406,10 @@ defmodule RokiWeb.WatchLive do
       end
 
     {:noreply,
-     push_navigate(socket, to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}")}
+     push_navigate(socket,
+       to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}",
+       replace: true
+     )}
   end
 
   def handle_event("previous", _params, socket), do: {:noreply, socket}
@@ -548,10 +554,22 @@ defmodule RokiWeb.WatchLive do
           ></progress>
           <.checks_list checks={@checks} />
         </div>
-
-        <.study_player :if={@player} player={@player} progress?={true} />
       </div>
     </Layouts.app>
+
+    <%!-- Once there is something to play, the player is the page: the whole screen, nothing to scroll. --%>
+    <.study_player
+      :if={@player}
+      player={@player}
+      progress?={true}
+      immersive?={true}
+      study?={@study != nil}
+      label={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
+      home={if @title, do: ~p"/title/#{@type}/#{@id}", else: ~p"/home"}
+    />
+    <style :if={@player}>
+      html, body { overflow: hidden; height: 100%; overscroll-behavior: none; }
+    </style>
     """
   end
 end

@@ -448,3 +448,48 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .rate-range::-moz-range-track {
   background: transparent;
 }
+
+
+/* ── The watch page's player: the whole screen, the picture above one bar ────────────────────
+   Close at the top left, the timeline and menus along the bottom, the list of lines a fifth of
+   the width when Lines is on. No page around it, no scrolling. */
+.study-immersive { position: fixed; inset: 0; z-index: 60; height: 100dvh; overflow: hidden; background: #000; color: #fff; }
+.study-immersive > #study-ui, .study-immersive .study-layout { height: 100%; }
+.study-immersive .study-layout { gap: 0; }
+.study-immersive .study-main { height: 100%; gap: 0; }
+.study-immersive .study-stage { flex: 1 1 0; min-height: 0; aspect-ratio: auto; border-radius: 0; }
+.study-immersive .study-stage:not([data-active]) { cursor: none; }
+.study-immersive .study-stage[data-active] .study-overlay { bottom: 0.5rem; }
+.study-immersive [data-role="theater"], .study-immersive [data-role="compact"] { display: none !important; }
+
+.study-close { position: absolute; top: 0.75rem; left: 0.75rem; z-index: 5; display: flex; align-items: center; gap: 0.6rem; max-width: calc(100% - 1.5rem); transition: opacity 0.25s; }
+.study-immersive .study-stage:not([data-active]) .study-close { opacity: 0; pointer-events: none; }
+.study-label-pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 0.5rem; background: rgb(0 0 0 / 0.55); padding: 0.3rem 0.65rem; font-size: 0.85rem; font-weight: 600; }
+
+.study-transport { display: flex; align-items: center; gap: 0.6rem; background: #0b0b0d; padding: 0.4rem 0.75rem 0; }
+.study-time { min-width: 2.6rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; color: rgb(255 255 255 / 0.8); text-align: center; }
+.study-range { -webkit-appearance: none; appearance: none; height: 0.3rem; cursor: pointer; border-radius: 9999px; background: linear-gradient(90deg, var(--color-primary) var(--p, 0%), rgb(255 255 255 / 0.25) var(--p, 0%)); }
+.study-range:hover { height: 0.42rem; }
+.study-range:disabled { opacity: 0.4; cursor: default; }
+.study-seek { flex: 1 1 auto; min-width: 0; }
+.study-volume { width: 5.5rem; flex: none; }
+.study-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0.9rem; height: 0.9rem; border-radius: 9999px; background: #fff; box-shadow: 0 0 3px rgb(0 0 0 / 0.6); }
+.study-range::-moz-range-thumb { width: 0.9rem; height: 0.9rem; border: 0; border-radius: 9999px; background: #fff; }
+
+.study-immersive .study-bar { background: #0b0b0d; padding: 0.35rem 0.75rem 0.6rem; }
+.study-immersive .study-bar .btn, .study-immersive .study-transport .btn { border-color: transparent; background: rgb(255 255 255 / 0.1); color: #fff; box-shadow: none; }
+.study-immersive .study-bar .btn:hover, .study-immersive .study-transport .btn:hover, .study-immersive .study-close .btn:hover { background: rgb(255 255 255 / 0.22); }
+.study-immersive .study-bar .btn.btn-primary { background: var(--color-primary); color: var(--color-primary-content); }
+.study-immersive .study-close .btn { border-color: transparent; background: rgb(0 0 0 / 0.55); color: #fff; box-shadow: none; }
+
+@media (min-width: 1024px) {
+  .study-immersive .study-layout, .study-immersive .study-ui[data-panel="compact"] .study-layout { grid-template-columns: minmax(0, 1fr) max(20vw, 17rem); }
+  .study-immersive .study-ui[data-panel="closed"] .study-layout { grid-template-columns: minmax(0, 1fr); }
+  .study-immersive .study-box { border-radius: 0; border-width: 0 0 0 1px; }
+}
+.study-immersive #study-ui[data-panel="closed"] .study-side { display: none; }
+@media (max-width: 1023px) {
+  .study-immersive .study-side { display: block; }
+}
+/* The list and the menus keep the site's own colours: only the bar and the picture are black. */
+.study-immersive .study-box, .study-immersive .study-pop, .study-immersive .study-tip { color: var(--color-base-content); }

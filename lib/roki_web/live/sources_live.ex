@@ -107,7 +107,7 @@ defmodule RokiWeb.SourcesLive do
       # Playing in the browser, the sources page has nothing to add: the watch page finds the
       # release and starts it itself. Going straight there saves a whole page.
       auto?(params, socket) and socket.assigns.linked? and socket.assigns.mode == :browser ->
-        {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns))}
+        {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns), replace: true)}
 
       true ->
         auto_or_list(params, socket)

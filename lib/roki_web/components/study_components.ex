@@ -24,6 +24,18 @@ defmodule RokiWeb.StudyComponents do
     default: false,
     doc: "post the playhead back to the LiveView (`progress` events)"
 
+  attr :immersive?, :boolean,
+    default: false,
+    doc:
+      "the watch page: the player fills the screen, with its own bar (timeline, menus) at the bottom"
+
+  attr :study?, :boolean,
+    default: false,
+    doc: "a study session: the list of lines starts open (a plain watch starts without it)"
+
+  attr :label, :string, default: nil, doc: "what is playing, beside the close button (immersive)"
+  attr :home, :string, default: "/home", doc: "where closing goes when there is no page behind"
+
   slot :controls,
     doc: "extra controls above the video (the /study page puts its file pickers here)"
 
@@ -37,7 +49,10 @@ defmodule RokiWeb.StudyComponents do
       data-video="study-video"
       data-player={@data}
       data-progress={to_string(@progress?)}
-      class="space-y-3"
+      data-immersive={to_string(@immersive?)}
+      data-study={to_string(@study?)}
+      data-home={@home}
+      class={if @immersive?, do: "study-immersive", else: "space-y-3"}
     >
       {render_slot(@controls)}
 
@@ -54,11 +69,23 @@ defmodule RokiWeb.StudyComponents do
             <div data-role="stage" class="study-stage">
               <video
                 id="study-video"
-                controls
+                controls={!@immersive?}
                 playsinline
                 controlslist="nofullscreen"
                 class="study-video"
               ></video>
+              <div :if={@immersive?} class="study-close">
+                <button
+                  type="button"
+                  data-role="close"
+                  class="btn btn-sm btn-square"
+                  title="Close the player"
+                  aria-label="Close the player"
+                >
+                  <.icon name="hero-x-mark" class="h-5 w-5" />
+                </button>
+                <span :if={@label} class="study-label-pill">{@label}</span>
+              </div>
               <div data-role="overlay" class="study-overlay"></div>
               <button
                 type="button"
@@ -70,6 +97,47 @@ defmodule RokiWeb.StudyComponents do
               >
                 <.icon name="hero-arrow-path" class="h-5 w-5" />
               </button>
+            </div>
+
+            <div :if={@immersive?} class="study-transport">
+              <button
+                type="button"
+                data-role="play"
+                class="btn btn-sm btn-square"
+                aria-label="Play or pause"
+              >
+                <span data-icon="play"><.icon name="hero-play-solid" class="h-5 w-5" /></span>
+                <span data-icon="pause" class="hidden"><.icon name="hero-pause-solid" class="h-5 w-5" /></span>
+              </button>
+              <span data-role="cur" class="study-time">0:00</span>
+              <input
+                type="range"
+                data-role="seek"
+                min="0"
+                max="1000"
+                value="0"
+                step="1"
+                class="study-range study-seek"
+                aria-label="Seek"
+              />
+              <span data-role="dur" class="study-time">0:00</span>
+              <button type="button" data-role="mute" class="btn btn-sm btn-square" aria-label="Mute">
+                <span data-icon="on"><.icon name="hero-speaker-wave" class="h-5 w-5" /></span>
+                <span data-icon="off" class="hidden"><.icon
+                  name="hero-speaker-x-mark"
+                  class="h-5 w-5"
+                /></span>
+              </button>
+              <input
+                type="range"
+                data-role="volume"
+                min="0"
+                max="1"
+                step="0.05"
+                value="1"
+                class="study-range study-volume"
+                aria-label="Volume"
+              />
             </div>
 
             <div class="study-bar">

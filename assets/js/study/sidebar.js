@@ -12,6 +12,7 @@
 //
 // No framework: the video is a plain <video>, the rest is plain DOM.
 import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
+import {bindTransport} from "./transport.js"
 
 // After you scroll the list it stops following the video, then picks the current line back up
 // on its own once you've been idle this long.
@@ -593,6 +594,18 @@ export const StudySidebar = {
     this.video.addEventListener("ended", () => { this.stage.dataset.active = "1" })
     if (this.video.paused) this.stage.dataset.active = "1"
 
+    // ── the full-screen player (the watch page): its own bar instead of the video's, and a button
+    // that closes it — back to the page before, or to the title when there was none.
+    const immersive = this.el.dataset.immersive === "true"
+    if (immersive) {
+      bindTransport(this.el, this.video, this.stage)
+      $("[data-role=close]").addEventListener("click", () => {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+        if (history.length > 1) history.back()
+        else window.location.assign(this.el.dataset.home || "/home")
+      })
+    }
+
     // ── theater and fullscreen
     const theater = $("[data-role=theater]")
     const setTheater = (on) => {
@@ -608,6 +621,7 @@ export const StudySidebar = {
     // Fullscreen is the picture with its subtitles (the card goes in with it), not the bare video.
     $("[data-role=fullscreen]").addEventListener("click", () => {
       if (document.fullscreenElement) document.exitFullscreen()
+      else if (immersive && this.el.requestFullscreen) this.el.requestFullscreen().catch(() => {})
       else if (this.stage.requestFullscreen) this.stage.requestFullscreen().catch(() => {})
       else if (this.video.webkitEnterFullscreen) this.video.webkitEnterFullscreen()
     })
@@ -633,7 +647,7 @@ export const StudySidebar = {
       const small = state === "compact"
       compact.title = small ? "Larger" : "Smaller"
       compact.setAttribute("aria-label", small ? "Make the list larger" : "Make the list smaller")
-      store.set("panel", state)
+      if (!immersive) store.set("panel", state)
       if (state !== "closed") showList()
       reflect()
     }
@@ -648,8 +662,13 @@ export const StudySidebar = {
     }
     lines.addEventListener("click", toggleList)
     compact.addEventListener("click", () => this.setPanel(this.ui.dataset.panel === "compact" ? "open" : "compact"))
+    // The full-screen player starts the way it was asked for: a study session with the list of
+    // lines open, a plain watch without it (one press of Lines). Not remembered between plays.
     const savedPanel = store.get("panel")
-    this.setPanel(["open", "compact", "closed"].includes(savedPanel) ? savedPanel : "open")
+    this.setPanel(
+      immersive ? (this.el.dataset.study === "true" ? "open" : "closed")
+        : ["open", "compact", "closed"].includes(savedPanel) ? savedPanel : "open"
+    )
     this.wide.addEventListener("change", reflect)
 
     // ── the two menus
