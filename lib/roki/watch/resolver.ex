@@ -319,7 +319,12 @@ defmodule Roki.Watch.Resolver do
     task =
       Task.async(
         Roki.Study.wrap(fn ->
-          Roki.Laev.run(uuid, fn -> Laev.Providers.probe_sources(indexed, opts) end)
+          Roki.Laev.run(uuid, fn ->
+            # A release numbered by the part it belongs to is asked for that number.
+            for {ctx, group} <- by_numbering(indexed, ctx) do
+              Laev.Providers.probe_sources(group, probe_opts(opts, ctx))
+            end
+          end)
         end)
       )
 
@@ -335,6 +340,60 @@ defmodule Roki.Watch.Resolver do
      |> Enum.sort_by(&elem(&1, 0))
      |> Enum.map(fn {_i, source, stream} -> {source, stream} end), late}
   end
+
+  # `[{ctx, releases}]`: the releases that name the season in `ctx.scene` (Lupin's "S02E06" or
+  # "S02E01" for TMDB's sixth episode of season one) are probed as that season and episode, the one
+  # a release names when it names one; the rest as asked.
+  defp by_numbering(indexed, %{scene: [{scene_season, _} | _] = numbers} = ctx) do
+    {scene, rest} =
+      Enum.split_with(indexed, fn {source, _} ->
+        names_season?(source.name, scene_season) and not names_season?(source.name, ctx.season)
+      end)
+
+    alts =
+      scene
+      |> Enum.group_by(fn {source, _} ->
+        {numbered_like(source.name, numbers), range?(source.name)}
+      end)
+      |> Enum.map(fn {{{s, e} = number, range?}, group} ->
+        # A pack may count again from one (the "S02E01-E05" of a second part), so either number
+        # is taken from it. A single episode of the second part is the carried-on number ("S02E06");
+        # an "S02E01" is more likely the first episode of the show than this one.
+        other = Enum.find_value(numbers, fn {_, n} -> if {s, n} != number, do: n end)
+        {%{ctx | season: s, episode: e, tmdb_episode: (range? && other) || e}, group}
+      end)
+
+    Enum.reject([{ctx, rest} | alts], fn {_, group} -> group == [] end)
+  end
+
+  defp by_numbering(indexed, ctx), do: [{ctx, indexed}]
+
+  defp numbered_like(name, numbers) do
+    if range?(name) do
+      Enum.find(numbers, fn {s, e} ->
+        Regex.match?(~r/\bS0?#{s}[ ._-]?E0?#{e}(?!\d)/i, name)
+      end) || hd(numbers)
+    else
+      hd(numbers)
+    end
+  end
+
+  # A pack or a range of episodes, not a single one.
+  defp range?(name) when is_binary(name) do
+    Laev.Episodes.pack?(name) or Regex.match?(~r/\bS\d+[ ._-]?E\d+\s*[-–~]\s*E?\d+/i, name)
+  end
+
+  defp range?(_name), do: false
+
+  defp names_season?(name, season) when is_binary(name) and is_integer(season),
+    do: Regex.match?(~r/\bS0?#{season}(?!\d)|\bseason[ ._]?0?#{season}(?!\d)/i, name)
+
+  defp names_season?(_name, _season), do: false
+
+  defp probe_opts(opts, %{anime: true} = ctx), do: Keyword.put(opts, :ctx, ctx)
+
+  defp probe_opts(opts, ctx),
+    do: opts |> Keyword.put(:ctx, ctx) |> Keyword.put(:season, ctx.season)
 
   defp needs_reencode(source, {:ok, stream} = result) do
     cond do

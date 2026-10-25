@@ -498,7 +498,12 @@ defmodule Roki.Watch do
   and stats lined up with the terminal app.
   """
   def ctx(uuid, title, season \\ nil, episode \\ nil),
-    do: Roki.Laev.run(uuid, fn -> build_ctx(title, season, episode) end)
+    do:
+      Roki.Laev.run(uuid, fn ->
+        title
+        |> build_ctx(season, episode)
+        |> Map.put(:scene, scene_numbering(title, season, episode, uuid))
+      end)
 
   # Needs a laev scope: the season → MyAnimeList mapping is read from the user's files.
   defp build_ctx(title, season, episode) do
@@ -526,6 +531,78 @@ defmodule Roki.Watch do
     }
   end
 
+  # A series released in parts (a few episodes now, a few more months later) is one season on TMDB,
+  # but its releases number each part as a season of its own: Lupin's sixth episode is the first
+  # of "S02", numbered either 6 (the count carries on) or 1 (it starts again), and the part after
+  # that is "S03E01". A gap of three months between episodes of a season marks the parts; this is
+  # the `[{season, episode}]` the releases are likely to use, or nil when they number as TMDB does.
+  @part_gap_days 90
+  @doc false
+  def scene_numbering(%{type: "tv", id: id} = title, season, episode, uuid)
+      when is_integer(season) and is_integer(episode) and season > 0 do
+    if Map.get(title, :anime?) do
+      nil
+    else
+      parts = for s <- 1..season, do: season_parts(id, s, uuid)
+      before = parts |> Enum.drop(-1) |> Enum.map(&(length(&1) - 1)) |> Enum.sum()
+
+      {part, place} =
+        parts
+        |> List.last()
+        |> Enum.with_index()
+        |> Enum.find_value({0, episode}, fn {numbers, i} ->
+          if episode in numbers, do: {i, Enum.find_index(numbers, &(&1 == episode)) + 1}
+        end)
+
+      scene_season = season + before + part
+      carried = if part > 0, do: [{scene_season, episode}], else: []
+
+      case Enum.uniq(carried ++ [{scene_season, place}]) -- [{season, episode}] do
+        [] -> nil
+        numbers -> numbers
+      end
+    end
+  rescue
+    _ -> nil
+  end
+
+  def scene_numbering(_title, _season, _episode, _uuid), do: nil
+
+  # The episode numbers of a season, grouped into the parts it was released in.
+  defp season_parts(id, season, uuid) do
+    case episodes(id, season, uuid) do
+      {:ok, eps} ->
+        eps
+        |> Enum.filter(&(is_binary(&1.air_date) and is_integer(&1.number)))
+        |> Enum.map(&{&1.number, Date.from_iso8601!(&1.air_date)})
+        |> Enum.chunk_while(
+          [],
+          fn {n, date}, acc ->
+            case acc do
+              [{_, last} | _] ->
+                if abs(Date.diff(date, last)) > @part_gap_days,
+                  do: {:cont, acc |> Enum.map(&elem(&1, 0)) |> Enum.reverse(), [{n, date}]},
+                  else: {:cont, [{n, date} | acc]}
+
+              [] ->
+                {:cont, [{n, date}]}
+            end
+          end,
+          fn
+            [] -> {:cont, []}
+            acc -> {:cont, acc |> Enum.map(&elem(&1, 0)) |> Enum.reverse(), []}
+          end
+        )
+
+      _ ->
+        []
+    end
+    |> then(fn
+      [] -> [[]]
+      parts -> parts
+    end)
+  end
+
   # ── 2. sources ─────────────────────────────────────────────────────
 
   @doc """
@@ -537,7 +614,9 @@ defmodule Roki.Watch do
     if fresh?, do: TTLCache.delete({:sources, title.type, title.id, season, episode})
 
     TTLCache.fetch({:sources, title.type, title.id, season, episode}, @sources_ttl, fn ->
-      isolated(fn -> Roki.Laev.public(uuid, fn -> search_sources(title, season, episode) end) end)
+      isolated(fn ->
+        Roki.Laev.public(uuid, fn -> search_sources(title, season, episode, uuid) end)
+      end)
     end)
   end
 
@@ -555,7 +634,7 @@ defmodule Roki.Watch do
     end
   end
 
-  defp search_sources(%{type: "movie"} = t, _season, _episode) do
+  defp search_sources(%{type: "movie"} = t, _season, _episode, _uuid) do
     [primary | alternates] = t.search.search
     q = join([Sources.query_title(primary), t.year])
     torrentio = t.imdb_id && {:movie, t.imdb_id}
@@ -568,7 +647,7 @@ defmodule Roki.Watch do
 
   # An anime season: its releases are fansub groups numbering by the anime's own episode
   # count, found by title and by Kitsu / AniDB id, never by "S02E05".
-  defp search_sources(%{type: "tv", anime?: true} = t, season, episode) do
+  defp search_sources(%{type: "tv", anime?: true} = t, season, episode, uuid) do
     located = season && Laev.Anime.Parts.locate(t.id, season, episode)
 
     if located do
@@ -584,11 +663,11 @@ defmodule Roki.Watch do
 
       {:ok, %{query: name, sources: Sources.rank(Enum.uniq_by(found, & &1.hash))}}
     else
-      search_sources(%{t | anime?: false}, season, episode)
+      search_sources(%{t | anime?: false}, season, episode, uuid)
     end
   end
 
-  defp search_sources(%{type: "tv"} = t, season, episode) do
+  defp search_sources(%{type: "tv"} = t, season, episode, uuid) do
     [primary | alternates] = t.search.search
     q = Sources.episode_query(Sources.query_title(primary), season, episode)
     torrentio = t.imdb_id && {:series, t.imdb_id, season, episode}
@@ -600,18 +679,34 @@ defmodule Roki.Watch do
           &extra_sources(Sources.episode_query(Sources.query_title(&1), season, episode))
         )
 
+      # Numbered the way its parts are (see `scene_numbering/4`): searched as well.
+      scene = scene_sources(t, primary, season, episode, uuid)
+
       packs =
-        if length(found) + length(extra) < @few_sources,
+        if length(found) + length(extra) + length(scene) < @few_sources,
           do: season_packs(primary, season),
           else: []
 
-      {:ok, %{query: q, sources: finish(found ++ extra ++ packs, t, :tv)}}
+      {:ok, %{query: q, sources: finish(found ++ extra ++ scene ++ packs, t, :tv)}}
     end
   end
 
   # An episode few releases are named for (a later episode of a season released in parts is often
   # only inside the whole-season download) is also looked for among the season packs; the file
   # picker takes the episode out of the one that has it.
+  defp scene_sources(t, title, season, episode, uuid) do
+    for {s, e} <- scene_numbering(t, season, episode, uuid) || [], reduce: [] do
+      acc ->
+        query = Sources.episode_query(Sources.query_title(title), s, e)
+        torrentio = t.imdb_id && {:series, t.imdb_id, s, e}
+
+        case search(query, torrentio) do
+          {:ok, found} -> acc ++ found
+          _ -> acc
+        end
+    end
+  end
+
   defp season_packs(title, season) do
     n = String.pad_leading(Integer.to_string(season || 1), 2, "0")
     pack = ~r/\bS0?#{season || 1}\b(?![ ._-]?E\d)|\bseason[ ._]?0?#{season || 1}\b/i
