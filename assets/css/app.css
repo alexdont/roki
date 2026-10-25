@@ -549,3 +549,8 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-timeline .study-clock { top: 0.15rem; transform: none; padding: 0 0.15rem; font-size: 0.8rem; font-weight: 600; text-shadow: none; color: rgb(255 255 255 / 0.9); }
 .study-timeline .study-seek::-webkit-slider-thumb { width: 0.9rem; height: 0.9rem; border-radius: 9999px; background: #fff; box-shadow: 0 0 3px rgb(0 0 0 / 0.6); }
 .study-timeline .study-seek::-moz-range-thumb { width: 0.9rem; height: 0.9rem; border-radius: 9999px; background: #fff; }
+
+/* The timeline in one row: the time so far, the slim bar, the length. */
+.study-timeline { position: static; display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0 0.3rem; }
+.study-timeline .study-clock, .study-timeline .study-clock:first-child, .study-timeline .study-clock:last-child { position: static; transform: none; min-width: 3rem; padding: 0; font-size: 0.85rem; font-weight: 600; text-align: center; color: #fff; pointer-events: auto; }
+.study-timeline .study-seek { flex: 1 1 auto; width: auto; min-width: 0; }
