@@ -617,7 +617,7 @@ export const StudySidebar = {
       const BOTTOM = 88
       const TOP = 72
       let pointerY = null
-      let overTip = false // on the word's translation card, which may reach down over the bar
+      let overTip = false // on a word's card or on the lines themselves, which sit at the bottom edge
       let wakeUntil = 0
       let started = false
       const wake = (ms = 2500) => { wakeUntil = Math.max(wakeUntil, Date.now() + ms) }
@@ -634,7 +634,7 @@ export const StudySidebar = {
       }
       this.el.addEventListener("pointermove", (e) => {
         pointerY = e.clientY
-        overTip = !!(e.target.closest && e.target.closest(".study-tip:not([hidden])"))
+        overTip = !!(e.target.closest && e.target.closest(".study-tip:not([hidden]), .study-overlay .study-line, .study-overlay .study-word"))
         evaluate()
       }, {passive: true})
       this.el.addEventListener("pointerleave", () => { pointerY = null; overTip = false; evaluate() })
