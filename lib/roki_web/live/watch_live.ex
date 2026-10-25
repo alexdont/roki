@@ -11,7 +11,7 @@ defmodule RokiWeb.WatchLive do
   use RokiWeb, :live_view
 
   import RokiWeb.StudyComponents
-  import RokiWeb.WatchComponents, only: [now_playing: 3, checks_list: 1]
+  import RokiWeb.WatchComponents, only: [now_playing: 3, checks_list: 1, heavy_offer: 1]
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
@@ -55,6 +55,9 @@ defmodule RokiWeb.WatchLive do
           current: nil,
           player: nil,
           failed: nil,
+          failed_reason: nil,
+          heavy_ok: false,
+          heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           episodes: nil,
           up_next: nil,
           up_prev: nil
@@ -98,17 +101,38 @@ defmodule RokiWeb.WatchLive do
     %{uuid: uuid, title: title, season: season, episode: episode, hash: hash, prefer: prefer} =
       socket.assigns
 
+    heavy_ok = socket.assigns.heavy_ok
+
     parent = self()
 
     socket
-    |> assign(token: token, failed: nil, player: nil, checks: [])
+    |> assign(token: token, failed: nil, failed_reason: nil, player: nil, checks: [])
     |> start_async(
       :resolve,
       Roki.Study.wrap(fn ->
         with {:ok, res} <-
-               Resolver.run(parent, token, uuid, title, season, episode, false, :browser, true),
+               Resolver.run(
+                 parent,
+                 token,
+                 uuid,
+                 title,
+                 season,
+                 episode,
+                 false,
+                 :browser,
+                 true,
+                 heavy_ok
+               ),
              {res, pair} <-
-               locate(parent, token, uuid, res, hash || prefer, if(hash, do: 3, else: 1)),
+               locate(
+                 parent,
+                 token,
+                 uuid,
+                 heavy_ok,
+                 res,
+                 hash || prefer,
+                 if(hash, do: 3, else: 1)
+               ),
              pair = if(hash, do: pair, else: within_cap(res, pair)),
              {:ok, pair} <- choose(res, pair),
              :ok <- announce(parent, token, "Getting the video ready…"),
@@ -124,9 +148,9 @@ defmodule RokiWeb.WatchLive do
 
   # A shared address names a release. It may not be among the first ones checked, so look further
   # (a few pages) before settling for the best.
-  defp locate(_parent, _token, _uuid, res, nil, _pages), do: {res, nil}
+  defp locate(_parent, _token, _uuid, _heavy_ok, res, nil, _pages), do: {res, nil}
 
-  defp locate(parent, token, uuid, res, hash, pages) do
+  defp locate(parent, token, uuid, heavy_ok, res, hash, pages) do
     case Resolver.find(res.playable, hash) do
       nil when pages > 0 and res.rest != [] ->
         hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
@@ -141,10 +165,10 @@ defmodule RokiWeb.WatchLive do
             res.playable,
             res.key,
             hours,
-            not Roki.Keys.heavy?(uuid)
+            Resolver.light?(:browser, uuid, heavy_ok)
           )
 
-        locate(parent, token, uuid, %{res | playable: all, rest: rest}, hash, pages - 1)
+        locate(parent, token, uuid, heavy_ok, %{res | playable: all, rest: rest}, hash, pages - 1)
 
       pair ->
         {res, pair}
@@ -264,7 +288,7 @@ defmodule RokiWeb.WatchLive do
         {:ok, {:error, token, reason}},
         %{assigns: %{token: token}} = socket
       ),
-      do: {:noreply, assign(socket, :failed, Resolver.failure(reason))}
+      do: {:noreply, assign(socket, failed: Resolver.failure(reason), failed_reason: reason)}
 
   def handle_async(:resolve, {:exit, reason}, socket),
     do:
@@ -466,6 +490,13 @@ defmodule RokiWeb.WatchLive do
 
   def handle_event("previous", _params, socket), do: {:noreply, socket}
 
+  # A heavy-allowed account says yes to re-encoded releases for this search only.
+  def handle_event("search_heavy", _params, %{assigns: %{uuid: uuid}} = socket) do
+    if Roki.Keys.heavy?(uuid),
+      do: {:noreply, socket |> assign(heavy_ok: true) |> resolve()},
+      else: {:noreply, socket}
+  end
+
   def handle_event("ended", _params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
     if uuid && ctx, do: Task.start(fn -> Watch.ended(uuid, ctx) end)
@@ -589,6 +620,7 @@ defmodule RokiWeb.WatchLive do
 
         <div :if={@failed} class="space-y-3">
           <p class="alert alert-warning text-sm">{@failed}</p>
+          <.heavy_offer :if={@failed_reason == :no_light and @heavy_allowed?} />
           <.link navigate={sources_path(assigns)} class="btn">Choose another source</.link>
         </div>
 

@@ -61,6 +61,9 @@ defmodule RokiWeb.SourcesLive do
           auto: :off,
           auto_req: false,
           failed: nil,
+          failed_reason: nil,
+          heavy_ok: false,
+          heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           busy?: false
         )
 
@@ -161,6 +164,7 @@ defmodule RokiWeb.SourcesLive do
   defp begin(socket, force?) do
     token = socket.assigns.token + 1
     %{uuid: uuid, title: title, season: season, episode: episode, mode: mode} = socket.assigns
+    heavy_ok = socket.assigns.heavy_ok
     parent = self()
 
     socket
@@ -177,10 +181,11 @@ defmodule RokiWeb.SourcesLive do
       current: nil,
       external: nil,
       failed: nil,
+      failed_reason: nil,
       cached_at: nil
     )
     |> start_async(:pipeline, fn ->
-      Resolver.run(parent, token, uuid, title, season, episode, force?, mode)
+      Resolver.run(parent, token, uuid, title, season, episode, force?, mode, false, heavy_ok)
     end)
   end
 
@@ -227,7 +232,14 @@ defmodule RokiWeb.SourcesLive do
         {:ok, {:error, token, reason}},
         %{assigns: %{token: token}} = socket
       ),
-      do: {:noreply, assign(socket, phase: :failed, failed: Resolver.failure(reason), auto: :off)}
+      do:
+        {:noreply,
+         assign(socket,
+           phase: :failed,
+           failed: Resolver.failure(reason),
+           failed_reason: reason,
+           auto: :off
+         )}
 
   def handle_async(:pipeline, {:exit, reason}, socket),
     do:
@@ -375,7 +387,7 @@ defmodule RokiWeb.SourcesLive do
     %{rest: rest, uuid: uuid, ctx: ctx, token: token, playable: have, key: key} = socket.assigns
     parent = self()
     hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
-    light? = socket.assigns.mode == :browser and not Roki.Keys.heavy?(uuid)
+    light? = Resolver.light?(socket.assigns.mode, uuid, socket.assigns.heavy_ok)
 
     {:noreply,
      socket
@@ -388,6 +400,13 @@ defmodule RokiWeb.SourcesLive do
   def handle_event("more", _params, socket), do: {:noreply, socket}
 
   # Look again, ignoring the cached releases; nothing starts by itself this time.
+  # A heavy-allowed account says yes to re-encoded releases for this search only.
+  def handle_event("search_heavy", _params, %{assigns: %{uuid: uuid}} = socket) do
+    if Roki.Keys.heavy?(uuid),
+      do: {:noreply, socket |> assign(heavy_ok: true, auto: :cancelled) |> begin(false)},
+      else: {:noreply, socket}
+  end
+
   def handle_event("retry", _params, socket),
     do: {:noreply, socket |> assign(:auto, :cancelled) |> begin(true)}
 
@@ -541,6 +560,10 @@ defmodule RokiWeb.SourcesLive do
         <.checks_list :if={@phase in [:loading, :working] and @auto != :pending} checks={@checks} />
         <p :if={@start_error} class="alert alert-warning text-sm">{@start_error}</p>
         <p :if={@phase == :failed} class="alert alert-warning text-sm">{@failed}</p>
+        <.heavy_offer :if={
+          @phase == :failed and @failed_reason == :no_light and @mode == :browser and
+            @heavy_allowed?
+        } />
         <p
           :if={@phase == :ready and @playable != [] and @external == nil and @auto != :pending}
           class="text-sm text-base-content/70"

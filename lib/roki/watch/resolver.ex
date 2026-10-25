@@ -20,14 +20,26 @@ defmodule Roki.Watch.Resolver do
   :cached_at :good` (`cached_at`/`good` are nil for a fresh search). `force?` (Retry) ignores the
   cached releases and the shared search list.
   """
-  def run(parent, token, uuid, title, season, episode, force?, mode, quick? \\ false) do
+  def run(
+        parent,
+        token,
+        uuid,
+        title,
+        season,
+        episode,
+        force?,
+        mode,
+        quick? \\ false,
+        heavy_ok? \\ false
+      ) do
     key = key(title.type, title.id, season, episode)
     web = Roki.Laev.web_settings(uuid)
     hours = SourceCache.hours(web)
 
-    # Re-encoding a video for the browser is what costs the server: unless the account is allowed it,
-    # only what needs none (H.264) is looked at, and the rest is for an external player.
-    light? = mode == :browser and not Roki.Keys.heavy?(uuid)
+    # Re-encoding a video for the browser is what costs the server, so the browser only looks at what
+    # needs none (H.264). An account that is allowed heavy encoding gets the rest only when it asked
+    # for it for this search (`heavy_ok?`); everyone else is sent to an external player.
+    light? = light?(mode, uuid, heavy_ok?)
     cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours) |> lighten(light?)
 
     with :ok <- Watch.subscription(uuid),
@@ -54,9 +66,17 @@ defmodule Roki.Watch.Resolver do
            end) do
       {:ok, res}
     else
-      {:error, reason} -> {:error, token, reason}
+      {:error, reason} when light? and reason in [:only_heavy, :none_playable] ->
+        {:error, token, :no_light}
+
+      {:error, reason} ->
+        {:error, token, reason}
     end
   end
+
+  @doc "Whether a search for this account looks at light releases only."
+  def light?(mode, uuid, heavy_ok?),
+    do: mode == :browser and not (heavy_ok? and Roki.Keys.heavy?(uuid))
 
   @doc "Check the next page of unchecked releases: `{:ok, token, playable, rest}`."
   def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false) do
@@ -483,6 +503,10 @@ defmodule Roki.Watch.Resolver do
 
   def failure(:search_failed),
     do: "The sites that list releases did not answer in time. Try again in a moment."
+
+  def failure(:no_light),
+    do:
+      "No release was found that the browser can play without the server re-encoding it. Use an external player (VLC, mpv)."
 
   def failure(:only_heavy),
     do:

@@ -122,6 +122,24 @@ defmodule RokiWeb.WatchComponents do
     """
   end
 
+  @doc """
+  Nothing light enough was found. An account allowed heavy encoding is asked before the server is
+  made to re-encode anything: yes searches the heavy releases too, for this search only.
+  """
+  def heavy_offer(assigns) do
+    ~H"""
+    <div class="space-y-2 rounded-box bg-base-200 p-4 text-sm">
+      <p>
+        Search again including releases the server has to re-encode (HEVC and similar)? That is heavy for
+        the server — one is enough to slow it down for others. Otherwise use an external player.
+      </p>
+      <button type="button" phx-click="search_heavy" class="btn btn-sm btn-warning">
+        Search with heavy encoding
+      </button>
+    </div>
+    """
+  end
+
   attr :name, :string, required: true
 
   @doc "The wait after a release is chosen: the video is being got ready, and then the page opens."
