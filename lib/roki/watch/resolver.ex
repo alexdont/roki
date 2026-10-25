@@ -59,12 +59,12 @@ defmodule Roki.Watch.Resolver do
   end
 
   @doc "Check the next page of unchecked releases: `{:ok, token, playable, rest}`."
-  def more(parent, token, uuid, ctx, rest, have, key, hours) do
+  def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false) do
     {page, rest} = Watch.probe_page(rest)
-    {playable, late} = probe_page(parent, token, uuid, ctx, page)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page, false, light?)
     rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
-    if hours > 0, do: SourceCache.put(uuid, key, all, rest)
+    if hours > 0 and not light?, do: SourceCache.put(uuid, key, all, rest)
     {:ok, token, all, rest}
   end
 
@@ -126,7 +126,7 @@ defmodule Roki.Watch.Resolver do
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, sources} <- only_light(sources, light?),
          {:ok, playable, rest} <-
-           probe_until_playable(parent, token, uuid, ctx, sources, [], quick?) do
+           probe_until_playable(parent, token, uuid, ctx, sources, [], quick?, light?) do
       # (A list made for the browser alone is left out of the saved ones: it is missing the heavy releases.)
       if hours > 0 and not light?, do: SourceCache.put(uuid, key, playable, rest)
 
@@ -228,12 +228,12 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
-  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _quick?),
+  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _quick?, _light?),
     do: {:error, :none_playable}
 
-  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?) do
+  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?, light?) do
     {page, rest} = Watch.probe_page(sources, if(quick?, do: 8, else: 12))
-    {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?, light?)
     rest = late ++ rest
     # Starting in the browser is what is waited for: what is known from the names ranks it.
     ranked =
@@ -242,7 +242,7 @@ defmodule Roki.Watch.Resolver do
     cond do
       ranked != [] -> {:ok, ranked, rest}
       rest == [] -> {:error, :none_playable}
-      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], quick?)
+      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], quick?, light?)
     end
   end
 
@@ -253,7 +253,7 @@ defmodule Roki.Watch.Resolver do
 
   # One round of probing, 8 releases two at a time. Each answer is counted on the page as it
   # arrives; the task keeps the ones that play.
-  defp probe_page(parent, token, uuid, ctx, page, quick? \\ false) do
+  defp probe_page(parent, token, uuid, ctx, page, quick?, light?) do
     {:ok, agent} = Agent.start_link(fn -> %{done: 0, ok: [], seen: []} end)
     total = length(page)
     Roki.Keys.record(uuid, :probe, max(total, 1))
@@ -261,6 +261,11 @@ defmodule Roki.Watch.Resolver do
     send(parent, {:candidates, token, Enum.map(page, &Roki.Watch.Checks.summary/1)})
 
     notify = fn {:result, idx, source, result} ->
+      # For an account that may not have a video re-encoded: a release whose name does not say what
+      # the video is gets its real codec read here, and one that would need re-encoding is dropped
+      # now rather than offered and refused later.
+      result = if light?, do: needs_reencode(source, result), else: result
+
       {done, ok} =
         Agent.get_and_update(agent, fn st ->
           ok =
@@ -310,6 +315,21 @@ defmodule Roki.Watch.Resolver do
      |> Enum.sort_by(&elem(&1, 0))
      |> Enum.map(fn {_i, source, stream} -> {source, stream} end), late}
   end
+
+  defp needs_reencode(source, {:ok, stream} = result) do
+    cond do
+      source.codec != nil ->
+        result
+
+      String.ends_with?(String.downcase(stream.filename || ""), [".mp4", ".m4v", ".webm"]) ->
+        result
+
+      true ->
+        if Watch.video_h264?(stream) == false, do: {:error, :needs_reencode}, else: result
+    end
+  end
+
+  defp needs_reencode(_source, result), do: result
 
   # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
   # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.

@@ -896,11 +896,17 @@ defmodule Roki.Watch do
   end
 
   defp check_video_codec(stream) do
-    codec =
-      Laev.Remux.Worker.probe_streams(stream.url)
-      |> Enum.find_value(fn s -> if s.kind == "video", do: s.codec end)
+    if video_h264?(stream) == false, do: {:error, :needs_heavy}, else: :ok
+  end
 
-    if codec in [nil, "", "h264"], do: :ok, else: {:error, :needs_heavy}
+  @doc "Whether the file's video is H.264 (read from the file): `true`, `false`, or `nil` when it could not be read."
+  def video_h264?(stream) do
+    case Laev.Remux.Worker.probe_streams(stream.url)
+         |> Enum.find_value(fn s -> if s.kind == "video", do: s.codec end) do
+      c when c in [nil, ""] -> nil
+      "h264" -> true
+      _ -> false
+    end
   end
 
   defp allowed(source) do
@@ -1812,6 +1818,7 @@ defmodule Roki.Watch do
   def why(:no_provider), do: "no debrid account connected"
   def why(:no_sources), do: "no releases found"
   def why(:timeout), do: "timed out"
+  def why(:needs_reencode), do: "needs re-encoding (not H.264)"
   def why(:another_episode), do: "that release is another episode"
   def why(:no_file_for_episode), do: "that pack has no file for this episode"
   def why({:expired, detail}), do: "your debrid subscription isn't active (#{detail})"

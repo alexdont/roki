@@ -132,7 +132,17 @@ defmodule RokiWeb.WatchLive do
         hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
 
         {:ok, _token, all, rest} =
-          Resolver.more(parent, token, uuid, res.ctx, res.rest, res.playable, res.key, hours)
+          Resolver.more(
+            parent,
+            token,
+            uuid,
+            res.ctx,
+            res.rest,
+            res.playable,
+            res.key,
+            hours,
+            not Roki.Keys.heavy?(uuid)
+          )
 
         locate(parent, token, uuid, %{res | playable: all, rest: rest}, hash, pages - 1)
 

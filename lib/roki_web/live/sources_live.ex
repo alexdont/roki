@@ -375,12 +375,13 @@ defmodule RokiWeb.SourcesLive do
     %{rest: rest, uuid: uuid, ctx: ctx, token: token, playable: have, key: key} = socket.assigns
     parent = self()
     hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
+    light? = socket.assigns.mode == :browser and not Roki.Keys.heavy?(uuid)
 
     {:noreply,
      socket
      |> assign(busy?: true, phase: :working, status: "Checking more releases…")
      |> start_async(:more, fn ->
-       Resolver.more(parent, token, uuid, ctx, rest, have, key, hours)
+       Resolver.more(parent, token, uuid, ctx, rest, have, key, hours, light?)
      end)}
   end
 
