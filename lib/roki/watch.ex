@@ -391,7 +391,12 @@ defmodule Roki.Watch do
         ctx
       end)
 
-    if watched?, do: scrobble(uuid, [ctx])
+    if watched? do
+      scrobble(uuid, [ctx])
+      # One film or episode marked on its own (after an external player, say) is a finish.
+      Roki.Activity.record(uuid, ctx, "finished")
+    end
+
     if title.type == "tv", do: follow_episodes(uuid, title, [ctx], watched?)
 
     library_changed(uuid)
@@ -818,7 +823,6 @@ defmodule Roki.Watch do
         resume_at: Laev.Position.saved_position(ctx) || 0
       }
     end)
-    |> tap(fn _ -> Roki.Activity.record(uuid, ctx, "started") end)
   end
 
   @doc "Mark this episode or film watched (an external player cannot report progress)."
@@ -875,10 +879,6 @@ defmodule Roki.Watch do
       Roki.Keys.record(uuid, :play)
 
       do_start(uuid, ctx, source, stream)
-      |> tap(fn
-        {:ok, _} -> Roki.Activity.record(uuid, ctx, "started")
-        _ -> :ok
-      end)
     end
   end
 
@@ -1269,12 +1269,35 @@ defmodule Roki.Watch do
       if finished? and not before?, do: Laev.Sync.live_push()
       {:finished, finished? and not before?}
     end)
+    |> tap(fn _ -> note_started(uuid, ctx, position) end)
     |> tap(fn {:finished, new?} ->
       if new? do
         scrobble(uuid, [ctx])
         Roki.Activity.record(uuid, ctx)
       end
     end)
+  end
+
+  # Ten minutes in is "started" (once per episode: the guard keeps the 5-second progress ticks off the
+  # database).
+  defp note_started(uuid, ctx, position) do
+    if position >= Roki.Activity.started_after_s() do
+      Roki.TTLCache.fetch(
+        {:started, uuid, ctx[:type], ctx[:tmdb_id], ctx[:season], ctx[:episode]},
+        12 * 3600,
+        fn ->
+          Roki.Activity.record(uuid, ctx, "started")
+          {:ok, true}
+        end
+      )
+    end
+
+    :ok
+  rescue
+    # Recording activity never gets in the way of saving where you are.
+    _ -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   @doc "Where playback should resume, in seconds (0 = from the start)."

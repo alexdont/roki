@@ -105,6 +105,8 @@ defmodule Roki.SyncStore do
       case Laev.SyncServer.merge(stored, patch) do
         {:ok, merged} ->
           {:ok, etag} = put(token, doc, Jason.encode!(merged))
+          # The terminal app's plays show up in Recent activity (see Roki.Activity.from_sync/3).
+          Task.start(fn -> Roki.Activity.from_sync(token, stored, merged) end)
           etag
 
         {:error, reason} ->

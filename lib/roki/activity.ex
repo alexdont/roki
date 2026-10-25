@@ -22,21 +22,47 @@ defmodule Roki.Activity do
 
   def topic, do: @topic
 
+  # Watching this long (seconds into it) is what makes something "started": opening a title and
+  # closing it again is not activity.
+  @started_after_s 600
+
+  def started_after_s, do: @started_after_s
+
   @doc """
   Remember that an episode or film was started (`"started"`) or finished (`"finished"`), from a
-  play context, and tell the open pages. Opening a title and closing it again is not activity:
-  a start is recorded only when playing begins.
+  play context, and tell the open pages. Starts are recorded once `@started_after_s` seconds in
+  (see `Roki.Watch.record_progress/5`); a finish is an episode or film played to the end, or one
+  marked watched on its own (not a whole season at once).
   """
   def record(uuid, ctx, kind \\ "finished")
 
   def record(uuid, %{type: type, tmdb_id: id, title: title} = ctx, kind)
       when is_binary(uuid) and type in ["movie", "tv"] and is_integer(id) and is_binary(title) and
              kind in ["started", "finished"] do
+    insert(
+      uuid,
+      %{
+        type: type,
+        tmdb_id: id,
+        title: title,
+        poster: poster_url(ctx[:poster_path]),
+        season: if(type == "tv", do: ctx[:season]),
+        episode: if(type == "tv", do: ctx[:tmdb_episode] || ctx[:episode])
+      },
+      kind
+    )
+  end
+
+  def record(_uuid, _ctx, _kind), do: :ok
+
+  @doc "Insert one entry (`%{type, tmdb_id, title, poster, season, episode}`) unless it is a repeat."
+  def insert(uuid, %{} = what, kind) when kind in ["started", "finished"] do
     Task.start(fn ->
-      season = if type == "tv", do: ctx[:season]
-      episode = if type == "tv", do: ctx[:tmdb_episode] || ctx[:episode]
       {:ok, uuid_bin} = Ecto.UUID.dump(uuid)
       now = DateTime.utc_now() |> DateTime.truncate(:second)
+      # A start is one per episode per half day however long it is watched; a finish twice in
+      # ten minutes is one.
+      window = if kind == "started", do: 12 * 3600, else: @dup_s
 
       dup? =
         Repo.query!(
@@ -46,7 +72,15 @@ defmodule Roki.Activity do
              and season is not distinct from $4 and episode is not distinct from $5
              and kind = $7 and at > $6 limit 1
           """,
-          [uuid_bin, type, id, season, episode, DateTime.add(now, -@dup_s), kind]
+          [
+            uuid_bin,
+            what.type,
+            what.tmdb_id,
+            what.season,
+            what.episode,
+            DateTime.add(now, -window),
+            kind
+          ]
         ).num_rows > 0
 
       unless dup? do
@@ -55,7 +89,17 @@ defmodule Roki.Activity do
           insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind)
           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           """,
-          [uuid_bin, type, id, season, episode, title, poster_url(ctx[:poster_path]), now, kind]
+          [
+            uuid_bin,
+            what.type,
+            what.tmdb_id,
+            what.season,
+            what.episode,
+            what.title,
+            what.poster,
+            now,
+            kind
+          ]
         )
 
         Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
@@ -67,7 +111,161 @@ defmodule Roki.Activity do
     _ -> :ok
   end
 
-  def record(_uuid, _ctx, _kind), do: :ok
+  # ── from the terminal app ──────────────────────────────────────────
+
+  @doc """
+  The terminal app syncs through this site, so what it does shows up here too: given a person's
+  synced document before and after a merge, anything newly finished (`done`), newly marked on its
+  own (`seen`, a few at a time — an import is not activity) or watched past `@started_after_s` seconds
+  becomes an entry. Titles are named from the document's own `resume` records, so a title the
+  terminal app never played is skipped. Whatever the site recorded itself a moment ago for the same
+  title is not repeated.
+  """
+  def from_sync(token, before, after_) when is_binary(token) do
+    with uuid when is_binary(uuid) <- user_for(token) do
+      old = Map.get(before, "positions") || %{}
+      new = Map.get(after_, "positions") || %{}
+      resume = Map.get(after_, "resume") || %{}
+      cutoff = System.os_time(:second) - 2 * 3600
+
+      changed =
+        for {key, %{"data" => data, "deleted" => false} = rec} <- new,
+            rec != Map.get(old, key),
+            (rec["updated_at"] || 0) >= cutoff,
+            do: {key, data, Map.get(old, key)}
+
+      done =
+        for {k, "done", o} <- changed,
+            not match?(%{"data" => "done", "deleted" => false}, o),
+            do: k
+
+      seen =
+        for {k, "seen", o} <- changed,
+            not match?(%{"data" => "seen", "deleted" => false}, o),
+            do: k
+
+      seen = if length(seen) <= 3, do: seen, else: []
+
+      started =
+        for {k, d, o} <- changed,
+            secs(d) >= @started_after_s,
+            secs(old_data(o)) < @started_after_s,
+            do: k
+
+      for {kind, keys} <- [{"finished", done ++ seen}, {"started", started}],
+          key <- Enum.take(keys, 10),
+          what = describe(uuid, key, resume),
+          not recent_title?(uuid, what.type, what.tmdb_id, 1800) do
+        insert(uuid, what, kind)
+      end
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  def from_sync(_token, _before, _after), do: :ok
+
+  defp secs(data) when is_binary(data) do
+    case Integer.parse(data) do
+      {n, ""} -> n
+      _ -> 0
+    end
+  end
+
+  defp secs(_), do: 0
+
+  defp old_data(%{"data" => d, "deleted" => false}), do: d
+  defp old_data(_), do: nil
+
+  # A position key (`movie-ID`, `tv-ID-sSeE`, `tv-ID-eE`, `mal-ID-eE`) as something to show.
+  defp describe(uuid, key, resume) do
+    case Regex.run(~r/^(movie|tv|mal)-(\d+)(?:-s(\d+))?(?:-?e(\d+))?$/, key) do
+      [_, "movie", id] ->
+        named(resume, "movie", String.to_integer(id), nil, nil)
+
+      [_, "movie", id, _] ->
+        named(resume, "movie", String.to_integer(id), nil, nil)
+
+      [_, "tv", id, season, ep] when ep != "" ->
+        named(resume, "tv", String.to_integer(id), season_of(season), String.to_integer(ep))
+
+      [_, "tv", id, "", ep] when ep != "" ->
+        named(resume, "tv", String.to_integer(id), 1, String.to_integer(ep))
+
+      [_, "mal", mal, _, ep] when ep != "" ->
+        mal = String.to_integer(mal)
+        local = String.to_integer(ep)
+
+        case Roki.Laev.run(uuid, fn -> Laev.AnimeMap.tmdb(mal) end) do
+          {"tv", tmdb, season} ->
+            season = season || 1
+
+            tmdb_ep =
+              Roki.Laev.run(uuid, fn -> Laev.Anime.Parts.to_tmdb(tmdb, season, mal, local) end)
+
+            named(resume, "tv", tmdb, season, tmdb_ep)
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp season_of(""), do: 1
+  defp season_of(s), do: String.to_integer(s)
+
+  defp named(resume, type, id, season, episode) do
+    case get_in(resume, ["#{type}:#{id}", "data"]) do
+      %{"title" => title} = r when is_binary(title) ->
+        %{
+          type: type,
+          tmdb_id: id,
+          title: title,
+          poster: poster_url(r["poster_path"]),
+          season: season,
+          episode: episode
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc "Has this person got an entry for this title in the last `seconds`?"
+  def recent_title?(uuid, type, tmdb_id, seconds) do
+    {:ok, uuid_bin} = Ecto.UUID.dump(uuid)
+
+    Repo.query!(
+      "select 1 from roki_activity where user_uuid = $1 and type = $2 and tmdb_id = $3 and at > $4 limit 1",
+      [uuid_bin, type, tmdb_id, DateTime.add(DateTime.utc_now(), -seconds)]
+    ).num_rows > 0
+  end
+
+  # Which account a laev key belongs to: the keys are in each account's own laev config.
+  defp user_for(token) do
+    {:ok, map} =
+      Roki.TTLCache.fetch(:sync_tokens, 60, fn ->
+        base = Roki.Laev.base_dir()
+
+        tokens =
+          for dir <- File.ls!(base),
+              {:ok, _} <- [Ecto.UUID.cast(dir)],
+              cfg = Laev.Config.read_dir(Path.join(base, dir)),
+              t = cfg[:sync_token],
+              is_binary(t),
+              into: %{},
+              do: {t, dir}
+
+        {:ok, tokens}
+      end)
+
+    Map.get(map, token)
+  end
 
   defp poster_url(nil), do: nil
   defp poster_url(path), do: Laev.Tmdb.poster_url(path, "w185")
