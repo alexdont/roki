@@ -564,3 +564,9 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-timeline .study-clock:last-child { right: 0; left: auto; }
 .study-timeline .study-seek::-webkit-slider-thumb { width: 0.3rem; height: 1.15rem; border-radius: 0.15rem; background: #fff; box-shadow: none; }
 .study-timeline .study-seek::-moz-range-thumb { width: 0.3rem; height: 1.15rem; border-radius: 0.15rem; background: #fff; }
+
+/* The volume bar is square-ended like the timeline, with a thin handle instead of a round one. */
+.study-bar2 .study-volume { height: 0.65rem; border-radius: 0.2rem; }
+.study-bar2 .study-volume:hover { height: 0.65rem; }
+.study-bar2 .study-volume::-webkit-slider-thumb { width: 0.3rem; height: 1.05rem; border-radius: 0.1rem; background: #fff; box-shadow: none; }
+.study-bar2 .study-volume::-moz-range-thumb { width: 0.3rem; height: 1.05rem; border-radius: 0.1rem; background: #fff; }
