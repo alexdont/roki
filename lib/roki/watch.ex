@@ -896,17 +896,51 @@ defmodule Roki.Watch do
   end
 
   defp check_video_codec(stream) do
-    if video_h264?(stream) == false, do: {:error, :needs_heavy}, else: :ok
+    case video_h264?(stream) do
+      false -> {:error, :needs_heavy}
+      :unreachable -> {:error, :unreachable}
+      _ -> :ok
+    end
   end
 
-  @doc "Whether the file's video is H.264 (read from the file): `true`, `false`, or `nil` when it could not be read."
+  @doc "Whether the file's video is H.264 (read from the file): `true`, `false`, `nil` when it could not be read, or `:unreachable` when the host did not answer."
   def video_h264?(stream) do
-    case Laev.Remux.Worker.probe_streams(stream.url)
-         |> Enum.find_value(fn s -> if s.kind == "video", do: s.codec end) do
+    case video_codec(stream.url) do
+      :unreachable -> :unreachable
       c when c in [nil, ""] -> nil
       "h264" -> true
       _ -> false
     end
+  end
+
+  # The first video stream's codec, read from the file. A host that stops answering must not hold the
+  # request for ever (ffprobe has no time limit of its own): it gives up after 15 s without data,
+  # and `timeout` ends it outright after 25 s. `nil` when it could not be read, `:unreachable` when
+  # the host never answered.
+  defp video_codec(url) do
+    args = [
+      "25",
+      "ffprobe",
+      "-v",
+      "error",
+      "-rw_timeout",
+      "15000000",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=codec_name",
+      "-of",
+      "csv=p=0",
+      url
+    ]
+
+    case System.cmd("timeout", args, stderr_to_stdout: true) do
+      {out, 0} -> out |> String.split() |> List.first()
+      {_, 124} -> :unreachable
+      {out, _} -> if out =~ ~r/timed out/i, do: :unreachable
+    end
+  rescue
+    _ -> nil
   end
 
   defp allowed(source) do

@@ -516,6 +516,10 @@ defmodule Roki.Watch.Resolver do
     do:
       "That release needs the server to re-encode the video, which isn't switched on for this account. Pick an H.264 release, or use an external player (VLC, mpv)."
 
+  def failure(:unreachable),
+    do:
+      "That release's download server isn't answering right now. Pick another release, or try again in a minute."
+
   def failure(:over_limit),
     do: "You have used today's plays. Try again tomorrow."
 
