@@ -1203,7 +1203,7 @@ defmodule RokiWeb.TitleLive do
   end
 
   # Where else the title lives: MyAnimeList first for anime (its first season's entry, or the
-  # film itself — the cross-id list, no request), then TMDB for everything.
+  # film itself — the cross-id list, no request), then TMDB and, when TMDB knows it, IMDb.
   defp external_links(t, entry) do
     kind = if t.type == "movie", do: "movie", else: "tv"
 
@@ -1235,7 +1235,13 @@ defmodule RokiWeb.TitleLive do
         []
       end
 
-    mal ++ [{"Open on TMDB", "https://www.themoviedb.org/#{kind}/#{t.id}"}]
+    imdb =
+      case t.imdb_id do
+        "tt" <> _ = id -> [{"Open on IMDb", "https://www.imdb.com/title/#{id}/"}]
+        _ -> []
+      end
+
+    mal ++ [{"Open on TMDB", "https://www.themoviedb.org/#{kind}/#{t.id}"}] ++ imdb
   end
 
   attr :title, :map, required: true
