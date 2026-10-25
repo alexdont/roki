@@ -45,7 +45,7 @@ defmodule Roki.MixProject do
       {:phoenix_kit, "~> 2.0"},
       # Terminal cinema as a library: per-user watchlist, stats, settings, playback.
       # Declares elixir ~> 1.20 though it compiles clean on 1.19.6 (this image) — warning only.
-      {:laev, "~> 0.1.44"},
+      {:laev, "~> 0.1.45"},
       # Build-time tooling for the mix phoenix_kit.install / .update tasks,
       # which refuse to patch code without it. PhoenixKit declares :igniter
       # optional and an optional dep is not resolved transitively, so it has

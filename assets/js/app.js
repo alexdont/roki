@@ -65,8 +65,8 @@ window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "
 
 // The rating slider: the word and the colour of the score under the thumb. The same scale as
 // `score_word/1` and `score_color/1` in title_live.ex.
-const SCORE_WORDS = ["", "absolute trash", "garbage", "truly bad", "not good", "passable",
-  "it's alright", "pretty decent", "really good", "banger", "masterpiece"]
+// The words come from laev, put on the sheet by the server (`data-words`).
+let SCORE_WORDS = {}
 function scoreColor(v) {
   const s = Math.min(10, Math.max(1, v))
   const [h, sat, l] = s <= 7 ? [(s - 1) / 6 * 130, 75, 46]
@@ -79,7 +79,10 @@ window.rokiScore = input => {
   const out = document.getElementById("rate-out")
   const word = document.getElementById("rate-word")
   out.textContent = v % 1 === 0 ? String(v) : v.toFixed(1)
-  word.textContent = SCORE_WORDS[Math.min(10, Math.max(1, Math.round(v)))]
+  if (!Object.keys(SCORE_WORDS).length) {
+    try { SCORE_WORDS = JSON.parse(document.getElementById("rate-sheet").dataset.words) } catch {}
+  }
+  word.textContent = SCORE_WORDS[Math.min(10, Math.max(1, Math.round(v)))] || ""
   out.style.color = word.style.color = color
   input.style.setProperty("--thumb", color)
 }

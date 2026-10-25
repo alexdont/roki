@@ -33,9 +33,8 @@ defmodule Roki.Laev do
     # Keys lent by the site owner (Roki.Keys) are added to this request's scope only, and only
     # where the account has none of its own.
     lent = Roki.Keys.overrides(uuid, Laev.Config.read_dir(dir))
-    # A study session's languages (Roki.Study) win over the account's own for this request only.
-    overrides = lent |> Map.merge(app_keys()) |> Map.merge(Roki.Study.current())
-    dir |> Laev.Scope.load(overrides) |> Laev.Scope.run(fun)
+    # (A study session's languages are laev scope overrides, which win over any of this.)
+    dir |> Laev.Scope.load(Map.merge(lent, app_keys())) |> Laev.Scope.run(fun)
   end
 
   @doc "Run inside the site's own scope — no user, only the server-wide TMDB key."

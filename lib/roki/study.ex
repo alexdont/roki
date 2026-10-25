@@ -4,13 +4,10 @@ defmodule Roki.Study do
   left alone. The choice (audio and subtitle language) is remembered per account and title, in
   the account's laev directory, so the next time it is already filled in.
 
-  A study session is the same laev scope as always with `lang` and `subs_lang` replaced. The
-  replacement is held in the process dictionary under `:roki_study` and read by
-  `Roki.Laev.run/2`, so every call a page makes inside `bind/1`'s process is in the chosen
-  language. Work handed to another process does not inherit it: wrap that work in `wrap/2`.
+  A study session is the same laev scope as always with `lang` and `subs_lang` replaced, by
+  laev's own scope overrides (`Laev.Scope.put_overrides/1`). `Laev.Scope.async/1` carries them to
+  other processes; Phoenix's `start_async` does not, so wrap that work in `wrap/1`.
   """
-
-  @key :roki_study
 
   @doc "The remembered choice for a title: `%{\"lang\" => \"fr\", \"subs\" => \"fr\"}` or nil."
   def get(uuid, type, id) do
@@ -35,23 +32,19 @@ defmodule Roki.Study do
   def overrides(%{"lang" => lang, "subs" => subs}), do: %{lang: lang, subs_lang: subs}
   def overrides(_), do: %{}
 
-  @doc "Bind a choice's overrides to this process."
-  def bind(overrides) when overrides == %{}, do: Process.delete(@key)
-  def bind(overrides) when is_map(overrides), do: Process.put(@key, overrides)
+  @doc "Bind a choice's overrides to this process (laev's scope overrides)."
+  def bind(overrides) when overrides == %{}, do: Laev.Scope.clear_overrides()
+  def bind(overrides) when is_map(overrides), do: Laev.Scope.put_overrides(overrides)
 
   @doc "The overrides bound to this process (`%{}` outside study mode)."
-  def current, do: Process.get(@key) || %{}
+  def current, do: Laev.Scope.overrides()
 
   def active?, do: current() != %{}
 
-  @doc "`fun` for another process (a task, `start_async`) that keeps what is bound here."
+  @doc "`fun` for a process laev does not carry the overrides into (`start_async`)."
   def wrap(fun) when is_function(fun, 0) do
     overrides = current()
-
-    fn ->
-      bind(overrides)
-      fun.()
-    end
+    fn -> Laev.Scope.with_overrides(overrides, fun) end
   end
 
   defp path(uuid, type, id) when type in ["movie", "tv"] and is_integer(id),
@@ -60,7 +53,8 @@ defmodule Roki.Study do
   defp clean(value, default) do
     case value |> to_string() |> String.trim() |> String.downcase() do
       "" -> default
-      code -> String.slice(code, 0, 12)
+      "off" -> "off"
+      other -> (Laev.Config.normalise_lang(other) || other) |> String.slice(0, 12)
     end
   end
 end

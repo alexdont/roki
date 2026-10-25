@@ -35,7 +35,14 @@ defmodule Roki.Languages do
 
   @doc "The value to show selected: lower-case, `nil` when nothing is set."
   def normalize(nil), do: nil
-  def normalize(value), do: value |> to_string() |> String.trim() |> String.downcase()
+
+  # "French", "fre" and "FR" are one language; "off" (subtitles) stays itself.
+  def normalize(value) do
+    case value |> to_string() |> String.trim() |> String.downcase() do
+      "off" -> "off"
+      other -> Laev.Config.normalise_lang(other) || other
+    end
+  end
 
   defp label(code, name), do: "#{name} (#{code})"
 end

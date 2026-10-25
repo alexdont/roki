@@ -869,24 +869,10 @@ defmodule RokiWeb.TitleLive do
     end
   end
 
-  # What a score means, in laev's own words (its terminal rating prompt), and the colour it is
-  # drawn in: red at the bottom through green at 7 to gold at 10. `assets/js/app.js` (`rokiScore`)
-  # does the same while the slider moves.
-  @score_words %{
-    10 => "masterpiece",
-    9 => "banger",
-    8 => "really good",
-    7 => "pretty decent",
-    6 => "it's alright",
-    5 => "passable",
-    4 => "not good",
-    3 => "truly bad",
-    2 => "garbage",
-    1 => "absolute trash"
-  }
-
-  defp score_word(v) when is_number(v),
-    do: Map.fetch!(@score_words, v |> round() |> max(1) |> min(10))
+  # What a score means is laev's own list (`Laev.Ratings`); the colour it is drawn in runs red at the
+  # bottom through green at 7 to gold at 10. `assets/js/app.js` (`rokiScore`) does the same while the
+  # slider moves, with the words handed to it on the sheet.
+  defp score_word(v) when is_number(v), do: Laev.Ratings.score_word(v)
 
   defp score_color(v) when is_number(v) do
     s = v |> max(1) |> min(10)
@@ -1739,6 +1725,7 @@ defmodule RokiWeb.TitleLive do
     ~H"""
     <div
       id="rate-sheet"
+      data-words={Jason.encode!(for {n, w} <- Laev.Ratings.score_words(), into: %{}, do: {n, w})}
       class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50 sm:items-center sm:justify-center"
       phx-window-keydown={JS.hide(to: "#rate-sheet")}
       phx-key="escape"

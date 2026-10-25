@@ -111,30 +111,36 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
-  # The shared list is ranked for no one in particular; a study session ranks it for its languages
-  # so the releases in them are the ones checked first.
-  # Studying happens in the browser, where 4K is a software re-encode that never keeps up: nothing
-  # above 1080p is looked at at all.
+  # The shared list is ranked for no one in particular. A study session ranks it for its language
+  # and keeps to what a browser can play: nothing above 1080p, and no release whose audio is known
+  # not to have the language — all of it before anything is checked.
   defp in_study_order(sources, uuid) do
-    if Roki.Study.active?() do
-      Roki.Laev.run(uuid, fn ->
-        sources |> Laev.Sources.at_most("1080p") |> Laev.Sources.rank()
-      end)
-    else
-      sources
+    case Roki.Study.current() do
+      %{lang: lang} ->
+        Roki.Laev.run(uuid, fn ->
+          Laev.Sources.rank(sources, strict_audio: lang, max_resolution: "1080p")
+        end)
+
+      _ ->
+        sources
     end
   end
 
-  # Subtitles in the language but the speech in another is no help to someone learning it: a study
-  # session only keeps releases whose audio — as read from the file itself — has the language.
+  # Subtitles in the language but the speech in another is no help to someone learning it. Once
+  # the tracks of a release have been read, only those with the language in their audio stay
+  # (releases whose tracks could not be read are used only when nothing better is left).
   defp spoken_in_study_language(ranked) do
     case Roki.Study.current() do
       %{lang: lang} ->
-        want = Watch.short_code(lang)
+        {yes, rest} =
+          Enum.split_with(ranked, fn {source, _} ->
+            Laev.Sources.audio_in?(source, lang) == true
+          end)
 
-        Enum.filter(ranked, fn {source, _stream} ->
-          want in Enum.map(Map.get(source, :langs) || [], &Watch.short_code/1)
-        end)
+        if yes != [],
+          do: yes,
+          else:
+            Enum.filter(rest, fn {source, _} -> Laev.Sources.audio_in?(source, lang) == nil end)
 
       _ ->
         ranked
