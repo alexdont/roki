@@ -74,11 +74,7 @@ defmodule RokiWeb.TitleLive do
   # How this device plays: the page tells us (`player` in the socket params, from the browser's
   # own storage). It decides what the sources page does when a release is found.
   defp mode_param(socket),
-    do:
-      if(connect_param(socket, "player") == "browser" and RokiWeb.PlayerMode.allowed?(socket),
-        do: :browser,
-        else: :external
-      )
+    do: if(connect_param(socket, "player") == "browser", do: :browser, else: :external)
 
   defp connect_param(socket, key) do
     if connected?(socket), do: (get_connect_params(socket) || %{})[key]

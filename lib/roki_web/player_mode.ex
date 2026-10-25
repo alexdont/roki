@@ -18,12 +18,6 @@ defmodule RokiWeb.PlayerMode do
     {:cont, attach_hook(socket, :player_mode, :handle_event, &handle/3)}
   end
 
-  defp handle("set_mode", %{"mode" => "browser"}, socket) do
-    if allowed?(socket),
-      do: pass_browser(socket),
-      else: {:halt, push_event(socket, "roki:player", %{mode: "external"})}
-  end
-
   defp handle("set_mode", %{"mode" => mode}, socket) when mode in ["browser", "external"] do
     if Map.has_key?(socket.assigns, :mode),
       do: {:cont, socket},
@@ -31,19 +25,4 @@ defmodule RokiWeb.PlayerMode do
   end
 
   defp handle(_event, _params, socket), do: {:cont, socket}
-
-  # The same as for any other switch: a page with its own @mode answers it, any other page just remembers.
-  defp pass_browser(socket) do
-    if Map.has_key?(socket.assigns, :mode),
-      do: {:cont, socket},
-      else: {:halt, push_event(socket, "roki:player", %{mode: "browser"})}
-  end
-
-  @doc "Whether the signed-in account may use the browser player (see `Roki.Keys.browser?/1`)."
-  def allowed?(%{assigns: assigns}) do
-    case assigns[:phoenix_kit_current_scope] do
-      nil -> false
-      scope -> Roki.Keys.browser?(PhoenixKit.Users.Auth.Scope.user_uuid(scope))
-    end
-  end
 end

@@ -155,8 +155,6 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     connect!(user)
-    # (Playing in the browser is for allowed accounts; see the next test for one that is not.)
-    Roki.Keys.grant!(user.uuid)
     {:ok, view, _} = live(conn, "/settingstest/settings")
     render_async(view, 3000)
 
@@ -168,22 +166,6 @@ defmodule RokiWeb.SettingsLiveTest do
 
     assert_push_event(view, "roki:player", %{mode: "browser"})
     assert has_element?(view, "#d-player option[selected]", "Browser")
-  end
-
-  test "an account that is not allowed the browser player stays on the external one", %{
-    conn: conn,
-    user: user
-  } do
-    connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
-    render_async(view, 3000)
-
-    view
-    |> form("#settings-form")
-    |> render_change(%{"_target" => ["d", "player"], "d" => %{"player" => "browser"}})
-
-    assert_push_event(view, "roki:player", %{mode: "external"})
-    assert has_element?(view, "#d-player option[selected]", "External player")
   end
 
   test "when keys are carried, a change schedules its own sync", %{conn: conn, user: user} do

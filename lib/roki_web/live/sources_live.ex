@@ -81,9 +81,7 @@ defmodule RokiWeb.SourcesLive do
   defp mode_param(socket) do
     params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
 
-    if params["player"] == "browser" and RokiWeb.PlayerMode.allowed?(socket),
-      do: :browser,
-      else: :external
+    if params["player"] == "browser", do: :browser, else: :external
   end
 
   defp platform_param(socket) do

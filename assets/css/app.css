@@ -601,6 +601,3 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 /* The end time stays at the right end now that the hover mark's elements follow it in the row. */
 .study-timeline [data-role=cur] { left: 0; }
 .study-timeline [data-role=dur] { right: 0; left: auto; }
-
-/* An account that may not play in the browser is shown the external player only. */
-html[data-browser-locked] [phx-click="set_mode"][phx-value-mode="browser"] { display: none; }

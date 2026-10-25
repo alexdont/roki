@@ -71,15 +71,15 @@ defmodule Roki.Keys do
   def grant(_), do: nil
 
   @doc """
-  May this account play in the browser? A browser play can make the server convert the video, which
-  is the heavy part of it, so it is for the owner and the accounts they allowed; everyone else
-  uses an external player (VLC, mpv), which costs the server nothing.
+  May this account have the server re-encode a video for the browser (HEVC and the like)? That is
+  the heavy part, so it is for the owner and the accounts they allowed. Everyone else plays in the
+  browser only what needs no re-encoding (H.264), and uses an external player (VLC, mpv) for the rest.
   """
-  def browser?(uuid) when is_binary(uuid) do
-    config().owner_uuid == uuid or match?(%{browser: true}, grant(uuid))
+  def heavy?(uuid) when is_binary(uuid) do
+    config().owner_uuid == uuid or match?(%{heavy: true}, grant(uuid))
   end
 
-  def browser?(_), do: false
+  def heavy?(_), do: false
 
   @doc "Does this account use any of the owner's keys?"
   def granted?(uuid), do: match?(%{keys: [_ | _]}, grant(uuid))
@@ -90,30 +90,30 @@ defmodule Roki.Keys do
     found =
       from(g in grants(),
         where: g.user_uuid == ^bin,
-        select: %{daily_plays: g.daily_plays, note: g.note, keys: g.keys, browser: g.browser}
+        select: %{daily_plays: g.daily_plays, note: g.note, keys: g.keys, heavy: g.heavy}
       )
       |> Repo.one()
 
     {:ok, found || false}
   end
 
-  @doc "Let this account use all of the owner's keys and play in the browser."
+  @doc "Let this account use all of the owner's keys and have videos re-encoded for the browser."
   def grant!(uuid, daily_plays \\ nil) do
-    set_access!(uuid, %{keys: for({id, _, _} <- @permissions, do: id), browser: true})
+    set_access!(uuid, %{keys: for({id, _, _} <- @permissions, do: id), heavy: true})
 
     if daily_plays, do: set_daily_plays!(uuid, daily_plays)
     :ok
   end
 
   @doc """
-  Set what an account may use: `keys` (permission ids, see `permissions/0`) and `browser`.
+  Set what an account may use: `keys` (permission ids, see `permissions/0`) and `heavy` (re-encoding for the browser).
   An account left with neither has no row at all.
   """
-  def set_access!(uuid, %{keys: keys, browser: browser}) do
+  def set_access!(uuid, %{keys: keys, heavy: heavy}) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     keys = Enum.filter(keys, &(&1 in Enum.map(@permissions, fn {id, _, _} -> id end)))
 
-    if keys == [] and not browser do
+    if keys == [] and not heavy do
       Repo.delete_all(from(g in grants(), where: g.user_uuid == ^bin))
     else
       Repo.insert_all(
@@ -123,10 +123,10 @@ defmodule Roki.Keys do
             user_uuid: bin,
             granted_at: DateTime.utc_now() |> DateTime.truncate(:second),
             keys: keys,
-            browser: browser
+            heavy: heavy
           }
         ],
-        on_conflict: {:replace, [:keys, :browser]},
+        on_conflict: {:replace, [:keys, :heavy]},
         conflict_target: [:user_uuid]
       )
     end
@@ -135,7 +135,7 @@ defmodule Roki.Keys do
     :ok
   end
 
-  @doc "Take everything back: the keys and the browser player."
+  @doc "Take everything back: the keys and the heavy re-encoding."
   def revoke!(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     Repo.delete_all(from(g in grants(), where: g.user_uuid == ^bin))
@@ -153,12 +153,12 @@ defmodule Roki.Keys do
 
   defp forget(uuid), do: TTLCache.delete({:key_grant, uuid})
 
-  @doc "Every account with any access: `%{uuid => %{daily_plays, granted_at, keys, browser}}`."
+  @doc "Every account with any access: `%{uuid => %{daily_plays, granted_at, keys, heavy}}`."
   def all_grants do
     from(g in grants(),
       select:
         {g.user_uuid,
-         %{daily_plays: g.daily_plays, granted_at: g.granted_at, keys: g.keys, browser: g.browser}}
+         %{daily_plays: g.daily_plays, granted_at: g.granted_at, keys: g.keys, heavy: g.heavy}}
     )
     |> Repo.all()
     |> Map.new(fn {bin, g} -> {Ecto.UUID.load!(bin), g} end)

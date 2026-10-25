@@ -874,14 +874,33 @@ defmodule Roki.Watch do
   """
   def start(uuid, ctx, source, stream) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
-    with true <- Roki.Keys.browser?(uuid) || {:error, :browser_not_allowed},
-         true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+    with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+         :ok <- light_enough(uuid, source, stream),
          :ok <- release_previous(uuid),
          :ok <- allowed(source) do
       Roki.Keys.record(uuid, :play)
 
       do_start(uuid, ctx, source, stream)
     end
+  end
+
+  # Without the heavy permission only a video the browser can take as it is (or have copied) plays: the
+  # name says so for most releases; one that does not is read from the file itself.
+  defp light_enough(uuid, source, stream) do
+    cond do
+      Roki.Keys.heavy?(uuid) -> :ok
+      heavy?(source) -> {:error, :needs_heavy}
+      String.ends_with?(String.downcase(stream.filename || ""), [".mp4", ".m4v", ".webm"]) -> :ok
+      true -> check_video_codec(stream)
+    end
+  end
+
+  defp check_video_codec(stream) do
+    codec =
+      Laev.Remux.Worker.probe_streams(stream.url)
+      |> Enum.find_value(fn s -> if s.kind == "video", do: s.codec end)
+
+    if codec in [nil, "", "h264"], do: :ok, else: {:error, :needs_heavy}
   end
 
   defp allowed(source) do

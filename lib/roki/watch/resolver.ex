@@ -24,7 +24,11 @@ defmodule Roki.Watch.Resolver do
     key = key(title.type, title.id, season, episode)
     web = Roki.Laev.web_settings(uuid)
     hours = SourceCache.hours(web)
-    cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours)
+
+    # Re-encoding a video for the browser is what costs the server: unless the account is allowed it,
+    # only what needs none (H.264) is looked at, and the rest is for an external player.
+    light? = mode == :browser and not Roki.Keys.heavy?(uuid)
+    cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours) |> lighten(light?)
 
     with :ok <- Watch.subscription(uuid),
          ctx = Watch.ctx(uuid, title, season, episode),
@@ -44,7 +48,8 @@ defmodule Roki.Watch.Resolver do
                key,
                hours,
                force?,
-               quick?
+               quick?,
+               light?
              )
            end) do
       {:ok, res}
@@ -61,6 +66,18 @@ defmodule Roki.Watch.Resolver do
     all = Watch.attach_and_rank(uuid, have ++ playable)
     if hours > 0, do: SourceCache.put(uuid, key, all, rest)
     {:ok, token, all, rest}
+  end
+
+  # A saved list made for another player: only its light releases, and none left means search again.
+  defp lighten(nil, _light?), do: nil
+  defp lighten(entry, false), do: entry
+
+  defp lighten(entry, true) do
+    playable = Enum.reject(entry.playable, &Watch.heavy?/1)
+
+    if playable == [],
+      do: nil,
+      else: %{entry | playable: playable, rest: Enum.reject(entry.rest, &Watch.heavy?/1)}
   end
 
   defp from_cache(_uuid, _token, _ctx, _cap, _key, nil), do: nil
@@ -84,7 +101,21 @@ defmodule Roki.Watch.Resolver do
   defp fresh_if_none(nil, fun), do: fun.()
   defp fresh_if_none(hit, _fun), do: hit
 
-  defp search(parent, token, uuid, title, season, episode, ctx, cap, key, hours, force?, quick?) do
+  defp search(
+         parent,
+         token,
+         uuid,
+         title,
+         season,
+         episode,
+         ctx,
+         cap,
+         key,
+         hours,
+         force?,
+         quick?,
+         light?
+       ) do
     send(parent, {:status, token, "Searching for releases…"})
     Roki.Keys.record(uuid, :search)
 
@@ -93,9 +124,11 @@ defmodule Roki.Watch.Resolver do
          sources =
            Watch.with_library(uuid, query, found) |> in_study_order(uuid) |> prioritise(ctx),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
+         {:ok, sources} <- only_light(sources, light?),
          {:ok, playable, rest} <-
            probe_until_playable(parent, token, uuid, ctx, sources, [], quick?) do
-      if hours > 0, do: SourceCache.put(uuid, key, playable, rest)
+      # (A list made for the browser alone is left out of the saved ones: it is missing the heavy releases.)
+      if hours > 0 and not light?, do: SourceCache.put(uuid, key, playable, rest)
 
       {:ok,
        %{
@@ -108,6 +141,15 @@ defmodule Roki.Watch.Resolver do
          cached_at: nil,
          good: nil
        }}
+    end
+  end
+
+  defp only_light(sources, false), do: {:ok, sources}
+
+  defp only_light(sources, true) do
+    case Enum.reject(sources, &Watch.heavy?/1) do
+      [] when sources != [] -> {:error, :only_heavy}
+      light -> {:ok, light}
     end
   end
 
@@ -422,9 +464,13 @@ defmodule Roki.Watch.Resolver do
   def failure(:search_failed),
     do: "The sites that list releases did not answer in time. Try again in a moment."
 
-  def failure(:browser_not_allowed),
+  def failure(:only_heavy),
     do:
-      "Watching in the browser isn't switched on for this account. Use an external player (VLC, mpv)."
+      "Every release found needs the server to re-encode the video (HEVC and similar), which isn't switched on for this account. Use an external player (VLC, mpv)."
+
+  def failure(:needs_heavy),
+    do:
+      "That release needs the server to re-encode the video, which isn't switched on for this account. Pick an H.264 release, or use an external player (VLC, mpv)."
 
   def failure(:over_limit),
     do: "You have used today's plays. Try again tomorrow."

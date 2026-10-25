@@ -58,17 +58,17 @@ defmodule Roki.KeysTest do
     assert Keys.overrides(@friend, %{}) == %{tmdb_key: "owner-tmdb"}
   end
 
-  test "keys are allowed one at a time, and the browser separately" do
-    Keys.set_access!(@friend, %{keys: ["RD_TOKEN"], browser: false})
+  test "keys are allowed one at a time, and heavy re-encoding separately" do
+    Keys.set_access!(@friend, %{keys: ["RD_TOKEN"], heavy: false})
     assert Keys.overrides(@friend, %{}) == %{rd_token: "owner-rd-token"}
-    refute Keys.browser?(@friend)
+    refute Keys.heavy?(@friend)
 
-    Keys.set_access!(@friend, %{keys: [], browser: true})
+    Keys.set_access!(@friend, %{keys: [], heavy: true})
     assert Keys.overrides(@friend, %{}) == %{}
-    assert Keys.browser?(@friend)
+    assert Keys.heavy?(@friend)
 
-    Keys.set_access!(@friend, %{keys: [], browser: false})
-    refute Keys.browser?(@friend)
+    Keys.set_access!(@friend, %{keys: [], heavy: false})
+    refute Keys.heavy?(@friend)
     assert Keys.all_grants()[@friend] == nil
   end
 

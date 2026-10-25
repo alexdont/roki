@@ -99,16 +99,16 @@ defmodule RokiWeb.Admin.KeyAccessLive do
   end
 
   def handle_event("toggle_key", %{"uuid" => uuid, "perm" => perm}, socket) do
-    g = socket.assigns.grants[uuid] || %{keys: [], browser: false}
+    g = socket.assigns.grants[uuid] || %{keys: [], heavy: false}
     keys = if perm in g.keys, do: List.delete(g.keys, perm), else: g.keys ++ [perm]
-    Keys.set_access!(uuid, %{keys: keys, browser: g.browser})
+    Keys.set_access!(uuid, %{keys: keys, heavy: g.heavy})
     unless Roki.Laev.connected?(uuid), do: Task.start(fn -> Roki.Laev.setup_granted(uuid) end)
     {:noreply, load(socket)}
   end
 
-  def handle_event("toggle_browser", %{"uuid" => uuid}, socket) do
-    g = socket.assigns.grants[uuid] || %{keys: [], browser: false}
-    Keys.set_access!(uuid, %{keys: g.keys, browser: not g.browser})
+  def handle_event("toggle_heavy", %{"uuid" => uuid}, socket) do
+    g = socket.assigns.grants[uuid] || %{keys: [], heavy: false}
+    Keys.set_access!(uuid, %{keys: g.keys, heavy: not g.heavy})
     {:noreply, load(socket)}
   end
 
@@ -214,9 +214,9 @@ defmodule RokiWeb.Admin.KeyAccessLive do
               <th :for={{_id, label, _} <- Roki.Keys.permissions()} class="text-center">{label}</th>
               <th
                 class="text-center"
-                title="May play in the browser (the server may convert the video)"
+                title="May have the server re-encode HEVC and similar videos for the browser (heavy on the server). Without it, the browser plays only H.264 releases."
               >
-                Browser
+                Heavy encode
               </th>
               <th></th>
               <th title="Plays a day; blank for no cap">Daily plays</th>
@@ -255,16 +255,16 @@ defmodule RokiWeb.Admin.KeyAccessLive do
                 <span :if={r.owner?} class="badge badge-ghost">owner</span>
                 <button
                   :if={!r.owner?}
-                  phx-click="toggle_browser"
+                  phx-click="toggle_heavy"
                   phx-value-uuid={r.user.uuid}
                   class={[
                     "btn btn-xs w-14",
-                    r.grant && r.grant.browser && "btn-success",
-                    !(r.grant && r.grant.browser) && "btn-outline btn-error"
+                    r.grant && r.grant.heavy && "btn-success",
+                    !(r.grant && r.grant.heavy) && "btn-outline btn-error"
                   ]}
-                  title={"Browser player: " <> if(r.grant && r.grant.browser, do: "allowed — click to disable", else: "off (external player only) — click to allow")}
+                  title={"Heavy re-encoding: " <> if(r.grant && r.grant.heavy, do: "allowed — click to disable", else: "off (browser plays H.264 releases only) — click to allow")}
                 >
-                  {if r.grant && r.grant.browser, do: "on", else: "off"}
+                  {if r.grant && r.grant.heavy, do: "on", else: "off"}
                 </button>
               </td>
               <td class="whitespace-nowrap">

@@ -24,9 +24,7 @@ defmodule RokiWeb.WatchLive do
     with {n, ""} <- Integer.parse(id),
          {season, episode} <- parse_episode(params),
          scope = socket.assigns[:phoenix_kit_current_scope],
-         uuid = if(scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)),
-         # Playing here can make the server convert the video: only for the accounts allowed to.
-         true <- uuid == nil or Roki.Keys.browser?(uuid) or {:allowed, false, n} do
+         uuid = if(scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)) do
       # Study mode (`?study=1`): this title in the languages remembered for it, the account's own
       # settings untouched. Everything this page runs in is bound to them.
       study = if params["study"] == "1" and uuid, do: Roki.Study.get(uuid, type, n)
@@ -64,15 +62,6 @@ defmodule RokiWeb.WatchLive do
 
       {:ok, if(connected?(socket) and socket.assigns.linked?, do: load(socket), else: socket)}
     else
-      {:allowed, false, n} ->
-        {:ok,
-         socket
-         |> put_flash(
-           :error,
-           "Watching in the browser isn't switched on for this account. Use an external player (VLC, mpv)."
-         )
-         |> push_navigate(to: ~p"/title/#{type}/#{n}")}
-
       _ ->
         {:ok, push_navigate(socket, to: ~p"/home")}
     end

@@ -17,14 +17,6 @@
       name="roki-player-default"
       content={RokiWeb.PlayerMode.default_for(assigns[:phoenix_kit_current_user])}
     />
-    <meta
-      :if={
-        assigns[:phoenix_kit_current_user] &&
-          !Roki.Keys.browser?(assigns[:phoenix_kit_current_user].uuid)
-      }
-      name="roki-browser-locked"
-      content="1"
-    />
     <.live_title default="Roki" suffix=" · Phoenix Framework" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <!-- PhoenixKit JS Hooks -->
@@ -51,7 +43,7 @@
             document.documentElement.setAttribute("data-theme-source", "user");
           }
         };
-        try { const d = (document.querySelector("meta[name=roki-player-default]") || {}).content || "external"; const locked = !!document.querySelector("meta[name=roki-browser-locked]"); if (locked) document.documentElement.dataset.browserLocked = "1"; document.documentElement.dataset.player = locked ? "external" : (localStorage.getItem("roki:player") || d) } catch (_) { document.documentElement.dataset.player = "external" }
+        try { const d = (document.querySelector("meta[name=roki-player-default]") || {}).content || "external"; document.documentElement.dataset.player = localStorage.getItem("roki:player") || d } catch (_) { document.documentElement.dataset.player = "external" }
         if (!document.documentElement.hasAttribute("data-theme")) {
           setTheme(localStorage.getItem("phx:theme") || "system");
         }
