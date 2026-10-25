@@ -462,7 +462,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-immersive .study-stage[data-active] .study-overlay { bottom: 0.5rem; }
 .study-immersive [data-role="theater"], .study-immersive [data-role="compact"] { display: none !important; }
 
-.study-close { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 5; display: flex; align-items: center; gap: 0.6rem; max-width: calc(100% - 1.5rem); transition: opacity 0.25s; }
+.study-close { position: absolute; top: 0.75rem; left: 0.75rem; z-index: 5; display: flex; align-items: center; gap: 0.6rem; max-width: calc(100% - 1.5rem); transition: opacity 0.25s; }
 .study-immersive .study-stage:not([data-active]) .study-close { opacity: 0; pointer-events: none; }
 .study-label-pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 0.5rem; background: rgb(0 0 0 / 0.55); padding: 0.3rem 0.65rem; font-size: 0.85rem; font-weight: 600; }
 
