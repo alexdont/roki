@@ -876,12 +876,61 @@ defmodule Roki.Watch do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
          :ok <- release_previous(uuid),
-         :ok <- Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
+         :ok <- allowed(source) do
       Roki.Keys.record(uuid, :play)
 
       do_start(uuid, ctx, source, stream)
     end
   end
+
+  defp allowed(source) do
+    case Laev.Playback.allowed?(source, max_height: 1080, max_encoders: @max_encoders) do
+      {:error, :busy} -> {:error, {:busy, encoding_now()}}
+      other -> other
+    end
+  end
+
+  @doc """
+  Who is converting what right now: `[%{username:, title:, release:}]`, one per running
+  conversion (a conversion started before this was tracked shows as someone unknown).
+  """
+  def encoding_now do
+    Enum.map(Laev.Remux.running(), fn id ->
+      info =
+        case Roki.TTLCache.fetch({:remux_info, id}, 3 * 3600, fn -> :none end) do
+          {:ok, i} -> i
+          _ -> %{}
+        end
+
+      %{
+        username: username(info[:uuid]),
+        title: info[:title] || "an unknown video",
+        release: info[:release]
+      }
+    end)
+  end
+
+  defp username(nil), do: "someone"
+
+  defp username(uuid) do
+    case Roki.Repo.query(
+           "select coalesce(nullif(username, ''), 'someone') from phoenix_kit_users where uuid::text = $1",
+           [uuid]
+         ) do
+      {:ok, %{rows: [[name]]}} -> name
+      _ -> "someone"
+    end
+  end
+
+  defp remember_info(uuid, ctx, source, %{kind: :remux, remux_id: id}) do
+    ep = if ctx[:season] && ctx[:episode], do: " S#{ctx.season}E#{ctx.episode}", else: ""
+
+    Roki.TTLCache.fetch({:remux_info, id}, 3 * 3600, fn ->
+      {:ok, %{uuid: uuid, title: "#{ctx.title}#{ep}", release: source.name}}
+    end)
+  end
+
+  defp remember_info(_uuid, _ctx, _source, _src), do: :ok
 
   # One player per person: starting something else ends the conversion left from the last one,
   # which would otherwise sit on an encoder slot (and the CPU) for ten idle minutes.
@@ -911,6 +960,7 @@ defmodule Roki.Watch do
            :ok <- ready(src) do
         save_resume(ctx, source)
         remember_remux(uuid, src)
+        remember_info(uuid, ctx, source, src)
 
         {:ok,
          %{

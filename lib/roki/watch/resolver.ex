@@ -355,6 +355,17 @@ defmodule Roki.Watch.Resolver do
     do:
       "The server is re-encoding other videos right now. Try again in a minute, or pick an h264 release."
 
+  def failure({:busy, holders}) when is_list(holders) and holders != [] do
+    who =
+      Enum.map_join(holders, "; ", fn h ->
+        "#{h.username}: #{h.title}#{if h.release, do: " (#{String.slice(h.release, 0, 70)})"}"
+      end)
+
+    "The server is re-encoding other videos right now — #{who}. Try again in a minute, or pick an h264 release."
+  end
+
+  def failure({:busy, _}), do: failure(:busy)
+
   def failure(:search_failed),
     do: "The sites that list releases did not answer in time. Try again in a moment."
 
