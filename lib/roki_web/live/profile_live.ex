@@ -246,16 +246,17 @@ defmodule RokiWeb.ProfileLive do
             style={@banner && "background-image: url('#{@banner}')"}
           >
           </div>
-          <%!-- The avatar is PhoenixKit's biggest; on a phone it is drawn smaller so the name has room. --%>
-          <div class="-mt-12 flex flex-wrap items-end gap-x-4 gap-y-3 px-4 pb-4 sm:-mt-16 sm:px-6">
-            <div class="shrink-0 rounded-full ring-4 ring-base-200 [&_.avatar>div]:!h-24 [&_.avatar>div]:!w-24 sm:[&_.avatar>div]:!h-40 sm:[&_.avatar>div]:!w-40">
+          <%!-- The avatar is PhoenixKit's biggest, and overlaps the banner. On a phone it is drawn
+                smaller and the name goes under it, clear of the banner, rather than beside it. --%>
+          <div class="-mt-12 flex flex-col gap-y-2 px-4 pb-4 sm:-mt-16 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-4 sm:gap-y-3 sm:px-6">
+            <div class="w-24 shrink-0 rounded-full ring-4 ring-base-200 sm:w-40 [&_.avatar>div]:!h-24 [&_.avatar>div]:!w-24 sm:[&_.avatar>div]:!h-40 sm:[&_.avatar>div]:!w-40">
               <.user_avatar user={@user} size="xl" />
             </div>
-            <div class="min-w-0 flex-1 pb-1">
+            <div class="min-w-0 flex-1 pt-1 sm:pb-1 sm:pt-0">
               <h1 class="truncate text-2xl font-bold sm:text-3xl">{@user.username}</h1>
               <p :if={joined(@user)} class="text-sm text-base-content/60">On roki since {joined(@user)}</p>
             </div>
-            <button :if={@owner?} type="button" phx-click="edit" class="btn btn-sm basis-full sm:basis-auto">
+            <button :if={@owner?} type="button" phx-click="edit" class="btn btn-sm self-stretch sm:self-auto">
               <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit profile
             </button>
           </div>
