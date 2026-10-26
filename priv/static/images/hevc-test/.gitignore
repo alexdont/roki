@@ -1,7 +1,2 @@
 *.mp4
-hls/
-hlsB/
-hlsC/
-hlsD/
-hlsE/
-hlsF/
+hls*/
