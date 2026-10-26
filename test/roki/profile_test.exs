@@ -5,12 +5,11 @@ defmodule Roki.ProfileTest do
 
   @uuid "0199f7a1-0000-7000-8000-000000000001"
 
-  test "a profile starts private and empty, and keeps what its owner writes" do
-    assert %{public: false, bio: "", banner: nil, show_history: true} = Profile.get(@uuid)
+  test "a profile starts empty and open, and keeps what its owner writes" do
+    assert %{public: true, bio: "", banner: nil, show_history: true} = Profile.get(@uuid)
 
-    assert {:ok, p} = Profile.update(@uuid, %{"bio" => "  Films and anime.  ", "public" => "true", "show_ratings" => "false"})
-    assert %{bio: "Films and anime.", public: true, show_history: true, show_ratings: false} = p
-    assert Profile.get(@uuid).public
+    assert {:ok, p} = Profile.update(@uuid, %{"bio" => "  Films and anime.  "})
+    assert %{bio: "Films and anime.", public: true} = p
 
     assert {:error, msg} = Profile.update(@uuid, %{"bio" => String.duplicate("x", 601)})
     assert msg =~ "600"

@@ -19,36 +19,45 @@ defmodule RokiWeb.ProfileLiveTest do
     Plug.Test.init_test_session(build_conn(), %{user_token: token})
   end
 
-  test "a name nobody has, and a private profile, show nothing of the person", %{conn: conn} do
+  test "a name nobody has shows nothing; every profile is open to a visitor", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/nobody-here")
     assert html =~ "There is no one called"
 
     register("quietone")
-    {:ok, _view, html} = live(conn, "/quietone")
-    assert html =~ "This profile is private."
-    refute html =~ "Watched"
+    {:ok, view, html} = live(conn, "/quietone")
+    assert html =~ "quietone"
+    assert html =~ "written anything here yet"
+    # Empty shelves are the owner's to see, not a visitor's.
+    refute render_async(view) =~ "Top 10 Movies"
   end
 
-  test "the owner sees their private page with a note, and can open it to everyone", %{conn: conn} do
+  test "the owner writes the words where they go, and the rest from the banner's button", %{conn: conn} do
     user = register("ownerone")
     {:ok, view, html} = live(signed_in(user), "/ownerone")
-    assert html =~ "Only you can see this page"
+    assert html =~ "Press here to write it"
     assert html =~ "Edit profile"
 
-    view |> element("button", "Edit profile") |> render_click()
-    assert has_element?(view, "#profile-form")
-
-    view
-    |> form("#profile-form", profile: %{bio: "Mostly anime.", public: "true", show_history: "true", show_ratings: "true"})
-    |> render_submit()
-
+    # The placeholder becomes the place to write, Enter (the form) keeps it.
+    view |> element("button", "Say something about yourself") |> render_click()
+    assert has_element?(view, "form input[name=bio]")
+    view |> form("form[phx-submit=bio_save]", %{bio: "Mostly anime."}) |> render_submit()
     html = render(view)
     assert html =~ "Mostly anime."
-    refute html =~ "Only you can see this page"
+    refute html =~ "Press here to write it"
 
-    # Now a visitor sees it, words and all, and the watched page with its controls.
+    # Written, the words are no longer a button; the panel on the banner changes them.
+    refute has_element?(view, "button", "Mostly anime.")
+    view |> element("button", "Edit profile") |> render_click()
+    assert has_element?(view, "#profile-form")
+    assert has_element?(view, "#profile-form a", "Change picture")
+    refute has_element?(view, "#profile-form input[name='profile[public]']")
+
+    view |> form("#profile-form", profile: %{bio: "Mostly anime, some films."}) |> render_submit()
+    assert render(view) =~ "Mostly anime, some films."
+
+    # A visitor sees it all, and the watched page with its controls.
     {:ok, _view, html} = live(conn, "/ownerone")
-    assert html =~ "Mostly anime."
+    assert html =~ "Mostly anime, some films."
     assert html =~ "Watched →"
 
     {:ok, _view, html} = live(conn, "/ownerone/watched")
@@ -63,9 +72,9 @@ defmodule RokiWeb.ProfileLiveTest do
     assert html =~ "Top 10 Movies"
     assert html =~ "Nothing on this shelf yet"
 
-    # A visitor to a private profile sees nothing; to a public one, only shelves with something on them.
-    {:ok, _, html} = live(conn, "/shelfowner")
-    assert html =~ "This profile is private."
+    # A visitor sees only the shelves with something on them.
+    {:ok, visitor, _} = live(conn, "/shelfowner")
+    refute render_async(visitor) =~ "Top 10 Movies"
 
     assert {:ok, favs} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", 10_331}, "Easy A")
     assert [%{title: "Easy A", position: 1, badge: "#1"}] = favs.movie

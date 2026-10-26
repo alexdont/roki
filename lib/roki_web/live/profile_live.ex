@@ -4,9 +4,10 @@ defmodule RokiWeb.ProfileLive do
   top ten of each kind — films, shows, anime, manga — picked from what they watched, the way
   one shows a shelf. Everything they finished is a page of its own (`/:username/watched`).
 
-  Private until its owner opens it (the owner always sees it, with a note saying so).
-  Everything is `Roki.Profile`'s and read from this server; the owner edits in panels on the
-  page itself.
+  Open to everyone: the site is a handful of people who know each other. Everything is
+  `Roki.Profile`'s and read from this server; the owner edits on the page itself — the words
+  right where they go when there are none yet, the rest (picture, banner, words) from the
+  button on the banner.
   """
   use RokiWeb, :live_view
 
@@ -37,8 +38,9 @@ defmodule RokiWeb.ProfileLive do
           uuid: user.uuid,
           owner?: owner?,
           profile: profile,
-          visible?: profile.public or owner?,
+          visible?: true,
           editing?: false,
+          bio_editing?: false,
           error: nil,
           notice: nil,
           stats: nil,
@@ -77,6 +79,20 @@ defmodule RokiWeb.ProfileLive do
     do: {:noreply, assign(socket, editing?: not socket.assigns.editing?, error: nil)}
 
   def handle_event("cancel", _params, socket), do: {:noreply, assign(socket, editing?: false, error: nil)}
+
+  # The words, written right where they go — only while there are none; once written, the
+  # panel on the banner is where they change.
+  def handle_event("bio_edit", _params, %{assigns: %{owner?: true, profile: %{bio: ""}}} = socket),
+    do: {:noreply, assign(socket, bio_editing?: true, error: nil)}
+
+  def handle_event("bio_cancel", _params, socket), do: {:noreply, assign(socket, bio_editing?: false)}
+
+  def handle_event("bio_save", %{"bio" => bio}, %{assigns: %{owner?: true, uuid: uuid}} = socket) do
+    case Profile.update(uuid, %{"bio" => bio}) do
+      {:ok, profile} -> {:noreply, assign(socket, profile: profile, bio_editing?: false, error: nil)}
+      {:error, why} -> {:noreply, assign(socket, :error, why)}
+    end
+  end
 
   def handle_event("validate", _params, socket), do: {:noreply, socket}
 
@@ -234,17 +250,15 @@ defmodule RokiWeb.ProfileLive do
         There is no one called <strong>{@username}</strong> here.
       </p>
 
-      <div :if={@user != nil and not @visible?} class="space-y-2 py-24 text-center">
-        <h1 class="text-2xl font-bold">{@username}</h1>
-        <p class="text-base-content/60">This profile is private.</p>
-      </div>
-
       <div :if={@visible?} class="space-y-10">
         <section class="overflow-hidden rounded-box bg-base-200">
           <div
-            class={["h-40 w-full bg-cover bg-center sm:h-60", !@banner && "bg-gradient-to-r from-primary/40 via-base-300 to-secondary/40"]}
+            class={["relative h-40 w-full bg-cover bg-center sm:h-60", !@banner && "bg-gradient-to-r from-primary/40 via-base-300 to-secondary/40"]}
             style={@banner && "background-image: url('#{@banner}')"}
           >
+            <button :if={@owner?} type="button" phx-click="edit" class="btn btn-sm absolute right-3 top-3 shadow">
+              <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit profile
+            </button>
           </div>
           <%!-- The avatar is PhoenixKit's biggest, and overlaps the banner. On a phone it is drawn
                 smaller and the name goes under it, clear of the banner, rather than beside it. --%>
@@ -256,35 +270,43 @@ defmodule RokiWeb.ProfileLive do
               <h1 class="truncate text-2xl font-bold sm:text-3xl">{@user.username}</h1>
               <p :if={joined(@user)} class="text-sm text-base-content/60">On roki since {joined(@user)}</p>
             </div>
-            <button :if={@owner?} type="button" phx-click="edit" class="btn btn-sm self-stretch sm:self-auto">
-              <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit profile
-            </button>
           </div>
           <p :if={@profile.bio != ""} class="whitespace-pre-line px-4 pb-4 sm:px-6">{@profile.bio}</p>
-          <%!-- Nothing written yet: a place held for it, and for the owner a way to write it. --%>
-          <p :if={@profile.bio == "" and @owner?} class="px-4 pb-4 sm:px-6">
-            <button type="button" phx-click="edit" class="text-left italic text-base-content/50 hover:text-base-content">
+          <%!-- Nothing written yet: a place held for it; the owner presses it and writes there. --%>
+          <p :if={@profile.bio == "" and @owner? and not @bio_editing?} class="px-4 pb-4 sm:px-6">
+            <button type="button" phx-click="bio_edit" class="text-left italic text-base-content/50 hover:text-base-content">
               Say something about yourself — a few words, a favourite quote, what you are into. Press here to write it.
             </button>
           </p>
+          <form :if={@bio_editing?} phx-submit="bio_save" class="flex flex-wrap items-center gap-2 px-4 pb-4 sm:px-6">
+            <input
+              type="text"
+              name="bio"
+              maxlength="600"
+              autofocus
+              autocomplete="off"
+              placeholder="A few words, a favourite quote, what you are into…"
+              class="input input-bordered min-w-0 flex-1"
+              phx-key="Escape"
+              phx-keydown="bio_cancel"
+            />
+            <button type="submit" class="btn btn-primary">Done</button>
+            <button type="button" phx-click="bio_cancel" class="btn btn-ghost">Cancel</button>
+          </form>
           <p :if={@profile.bio == "" and not @owner?} class="px-4 pb-4 italic text-base-content/40 sm:px-6">
             {@username} hasn't written anything here yet.
           </p>
+          <p :if={@error != nil and not @editing?} class="px-4 pb-4 text-sm text-error sm:px-6">{@error}</p>
 
           <%!-- The numbers, as the thing they are: big, with a word under each. --%>
           <div class="grid grid-cols-2 gap-px overflow-hidden border-t border-base-300 bg-base-300 sm:grid-cols-4">
             <.link
-              :if={@owner? or @profile.show_history}
               navigate={"/#{@username}/watched"}
               class="group bg-base-200 px-4 py-4 transition hover:bg-base-100 sm:px-6"
             >
               <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{if @watched, do: thousands(@watched), else: "…"}</div>
               <div class="text-xs font-medium uppercase tracking-wide text-base-content/60 group-hover:text-primary">Watched →</div>
             </.link>
-            <div :if={not (@owner? or @profile.show_history)} class="bg-base-200 px-4 py-4 sm:px-6">
-              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{if @watched, do: thousands(@watched), else: "…"}</div>
-              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Watched</div>
-            </div>
             <div class="bg-base-200 px-4 py-4 sm:px-6">
               <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{stat(@stats, :films)}</div>
               <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Films</div>
@@ -298,14 +320,10 @@ defmodule RokiWeb.ProfileLive do
               <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Hours watched</div>
             </div>
           </div>
-          <p :if={@owner? and not @profile.public} class="mx-4 my-4 alert text-sm sm:mx-6">
-            <.icon name="hero-lock-closed" class="h-4 w-4" />
-            <span>Only you can see this page. Make it public under <b>Edit profile</b> to share it.</span>
-          </p>
-          <p :if={@notice} class="mx-4 mb-4 text-sm text-success sm:mx-6">{@notice}</p>
+          <p :if={@notice} class="mx-4 my-4 text-sm text-success sm:mx-6">{@notice}</p>
         </section>
 
-        <.edit_panel :if={@owner? and @editing?} profile={@profile} uploads={@uploads} error={@error} banner={@banner} />
+        <.edit_panel :if={@owner? and @editing?} profile={@profile} uploads={@uploads} error={@error} banner={@banner} user={@user} />
 
         <%!-- The shelves: a visitor sees the ones with something on them. --%>
         <section :for={{kind, label} <- Profile.shelves()} :if={@favorites == nil or @owner? or (@favorites[kind] || []) != []} class="space-y-3">
@@ -392,12 +410,22 @@ defmodule RokiWeb.ProfileLive do
   attr :uploads, :any, required: true
   attr :error, :string, default: nil
   attr :banner, :string, default: nil
+  attr :user, :map, required: true
 
-  # The owner's panel: the words, the banner, and what is shown to others.
+  # The owner's panel: the picture (PhoenixKit's own page changes it), the banner, the words.
   defp edit_panel(assigns) do
     ~H"""
     <form id="profile-form" phx-submit="save" phx-change="validate" class="card space-y-4 bg-base-200 p-5">
       <h2 class="text-lg font-semibold">Edit profile</h2>
+
+      <div class="flex flex-wrap items-center gap-4">
+        <.user_avatar user={@user} size="lg" />
+        <div class="space-y-1">
+          <span class="font-medium">Profile picture</span>
+          <p class="text-sm text-base-content/60">Changed on your account page, which also has your name and password.</p>
+        </div>
+        <a href={PhoenixKit.Utils.Routes.user_settings_path()} class="btn btn-sm sm:ml-auto">Change picture</a>
+      </div>
 
       <label class="form-control w-full">
         <span class="label-text mb-1 font-medium">About you</span>
@@ -420,18 +448,6 @@ defmodule RokiWeb.ProfileLive do
           <p :for={err <- upload_errors(@uploads.banner, entry)} class="text-error">{upload_error(err)}</p>
         </div>
         <p :for={err <- upload_errors(@uploads.banner)} class="text-sm text-error">{upload_error(err)}</p>
-      </div>
-
-      <div class="space-y-2">
-        <label :for={{key, label, hint} <- [
-          {:public, "Public profile", "anyone with the link can see this page"},
-          {:show_history, "Show what I watched", "the watched page, newest first"},
-          {:show_ratings, "Show my ratings", "the stars, and the by-rating order"}
-        ]} class="flex cursor-pointer items-start gap-3">
-          <input type="hidden" name={"profile[#{key}]"} value="false" />
-          <input type="checkbox" name={"profile[#{key}]"} value="true" checked={Map.get(@profile, key)} class="checkbox mt-0.5" />
-          <span class="text-sm"><span class="font-medium">{label}</span> <span class="text-base-content/60">— {hint}</span></span>
-        </label>
       </div>
 
       <p :if={@error} class="alert alert-error text-sm">{@error}</p>

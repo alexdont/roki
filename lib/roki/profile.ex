@@ -3,8 +3,8 @@ defmodule Roki.Profile do
   A user's public page (`/:username`): a banner and a few words of their own, and what they
   have watched — newest first, or by their own ratings, so the ten-out-of-tens can be shown.
 
-  The page is private until its owner opens it, and the owner chooses whether the history and
-  the ratings are on it. The history is laev's list of finished titles, read in the owner's
+  Every profile is open — the site is a handful of people who know each other — so the privacy
+  switches the table still has are not consulted. The history is laev's list of finished titles, read in the owner's
   scope and remembered for a few minutes; the ratings are copied into the site's own table from
   TMDB (the owner's TMDB account) and MyAnimeList (their list) now and then, and kept up to date
   by the ratings made here, so a visitor's view never needs the owner's keys.
@@ -43,19 +43,19 @@ defmodule Roki.Profile do
            "select bio, banner, public, show_history, show_ratings, ratings_synced_at from roki_profiles where user_uuid = $1",
            [bin]
          ) do
-      %{rows: [[bio, banner, public, history, ratings, synced]]} ->
+      %{rows: [[bio, banner, _public, _history, _ratings, synced]]} ->
         %{
           user_uuid: uuid,
           bio: bio || "",
           banner: banner,
-          public: public,
-          show_history: history,
-          show_ratings: ratings,
+          public: true,
+          show_history: true,
+          show_ratings: true,
           ratings_synced_at: synced
         }
 
       _ ->
-        Map.put(@defaults, :user_uuid, uuid)
+        @defaults |> Map.merge(%{public: true, show_history: true, show_ratings: true}) |> Map.put(:user_uuid, uuid)
     end
   end
 

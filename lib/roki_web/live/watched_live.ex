@@ -1,9 +1,8 @@
 defmodule RokiWeb.WatchedLive do
   @moduledoc """
   `/:username/watched` — everything a user finished, newest first or by their own ratings
-  (`?sort=top`, `?kind=anime`, `?tens=1` for the ten-out-of-tens), with the same privacy as
-  the profile it belongs to: private until the owner opens the profile, and the owner may keep
-  the history or the ratings off it. Everything is read from this server (`Roki.Profile`).
+  (`?sort=top`, `?kind=anime`, `?tens=1` for the ten-out-of-tens), open to everyone, like the
+  profile. Everything is read from this server (`Roki.Profile`).
   """
   use RokiWeb, :live_view
 
@@ -26,7 +25,7 @@ defmodule RokiWeb.WatchedLive do
     else
       profile = Profile.get(user.uuid)
       owner? = viewer == user.uuid
-      visible? = (profile.public or owner?) and (profile.show_history or owner?)
+      visible? = true
 
       socket =
         assign(socket,
@@ -115,14 +114,6 @@ defmodule RokiWeb.WatchedLive do
       <p :if={@user == nil} class="py-24 text-center text-base-content/60">
         There is no one called <strong>{@username}</strong> here.
       </p>
-
-      <div :if={@user != nil and not @visible?} class="space-y-2 py-24 text-center">
-        <h1 class="text-2xl font-bold">{@username}</h1>
-        <p class="text-base-content/60">
-          {if @profile.public, do: "#{@username} keeps their watch history to themselves.", else: "This profile is private."}
-        </p>
-        <.link navigate={"/#{@username}"} class="link text-sm">Back to the profile</.link>
-      </div>
 
       <div :if={@visible?} class="space-y-6">
         <div class="flex flex-wrap items-center gap-3">
