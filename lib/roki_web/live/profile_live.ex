@@ -450,7 +450,7 @@ defmodule RokiWeb.ProfileLive do
               </label>
               <p class="text-sm text-base-content/60">
                 {if Profile.ranked?(@profile, kind),
-                  do: "The numbers show: the order matters. Drag a poster by its grip to reorder.",
+                  do: "The numbers show: the order matters. Drag a poster to reorder.",
                   else: "Just your favourites, none above another. Drag to arrange them as you like."}
                 × takes one off; an empty place adds more.
               </p>
@@ -460,33 +460,29 @@ defmodule RokiWeb.ProfileLive do
               phx-hook="SortableGrid"
               data-sortable-event="shelf_reorder"
               data-sortable-scope-kind={kind}
-              data-sortable-handle=".pk-drag-handle"
-              class="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-10"
+              class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
             >
               <li
                 :for={i <- @favorites[kind]}
                 id={"fav-#{kind}-#{i.type || "mal"}-#{i.id || i.mal_id}"}
                 data-id={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                class="sortable-item space-y-1"
+                class="sortable-item cursor-grab touch-none select-none space-y-1 active:cursor-grabbing"
               >
                 <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
                   <img :if={i.poster} src={Roki.Images.local(i.poster)} alt={i.title} class="h-full w-full object-cover" draggable="false" />
                   <span :if={!i.poster} class="flex h-full items-center justify-center p-2 text-center text-xs">{i.title}</span>
-                  <span :if={Profile.ranked?(@profile, kind)} class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow">#{i.position}</span>
+                  <span :if={Profile.ranked?(@profile, kind)} class="badge badge-primary badge-xs absolute bottom-1 right-1 shadow sm:badge-sm sm:bottom-auto sm:right-1.5 sm:top-1.5">#{i.position}</span>
                   <button
                     type="button"
                     phx-click="shelf_remove"
                     phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                    class="btn btn-circle btn-xs btn-error absolute left-1.5 top-1.5 shadow"
+                    class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-5 min-h-0 w-5 p-0 shadow sm:left-1.5 sm:top-1.5 sm:h-6 sm:w-6"
                     aria-label={"Take #{i.title} off the shelf"}
                   >
                     <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
                   </button>
-                  <div class="pk-drag-handle absolute inset-x-0 bottom-0 flex cursor-grab items-center justify-center gap-1 bg-black/65 py-2 text-xs font-medium text-white active:cursor-grabbing" title="Drag to reorder">
-                    <.icon name="hero-arrows-up-down-micro" class="h-3.5 w-3.5 rotate-90" /> drag
-                  </div>
                 </div>
-                <div class="truncate text-xs">{i.title}</div>
+                <div class="hidden truncate text-xs sm:block">{i.title}</div>
               </li>
               <li
                 :for={_ <- 1..places_left(@favorites, kind)//1}
@@ -498,8 +494,8 @@ defmodule RokiWeb.ProfileLive do
                   phx-value-kind={kind}
                   class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-1 rounded-box border-2 border-dashed border-primary/50 text-primary transition hover:border-primary hover:bg-primary/10"
                 >
-                  <.icon name="hero-plus" class="h-6 w-6" />
-                  <span class="text-xs font-medium">Add</span>
+                  <.icon name="hero-plus" class="h-5 w-5 sm:h-6 sm:w-6" />
+                  <span class="hidden text-xs font-medium sm:block">Add</span>
                 </button>
               </li>
             </ul>

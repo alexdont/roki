@@ -138,7 +138,9 @@ defmodule RokiWeb.ProfileLiveTest do
     refute render(view) =~ "Add to your favorite movies"
     assert has_element?(view, "li.sortable-item[data-id='movie:1']")
     assert has_element?(view, "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
-    assert has_element?(view, "li.sortable-item .pk-drag-handle")
+    # The whole poster is what is dragged: no handle, no strip.
+    refute has_element?(view, "li.sortable-item .pk-drag-handle")
+    refute has_element?(view, "ul#shelf-movie[data-sortable-handle]")
 
     # Unranked by default: no numbers on the shelf until the owner turns them on.
     refute has_element?(view, "li.sortable-item .badge-primary")
