@@ -528,6 +528,8 @@ defmodule Roki.Watch do
       title: title.title,
       poster_path: title.poster_path,
       year: title.year,
+      # The title's original language (TMDB), the audio to start with when the account's is absent.
+      language: title[:language],
       anime: title.anime? and not is_nil(mal),
       search_title: mal && Laev.Anime.title(mal),
       mal_id: mal
@@ -1173,6 +1175,7 @@ defmodule Roki.Watch do
         save_resume(ctx, source)
         remember_remux(uuid, src)
         remember_info(uuid, ctx, source, src)
+        Roki.Direct.remember_title(src[:remux_id], ctx)
 
         {:ok,
          %{

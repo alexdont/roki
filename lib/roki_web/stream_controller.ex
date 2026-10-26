@@ -35,11 +35,11 @@ defmodule RokiWeb.StreamController do
   defp serve(conn, id, "playlist.m3u8" = file) do
     cond do
       Roki.Direct.direct?(id) ->
-        playlist(conn, Roki.Direct.playlist(id, prefer(conn)))
+        playlist(conn, Roki.Direct.playlist(id, prefer(conn, id)))
 
       Laev.Remux.entry_playlist(id) == "master.m3u8" ->
         case File.read(Path.join(Laev.Remux.dir(id), "master.m3u8")) do
-          {:ok, content} -> playlist(conn, Roki.Direct.tidy_master(content, prefer(conn)))
+          {:ok, content} -> playlist(conn, Roki.Direct.tidy_master(content, prefer(conn, id)))
           _ -> send_resp(conn, 404, "not ready")
         end
 
@@ -68,8 +68,11 @@ defmodule RokiWeb.StreamController do
     |> send_resp(200, content)
   end
 
-  # The account's language (laev's setting), the audio track to start with when there is one.
-  defp prefer(conn) do
+  # The audio to start with, in order: the account's language (laev's setting), then the title's
+  # original language, when the release has either.
+  defp prefer(conn, id), do: [account_language(conn), Roki.Direct.original_language(id)]
+
+  defp account_language(conn) do
     case conn.assigns[:phoenix_kit_current_user] do
       %{uuid: uuid} when is_binary(uuid) -> Roki.Laev.run(uuid, fn -> Laev.Config.lang() end)
       _ -> nil

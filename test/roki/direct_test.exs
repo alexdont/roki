@@ -26,6 +26,9 @@ defmodule Roki.DirectTest do
 
     # A language the release lacks leaves the first track the default.
     assert Roki.Direct.master_playlist(tracks, 1_000_000, "en") =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
+    # Preferences in order: the account's language first, then the title's own.
+    assert Roki.Direct.master_playlist(tracks, 1_000_000, ["en", "ko"]) =~ ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES)
+    assert Roki.Direct.master_playlist(tracks, 1_000_000, ["ru", "ko"]) =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
   end
 
   test "laev's master is cut to one rendition per file, named by language" do

@@ -157,6 +157,29 @@ defmodule Roki.Direct do
 
   defp multi?(id), do: length(tracks(id)) > 1
 
+  @doc """
+  Keep what the playlist needs to know of the title beside a conversion (laev's or this one's):
+  its original language, the audio to start with when the account's language is not there.
+  """
+  def remember_title(id, ctx) when is_binary(id) do
+    dir = dir(id)
+    File.mkdir_p(dir)
+    File.write(Path.join(dir, "title.json"), Jason.encode!(%{language: ctx[:language]}))
+    :ok
+  end
+
+  def remember_title(_id, _ctx), do: :ok
+
+  @doc "The title's original language (`\"ko\"`) as remembered at the start, or nil."
+  def original_language(id) do
+    with {:ok, json} <- File.read(file(id, "title.json")),
+         {:ok, %{"language" => lang}} when is_binary(lang) and lang != "" <- Jason.decode(json) do
+      lang
+    else
+      _ -> nil
+    end
+  end
+
   defp running?(id), do: Registry.lookup(@registry, id) != []
   defp done?(id), do: File.exists?(Path.join(dir(id), "done"))
 
@@ -197,8 +220,8 @@ defmodule Roki.Direct do
 
   @doc """
   What the player loads: the media playlist of `media.mp4` when the audio is in it, else a
-  master playlist with the video and one rendition per audio track, the one in `prefer`
-  (the account's language, as `"ko"`) the default when there is one.
+  master playlist with the video and one rendition per audio track, the first of `prefer`
+  (languages in order of preference, as `["en", "ko"]`) the release has as the default.
   """
   def playlist(id, prefer \\ nil) do
     if multi?(id),
@@ -208,8 +231,8 @@ defmodule Roki.Direct do
 
   @doc """
   The master playlist of a multi-audio conversion: every track as a switchable rendition of
-  one group. The default is the first track in the preferred language, else the first track
-  (the player remembers the one picked and switches to it). Without a CODECS attribute on
+  one group. The default is the first track in the first preferred language the release has,
+  else the first track (the player remembers the one picked and switches to it). Without a CODECS attribute on
   purpose — hls.js on Firefox stops at the HEVC string.
   """
   def master_playlist(tracks, bandwidth, prefer \\ nil) do
@@ -233,15 +256,14 @@ defmodule Roki.Direct do
     ) <> "\n"
   end
 
-  # The index of the first track in the preferred language, else 0.
+  # The index of the first track in the first preferred language the release has, else 0.
   defp default_track(tracks, prefer) do
-    with p when is_binary(p) and p != "" <- prefer,
-         i when is_integer(i) <-
-           Enum.find_index(tracks, &(&1.lang != "" and Roki.Watch.short_code(&1.lang) == p)) do
-      i
-    else
-      _ -> 0
-    end
+    prefer
+    |> List.wrap()
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.find_value(0, fn p ->
+      Enum.find_index(tracks, &(&1.lang != "" and Roki.Watch.short_code(&1.lang) == p))
+    end)
   end
 
   @doc """
