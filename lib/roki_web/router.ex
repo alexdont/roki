@@ -38,6 +38,8 @@ defmodule RokiWeb.Router do
     get "/account/services", AccountController, :services
     # Where MyAnimeList sends people back after they approve the site's app.
     get "/mal/callback", MalController, :callback
+    # A profile's banner (Roki.Profile).
+    get "/banners/:file", BannerController, :show
   end
 
   scope "/", RokiWeb do
@@ -79,6 +81,8 @@ defmodule RokiWeb.Router do
       live "/:username/stats", StatsLive, :index
       live "/:username/calendar", CalendarLive, :index
       live "/:username/settings", SettingsLive, :index
+      # The public profile. Last: a name is anything, so every fixed address goes before it.
+      live "/:username", ProfileLive, :show
     end
   end
 

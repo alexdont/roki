@@ -139,6 +139,12 @@ defmodule RokiWeb.Layouts do
           />
           <template data-role="menu-extras">
             <li :if={@username} data-menu-extras>
+              <.link navigate={~p"/#{@username}"} class="flex items-center gap-3">
+                <.icon name="hero-user-circle" class="h-4 w-4" />
+                <span>My profile</span>
+              </.link>
+            </li>
+            <li :if={@username} data-menu-extras>
               <.link navigate={~p"/#{@username}/settings"} class="flex items-center gap-3">
                 <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
                 <span>Playback & services</span>

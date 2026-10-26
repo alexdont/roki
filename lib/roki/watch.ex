@@ -325,14 +325,22 @@ defmodule Roki.Watch do
           score = value |> round() |> max(1) |> min(10)
 
           case Laev.MAL.rate(mal, score) do
-            :ok -> {:ok, score * 1.0}
-            other -> {:error, other}
+            :ok ->
+              Roki.Profile.note_rating(uuid, {"mal", mal}, score)
+              {:ok, score * 1.0}
+
+            other ->
+              {:error, other}
           end
 
         :tmdb ->
-          if title.type == "movie",
-            do: Laev.Tmdb.rate_movie(title.id, value),
-            else: Laev.Tmdb.rate_tv(title.id, value)
+          result =
+            if title.type == "movie",
+              do: Laev.Tmdb.rate_movie(title.id, value),
+              else: Laev.Tmdb.rate_tv(title.id, value)
+
+          with {:ok, rating} <- result, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
+          result
       end
     end)
   end
@@ -343,14 +351,22 @@ defmodule Roki.Watch do
       case rating_target(title, entry) do
         {:mal, mal} ->
           case Laev.MAL.rate(mal, 0) do
-            :ok -> :ok
-            other -> {:error, other}
+            :ok ->
+              Roki.Profile.note_rating(uuid, {"mal", mal}, nil)
+              :ok
+
+            other ->
+              {:error, other}
           end
 
         :tmdb ->
-          if title.type == "movie",
-            do: Laev.Tmdb.clear_movie_rating(title.id),
-            else: Laev.Tmdb.clear_tv_rating(title.id)
+          result =
+            if title.type == "movie",
+              do: Laev.Tmdb.clear_movie_rating(title.id),
+              else: Laev.Tmdb.clear_tv_rating(title.id)
+
+          if result == :ok, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, nil)
+          result
       end
     end)
   end
