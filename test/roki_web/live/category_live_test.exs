@@ -23,13 +23,15 @@ defmodule RokiWeb.CategoryLiveTest do
     html = render_async(view, 3000)
 
     assert html =~ "Title 1<" or html =~ "Title 1\""
-    assert html =~ "Load more"
     refute html =~ "Title 21"
+    # No button: the end of the list asks for the next page as it comes into view.
+    refute html =~ "Load more"
+    assert has_element?(view, "#grid-more[phx-hook=InfiniteScroll][data-active=true]")
 
-    view |> element("button", "Load more") |> render_click()
+    render_hook(view, "more", %{})
     html = render_async(view, 3000)
     assert html =~ "Title 21"
-    refute html =~ "Load more"
+    refute has_element?(view, "#grid-more")
   end
 
   test "the order and the grid size are controls at the top", %{conn: conn} do

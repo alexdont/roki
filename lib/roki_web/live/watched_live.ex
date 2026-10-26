@@ -234,7 +234,9 @@ defmodule RokiWeb.WatchedLive do
       </p>
 
       <div :if={@visible?} class={["space-y-6", @select? && "pb-28"]}>
-        <div class="flex items-center gap-3">
+        <%!-- The title row stays at the top of the screen while the list scrolls, so Select is
+              always within reach. --%>
+        <div class="sticky top-0 z-30 -mx-4 flex items-center gap-3 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <.link navigate={"/#{@username}"} class="flex min-w-0 items-center gap-2 text-base-content/70 hover:text-base-content">
             <.user_avatar user={@user} size="md" />
             <span class="hidden truncate font-semibold sm:inline">{@user.username}</span>
@@ -275,35 +277,33 @@ defmodule RokiWeb.WatchedLive do
           </div>
         </div>
 
-        <%!-- The filters: one line that swipes sideways on a phone, wraps on a wide screen. --%>
-        <div class="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-          <div class="flex w-max items-center gap-2 sm:w-auto sm:flex-wrap">
-            <div class="join shrink-0">
-              <.link
-                :for={{s, label} <- [latest: "Latest", top: "By rating"]}
-                patch={address(assigns, sort: s)}
-                class={["btn btn-sm join-item whitespace-nowrap", @sort == s && "btn-primary"]}
-              >
-                {label}
-              </.link>
-            </div>
-            <div class="join shrink-0">
-              <.link
-                :for={{k, label} <- Profile.kinds()}
-                patch={address(assigns, kind: k)}
-                class={["btn btn-sm join-item whitespace-nowrap", @kind == k && "btn-primary"]}
-              >
-                {label}
-              </.link>
-            </div>
+        <%!-- The filters: one line on a phone (short labels, snug buttons), roomier on a wide screen. --%>
+        <div class="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
+          <div class="join shrink-0">
             <.link
-              :if={@owner? or @profile.show_ratings}
-              patch={address(assigns, sort: :top, tens: not @tens?)}
-              class={["btn btn-sm shrink-0 whitespace-nowrap", @tens? && "btn-primary"]}
+              :for={{s, short, long} <- [{:latest, "Latest", "Latest"}, {:top, "Rating", "By rating"}]}
+              patch={address(assigns, sort: s)}
+              class={["btn btn-sm join-item whitespace-nowrap px-[1.3vw] text-[length:clamp(0.65rem,3.1vw,0.875rem)] sm:px-3 sm:text-sm", @sort == s && "btn-primary"]}
             >
-              ★ 10 only
+              <span class="sm:hidden">{short}</span><span class="hidden sm:inline">{long}</span>
             </.link>
           </div>
+          <div class="join shrink-0">
+            <.link
+              :for={{k, label} <- Profile.kinds()}
+              patch={address(assigns, kind: k)}
+              class={["btn btn-sm join-item whitespace-nowrap px-[1.3vw] text-[length:clamp(0.65rem,3.1vw,0.875rem)] sm:px-3 sm:text-sm", @kind == k && "btn-primary"]}
+            >
+              {label}
+            </.link>
+          </div>
+          <.link
+            :if={@owner? or @profile.show_ratings}
+            patch={address(assigns, sort: :top, tens: not @tens?)}
+            class={["btn btn-sm shrink-0 whitespace-nowrap px-[1.3vw] text-[length:clamp(0.65rem,3.1vw,0.875rem)] sm:px-3 sm:text-sm", @tens? && "btn-primary"]}
+          >
+            ★ 10<span class="hidden sm:inline"> only</span>
+          </.link>
         </div>
 
         <ul :if={@history == nil} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
@@ -359,9 +359,17 @@ defmodule RokiWeb.WatchedLive do
           </ul>
         </div>
 
-        <button :if={length(@items) > @shown} phx-click="more" class="btn btn-ghost btn-sm">
-          Show {min(length(@items) - @shown, @page)} more
-        </button>
+        <%!-- The end of the list: the next sixty are shown as it comes into view. --%>
+        <div
+          :if={length(@items) > @shown}
+          id="watched-more"
+          phx-hook="InfiniteScroll"
+          data-event="more"
+          data-active="true"
+          class="flex min-h-16 items-center justify-center"
+        >
+          <span class="loading loading-spinner loading-md text-base-content/50"></span>
+        </div>
       </div>
 
       <%!-- Select mode's bar: how many and which, then what to do with them. Two lines on a

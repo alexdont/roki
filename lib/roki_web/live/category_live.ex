@@ -3,7 +3,8 @@ defmodule RokiWeb.CategoryLive do
   `/movies`, `/shows`, `/anime` — one kind of title on a page of its own, in a grid with
   larger posters. Popular (what Featured shows) by default, or newest, oldest, top rated;
   the grid size is a choice at the top right, remembered in the browser. "Load more" adds a
-  page at the bottom — the Featured page stays short because this is where "more" lives.
+  page as the end of the list comes into view — the Featured page stays short because this is
+  where "more" lives.
 
   Anime can also be listed by season (`?season=fall&year=2026`) and in the order of Anime
   Corner's weekly poll (`?sort=corner&week=3`, the latest week without one): the season's
@@ -421,10 +422,16 @@ defmodule RokiWeb.CategoryLive do
         </li>
       </ul>
 
-      <div :if={@items != [] and (@more? or @loading?)} class="flex justify-center pt-4">
-        <button phx-click="more" class="btn btn-wide" disabled={@loading?}>
-          <span :if={@loading?} class="loading loading-spinner loading-sm"></span> Load more
-        </button>
+      <%!-- The end of the list: the next page is asked for as it comes into view. --%>
+      <div
+        :if={@items != [] and (@more? or @loading?)}
+        id="grid-more"
+        phx-hook="InfiniteScroll"
+        data-event="more"
+        data-active={to_string(@more? and not @loading?)}
+        class="flex min-h-16 items-center justify-center pt-4"
+      >
+        <span :if={@loading?} class="loading loading-spinner loading-md text-base-content/50"></span>
       </div>
 
       <p

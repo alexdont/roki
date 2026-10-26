@@ -76,7 +76,7 @@ defmodule RokiWeb.Layouts do
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
             <.icon name="hero-play-solid" class="h-4 w-4" />
           </span>
-          roki
+          <span class="hidden min-[340px]:inline">roki</span>
         </a>
 
         <nav class="hidden items-stretch md:flex" aria-label="Sections">
@@ -398,7 +398,7 @@ defmodule RokiWeb.Layouts do
       aria-label={@label}
       title={@label}
       class={[
-        "flex items-center border-b-2 px-3 transition hover:bg-base-200",
+        "flex items-center border-b-2 px-2 transition hover:bg-base-200 min-[380px]:px-3",
         if(@active,
           do: "border-primary text-primary",
           else: "border-transparent text-base-content/70 hover:text-base-content"
