@@ -43,6 +43,8 @@ defmodule Roki.Watch.Resolver do
     light? = light?(mode, uuid, heavy_ok?)
     cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours) |> lighten(light?, caps)
 
+    size_cap = if mode == :browser, do: Watch.size_cap(web)
+
     with :ok <- Watch.subscription(uuid),
          ctx = Watch.ctx(uuid, title, season, episode),
          cap = Watch.ceiling(uuid, ctx, mode, web, caps),
@@ -63,7 +65,8 @@ defmodule Roki.Watch.Resolver do
                force?,
                quick?,
                light?,
-               caps
+               caps,
+               size_cap
              )
            end) do
       {:ok, res}
@@ -138,7 +141,8 @@ defmodule Roki.Watch.Resolver do
          force?,
          quick?,
          light?,
-         caps
+         caps,
+         size_cap
        ) do
     send(parent, {:status, token, "Searching for releases…"})
     Roki.Keys.record(uuid, :search)
@@ -148,6 +152,7 @@ defmodule Roki.Watch.Resolver do
          sources =
            Watch.with_library(uuid, query, found) |> in_study_order(uuid) |> prioritise(ctx),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
+         {:ok, sources} <- Watch.within_size(sources, size_cap),
          {:ok, sources} <- only_light(sources, light?, caps),
          {:ok, playable, rest} <-
            probe_until_playable(parent, token, uuid, ctx, sources, [], quick?, light?, caps) do
@@ -585,6 +590,13 @@ defmodule Roki.Watch.Resolver do
   def failure({:above_ceiling, n, cap}),
     do:
       "Nothing at #{label(cap)} or below — #{n} found above it. (Settings → only list sources within the ceiling.)"
+
+  def failure({:too_big, n, gb}),
+    do:
+      "Every release found (#{n}) is above the #{gb} GB limit for the browser player. (Settings → size limit, or use the external player.)"
+
+  def failure({:too_big_one, size, gb}),
+    do: "That release is #{size} GB — above the #{gb} GB limit for the browser player. (Settings → size limit, or use the external player.)"
 
   def failure(:too_heavy),
     do:

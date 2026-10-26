@@ -36,10 +36,13 @@ defmodule RokiWeb.SettingsLive do
     "external_app" =>
       "What Play opens when this device uses an external player. It starts by itself; if your device asks, allow it. The download option gives you an .m3u file to open yourself.",
     "browser_max_resolution" =>
-      "For the browser player. 4K plays where the browser decodes the release's video itself (HEVC on Apple devices and most recent PCs); any other browser stays at 1080p, since more would mean the server re-encoding the release."
+      "For the browser player. 4K plays where the browser decodes the release's video itself (HEVC on Apple devices and most recent PCs); any other browser stays at 1080p, since more would mean the server re-encoding the release.",
+    "browser_max_size" =>
+      "For the browser player: a release larger than this is left out of the list. Each play is downloaded whole into the server's cache for a few hours, so a 90 GB remux picked by accident costs real disk. The external player has no such limit."
   }
   @web_labels %{
     "browser_max_resolution" => "Resolution ceiling — browser player",
+    "browser_max_size" => "Size limit — browser player",
     "external_app" => "External player app",
     "sources_cache" => "Keep found sources"
   }
@@ -762,7 +765,7 @@ defmodule RokiWeb.SettingsLive do
 
   # The site's browser cap sits right under laev's ceiling.
   defp web_rows_after("LAEV_MAX_RESOLUTION", specs),
-    do: Enum.filter(specs, &(elem(&1, 0) == "browser_max_resolution"))
+    do: Enum.filter(specs, &(elem(&1, 0) in ["browser_max_resolution", "browser_max_size"])) |> Enum.sort()
 
   defp web_rows_after(_key, _specs), do: []
 

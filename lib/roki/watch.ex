@@ -857,6 +857,31 @@ defmodule Roki.Watch do
     cap_to(setting, device)
   end
 
+  @doc """
+  The largest release the browser player takes, in bytes (`nil` is no limit): the account's
+  setting, 40 GB unless changed. Every browser play is downloaded whole into the server's cache.
+  """
+  def size_cap(web) do
+    case web["browser_max_size"] do
+      "off" -> nil
+      gb when is_binary(gb) -> String.to_integer(gb) * 1_073_741_824
+      _ -> 40 * 1_073_741_824
+    end
+  end
+
+  @doc """
+  The releases not above the size cap (one of unknown size is kept): `{:ok, kept}`, or
+  `{:error, {:too_big, n, gb}}` when the cap leaves nothing of a list that had something.
+  """
+  def within_size(sources, nil), do: {:ok, sources}
+
+  def within_size(sources, cap) do
+    case Enum.reject(sources, &(is_integer(&1[:size]) and &1.size > cap)) do
+      [] when sources != [] -> {:error, {:too_big, length(sources), div(cap, 1_073_741_824)}}
+      kept -> {:ok, kept}
+    end
+  end
+
   @doc "The lower of a ceiling and a limit (`nil` is no ceiling)."
   def cap_to(nil, limit), do: limit
   def cap_to(cap, limit), do: if(Sources.resolution_at_most?(limit, cap), do: limit, else: cap)
@@ -1005,6 +1030,7 @@ defmodule Roki.Watch do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
     # A video the browser decodes itself (`caps`) is only copied, and takes no encoder slot.
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+         :ok <- small_enough(uuid, source),
          :ok <- light_enough(uuid, source, stream, caps),
          :ok <- release_previous(uuid),
          :ok <- if(Roki.Direct.wanted?(source, caps), do: :ok, else: allowed(source)) do
@@ -1019,6 +1045,15 @@ defmodule Roki.Watch do
   codec the browser said it decodes (`caps`). Only a heavy release costs the server a re-encode.
   """
   def heavy?(source, caps), do: heavy?(source) and not Roki.Direct.wanted?(source, caps)
+
+  # A release above the account's size limit never starts in the browser, whatever list it came from.
+  defp small_enough(uuid, source) do
+    cap = size_cap(Roki.Laev.web_settings(uuid))
+
+    if cap && is_integer(source[:size]) && source.size > cap,
+      do: {:error, {:too_big_one, Float.round(source.size / 1_073_741_824, 1), div(cap, 1_073_741_824)}},
+      else: :ok
+  end
 
   # Without the heavy permission only a video the browser can take as it is (or have copied) plays: the
   # name says so for most releases; one that does not is read from the file itself.

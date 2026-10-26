@@ -360,6 +360,13 @@ defmodule Roki.Laev do
       allowed: ~w(480p 720p 1080p 2160p),
       labels: %{"2160p" => "4K"}
     },
+    # The largest release the browser player takes: each play is downloaded whole into the
+    # server's cache (`Roki.Watch.size_cap/1`), so a 90 GB remux picked by accident costs real disk.
+    "browser_max_size" => %{
+      default: "40",
+      allowed: ~w(10 20 40 80 off),
+      labels: %{"10" => "10 GB", "20" => "20 GB", "40" => "40 GB", "80" => "80 GB", "off" => "No limit"}
+    },
     # How long found sources are kept so the next Play skips the search.
     "sources_cache" => %{
       default: "12",

@@ -1415,7 +1415,7 @@ export const StudySidebar = {
     if (this.el.dataset.immersive !== "true") return
     const head = document.createElement("div")
     head.className = "study-label"
-    head.textContent = "Find it in another language"
+    head.textContent = "Other languages — finds another release"
     box.appendChild(head)
     for (const [code, name] of AUDIO_LANGS) {
       const row = document.createElement("button")

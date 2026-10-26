@@ -52,6 +52,22 @@ defmodule Roki.WatchTest do
     assert Watch.browser_limit(%{"browser_max_resolution" => "1080p"}, %{uhd: true}) == "1080p"
   end
 
+  test "the browser size limit leaves out what is above it, and says so when nothing is left" do
+    small = pair("small", "1080p", "h264", 9_000_000_000)
+    big = pair("remux", "2160p", "h265", 70_000_000_000)
+    unknown = {%{elem(small, 0) | name: "unknown", size: nil}, elem(small, 1)}
+    {small_s, _} = small
+    {big_s, _} = big
+    {unknown_s, _} = unknown
+
+    cap = Watch.size_cap(%{})
+    assert cap == 40 * 1_073_741_824
+    assert Watch.size_cap(%{"browser_max_size" => "off"}) == nil
+    assert {:ok, [^small_s, ^unknown_s]} = Watch.within_size([small_s, big_s, unknown_s], cap)
+    assert {:error, {:too_big, 1, 40}} = Watch.within_size([big_s], cap)
+    assert {:ok, [^big_s]} = Watch.within_size([big_s], nil)
+  end
+
   test "with nothing to copy, a re-encode is held to 1080p" do
     hevc4k = pair("4k hevc", "2160p", "h265", 50_000_000_000)
     hevc1080 = pair("1080 hevc", "1080p", "h265", 5_000_000_000)
