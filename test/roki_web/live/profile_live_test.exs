@@ -203,6 +203,9 @@ defmodule RokiWeb.ProfileLiveTest do
     assert render(view) =~ "1</b> selected"
     view |> element("button", "Edit watch date") |> render_click()
     assert has_element?(view, "#date-form input[type=date]")
+    # It opens on today's date, not blank, so it is plain what the field is.
+    today = Date.utc_today() |> Date.to_iso8601()
+    assert has_element?(view, "#date-form input[type=date][value='#{today}']")
 
     # The future is refused.
     future = Date.utc_today() |> Date.add(30) |> Date.to_iso8601()

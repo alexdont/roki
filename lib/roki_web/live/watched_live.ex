@@ -400,7 +400,7 @@ defmodule RokiWeb.WatchedLive do
               {MapSet.size(@selected)} {if MapSet.size(@selected) == 1, do: "title", else: "titles"} will be put on this day in your history — anywhere back, years if you like. They keep the order they have now.
             </p>
           </div>
-          <input type="date" name="date" required min="1900-01-01" max={@today} class="input input-bordered w-full" autofocus />
+          <input type="date" name="date" value={@today} required min="1900-01-01" max={@today} class="input input-bordered w-full" autofocus />
           <p :if={@date_error} class="text-sm text-error">{@date_error}</p>
           <div class="flex justify-end gap-2">
             <button type="button" phx-click="date_close" class="btn btn-ghost">Cancel</button>
