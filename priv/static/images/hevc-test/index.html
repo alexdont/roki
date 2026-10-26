@@ -37,6 +37,7 @@
 
 <h2>Real playback</h2>
 <p class="note">Each clip is muted and plays for about 4 seconds. It must advance, show a picture (not black) and not drop many frames.</p>
+<video id="main" muted playsinline controls preload="none"></video>
 <div id="clips"></div>
 
 <h2>Results to send back</h2>
@@ -124,7 +125,7 @@
   const holder = $("#clips")
   for (const c of CLIPS) {
     holder.insertAdjacentHTML("beforeend",
-      `<div class="clip"><b>${c.name}</b><video id="v-${c.id}" muted playsinline controls preload="none"></video>
+      `<div class="clip"><b>${c.name}</b>
        <div class="row"><button class="alt" data-id="${c.id}">Play this one</button><span id="r-${c.id}"></span></div></div>`)
   }
 
@@ -143,9 +144,10 @@
   }
 
   async function play(c) {
-    const v = $("#v-" + c.id), out = $("#r-" + c.id)
+    const v = $("#main"), out = $("#r-" + c.id)
     const set = (t, k) => { out.textContent = t; out.className = k || "" }
     set("loading…")
+    v.removeAttribute("src"); v._errs = null; v.load()
     let hls = null
     try {
       if (c.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
@@ -199,18 +201,32 @@
     }
   }
 
-  holder.addEventListener("click", (e) => {
+  let busy = false
+  holder.addEventListener("click", async (e) => {
     const id = e.target.dataset && e.target.dataset.id
     const c = CLIPS.find((x) => x.id === id)
-    if (c) play(c)
+    if (!c || busy) return
+    busy = true
+    $("#main").muted = true
+    await play(c)
+    busy = false
   })
   $("#run").addEventListener("click", async () => {
+    if (busy) return
+    busy = true
+    // The one video element is started here, inside the tap: iOS then lets it play on its own for
+    // the clips that follow (it refuses a muted autoplay later on, notably in Low Power Mode).
+    const main = $("#main")
+    main.muted = true
+    main.src = CLIPS[1].src
+    main.play().catch(() => {})
     $("#run").disabled = true
     $("#state").textContent = "running…"
     await capsDone
     for (const c of CLIPS) { await play(c); await sleep(700) }
     $("#state").textContent = "done — copy the box below"
     $("#run").disabled = false
+    busy = false
   })
   $("#copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("#out").value); $("#state").textContent = "copied" }
