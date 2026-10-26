@@ -134,6 +134,18 @@ defmodule RokiWeb.ProfileLive do
     end
   end
 
+  # Numbers on a shelf, or just ten favourites with none above another.
+  def handle_event("shelf_ranked", %{"kind" => kind}, %{assigns: %{owner?: true, uuid: uuid, profile: profile}} = socket) do
+    case Profile.shelf(kind) do
+      shelf when shelf in [:movie, :tv, :anime] ->
+        {:ok, profile} = Profile.set_ranked(uuid, shelf, not Profile.ranked?(profile, shelf))
+        {:noreply, assign(socket, :profile, profile)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("shelf_remove", %{"key" => key}, %{assigns: %{owner?: true}} = socket) do
     with {type, n} <- Profile.parse_key(key),
          {:ok, favorites} <- Profile.remove_favorite(socket.assigns.uuid, {type, n}) do
@@ -407,7 +419,7 @@ defmodule RokiWeb.ProfileLive do
             class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
           >
             <li :for={i <- @favorites[kind]} class="space-y-1">
-              <.poster item={i} cached_titles={@cached_titles} compact />
+              <.poster item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)} cached_titles={@cached_titles} compact />
             </li>
           </ul>
           <p :if={kind != :manga and @shelf != kind and @favorites != nil and (@favorites[kind] || []) == []} class="text-sm text-base-content/50">
@@ -417,9 +429,24 @@ defmodule RokiWeb.ProfileLive do
           <%!-- Editing: a cross in a corner takes one off, the grip along the bottom drags it to
                 a new place, and the empty places open the picker. --%>
           <div :if={@owner? and @shelf == kind and @favorites != nil} class="space-y-2">
-            <p class="text-sm text-base-content/60">
-              Drag a poster by its grip to reorder, × takes it off, and an empty place adds more.
-            </p>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  checked={Profile.ranked?(@profile, kind)}
+                  phx-click="shelf_ranked"
+                  phx-value-kind={kind}
+                />
+                Rank them 1 to {Profile.top()}
+              </label>
+              <p class="text-sm text-base-content/60">
+                {if Profile.ranked?(@profile, kind),
+                  do: "The numbers show: the order matters. Drag a poster by its grip to reorder.",
+                  else: "Just your favourites, none above another. Drag to arrange them as you like."}
+                × takes one off; an empty place adds more.
+              </p>
+            </div>
             <ul
               id={"shelf-#{kind}"}
               phx-hook="SortableGrid"
@@ -437,7 +464,7 @@ defmodule RokiWeb.ProfileLive do
                 <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
                   <img :if={i.poster} src={Roki.Images.local(i.poster)} alt={i.title} class="h-full w-full object-cover" draggable="false" />
                   <span :if={!i.poster} class="flex h-full items-center justify-center p-2 text-center text-xs">{i.title}</span>
-                  <span class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow">#{i.position}</span>
+                  <span :if={Profile.ranked?(@profile, kind)} class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow">#{i.position}</span>
                   <button
                     type="button"
                     phx-click="shelf_remove"

@@ -107,6 +107,17 @@ defmodule Roki.ProfileTest do
     assert msg =~ "holds 10"
   end
 
+  test "a shelf shows numbers only once its owner turns them on" do
+    refute Profile.ranked?(Profile.get(@uuid), :movie)
+    assert {:ok, p} = Profile.set_ranked(@uuid, :movie, true)
+    assert Profile.ranked?(p, :movie)
+    refute Profile.ranked?(p, :tv)
+    assert {:ok, _} = Profile.set_ranked(@uuid, :tv, true)
+    assert {:ok, p} = Profile.set_ranked(@uuid, :movie, false)
+    refute Profile.ranked?(p, :movie)
+    assert Profile.ranked?(p, :tv)
+  end
+
   test "a banner is a media file; anything else named there is no banner" do
     assert Profile.banner_url(%{banner: "0199f7a1-0000-7000-8000-000000000002"}) =~ ~r{/file/0199f7a1-0000-7000-8000-000000000002/original/}
     assert Profile.banner_url(%{banner: "a-1.jpg"}) == nil

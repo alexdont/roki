@@ -40,6 +40,7 @@ defmodule RokiWeb.WatchedLive do
           ratings: %{},
           sort: :latest,
           kind: :all,
+          q: "",
           tens?: false,
           shown: @page,
           page: @page
@@ -52,7 +53,13 @@ defmodule RokiWeb.WatchedLive do
   @impl true
   def handle_params(params, _uri, socket) do
     {:noreply,
-     assign(socket, sort: Profile.sort(params["sort"]), kind: Profile.kind(params["kind"]), tens?: params["tens"] == "1", shown: @page)}
+     assign(socket,
+       sort: Profile.sort(params["sort"]),
+       kind: Profile.kind(params["kind"]),
+       q: params["q"] |> to_string() |> String.trim() |> String.slice(0, 80),
+       tens?: params["tens"] == "1",
+       shown: @page
+     )}
   end
 
   defp load(socket) do
@@ -63,13 +70,27 @@ defmodule RokiWeb.WatchedLive do
     |> start_async(:history, fn -> Profile.history(uuid) end)
   end
 
-  defp arranged(%{assigns: a}) when is_list(a.history),
-    do: Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.tens?)
+  defp arranged(%{assigns: a}) when is_list(a.history) do
+    list = Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.tens?)
+
+    if a.q == "" do
+      list
+    else
+      q = String.downcase(a.q)
+      Enum.filter(list, &String.contains?(String.downcase(&1.title || ""), q))
+    end
+  end
 
   defp arranged(_socket), do: []
 
   @impl true
   def handle_event("more", _params, socket), do: {:noreply, update(socket, :shown, &(&1 + @page))}
+
+  # Typing in the search box: the address carries it, so a search can be shared too.
+  def handle_event("search", %{"q" => q}, socket) do
+    a = socket.assigns
+    {:noreply, push_patch(socket, to: address(a.username, sort: a.sort, kind: a.kind, tens: a.tens?, q: String.trim(q)), replace: true)}
+  end
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
@@ -84,6 +105,7 @@ defmodule RokiWeb.WatchedLive do
         {:sort, :top} -> [sort: "top"]
         {:kind, k} when k != :all -> [kind: Atom.to_string(k)]
         {:tens, true} -> [tens: "1"]
+        {:q, q} when is_binary(q) and q != "" -> [q: q]
         _ -> []
       end)
 
@@ -125,11 +147,18 @@ defmodule RokiWeb.WatchedLive do
           <span :if={is_list(@history)} class="text-sm text-base-content/60">{length(@history)}</span>
         </div>
 
+        <form id="watched-search" phx-change="search" phx-submit="search" class="max-w-md">
+          <label class="input input-bordered flex items-center gap-2">
+            <.icon name="hero-magnifying-glass" class="h-4 w-4 text-base-content/50" />
+            <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="grow" />
+          </label>
+        </form>
+
         <div class="flex flex-wrap items-center gap-2">
           <div class="join">
             <.link
               :for={{s, label} <- [latest: "Latest", top: "By rating"]}
-              patch={address(@username, sort: s, kind: @kind, tens: @tens?)}
+              patch={address(@username, sort: s, kind: @kind, tens: @tens?, q: @q)}
               class={["btn btn-sm join-item", @sort == s && "btn-primary"]}
             >
               {label}
@@ -138,7 +167,7 @@ defmodule RokiWeb.WatchedLive do
           <div class="join">
             <.link
               :for={{k, label} <- Profile.kinds()}
-              patch={address(@username, sort: @sort, kind: k, tens: @tens?)}
+              patch={address(@username, sort: @sort, kind: k, tens: @tens?, q: @q)}
               class={["btn btn-sm join-item", @kind == k && "btn-primary"]}
             >
               {label}
@@ -146,7 +175,7 @@ defmodule RokiWeb.WatchedLive do
           </div>
           <.link
             :if={@owner? or @profile.show_ratings}
-            patch={address(@username, sort: :top, kind: @kind, tens: not @tens?)}
+            patch={address(@username, sort: :top, kind: @kind, tens: not @tens?, q: @q)}
             class={["btn btn-sm", @tens? && "btn-primary"]}
           >
             ★ 10 only
@@ -164,7 +193,7 @@ defmodule RokiWeb.WatchedLive do
           {if @owner?, do: "Nothing finished yet. What you watch to the end shows up here.", else: "Nothing here yet."}
         </p>
         <p :if={@history != nil and @history != [] and @items == []} class="text-sm text-base-content/50">
-          Nothing of that kind{if @tens?, do: " rated 10", else: ""}.
+          {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{if @tens?, do: " rated 10", else: ""}."}
         </p>
 
         <ul :if={@items != []} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">

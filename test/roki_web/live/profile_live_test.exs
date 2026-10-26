@@ -140,6 +140,13 @@ defmodule RokiWeb.ProfileLiveTest do
     assert has_element?(view, "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
     assert has_element?(view, "li.sortable-item .pk-drag-handle")
 
+    # Unranked by default: no numbers on the shelf until the owner turns them on.
+    refute has_element?(view, "li.sortable-item .badge-primary")
+    render_click(view, "shelf_ranked", %{"kind" => "movie"})
+    assert has_element?(view, "li.sortable-item .badge-primary", "#1")
+    render_click(view, "shelf_ranked", %{"kind" => "movie"})
+    refute has_element?(view, "li.sortable-item .badge-primary")
+
     # A drag: the new order is kept.
     render_hook(view, "shelf_reorder", %{"ordered_ids" => ["movie:2", "movie:1"], "moved_id" => "movie:2", "kind" => "movie"})
     assert Enum.map(Roki.Profile.favorites(user.uuid).movie, & &1.id) == [2, 1]

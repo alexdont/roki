@@ -22,7 +22,8 @@ defmodule Roki.Profile do
     public: false,
     show_history: true,
     show_ratings: true,
-    ratings_synced_at: nil
+    ratings_synced_at: nil,
+    ranked: []
   }
 
   # ── who ───────────────────────────────────────────────────────────
@@ -40,10 +41,10 @@ defmodule Roki.Profile do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     case Repo.query!(
-           "select bio, banner, public, show_history, show_ratings, ratings_synced_at from roki_profiles where user_uuid = $1",
+           "select bio, banner, public, show_history, show_ratings, ratings_synced_at, ranked from roki_profiles where user_uuid = $1",
            [bin]
          ) do
-      %{rows: [[bio, banner, _public, _history, _ratings, synced]]} ->
+      %{rows: [[bio, banner, _public, _history, _ratings, synced, ranked]]} ->
         %{
           user_uuid: uuid,
           bio: bio || "",
@@ -51,7 +52,8 @@ defmodule Roki.Profile do
           public: true,
           show_history: true,
           show_ratings: true,
-          ratings_synced_at: synced
+          ratings_synced_at: synced,
+          ranked: ranked || []
         }
 
       _ ->
@@ -374,6 +376,29 @@ defmodule Roki.Profile do
 
   @doc "How many a shelf holds."
   def top, do: @top
+
+  @doc "Whether a shelf shows its places as numbers (`profile` as `get/1` returns it)."
+  def ranked?(%{ranked: ranked}, kind) when is_list(ranked), do: Atom.to_string(kind) in ranked
+  def ranked?(_profile, _kind), do: false
+
+  @doc "Turn the numbers on a shelf on or off: `{:ok, profile}`."
+  def set_ranked(uuid, kind, on?) when kind in [:movie, :tv, :anime, :manga] and is_boolean(on?) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    current = get(uuid).ranked
+    shelf = Atom.to_string(kind)
+    next = if on?, do: Enum.uniq(current ++ [shelf]), else: List.delete(current, shelf)
+
+    Repo.query!(
+      """
+      insert into roki_profiles (user_uuid, ranked, inserted_at, updated_at) values ($1, $2, $3, $3)
+      on conflict (user_uuid) do update set ranked = excluded.ranked, updated_at = excluded.updated_at
+      """,
+      [bin, next, now]
+    )
+
+    {:ok, get(uuid)}
+  end
 
   @doc """
   The favourites of a user, by shelf: `%{movie: [item], tv: [...], anime: [...], manga: [...]}`,
