@@ -1,11 +1,12 @@
 // The bottom bar of the full-screen player: play and pause, the timeline, volume, and the keys.
 // The video has no controls of its own there. `root` is the element holding the bar; `video`
-// the <video>. Returns nothing: it only listens.
+// the <video>; `study` the hook, whose `abs()`, `total()` and `seekAbs()` keep the film's own
+// clock (a stream may begin part-way through it). Returns nothing: it only listens.
 import {formatTime} from "./cues.js"
 
 const KEY = "roki:study:volume"
 
-export function bindTransport(root, video, stage) {
+export function bindTransport(root, video, stage, study) {
   const $ = (sel) => root.querySelector(sel)
   const play = $("[data-role=play]")
   const seek = $("[data-role=seek]")
@@ -16,7 +17,7 @@ export function bindTransport(root, video, stage) {
   let dragging = false
 
   const toggle = () => (video.paused ? video.play().catch(() => {}) : video.pause())
-  const duration = () => (Number.isFinite(video.duration) ? video.duration : 0)
+  const duration = () => study.total()
 
   const paint = (el, fraction) => el.style.setProperty("--p", `${Math.max(0, Math.min(1, fraction)) * 100}%`)
 
@@ -26,11 +27,12 @@ export function bindTransport(root, video, stage) {
   }
   const showTime = () => {
     const total = duration()
-    cur.textContent = formatTime(video.currentTime || 0)
+    const now = study.abs() || 0
+    cur.textContent = formatTime(now)
     dur.textContent = total ? formatTime(total) : "–:––"
     if (!dragging) {
-      seek.value = total ? Math.round((video.currentTime / total) * 1000) : 0
-      paint(seek, total ? video.currentTime / total : 0)
+      seek.value = total ? Math.round((now / total) * 1000) : 0
+      paint(seek, total ? now / total : 0)
     }
     seek.disabled = !total
   }
@@ -94,7 +96,7 @@ export function bindTransport(root, video, stage) {
   seek.addEventListener("change", () => {
     dragging = false
     const total = duration()
-    if (total) video.currentTime = (seek.value / 1000) * total
+    if (total) study.seekAbs((seek.value / 1000) * total)
   })
 
   mute.addEventListener("click", () => { video.muted = !video.muted })
@@ -117,7 +119,7 @@ export function bindTransport(root, video, stage) {
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && e.target.type !== "range") return
     if (!root.isConnected) return
-    const step = (s) => { video.currentTime = Math.max(0, Math.min(duration() || Infinity, video.currentTime + s)); stage.dataset.active = "1" }
+    const step = (s) => { study.seekAbs(Math.max(0, Math.min(duration() || Infinity, study.abs() + s))); stage.dataset.active = "1" }
     switch (e.key) {
       case " ": case "k": e.preventDefault(); toggle(); break
       case "ArrowLeft": e.preventDefault(); step(-5); break

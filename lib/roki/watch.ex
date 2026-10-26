@@ -1021,12 +1021,16 @@ defmodule Roki.Watch do
   @doc """
   Start `stream` for this user and say where to play it from.
 
-  `{:ok, player}` where `player` is `%{url:, hls?:, resume_at:, remux_id:, subtitles:}`:
+  `{:ok, player}` where `player` is `%{url:, hls?:, resume_at:, start:, remux_id:, subtitles:}`:
   a release a browser can read is played directly; anything else is remuxed to HLS by laev
   (ffmpeg) and waited for until the first segments are on disk. Also writes the history entry,
   so the title shows up in the user's History and as the thing to continue.
+
+  A conversion the browser decodes itself begins where the viewer left off (`opts[:from]`
+  to say where instead), not at the start of the file; `start` is where it begins, in seconds
+  of the film, for the player to count from.
   """
-  def start(uuid, ctx, source, stream, caps \\ %{}) do
+  def start(uuid, ctx, source, stream, caps \\ %{}, opts \\ []) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
     # A video the browser decodes itself (`caps`) is only copied, and takes no encoder slot.
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
@@ -1036,8 +1040,18 @@ defmodule Roki.Watch do
          :ok <- if(Roki.Direct.wanted?(source, caps), do: :ok, else: allowed(source)) do
       Roki.Keys.record(uuid, :play)
 
-      do_start(uuid, ctx, source, stream, caps)
+      do_start(uuid, ctx, source, stream, caps, opts)
     end
+  end
+
+  @doc """
+  The same stream again from `from` seconds in — the viewer seeked to before where its
+  conversion begins — and where to play it from, as `start/6` says. What was checked when it
+  first started (the size, the codec) is not checked again; the conversion it leaves is ended.
+  """
+  def restart(uuid, ctx, source, stream, caps, from) when is_number(from) do
+    :ok = release_previous(uuid)
+    do_start(uuid, ctx, source, stream, caps, from: max(0, from))
   end
 
   @doc """
@@ -1202,9 +1216,12 @@ defmodule Roki.Watch do
 
   defp remember_remux(_uuid, _src), do: :ok
 
-  defp do_start(uuid, ctx, source, stream, caps) do
+  defp do_start(uuid, ctx, source, stream, caps, opts) do
     Roki.Laev.run(uuid, fn ->
-      with {:ok, src} <- browser_source(ctx, stream, caps),
+      # Where to begin: where this seek asked for, else where the viewer left off.
+      from = Keyword.get(opts, :from) || Laev.Position.saved_position(ctx) || 0
+
+      with {:ok, src} <- browser_source(ctx, stream, caps, from),
            true <- src.playable || {:error, src[:reason] || :not_playable},
            :ok <- ready(src) do
         save_resume(ctx, source)
@@ -1214,10 +1231,10 @@ defmodule Roki.Watch do
 
         {:ok,
          %{
-           url:
-             if(src.kind == :remux, do: "/stream/#{src.remux_id}/playlist.m3u8", else: src.url),
+           url: stream_url(src),
            hls?: src.kind == :remux,
-           resume_at: src.resume_at,
+           resume_at: from,
+           start: part_start(src),
            remux_id: src[:remux_id],
            filename: src.filename,
            subtitles: embedded_subtitles(src)
@@ -1226,20 +1243,32 @@ defmodule Roki.Watch do
     end)
   end
 
-  # The video copied for a browser that decodes it (`Roki.Direct`), else laev's conversion.
-  defp browser_source(ctx, stream, caps) do
-    case Roki.Direct.start(stream, caps) do
-      {:ok, id} ->
+  defp stream_url(%{kind: :remux, remux_id: id} = src),
+    do: "/stream/#{id}/playlist.m3u8" <> Roki.Direct.part_query(src[:part] || 0)
+
+  defp stream_url(src), do: src.url
+
+  # Where the conversion begins, in seconds of the film: a direct part's first fragment says.
+  defp part_start(%{kind: :remux, remux_id: id, part: part}) when is_integer(part) and part > 0,
+    do: Roki.Direct.start_at(id, part)
+
+  defp part_start(_src), do: 0
+
+  # The video copied for a browser that decodes it (`Roki.Direct`), from `from` seconds in,
+  # else laev's conversion (from the start).
+  defp browser_source(ctx, stream, caps, from) do
+    case Roki.Direct.start(stream, caps, trunc(from)) do
+      {:ok, id, part} ->
         {:ok,
          %{
            kind: :remux,
            remux_id: id,
+           part: part,
            dir: Roki.Direct.dir(id),
            url: stream.url,
            playable: true,
            title: ctx.title,
-           filename: stream.filename,
-           resume_at: Laev.Position.saved_position(ctx) || 0
+           filename: stream.filename
          }}
 
       {:error, reason} ->
@@ -1518,20 +1547,20 @@ defmodule Roki.Watch do
   def autoplay?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.autoplay?/0)
 
   # A conversion that did not get going is stopped, not left to run its two hours.
-  defp ready(%{kind: :remux, remux_id: id}), do: await_segments(id, 180_000)
+  defp ready(%{kind: :remux, remux_id: id} = src), do: await_segments(id, src[:part] || 0, 180_000)
   defp ready(_), do: :ok
 
   # Playing can begin once the first two segments (about eight seconds) are written: the converter
   # runs far ahead of playback, and laev's own wait is for four, polled every 0.3 s. A wait that
   # runs out stops the conversion, as laev's does.
-  defp await_segments(id, timeout) do
+  defp await_segments(id, part, timeout) do
     deadline = System.monotonic_time(:millisecond) + timeout
-    wait_segments(id, deadline)
+    wait_segments(id, part, deadline)
   end
 
-  defp wait_segments(id, deadline) do
+  defp wait_segments(id, part, deadline) do
     cond do
-      segments_ready?(id) ->
+      segments_ready?(id, part) ->
         :ok
 
       System.monotonic_time(:millisecond) > deadline ->
@@ -1541,12 +1570,12 @@ defmodule Roki.Watch do
 
       true ->
         Process.sleep(150)
-        wait_segments(id, deadline)
+        wait_segments(id, part, deadline)
     end
   end
 
-  defp segments_ready?(id) do
-    if Roki.Direct.direct?(id), do: Roki.Direct.ready?(id), else: segments_on_disk?(id)
+  defp segments_ready?(id, part) do
+    if Roki.Direct.direct?(id), do: Roki.Direct.ready?(id, part), else: segments_on_disk?(id)
   end
 
   defp segments_on_disk?(id) do
@@ -1560,11 +1589,15 @@ defmodule Roki.Watch do
     end
   end
 
-  defp embedded_subtitles(%{kind: :remux, remux_id: id}) do
+  defp embedded_subtitles(%{kind: :remux, remux_id: id} = src) do
+    part = src[:part] || 0
+
     # laev lists a track by its basename (`sub0`); ffmpeg writes, and the stream route serves,
-    # `sub0.vtt` — without the extension every embedded track is a 400.
+    # `sub0.vtt` — without the extension every embedded track is a 400. A direct part has its
+    # own copy of each (`sub0-1800.vtt`).
     for t <- Laev.Playback.subtitles(id), is_binary(t[:file]) do
-      file = if String.ends_with?(t.file, ".vtt"), do: t.file, else: t.file <> ".vtt"
+      base = String.replace_suffix(t.file, ".vtt", "")
+      file = if String.starts_with?(base, "sub"), do: Roki.Direct.part_name(base, ".vtt", part), else: base <> ".vtt"
       %{lang: t.lang, label: language(t.lang), url: "/stream/#{id}/#{file}"}
     end
   end

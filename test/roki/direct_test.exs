@@ -31,6 +31,38 @@ defmodule Roki.DirectTest do
     assert Roki.Direct.master_playlist(tracks, 1_000_000, ["ru", "ko"]) =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
   end
 
+  test "a part's playlists name the part, its files carry it in their names" do
+    tracks = [%{file: "audio0", lang: "eng", name: "English"}, %{file: "audio1", lang: "kor", name: "Korean"}]
+    subs = [%{file: "sub0", lang: "fre", name: "French"}, %{file: "ext-en-os12", lang: "en", name: "English (OpenSubtitles)"}]
+
+    pl = Roki.Direct.master_playlist(tracks, 1_000_000, "ko", subs, 1800)
+    assert pl =~ ~s(NAME="English",LANGUAGE="en",DEFAULT=NO,AUTOSELECT=YES,URI="audio0.m3u8?from=1800")
+    assert pl =~ ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES,AUTOSELECT=YES,URI="audio1.m3u8?from=1800")
+    assert pl =~ ~s(TYPE=SUBTITLES,GROUP-ID="subs",NAME="French",LANGUAGE="fr",DEFAULT=NO,AUTOSELECT=NO,URI="sub0.m3u8?from=1800")
+    assert pl =~ ~s(URI="ext-en-os12.m3u8?from=1800")
+    assert pl =~ ~s(AUDIO="aud",SUBTITLES="subs"\nvideo.m3u8?from=1800\n)
+
+    # From the start, the names are plain.
+    plain = Roki.Direct.master_playlist(tracks, 1_000_000, "ko", subs)
+    assert plain =~ ~s(URI="audio0.m3u8")
+    refute plain =~ "from="
+    assert plain =~ "\nvideo.m3u8\n"
+
+    assert Roki.Direct.part_name("media", ".mp4", 0) == "media.mp4"
+    assert Roki.Direct.part_name("media", ".mp4", 1800) == "media-1800.mp4"
+    assert Roki.Direct.part_name("done", "", 1800) == "done-1800"
+    assert Roki.Direct.part_query(0) == ""
+    assert Roki.Direct.part_query(1800) == "?from=1800"
+  end
+
+  test "H.264 is decodable everywhere; the rest only where the browser says so" do
+    assert Roki.Direct.decodable?("h264", %{})
+    assert Roki.Direct.decodable?("x264", %{hevc: false})
+    refute Roki.Direct.decodable?("hevc", %{})
+    assert Roki.Direct.decodable?("hevc", %{hevc: true})
+    refute Roki.Direct.decodable?("mpeg4", %{hevc: true, av1: true})
+  end
+
   test "laev's master is cut to one rendition per file, named by language" do
     master = """
     #EXTM3U

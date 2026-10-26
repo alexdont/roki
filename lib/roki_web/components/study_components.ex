@@ -10,7 +10,11 @@ defmodule RokiWeb.StudyComponents do
   state of the list and which menu is open are attributes on it, kept in the browser. LiveView only
   changes `data-player` on the root, which the hook reads on mount and on every update:
 
-      %{url:, hls: bool, resume: seconds, tracks: [%{label:, lang:, url:}], prefer: "fr", key: "…"}
+      %{url:, hls: bool, resume: seconds, start: seconds, tracks: [%{label:, lang:, url:}], prefer: "fr", key: "…"}
+
+  `start` is where the stream begins in the film (a conversion begun where the viewer left
+  off): the player counts from it, and asks for the film from further back (`seek_back`) when
+  the viewer seeks before it.
   """
   use Phoenix.Component
 

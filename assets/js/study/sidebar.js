@@ -177,6 +177,9 @@ export const StudySidebar = {
     this.programmatic = false
     this.objectUrl = null
     this.offset = 0
+    this.base = 0
+    this.shift = 0
+    this.calibrated = true
     this.overlayKey = ""
     this.dict = new Map()
     this.pausedAt = -1
@@ -260,17 +263,58 @@ export const StudySidebar = {
   },
 
   postProgress(paused = false) {
-    const v = this.video
-    if (!this.ready || !(v.currentTime > 0)) return
+    const t = this.abs()
+    if (!this.ready || !(t > 0)) return
     this.pushEvent("progress", {
-      position: Math.floor(v.currentTime),
-      duration: Number.isFinite(v.duration) ? Math.floor(v.duration) : 0,
+      position: Math.floor(t),
+      duration: Math.floor(this.total()),
       paused,
     })
   },
 
-  // The time the subtitles are on: the video's, minus the sync offset.
-  now() { return this.video.currentTime - this.offset },
+  // ── the film's clock ───────────────────────────────────────────────
+  // A conversion begun part-way through the film (`start` in the player data, `base` here)
+  // has nothing before that point. hls.js plays its playlist from zero, so the film's time is
+  // the video's plus `shift`; a native player may keep the file's own clock, which the first
+  // seekable range tells, and then nothing is added. Everything that says or takes a time in
+  // the film goes through these.
+  abs() {
+    this.calibrate()
+    return this.video.currentTime + this.shift
+  },
+
+  // How long the film is, as far as is known: what the playlist has so far, on the film's clock.
+  total() {
+    this.calibrate()
+    const v = this.video
+    const r = v.seekable
+    const end = r && r.length ? r.end(r.length - 1) : 0
+    const d = Number.isFinite(v.duration) ? v.duration : 0
+    return Math.max(d, end) + this.shift
+  },
+
+  calibrate() {
+    if (this.calibrated) return true
+    const r = this.video.seekable
+    if (!r || !r.length) return false
+    this.shift = Math.abs(r.start(0) - this.base) < 5 ? 0 : this.base
+    this.calibrated = true
+    return true
+  },
+
+  // Go to a time in the film. Before where the conversion began, the server is asked for one
+  // from there (the page then gets a new source to play): `false`, and the seek comes with it.
+  seekAbs(t) {
+    if (this.base > 0 && t < this.base - 0.5) {
+      this.pushEvent("seek_back", {position: Math.max(0, Math.floor(t))})
+      return false
+    }
+    this.video.currentTime = Math.max(0, t - this.shift)
+    return true
+  },
+
+  // The time the subtitles are on: the film's, minus the sync offset.
+  now() { return this.abs() - this.offset },
 
   tick() {
     const p = this.p
@@ -313,7 +357,7 @@ export const StudySidebar = {
     if (i < 0 || !cues[i]) return
     this.pausedAt = -1
     this.watching = -1
-    this.video.currentTime = Math.max(0, cues[i].start + this.offset)
+    this.seekAbs(Math.max(0, cues[i].start + this.offset))
     this.video.play().catch(() => {})
   },
 
@@ -606,7 +650,7 @@ export const StudySidebar = {
     // that closes it — back to the page before, or to the title when there was none.
     const immersive = this.el.dataset.immersive === "true"
     if (immersive) {
-      bindTransport(this.el, this.video, this.stage)
+      bindTransport(this.el, this.video, this.stage, this)
 
       // Nothing sits over the picture while it plays: the bar shows only when the pointer goes
       // into the strip at the very bottom (below the lines, which sit just above it), the close
@@ -1172,10 +1216,12 @@ export const StudySidebar = {
     const target = Math.max(0, cue.start + this.offset)
     clearTimeout(this.seekWait)
     if (this.seekBtn && this.seekBtn !== btn) this.seekBtn.textContent = "▶"
+    // Before where the conversion began: another from there, which the page then plays.
+    if (this.base > 0 && target < this.base - 0.5) { this.seekAbs(target); return }
 
-    const reach = () => { const r = v.seekable; return r && r.length ? r.end(r.length - 1) : 0 }
+    const reach = () => { const r = v.seekable; return (r && r.length ? r.end(r.length - 1) : 0) + this.shift }
     const go = () => {
-      v.currentTime = target
+      this.seekAbs(target)
       v.play().catch(() => {})
       this.pausedAt = -1
       this.watching = -1
@@ -1267,6 +1313,10 @@ export const StudySidebar = {
   async startMedia(p) {
     const v = this.video
     this.ready = !(p.resume > 0)
+    // Where the stream begins in the film (a conversion begun where you left off), see `abs()`.
+    this.base = p.start > 0 ? p.start : 0
+    this.shift = this.base
+    this.calibrated = !this.base
     clearInterval(this.seekTimer)
     if (this.hls) { this.hls.destroy(); this.hls = null }
     this.clearMain()
@@ -1284,7 +1334,7 @@ export const StudySidebar = {
         // A growing playlist is still a film, not a broadcast: a finite duration, a seek bar,
         // and (when coming back to it) a start where you left off instead of the live edge.
         liveDurationInfinity: false,
-        startPosition: p.resume > 0 ? p.resume : -1,
+        startPosition: p.resume > 0 ? Math.max(0, p.resume - this.base) : -1,
         // The subtitle renditions are for players that draw their own; this page draws them.
         subtitleDisplay: false,
       }))
@@ -1302,15 +1352,17 @@ export const StudySidebar = {
   },
 
   // The remux is written while you watch, so a position far in may not exist yet. Wait for
-  // it, up to two minutes, then start from the beginning rather than never.
+  // it, up to two minutes, then start from the beginning rather than never. `t` is a time in
+  // the film; which clock the player keeps is only known once something is seekable.
   seekWhenReachable(t) {
     const v = this.video
     let tries = 0
     this.seekTimer = setInterval(() => {
       const r = v.seekable
       const reach = r.length ? r.end(r.length - 1) : 0
-      if (reach >= t - 1) {
-        v.currentTime = t
+      const rel = this.calibrate() ? t - this.shift : Infinity
+      if (reach >= rel - 1) {
+        v.currentTime = Math.max(0, rel)
         this.ready = true
         clearInterval(this.seekTimer)
       } else if (++tries > 240) {

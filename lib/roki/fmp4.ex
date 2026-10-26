@@ -4,13 +4,16 @@ defmodule Roki.Fmp4 do
   then `moof` + `mdat` pairs, one per fragment. A file still being written is read as far as
   it is complete, so a playlist can be made of it while it grows.
 
-  Only box sizes and the video track's sample durations are read; nothing is decoded.
+  Only box sizes, the video track's sample durations and each fragment's start time are read;
+  nothing is decoded.
   """
   import Bitwise
 
   @doc """
-  `%{init: bytes, timescale: n, fragments: [%{offset:, size:, duration:}]}` for the complete
-  fragments of the file (`duration` in seconds), or `nil` when the header is not there yet.
+  `%{init: bytes, timescale: n, start: seconds, fragments: [%{offset:, size:, duration:, time:}]}`
+  for the complete fragments of the file (`duration` and `time` in seconds; `start` is the
+  first fragment's time — zero for a file written from the beginning, the position in the
+  film for one begun part-way through), or `nil` when the header is not there yet.
   """
   def scan(path) do
     with {:ok, %{size: size}} <- File.stat(path),
@@ -28,12 +31,14 @@ defmodule Roki.Fmp4 do
                 [{"moof", off, moof_size}, {"mdat", mdat_off, mdat_size}]
                 when mdat_off == off + moof_size ->
                   moof = read(f, off + 8, moof_size - 8)
+                  {duration, time} = fragment_info(moof, track, default_duration)
 
                   [
                     %{
                       offset: off,
                       size: moof_size + mdat_size,
-                      duration: fragment_duration(moof, track, default_duration) / timescale
+                      duration: duration / timescale,
+                      time: time / timescale
                     }
                   ]
 
@@ -41,7 +46,13 @@ defmodule Roki.Fmp4 do
                   []
               end)
 
-            %{init: ftyp_size + moov_size, timescale: timescale, fragments: fragments}
+            start =
+              case fragments do
+                [first | _] -> first.time
+                [] -> 0
+              end
+
+            %{init: ftyp_size + moov_size, timescale: timescale, start: start, fragments: fragments}
 
           _ ->
             nil
@@ -140,18 +151,29 @@ defmodule Roki.Fmp4 do
     {track_id, max(timescale, 1), default}
   end
 
-  # The sum of the video samples' durations in one fragment.
-  defp fragment_duration(moof, track_id, default) do
-    Enum.find_value(children(moof), 0, fn
+  # The sum of the track's samples' durations in one fragment, and the fragment's decode time
+  # (`tfdt`), both in the track's timescale.
+  defp fragment_info(moof, track_id, default) do
+    Enum.find_value(children(moof), {0, 0}, fn
       {"traf", traf} ->
         case child(traf, "tfhd") do
           <<_::8, flags::24, ^track_id::32, rest::binary>> ->
             per_sample = tfhd_default(flags, rest) || default
 
-            children(traf)
-            |> Enum.filter(&match?({"trun", _}, &1))
-            |> Enum.map(fn {_, trun} -> trun_duration(trun, per_sample) end)
-            |> Enum.sum()
+            duration =
+              children(traf)
+              |> Enum.filter(&match?({"trun", _}, &1))
+              |> Enum.map(fn {_, trun} -> trun_duration(trun, per_sample) end)
+              |> Enum.sum()
+
+            time =
+              case child(traf, "tfdt") do
+                <<0, _::24, t::32, _::binary>> -> t
+                <<1, _::24, t::64, _::binary>> -> t
+                _ -> 0
+              end
+
+            {duration, time}
 
           _ ->
             nil

@@ -8,13 +8,17 @@ defmodule Roki.Subs do
   segment, each carrying the cues of that stretch and a timestamp map onto the stream's
   clock. The pieces are cut from the whole file on request, so a file ffmpeg is still
   writing serves what it has, and nothing is stored twice.
+
+  A direct conversion begun part-way through the film (a *part*, see `Roki.Direct`) has its
+  own copy of the release's subtitles (`sub0-1800.vtt`), on the film's clock like its video;
+  fetched files are the whole film's and serve every part.
   """
 
   @doc """
-  The subtitle tracks of conversion `id`: `[%{file: "sub0", lang: "fre", name: "French"}]`,
-  the release's own first, then fetched ones (named after their source).
+  The subtitle tracks of conversion `id` for `part`: `[%{file: "sub0", lang: "fre", name:
+  "French"}]`, the release's own first, then fetched ones (named after their source).
   """
-  def tracks(id) do
+  def tracks(id, part \\ 0) do
     dir = Laev.Remux.dir(id)
 
     embedded =
@@ -22,7 +26,7 @@ defmodule Roki.Subs do
         {:ok, json} ->
           case Jason.decode(json) do
             {:ok, list} when is_list(list) ->
-              for %{"file" => file} = s <- list, present?(dir, file),
+              for %{"file" => file} = s <- list, present?(dir, cue_file(file, part)),
                   do: %{file: file, lang: s["lang"] || "", name: name(s["lang"], "")}
 
             _ ->
@@ -52,8 +56,12 @@ defmodule Roki.Subs do
     unique(embedded ++ fetched)
   end
 
-  defp present?(dir, file) do
-    case File.stat(Path.join(dir, file <> ".vtt")) do
+  # The WebVTT file a track's cues are in: the release's own are written per part.
+  defp cue_file("sub" <> _ = file, part), do: Roki.Direct.part_name(file, ".vtt", part)
+  defp cue_file(file, _part), do: file <> ".vtt"
+
+  defp present?(dir, name) do
+    case File.stat(Path.join(dir, name)) do
       {:ok, %{size: n}} -> n > 0
       _ -> false
     end
@@ -76,21 +84,25 @@ defmodule Roki.Subs do
     |> Enum.sort_by(& &1.file)
   end
 
-  @doc "The `#EXT-X-MEDIA` lines for `tracks`; none shown unless picked."
-  def renditions(tracks) do
+  @doc "The `#EXT-X-MEDIA` lines for `tracks` (of `part`); none shown unless picked."
+  def renditions(tracks, part \\ 0) do
+    q = Roki.Direct.part_query(part)
+
     Enum.map(tracks, fn t ->
       lang = if t.lang != "", do: ~s(,LANGUAGE="#{Roki.Watch.short_code(t.lang)}"), else: ""
-      ~s(#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="#{t.name}"#{lang},DEFAULT=NO,AUTOSELECT=NO,URI="#{t.file}.m3u8")
+      ~s(#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="#{t.name}"#{lang},DEFAULT=NO,AUTOSELECT=NO,URI="#{t.file}.m3u8#{q}")
     end)
   end
 
   @doc """
-  The subtitle media playlist of `file` (`"sub0"`), cut like the stream's own segments: one
-  piece `file.K.vtt` per segment. `nil` when the stream has no segments yet.
+  The subtitle media playlist of `file` (`"sub0"`) for `part`, cut like the stream's own
+  segments: one piece `file.K.vtt` per segment. `nil` when the stream has no segments yet.
   """
-  def playlist(id, file) do
-    case timeline(id) do
+  def playlist(id, file, part \\ 0) do
+    case timeline(id, part) do
       %{segments: [_ | _] = segments, done?: done?, target: target} ->
+        q = Roki.Direct.part_query(part)
+
         head = [
           "#EXTM3U",
           "#EXT-X-VERSION:7",
@@ -103,7 +115,7 @@ defmodule Roki.Subs do
           segments
           |> Enum.with_index()
           |> Enum.flat_map(fn {{_start, dur}, k} ->
-            ["#EXTINF:#{:erlang.float_to_binary(dur * 1.0, decimals: 3)},", "#{file}.#{k}.vtt"]
+            ["#EXTINF:#{:erlang.float_to_binary(dur * 1.0, decimals: 3)},", "#{file}.#{k}.vtt#{q}"]
           end)
 
         tail = if done?, do: ["#EXT-X-ENDLIST"], else: []
@@ -114,11 +126,11 @@ defmodule Roki.Subs do
     end
   end
 
-  @doc "Piece `k` of `file`: the cues within that segment's stretch, mapped onto the stream's clock."
-  def segment(id, file, k) do
-    with %{segments: segments, offset: offset} <- timeline(id),
+  @doc "Piece `k` of `file` for `part`: the cues within that segment's stretch, mapped onto the stream's clock."
+  def segment(id, file, k, part \\ 0) do
+    with %{segments: segments, offset: offset} <- timeline(id, part),
          {start, dur} <- Enum.at(segments, k),
-         {:ok, text} <- File.read(Path.join(Laev.Remux.dir(id), file <> ".vtt")) do
+         {:ok, text} <- File.read(Path.join(Laev.Remux.dir(id), cue_file(file, part))) do
       cues =
         text
         |> parse()
@@ -132,19 +144,20 @@ defmodule Roki.Subs do
     end
   end
 
-  # The stream's segments as `{start, duration}` in seconds, whether it is complete, its target
-  # duration, and where its clock starts in 90 kHz units: a direct conversion's MP4 starts at
-  # zero; laev's MPEG-TS segments start at ffmpeg's usual 1.4 s.
-  defp timeline(id) do
+  # The stream's segments as `{start, duration}` in seconds of the film, whether it is complete,
+  # its target duration, and where its clock starts in 90 kHz units: a direct conversion's MP4
+  # carries the film's own times (a part begun later starts where it began); laev's MPEG-TS
+  # segments start at ffmpeg's usual 1.4 s.
+  defp timeline(id, part) do
     dir = Laev.Remux.dir(id)
 
     cond do
       Roki.Direct.direct?(id) ->
-        case Roki.Fmp4.scan(Roki.Direct.media(id)) do
-          %{fragments: fragments} ->
+        case Roki.Fmp4.scan(Roki.Direct.media(id, part)) do
+          %{start: start, fragments: fragments} ->
             durations = Enum.map(fragments, & &1.duration)
-            done? = File.exists?(Path.join(dir, "done"))
-            %{segments: starts(durations), done?: done?, target: target(durations), offset: 0}
+            done? = File.exists?(Path.join(dir, Roki.Direct.part_name("done", "", part)))
+            %{segments: starts(durations, start), done?: done?, target: target(durations), offset: 0}
 
           _ ->
             nil
@@ -159,7 +172,7 @@ defmodule Roki.Subs do
               Regex.scan(~r/^#EXTINF:([\d.]+)/m, content) |> Enum.map(fn [_, d] -> String.to_float(pad(d)) end)
 
             %{
-              segments: starts(durations),
+              segments: starts(durations, 0.0),
               done?: content =~ "#EXT-X-ENDLIST",
               target: target(durations),
               offset: 126_000
@@ -173,9 +186,9 @@ defmodule Roki.Subs do
 
   defp pad(d), do: if(d =~ ".", do: d, else: d <> ".0")
 
-  defp starts(durations) do
+  defp starts(durations, from) do
     {segments, _} =
-      Enum.map_reduce(durations, 0.0, fn d, at -> {{at, d}, at + d} end)
+      Enum.map_reduce(durations, from * 1.0, fn d, at -> {{at, d}, at + d} end)
 
     segments
   end

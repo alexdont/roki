@@ -332,6 +332,7 @@ defmodule RokiWeb.WatchLive do
       url: player.url,
       hls: player.hls?,
       resume: player.resume_at,
+      start: player[:start] || 0,
       tracks: player.subtitles ++ saved,
       prefer: prefer,
       key: play_id,
@@ -390,6 +391,21 @@ defmodule RokiWeb.WatchLive do
         {:noreply, assign(socket, :player, %{player | tracks: player.tracks ++ List.wrap(track)})}
 
   def handle_async({:ext_subs, _lang}, _other, socket), do: {:noreply, socket}
+
+  # The same release again from further back (see "seek_back"): the player gets the new
+  # stream's address and start, keeps its menus. The release's own subtitles are the new
+  # part's files; fetched ones are the whole film's and stay.
+  def handle_async(
+        :restart,
+        {:ok, {token, {:ok, p}}},
+        %{assigns: %{token: token, player: %{} = player}} = socket
+      ) do
+    kept = Enum.reject(player.tracks, &String.starts_with?(&1.url, "/stream/#{p.remux_id}/sub"))
+    data = %{player | url: p.url, resume: p.resume_at, start: p[:start] || 0, tracks: p.subtitles ++ kept}
+    {:noreply, assign(socket, :player, data)}
+  end
+
+  def handle_async(:restart, _other, socket), do: {:noreply, socket}
 
   def handle_async(:episodes, {:ok, {:ok, eps}}, socket) do
     socket = assign(socket, :episodes, eps)
@@ -474,8 +490,26 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
-  # The player's "Next": the next episode's sources are found and the best (the same release, if it
-  # has it) starts — one click, no page in between.
+  # A seek to before where the conversion begins (one begun at the saved position has nothing
+  # before it): the same release again from there, as a conversion of its own.
+  def handle_event(
+        "seek_back",
+        %{"position" => position},
+        %{assigns: %{current: {source, stream}, ctx: %{} = ctx, uuid: uuid}} = socket
+      )
+      when is_number(position) and is_binary(uuid) do
+    %{caps: caps, token: token} = socket.assigns
+
+    {:noreply,
+     start_async(
+       socket,
+       :restart,
+       Roki.Study.wrap(fn -> {token, Watch.restart(uuid, ctx, source, stream, caps, trunc(position))} end)
+     )}
+  end
+
+  def handle_event("seek_back", _params, socket), do: {:noreply, socket}
+
   # The OpenSubtitles choices for one language, listed on request from the subtitles menu.
   def handle_event("os_search", %{"lang" => lang}, %{assigns: %{ctx: ctx, uuid: uuid}} = socket)
       when is_binary(lang) and byte_size(lang) in 2..3 and ctx != nil do
