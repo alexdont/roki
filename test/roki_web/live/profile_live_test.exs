@@ -177,7 +177,7 @@ defmodule RokiWeb.ProfileLiveTest do
     {:ok, visitor, _} = live(signed_in(other), "/historian/watched")
     html = render_async(visitor)
     assert html =~ "Newest Film"
-    refute has_element?(visitor, "button[aria-label=More]")
+    refute has_element?(visitor, "button[phx-click=select_mode]")
     render_click(visitor, "select_mode", %{})
     refute render(visitor) =~ "Edit watch date"
     render_click(visitor, "remove", %{})
@@ -188,11 +188,15 @@ defmodule RokiWeb.ProfileLiveTest do
     html = render_async(view)
     assert html =~ "Forgotten Film"
     assert html =~ "not rated"
-    assert has_element?(view, "button[aria-label=More]")
+    assert has_element?(view, "button[phx-click=select_mode]", "Select")
 
-    view |> element("button[aria-label=More]") |> render_click()
-    view |> element("button", "Select") |> render_click()
+    # One button turns select mode on, and off again.
+    view |> element("button[phx-click=select_mode]") |> render_click()
     assert render(view) =~ "0</b> selected"
+    assert has_element?(view, "button[phx-click=select_mode]", "Done")
+    view |> element("button[phx-click=select_mode]") |> render_click()
+    refute render(view) =~ "selected"
+    view |> element("button[phx-click=select_mode]") |> render_click()
 
     # Pick the forgotten one, put it years back: it drops under the other, which keeps its place.
     view |> element("button[phx-click=select_toggle][phx-value-key='movie:2']") |> render_click()

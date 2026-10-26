@@ -5,7 +5,7 @@ defmodule RokiWeb.WatchedLive do
   `?kind=anime`, `?tens=1` for the ten-out-of-tens, `?q=` to search, `?view=rows`). Open to
   everyone, like the profile; everything is read from this server (`Roki.Profile`).
 
-  The owner has a menu (the three dots) that turns on *select mode*: tick any number of
+  The owner has a button that turns on *select mode* (and off again): tick any number of
   titles, then give them a watch date — a film found years after it was seen goes back where it
   belongs instead of topping the list — or take them off the list.
   """
@@ -49,7 +49,6 @@ defmodule RokiWeb.WatchedLive do
           tens?: false,
           shown: @page,
           page: @page,
-          menu?: false,
           select?: false,
           selected: MapSet.new(),
           dating?: false,
@@ -105,13 +104,10 @@ defmodule RokiWeb.WatchedLive do
     {:noreply, push_patch(socket, to: address(socket.assigns, q: String.trim(q)), replace: true)}
   end
 
-  def handle_event("menu", _params, socket), do: {:noreply, update(socket, :menu?, &(not &1))}
-  def handle_event("menu_close", _params, socket), do: {:noreply, assign(socket, :menu?, false)}
-
   # Select mode — the owner's.
   def handle_event("select_mode", _params, %{assigns: %{owner?: true}} = socket) do
     on? = not socket.assigns.select?
-    {:noreply, assign(socket, select?: on?, selected: MapSet.new(), menu?: false, dating?: false, notice: nil)}
+    {:noreply, assign(socket, select?: on?, selected: MapSet.new(), dating?: false, notice: nil)}
   end
 
   def handle_event("select_toggle", %{"key" => key}, %{assigns: %{owner?: true, select?: true}} = socket) do
@@ -238,74 +234,76 @@ defmodule RokiWeb.WatchedLive do
       </p>
 
       <div :if={@visible?} class={["space-y-6", @select? && "pb-28"]}>
-        <div class="flex flex-wrap items-center gap-3">
-          <.link navigate={"/#{@username}"} class="flex items-center gap-3 text-base-content/70 hover:text-base-content">
+        <div class="flex items-center gap-3">
+          <.link navigate={"/#{@username}"} class="flex min-w-0 items-center gap-2 text-base-content/70 hover:text-base-content">
             <.user_avatar user={@user} size="md" />
-            <span class="font-semibold">{@user.username}</span>
+            <span class="hidden truncate font-semibold sm:inline">{@user.username}</span>
           </.link>
           <h1 class="text-2xl font-bold sm:text-3xl">Watched</h1>
           <span :if={is_list(@history)} class="text-sm text-base-content/60">{length(@history)}</span>
 
-          <div class="ml-auto flex items-center gap-2">
-            <%!-- How it is laid out: posters, or one to a row with the details. --%>
-            <div class="join" role="group" aria-label="View">
-              <.link patch={address(assigns, view: :grid)} class={["btn btn-sm btn-square join-item", @view == :grid && "btn-active"]} aria-label="Grid view" title="Grid">
-                <.icon name="hero-squares-2x2" class="h-4 w-4" />
-              </.link>
-              <.link patch={address(assigns, view: :rows)} class={["btn btn-sm btn-square join-item", @view == :rows && "btn-active"]} aria-label="List view" title="List">
-                <.icon name="hero-bars-3" class="h-4 w-4" />
-              </.link>
-            </div>
-
-            <%!-- The three dots: for the owner, select mode. --%>
-            <div :if={@owner?} class="relative">
-              <button type="button" phx-click="menu" class={["btn btn-sm btn-square", (@menu? or @select?) && "btn-active"]} aria-label="More" aria-haspopup="menu" aria-expanded={to_string(@menu?)}>
-                <.icon name="hero-ellipsis-vertical" class="h-5 w-5" />
-              </button>
-              <div :if={@menu?} class="absolute right-0 top-full z-30 mt-1 w-56 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl" phx-click-away="menu_close" role="menu">
-                <button type="button" phx-click="select_mode" class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left font-medium hover:bg-base-200" role="menuitem">
-                  <.icon name="hero-check-circle" class="h-5 w-5" /> {if @select?, do: "Stop selecting", else: "Select"}
-                </button>
-              </div>
-            </div>
-          </div>
+          <%!-- Select mode, for the owner: one button, on and off. --%>
+          <button
+            :if={@owner?}
+            type="button"
+            phx-click="select_mode"
+            aria-pressed={to_string(@select?)}
+            class={["btn btn-sm ml-auto gap-1.5", @select? && "btn-primary"]}
+          >
+            <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
+            {if @select?, do: "Done", else: "Select"}
+          </button>
         </div>
 
         <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">{@notice}</p>
 
-        <form id="watched-search" phx-change="search" phx-submit="search" class="max-w-md">
-          <label class="input input-bordered flex items-center gap-2">
-            <.icon name="hero-magnifying-glass" class="h-4 w-4 text-base-content/50" />
-            <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="grow" />
-          </label>
-        </form>
+        <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
+        <div class="flex items-center gap-2">
+          <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md">
+            <label class="input input-bordered flex w-full items-center gap-2">
+              <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/50" />
+              <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="min-w-0 grow" />
+            </label>
+          </form>
+          <div class="join shrink-0" role="group" aria-label="View">
+            <.link patch={address(assigns, view: :grid)} class={["btn btn-square join-item", @view == :grid && "btn-active"]} aria-label="Grid view" title="Grid">
+              <.icon name="hero-squares-2x2" class="h-5 w-5" />
+            </.link>
+            <.link patch={address(assigns, view: :rows)} class={["btn btn-square join-item", @view == :rows && "btn-active"]} aria-label="List view" title="List">
+              <.icon name="hero-bars-3" class="h-5 w-5" />
+            </.link>
+          </div>
+        </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="join">
+        <%!-- The filters: one line that swipes sideways on a phone, wraps on a wide screen. --%>
+        <div class="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+          <div class="flex w-max items-center gap-2 sm:w-auto sm:flex-wrap">
+            <div class="join shrink-0">
+              <.link
+                :for={{s, label} <- [latest: "Latest", top: "By rating"]}
+                patch={address(assigns, sort: s)}
+                class={["btn btn-sm join-item whitespace-nowrap", @sort == s && "btn-primary"]}
+              >
+                {label}
+              </.link>
+            </div>
+            <div class="join shrink-0">
+              <.link
+                :for={{k, label} <- Profile.kinds()}
+                patch={address(assigns, kind: k)}
+                class={["btn btn-sm join-item whitespace-nowrap", @kind == k && "btn-primary"]}
+              >
+                {label}
+              </.link>
+            </div>
             <.link
-              :for={{s, label} <- [latest: "Latest", top: "By rating"]}
-              patch={address(assigns, sort: s)}
-              class={["btn btn-sm join-item", @sort == s && "btn-primary"]}
+              :if={@owner? or @profile.show_ratings}
+              patch={address(assigns, sort: :top, tens: not @tens?)}
+              class={["btn btn-sm shrink-0 whitespace-nowrap", @tens? && "btn-primary"]}
             >
-              {label}
+              ★ 10 only
             </.link>
           </div>
-          <div class="join">
-            <.link
-              :for={{k, label} <- Profile.kinds()}
-              patch={address(assigns, kind: k)}
-              class={["btn btn-sm join-item", @kind == k && "btn-primary"]}
-            >
-              {label}
-            </.link>
-          </div>
-          <.link
-            :if={@owner? or @profile.show_ratings}
-            patch={address(assigns, sort: :top, tens: not @tens?)}
-            class={["btn btn-sm", @tens? && "btn-primary"]}
-          >
-            ★ 10 only
-          </.link>
         </div>
 
         <ul :if={@history == nil} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
@@ -366,25 +364,29 @@ defmodule RokiWeb.WatchedLive do
         </button>
       </div>
 
-      <%!-- Select mode's bar: how many, and what to do with them. --%>
+      <%!-- Select mode's bar: how many and which, then what to do with them. Two lines on a
+            phone, one on a wide screen. --%>
       <div :if={@select?} class="fixed inset-x-0 bottom-0 z-40 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.3)] backdrop-blur">
-        <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-2">
-          <p class="min-w-0 flex-1 text-sm"><b>{MapSet.size(@selected)}</b> selected</p>
-          <button type="button" phx-click="select_all" class="btn btn-ghost btn-sm">All {length(@items)}</button>
-          <button type="button" phx-click="select_none" class="btn btn-ghost btn-sm" disabled={MapSet.size(@selected) == 0}>None</button>
-          <button type="button" phx-click="date_open" class="btn btn-sm btn-primary" disabled={MapSet.size(@selected) == 0}>
-            <.icon name="hero-calendar-days" class="h-4 w-4" /> Edit watch date
-          </button>
-          <button
-            type="button"
-            phx-click="remove"
-            data-confirm={"Take #{MapSet.size(@selected)} off your watched list? Their ratings stay."}
-            class="btn btn-sm btn-error btn-outline"
-            disabled={MapSet.size(@selected) == 0}
-          >
-            <.icon name="hero-trash" class="h-4 w-4" /> Remove
-          </button>
-          <button type="button" phx-click="select_mode" class="btn btn-sm">Done</button>
+        <div class="mx-auto max-w-6xl space-y-3 sm:flex sm:items-center sm:gap-4 sm:space-y-0">
+          <div class="flex items-center gap-1 sm:flex-1">
+            <p class="min-w-0 flex-1 text-sm"><b>{MapSet.size(@selected)}</b> selected</p>
+            <button type="button" phx-click="select_all" class="btn btn-ghost btn-sm whitespace-nowrap">All {length(@items)}</button>
+            <button type="button" phx-click="select_none" class="btn btn-ghost btn-sm" disabled={MapSet.size(@selected) == 0}>None</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 sm:flex">
+            <button type="button" phx-click="date_open" class="btn btn-primary whitespace-nowrap" disabled={MapSet.size(@selected) == 0}>
+              <.icon name="hero-calendar-days" class="h-4 w-4" /> Edit watch date
+            </button>
+            <button
+              type="button"
+              phx-click="remove"
+              data-confirm={"Take #{MapSet.size(@selected)} off your watched list? Their ratings stay."}
+              class="btn btn-error btn-outline"
+              disabled={MapSet.size(@selected) == 0}
+            >
+              <.icon name="hero-trash" class="h-4 w-4" /> Remove
+            </button>
+          </div>
         </div>
       </div>
 
