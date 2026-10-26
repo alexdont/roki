@@ -547,6 +547,15 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   .study-bar2 [data-role="audio-btn"], .study-bar2 [data-role="lines-btn"] { width: 2rem; padding: 0; justify-content: center; }
   .study-bar2 [data-role="subs-btn"] { padding-inline: 0.45rem; }
   .study-bar2 [data-role="subs-label"] { max-width: 3.5rem; }
+  /* A phone's rounded corners and home indicator: the bar sits a little higher and in from the
+     edges, by the safe-area insets where the browser reports them and a little anyway. */
+  .study-immersive .study-controls {
+    padding-left: calc(0.6rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.6rem + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+  }
+  .study-immersive .study-stage .study-overlay, .study-immersive .study-stage[data-active] .study-overlay { bottom: calc(6.2rem + env(safe-area-inset-bottom, 0px)); }
+  .study-immersive .study-replay { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* The colour choices for the lines. */
