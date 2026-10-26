@@ -31,6 +31,8 @@ defmodule Roki.Application do
       {DynamicSupervisor, name: Roki.Direct.Supervisor, strategy: :one_for_one},
       # Removes conversions nobody has fetched for six hours (laev's own sweep waits a day).
       Roki.CacheSweeper,
+      # Warms every account's copies (titles, ratings, pictures) on a clock, so pages never have to.
+      Roki.Refresher,
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)
       # {Roki.Worker, arg},

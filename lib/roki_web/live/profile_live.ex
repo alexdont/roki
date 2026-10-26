@@ -70,13 +70,13 @@ defmodule RokiWeb.ProfileLive do
      |> fetch_posters()}
   end
 
-  # The history and the stats take a moment (the owner's files); the ratings are the site's own
-  # copy, read at once and refreshed behind the page when it is time.
+  # Everything here is read from this server — the owner's files, the site's tables, the media
+  # library — and nothing is asked of TMDB or MyAnimeList: the copies are kept current on a
+  # clock (`Roki.Refresher`) and by what is done on the site.
   defp load(socket) do
     %{uuid: uuid, owner?: owner?, profile: profile} = socket.assigns
 
     socket = start_async(socket, :ratings, fn -> Profile.ratings(uuid) end)
-    socket = start_async(socket, :refresh, fn -> Profile.refresh_ratings(uuid) end)
 
     socket =
       if owner? or profile.show_history,
@@ -88,13 +88,8 @@ defmodule RokiWeb.ProfileLive do
       else: socket
   end
 
-  # Posters for the rows on screen that laev has none for yet, once the list is there.
-  defp fetch_posters(%{assigns: %{history: items}} = socket) when is_list(items) do
-    uuid = socket.assigns.uuid
-    shown = socket |> arranged() |> Enum.take(socket.assigns.shown)
-    start_async(socket, :posters, fn -> Profile.posters(uuid, shown) end)
-  end
-
+  # Posters come with the history, from the title store; a title the store has no card for yet
+  # shows without one until the refresher has been by.
   defp fetch_posters(socket), do: socket
 
   defp arranged(%{assigns: a}) when is_list(a.history),
@@ -156,27 +151,8 @@ defmodule RokiWeb.ProfileLive do
 
   def handle_async(:history, _other, socket), do: {:noreply, assign(socket, :history, [])}
 
-  def handle_async(:posters, {:ok, posters}, %{assigns: %{history: items}} = socket)
-      when is_map(posters) and is_list(items) and posters != %{} do
-    items =
-      Enum.map(items, fn i ->
-        key = if i.type == nil and is_integer(i.mal_id), do: {"mal", i.mal_id}, else: {i.type, i.id}
-        if i.poster == nil and posters[key], do: %{i | poster: posters[key]}, else: i
-      end)
-
-    {:noreply, assign(socket, :history, items)}
-  end
-
-  def handle_async(:posters, _other, socket), do: {:noreply, socket}
-
   def handle_async(:ratings, {:ok, ratings}, socket) when is_map(ratings), do: {:noreply, assign(socket, :ratings, ratings)}
   def handle_async(:ratings, _other, socket), do: {:noreply, socket}
-
-  # Freshly copied: read them again.
-  def handle_async(:refresh, {:ok, :ok}, %{assigns: %{uuid: uuid}} = socket),
-    do: {:noreply, start_async(socket, :ratings, fn -> Profile.ratings(uuid) end)}
-
-  def handle_async(:refresh, _other, socket), do: {:noreply, socket}
 
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
