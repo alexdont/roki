@@ -555,6 +555,8 @@ defmodule Roki.Watch do
   # Stats and the shelf's counts read the same marks; the other devices pick them up on a sync.
   defp library_changed(uuid) do
     Roki.Stats.forget(uuid)
+    # What was watched changed: the profile reads it again at its next look, not in five minutes.
+    Roki.Profile.forget_history(uuid)
     Task.start(fn -> Roki.Laev.run(uuid, &Laev.Sync.live_push/0) end)
     :ok
   end
@@ -1093,7 +1095,10 @@ defmodule Roki.Watch do
       Laev.Position.set_watched(ctx, true)
       Laev.Sync.live_push()
     end)
-    |> tap(fn _ -> Roki.Activity.record(uuid, ctx) end)
+    |> tap(fn _ ->
+      Roki.Activity.record(uuid, ctx)
+      Roki.Profile.forget_history(uuid)
+    end)
   end
 
   @doc """
@@ -1767,6 +1772,7 @@ defmodule Roki.Watch do
       if new? do
         scrobble(uuid, [ctx])
         Roki.Activity.record(uuid, ctx)
+        Roki.Profile.forget_history(uuid)
       end
     end)
   end
@@ -1791,6 +1797,7 @@ defmodule Roki.Watch do
     if new? do
       scrobble(uuid, [ctx])
       Roki.Activity.record(uuid, ctx)
+      Roki.Profile.forget_history(uuid)
     end
 
     new?
