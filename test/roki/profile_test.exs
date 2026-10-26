@@ -107,6 +107,19 @@ defmodule Roki.ProfileTest do
     assert msg =~ "holds 10"
   end
 
+  test "a pull's news is the film or episode newly finished, never a backlog" do
+    before = MapSet.new(["movie-1", "tv-5-s1e1"])
+
+    assert Roki.Laev.news(before, MapSet.new(["movie-1", "tv-5-s1e1", "movie-1561726"])) == [{"movie", 1_561_726, nil, nil}]
+    assert Roki.Laev.news(before, MapSet.put(before, "tv-5-s1e2")) == [{"tv", 5, 1, 2}]
+    # A whole show or an anime entry is not one thing watched.
+    assert Roki.Laev.news(before, MapSet.new(["movie-1", "tv-5-s1e1", "tv-9", "mal-30-e1"])) == []
+    # A first sync, and an import.
+    assert Roki.Laev.news(MapSet.new(), MapSet.new(["movie-1", "movie-2"])) == []
+    assert Roki.Laev.news(before, MapSet.union(before, MapSet.new(for n <- 100..110, do: "movie-#{n}"))) == []
+    assert Roki.Laev.news(before, before) == []
+  end
+
   test "a profile's counts follow the finished titles" do
     watched(@uuid, [
       {"movie", 1, "movie", 1, "Film", false},

@@ -325,11 +325,92 @@ defmodule Roki.Laev do
   @doc "This site's own sync store (`/api/laev`): where an account's laev key is kept unless it says otherwise."
   def sync_url, do: RokiWeb.Endpoint.url() <> "/api/laev"
 
-  @doc "Pull, merge and push once."
+  @doc """
+  Pull, merge and push once. What was finished in the terminal app and arrives with the pull
+  is news to the site: each film or episode newly finished goes into the recent activity (as
+  if it had been finished here) and the profile's copy of the finished titles is read again.
+  A pull that brings in a backlog (a first sync, an import) is not news and records nothing.
+  """
   def sync(uuid) do
+    before = run(uuid, &finished_marks/0)
     result = run(uuid, &Sync.sync/0)
+    now = run(uuid, &finished_marks/0)
     Roki.Stats.forget(uuid)
+    Roki.Profile.forget_history(uuid)
+    record_news(uuid, before, now)
     result
+  end
+
+  # The names of the marks that say something was watched (laev's `positions` files holding
+  # "done" or "seen"): `movie-603`, `tv-1396-s1e2`.
+  defp finished_marks do
+    dir = Path.join(Laev.Scope.dir(), "positions")
+
+    case File.ls(dir) do
+      {:ok, names} ->
+        for n <- names, match?({:ok, b} when b in ["done", "seen"], read_mark(dir, n)), into: MapSet.new(), do: n
+
+      _ ->
+        MapSet.new()
+    end
+  end
+
+  defp read_mark(dir, name) do
+    case File.read(Path.join(dir, name)) do
+      {:ok, body} -> {:ok, String.trim(body)}
+      other -> other
+    end
+  end
+
+  @news_max 6
+
+  @doc """
+  What a pull brought in that counts as something just watched: `[{type, id, season, episode}]`
+  from the marks before and after — none for a first sync (nothing before) or an import (more
+  than #{6} at once), neither of which is something watched.
+  """
+  def news(before, now) do
+    new = now |> MapSet.difference(before) |> Enum.sort() |> Enum.flat_map(&mark_target/1)
+    if MapSet.size(before) > 0 and length(new) <= @news_max, do: new, else: []
+  end
+
+  defp record_news(uuid, before, now) do
+    new = news(before, now)
+
+    if new != [] do
+      Task.start(fn ->
+        for {type, id, season, episode} <- new, do: record_finished(uuid, type, id, season, episode)
+      end)
+    end
+
+    :ok
+  end
+
+  # A film (`movie-603`) or an episode (`tv-1396-s1e2`); a whole-show mark and an anime entry
+  # are not a single thing finished.
+  defp mark_target(name) do
+    cond do
+      m = Regex.run(~r/^movie-(\d+)$/, name) -> [{"movie", String.to_integer(Enum.at(m, 1)), nil, nil}]
+      m = Regex.run(~r/^tv-(\d+)-s(\d+)e(\d+)$/, name) -> [{"tv", String.to_integer(Enum.at(m, 1)), String.to_integer(Enum.at(m, 2)), String.to_integer(Enum.at(m, 3))}]
+      true -> []
+    end
+  end
+
+  defp record_finished(uuid, type, id, season, episode) do
+    case Roki.Watch.title(type, id, uuid) do
+      {:ok, title} ->
+        Roki.Activity.record(uuid, %{
+          type: type,
+          tmdb_id: id,
+          title: title.title,
+          poster_path: title.poster_path,
+          season: season,
+          episode: episode
+        })
+
+      _ ->
+        :ok
+    end
   end
 
   @doc "Forget the connection and everything pulled for this account."

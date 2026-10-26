@@ -56,6 +56,8 @@ defmodule RokiWeb.SyncApiController do
       true ->
         case Store.put(conn.assigns.laev_token, doc, body, if_match(conn)) do
           {:ok, etag} ->
+            Roki.SyncPush.notify(conn.assigns.laev_token)
+
             conn
             |> put_resp_header("etag", quote_etag(etag))
             |> send_resp(200, "")
@@ -85,6 +87,8 @@ defmodule RokiWeb.SyncApiController do
 
         case Store.merge(conn.assigns.laev_token, doc, patch) do
           {:ok, etag} ->
+            Roki.SyncPush.notify(conn.assigns.laev_token)
+
             conn
             |> put_resp_header("etag", quote_etag(etag))
             |> send_resp(200, "")
