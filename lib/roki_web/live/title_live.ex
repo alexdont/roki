@@ -459,10 +459,18 @@ defmodule RokiWeb.TitleLive do
   def handle_async(:rating_load, _other, socket),
     do: {:noreply, assign(socket, :rating, %{state: :loading, value: nil, provider: :tmdb})}
 
-  def handle_async(:rating, {:ok, {:rate, {:ok, value}}}, socket),
-    do:
-      {:noreply,
-       assign(socket, rating: %{socket.assigns.rating | value: value}, rating_error: nil)}
+  # Rated is watched (Roki.Watch.rate/4): the watched state on the page is read again.
+  def handle_async(:rating, {:ok, {:rate, {:ok, value}}}, socket) do
+    %{uuid: uuid, title: title} = socket.assigns
+
+    {:noreply,
+     socket
+     |> assign(rating: %{socket.assigns.rating | value: value}, rating_error: nil)
+     |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)}
+  end
+
+  def handle_async(:lib_reload, {:ok, %{} = lib}, socket), do: {:noreply, assign(socket, :lib, lib)}
+  def handle_async(:lib_reload, _other, socket), do: {:noreply, socket}
 
   def handle_async(:rating, {:ok, {:clear, :ok}}, socket),
     do:
@@ -647,7 +655,7 @@ defmodule RokiWeb.TitleLive do
       <.link navigate={~p"/title/tv/#{@title.id}"} class="shrink-0" aria-label="Back to the title">
         <img
           :if={@title.poster}
-          src={@title.poster}
+          src={Roki.Images.local(@title.poster)}
           alt={@title.title}
           class="aspect-[2/3] w-16 rounded-lg bg-base-300 object-cover shadow sm:w-20"
         />
@@ -697,7 +705,7 @@ defmodule RokiWeb.TitleLive do
       <div class="w-[8.5rem] shrink-0 space-y-3 sm:w-56 sm:space-y-4">
         <img
           :if={@title.poster}
-          src={@title.poster}
+          src={Roki.Images.local(@title.poster)}
           alt={@title.title}
           class="aspect-[2/3] w-full rounded-box bg-base-300 object-cover shadow-lg"
         />
@@ -1139,7 +1147,7 @@ defmodule RokiWeb.TitleLive do
             <div class="hidden h-[4.5rem] w-32 shrink-0 overflow-hidden rounded bg-base-300 sm:block">
               <img
                 :if={e.still}
-                src={e.still}
+                src={Roki.Images.local(e.still)}
                 alt=""
                 loading="lazy"
                 class="h-full w-full object-cover"
@@ -1389,7 +1397,7 @@ defmodule RokiWeb.TitleLive do
           <div class="relative aspect-[2/3] w-[min(calc((100cqh-7rem)*0.66667),70cqw)] shrink-0 self-start overflow-hidden rounded-box bg-base-300 shadow-lg">
             <img
               :if={@title.poster}
-              src={@title.poster}
+              src={Roki.Images.local(@title.poster)}
               alt={@title.title}
               class="absolute inset-0 h-full w-full object-cover"
             />

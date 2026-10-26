@@ -174,26 +174,113 @@ defmodule Roki.Profile do
   # ── what they watched ─────────────────────────────────────────────
 
   @doc """
-  Everything the user finished, newest first, as laev lists it (`Roki.Laev.completed/1`):
-  `[%{type:, id:, mal_id:, title:, poster:, anime:, at:, dated?:}]`. Remembered for a few
-  minutes: it reads the owner's files, and a profile is looked at more often than it changes.
+  Everything the user finished, newest first: `[%{type:, id:, mal_id:, season:, title:,
+  poster:, anime:, at:, dated?:}]`, from the site's own table of finished titles, which is
+  filled from laev's marks (`Roki.Laev.completed/1`) when it is five minutes old or more —
+  a profile is looked at more often than it changes, and the table is there whether laev is
+  reachable or not. Posters come from the site's copy of the titles (`Roki.Titles`).
   """
   def history(uuid) when is_binary(uuid) do
-    case TTLCache.fetch({:profile_history, uuid}, @history_ttl_s, fn ->
-           if Roki.Laev.connected?(uuid),
-             do: {:ok, Roki.Laev.completed(uuid)},
-             else: {:ok, []}
-         end) do
-      {:ok, items} when is_list(items) -> items
-      _ -> []
-    end
+    sync_watched(uuid)
+    read_watched(uuid)
   end
 
-  @doc "Forget the remembered history (after a sync, say)."
-  def forget_history(uuid), do: TTLCache.delete({:profile_history, uuid})
+  @doc "Forget when the finished titles were last copied, so the next look copies them again."
+  def forget_history(uuid), do: TTLCache.delete({:watched_sync, uuid})
 
-  @doc "Posters for the shown rows that have none yet (one TMDB read each, once), by {type, id}."
-  def posters(uuid, items), do: Roki.Laev.completed_posters(uuid, items)
+  # laev's finished titles into the table, their cards into the title store; once per five
+  # minutes, one at a time.
+  defp sync_watched(uuid) do
+    if Roki.Laev.connected?(uuid) and not TTLCache.cached?({:watched_sync, uuid}) do
+      TTLCache.fetch({:watched_sync, uuid}, @history_ttl_s, fn ->
+        items = Roki.Laev.completed(uuid)
+        Roki.Titles.remember(for i <- items, i.type != nil, do: %{type: i.type, id: i.id, title: i.title, poster: i.poster})
+        replace_watched(uuid, items)
+        {:ok, :done}
+      end)
+    end
+
+    :ok
+  end
+
+  defp replace_watched(uuid, items) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    rows =
+      items
+      |> Enum.map(fn i ->
+        {type, id} = if is_integer(i[:mal_id]), do: {"mal", i.mal_id}, else: {i.type, i.id}
+        {type, id, i.type, i.id, i[:season], i[:title], i[:anime] == true, DateTime.from_unix!(max(i.at || 0, 0)), i[:dated?] == true}
+      end)
+      |> Enum.filter(fn {type, id, _, _, _, _, _, _, _} -> is_binary(type) and is_integer(id) end)
+      |> Enum.uniq_by(fn {type, id, _, _, _, _, _, _, _} -> {type, id} end)
+
+    Repo.transaction(fn ->
+      Repo.query!("delete from roki_watched where user_uuid = $1", [bin])
+
+      rows
+      |> Enum.chunk_every(300)
+      |> Enum.each(fn chunk ->
+        {values, params} =
+          chunk
+          |> Enum.with_index()
+          |> Enum.map_reduce([], fn {{type, id, tt, tid, season, title, anime, at, dated}, i}, acc ->
+            n = i * 9
+            {"($1, " <> Enum.map_join(2..10, ", ", &"$#{n + &1}") <> ")", acc ++ [type, id, tt, tid, season, title, anime, at, dated]}
+          end)
+
+        Repo.query!(
+          "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, season, title, anime, at, dated) values " <>
+            Enum.join(values, ", "),
+          [bin | params]
+        )
+      end)
+    end)
+
+    :ok
+  end
+
+  defp read_watched(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!(
+        "select type, id, tmdb_type, tmdb_id, season, title, anime, at, dated from roki_watched where user_uuid = $1 order by dated desc, at desc",
+        [bin]
+      )
+
+    items =
+      Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated] ->
+        %{
+          type: tt,
+          id: tid,
+          mal_id: if(type == "mal", do: id),
+          season: season,
+          title: title,
+          poster: nil,
+          anime: anime,
+          at: at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix(),
+          dated?: dated
+        }
+      end)
+
+    cards = Roki.Titles.cards(for i <- items, i.type != nil, do: {i.type, i.id})
+    Enum.map(items, fn i -> %{i | poster: cards[{i.type, i.id}][:poster], title: i.title || cards[{i.type, i.id}][:title]} end)
+  end
+
+  @doc """
+  Posters for the shown rows that have none yet, by {type, id}: read from TMDB through laev
+  (one read each, once), and kept in the title store so the next look is a lookup.
+  """
+  def posters(uuid, items) do
+    found = Roki.Laev.completed_posters(uuid, items)
+
+    Roki.Titles.remember_later(
+      for %{type: type, id: id, title: title} <- items, poster = found[{type, id}], do: %{type: type, id: id, title: title, poster: poster}
+    )
+
+    found
+  end
 
   @doc "The kinds a profile's history is filtered by."
   def kinds, do: [all: "All", movie: "Movies", tv: "Shows", anime: "Anime"]

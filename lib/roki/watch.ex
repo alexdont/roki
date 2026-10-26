@@ -23,7 +23,6 @@ defmodule Roki.Watch do
   alias Laev.{Sources, Tmdb}
   alias Roki.TTLCache
 
-  @details_ttl 12 * 60 * 60
   @episodes_ttl 6 * 60 * 60
   @few_sources 12
   @sources_ttl 10 * 60
@@ -39,20 +38,51 @@ defmodule Roki.Watch do
   # ── 1. the title ───────────────────────────────────────────────────
 
   @doc """
-  `{:ok, title}` for a film or show — cached 12 hours, shared (it is public data).
+  `{:ok, title}` for a film or show, from the site's own copy (`Roki.Titles`) when it has
+  one: TMDB is read once, and again behind the page when a copy of a running show is two
+  weeks old. Shared (it is public data).
 
   `title.search` is what to look for and `title.accept` every name a release may carry
   (laev's rule: accepting is free, searching costs a request per name).
   """
   def title(type, id, uuid \\ nil) when type in ~w(movie tv) and is_integer(id) do
-    TTLCache.fetch({:title, 2, type, id}, @details_ttl, fn ->
-      Roki.Laev.public(uuid, fn ->
-        with {:ok, d} <- fetch_details(type, id) do
-          Laev.AnimeMap.ensure()
-          {:ok, normalize(type, d)}
-        end
-      end)
+    case Roki.Titles.get(type, id) do
+      {:ok, title, true} ->
+        {:ok, title}
+
+      {:ok, title, false} ->
+        refresh_title(type, id, uuid)
+        {:ok, title}
+
+      :none ->
+        # One read at a time, and the answer kept a little while in memory: a burst of visitors
+        # to a new title is one request.
+        TTLCache.fetch({:title, 3, type, id}, 600, fn -> read_title(type, id, uuid) end)
+    end
+  end
+
+  # TMDB's answer, kept for everyone.
+  defp read_title(type, id, uuid) do
+    Roki.Laev.public(uuid, fn ->
+      with {:ok, d} <- fetch_details(type, id) do
+        Laev.AnimeMap.ensure()
+        title = normalize(type, d)
+        Roki.Titles.put(title)
+        {:ok, title}
+      end
     end)
+  end
+
+  # An old copy is read again behind the page, once an hour at most.
+  defp refresh_title(type, id, uuid) do
+    key = {:title_refresh, type, id}
+
+    unless TTLCache.cached?(key) do
+      TTLCache.fetch(key, 3600, fn -> {:ok, :queued} end)
+      Task.start(fn -> read_title(type, id, uuid) end)
+    end
+
+    :ok
   end
 
   defp fetch_details("movie", id), do: Tmdb.movie(id)
@@ -317,32 +347,56 @@ defmodule Roki.Watch do
     end)
   end
 
-  @doc "Rate a title (TMDB: 0.5–10 in half steps; MyAnimeList: 1–10): `{:ok, rating}` or `{:error, why}`."
+  @doc """
+  Rate a title (TMDB: 0.5–10 in half steps; MyAnimeList: 1–10): `{:ok, rating}` or
+  `{:error, why}`. Rating something is having watched it: a film, or a show not yet marked
+  as watched through, is marked so.
+  """
   def rate(uuid, title, value, entry \\ nil) do
-    Roki.Laev.run(uuid, fn ->
-      case rating_target(title, entry) do
-        {:mal, mal} ->
-          score = value |> round() |> max(1) |> min(10)
+    result =
+      Roki.Laev.run(uuid, fn ->
+        case rating_target(title, entry) do
+          {:mal, mal} ->
+            score = value |> round() |> max(1) |> min(10)
 
-          case Laev.MAL.rate(mal, score) do
-            :ok ->
-              Roki.Profile.note_rating(uuid, {"mal", mal}, score)
-              {:ok, score * 1.0}
+            case Laev.MAL.rate(mal, score) do
+              :ok ->
+                Roki.Profile.note_rating(uuid, {"mal", mal}, score)
+                {:ok, score * 1.0}
 
-            other ->
-              {:error, other}
-          end
+              other ->
+                {:error, other}
+            end
 
-        :tmdb ->
-          result =
-            if title.type == "movie",
-              do: Laev.Tmdb.rate_movie(title.id, value),
-              else: Laev.Tmdb.rate_tv(title.id, value)
+          :tmdb ->
+            result =
+              if title.type == "movie",
+                do: Laev.Tmdb.rate_movie(title.id, value),
+                else: Laev.Tmdb.rate_tv(title.id, value)
 
-          with {:ok, rating} <- result, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
-          result
-      end
-    end)
+            with {:ok, rating} <- result, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
+            result
+        end
+      end)
+
+    with {:ok, _} <- result, do: watched_by_rating(uuid, title)
+    result
+  end
+
+  # What is rated has been seen: the film, or every aired episode of the show, unless it is
+  # marked already. (A show rated half-way through is a judgement on it all the same.)
+  defp watched_by_rating(uuid, title) do
+    lib = library(uuid, title)
+
+    cond do
+      title.type == "movie" and not lib.watched? -> set_watched(uuid, title, nil, nil, true)
+      title.type == "tv" and not lib.all_watched? -> set_series_watched(uuid, title, true)
+      true -> :ok
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   @doc "Take your rating back: `:ok` or `{:error, why}`."

@@ -47,8 +47,10 @@ defmodule Roki.Browse do
 
     with {:ok, {items, more?}} <-
            TTLCache.fetch({:browse, kind, sort, season, week, n}, @ttl_s, fn ->
-             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week),
-                  do: {:ok, {items, more?}}
+             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week) do
+               Roki.Titles.remember_later(items)
+               {:ok, {items, more?}}
+             end
            end) do
       {:ok, items, more?}
     end

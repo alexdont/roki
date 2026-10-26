@@ -59,7 +59,7 @@ defmodule RokiWeb.PosterComponents do
       >
         <img
           :if={@item.poster}
-          src={@item.poster}
+          src={Roki.Images.local(@item.poster)}
           alt={@item.title}
           loading="lazy"
           class={[

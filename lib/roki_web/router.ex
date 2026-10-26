@@ -40,6 +40,8 @@ defmodule RokiWeb.Router do
     get "/mal/callback", MalController, :callback
     # A profile's banner (Roki.Profile).
     get "/banners/:file", BannerController, :show
+    # TMDB's pictures from the site's own copy (Roki.Images).
+    get "/img/:size/:file", ImageController, :show
   end
 
   scope "/", RokiWeb do

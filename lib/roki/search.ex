@@ -60,7 +60,10 @@ defmodule Roki.Search do
     else
       with {:ok, {items, more?, franchises}} <-
              TTLCache.fetch({:search, canonical(q), page}, @cache_ttl, fn ->
-               upstream(client, uuid, q, page)
+               with {:ok, {items, _, _}} = found <- upstream(client, uuid, q, page) do
+                 Roki.Titles.remember_later(items)
+                 found
+               end
              end) do
         {:ok, Roki.Laev.annotate(uuid, items), more?, Lists.with_progress(uuid, franchises),
          Roki.Laev.seen_keys(uuid, items)}

@@ -85,7 +85,11 @@ defmodule Roki.Featured do
   # Whose key pays is `Roki.Laev.public/2`'s call: the site's when it has one, else
   # the signed-in user's own carried key. The answer is public data either way, so
   # it lands in the shared cache and the next visitor gets it free.
-  defp fetch(kind, n, uuid), do: Roki.Laev.public(uuid, fn -> call(kind, n) end)
+  defp fetch(kind, n, uuid) do
+    result = Roki.Laev.public(uuid, fn -> call(kind, n) end)
+    with {:ok, items, _more?} <- result, do: Roki.Titles.remember_later(items)
+    result
+  end
 
   defp call(:movies, n), do: Laev.Tmdb.trending("movie", n)
   defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)

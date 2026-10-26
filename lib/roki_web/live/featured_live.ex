@@ -191,7 +191,7 @@ defmodule RokiWeb.FeaturedLive do
             >
               <img
                 :if={run.poster}
-                src={run.poster}
+                src={Roki.Images.local(run.poster)}
                 alt=""
                 loading="lazy"
                 class="aspect-[2/3] h-full rounded-md bg-base-300 object-cover"
