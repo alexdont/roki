@@ -249,6 +249,13 @@ export const StudySidebar = {
     })
     for (const ev of ["pause", "ended"]) v.addEventListener(ev, () => { cancelAnimationFrame(this.raf); tick() })
     for (const ev of ["seeked", "timeupdate", "loadedmetadata"]) v.addEventListener(ev, tick)
+    // Where the lines go depends on the picture's shape and the screen's: settled when either changes.
+    const place = () => this.placeOverlay()
+    for (const ev of ["loadedmetadata", "resize"]) v.addEventListener(ev, place)
+    window.addEventListener("resize", place)
+    window.addEventListener("orientationchange", () => setTimeout(place, 300))
+    document.addEventListener("fullscreenchange", () => setTimeout(place, 100))
+    this.wide.addEventListener("change", place)
 
     // Progress goes back to the server only when the page asked for it, and never before the
     // resume seek has happened (a playhead at 0 would overwrite where you were).
@@ -365,6 +372,28 @@ export const StudySidebar = {
 
   // The line(s) being spoken, each word its own element, and the translation under them. Rebuilt
   // only when the lines (or the tracks) change, never every frame.
+  // A phone held upright: the picture is a strip across the middle of the stage, and the lines
+  // at the bottom would float far under it, just over the bar. They go right under the picture
+  // instead, when there is room for them there; otherwise (landscape, a wide screen, a tall
+  // picture) they keep their place above the bar.
+  placeOverlay() {
+    const v = this.video
+    const o = this.overlay
+    if (!o || !this.stage) return
+    const upright = this.el.dataset.immersive === "true" && !this.wide.matches && window.innerHeight > window.innerWidth
+    const reset = () => { o.style.top = ""; o.style.bottom = "" }
+    if (!upright || !v.videoWidth || !v.videoHeight) return reset()
+    const r = v.getBoundingClientRect()
+    const s = this.stage.getBoundingClientRect()
+    const scale = Math.min(r.width / v.videoWidth, r.height / v.videoHeight)
+    const picBottom = r.top - s.top + (r.height + v.videoHeight * scale) / 2
+    const bar = this.el.querySelector(".study-controls")
+    const limit = (bar ? bar.getBoundingClientRect().top - s.top : s.height) - 8
+    if (limit - picBottom < 110) return reset()
+    o.style.top = `${Math.round(picBottom + 10)}px`
+    o.style.bottom = "auto"
+  },
+
   renderOverlay(live, t) {
     const extraLive = this.extras.map((e) => {
       const i = e.cues.length ? activeIndex(e.cues, t) : -1

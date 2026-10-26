@@ -531,10 +531,10 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-ep-label { min-width: 0; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .study-bar2 .study-pop { left: auto; right: 0; }
 .study-bar2 [data-role="ep-menu"] { left: 0; right: auto; }
-/* A phone's bar: one row that must fit. Play and the episode on the left; on the right only
-   icons — audio, settings, subtitles (with the language, short), the list, fullscreen. Previous and
-   Next are in the episode menu instead. */
-@media (max-width: 639px) {
+/* A phone's bar (upright, or on its side — a short screen): one row that must fit. Play and the
+   episode on the left; on the right only icons — audio, settings, subtitles (with the language,
+   short), the list, fullscreen. Previous and Next are in the episode menu instead. */
+@media (max-width: 639px), (max-height: 500px) {
   .study-bar2 { gap: 0.3rem; }
   .study-bar2 .study-bar-group { gap: 0.25rem; }
   .study-bar2 .study-bar-group:first-child { flex: 1 1 auto; }
@@ -554,8 +554,8 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
     padding-right: calc(0.6rem + env(safe-area-inset-right, 0px));
     padding-bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
   }
-  .study-immersive .study-stage .study-overlay, .study-immersive .study-stage[data-active] .study-overlay { bottom: calc(6.2rem + env(safe-area-inset-bottom, 0px)); }
-  .study-immersive .study-replay { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); }
+  .study-immersive #study-ui .study-stage .study-overlay, .study-immersive #study-ui .study-stage[data-active] .study-overlay { bottom: calc(6.2rem + env(safe-area-inset-bottom, 0px)); }
+  .study-immersive #study-ui .study-replay { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* The colour choices for the lines. */
