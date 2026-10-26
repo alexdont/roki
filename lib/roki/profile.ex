@@ -493,6 +493,90 @@ defmodule Roki.Profile do
     |> Enum.map(fn i -> Map.put(i, :on_shelf, MapSet.member?(taken, {i.type || "mal", i.id || i.mal_id})) end)
   end
 
+  @doc """
+  The list a shelf's picker shows: the user's watched titles of that kind and only that kind,
+  their own highest rating first (the unrated after, newest first), each with `key` (the
+  string a click names it by) and `on_shelf`. Nothing of another kind can be in it, so nothing
+  of another kind can be put on the shelf.
+  """
+  def picker(uuid, kind, favorites \\ nil) when kind in [:movie, :tv, :anime, :manga] do
+    favs = favorites || favorites(uuid)
+    taken = for {_, items} <- favs, i <- items, into: MapSet.new(), do: favorite_key(i)
+
+    uuid
+    |> history()
+    |> arrange(ratings(uuid), kind, :top)
+    |> Enum.map(fn i ->
+      {type, id} = favorite_key(i)
+      i |> Map.put(:key, "#{type}:#{id}") |> Map.put(:on_shelf, MapSet.member?(taken, {type, id}))
+    end)
+  end
+
+  @doc "A click's key (`\"movie:603\"`, `\"mal:5114\"`) as `{type, id}`, or nil."
+  def parse_key(key) when is_binary(key) do
+    with [type, id] when type in ["movie", "tv", "mal"] <- String.split(key, ":", parts: 2),
+         {n, ""} <- Integer.parse(id) do
+      {type, n}
+    else
+      _ -> nil
+    end
+  end
+
+  def parse_key(_), do: nil
+
+  @doc """
+  Put several titles on a shelf at once, at the end, in the order given: `{:ok, favorites,
+  added}`. Only titles in the shelf's own picker list count — a film cannot go on the shows
+  shelf — and only as many as the shelf has places left; `{:error, message}` when none can.
+  """
+  def add_favorites(uuid, kind, keys) when kind in [:movie, :tv, :anime] and is_list(keys) do
+    favs = favorites(uuid)
+    left = @top - length(favs[kind] || [])
+    wanted = keys |> Enum.map(&parse_key/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    allowed = for i <- picker(uuid, kind, favs), not i.on_shelf, into: %{}, do: {favorite_key(i), i.title}
+    chosen = wanted |> Enum.filter(&Map.has_key?(allowed, &1)) |> Enum.take(left)
+
+    cond do
+      left <= 0 -> {:error, "The shelf holds #{@top}. Take one off first."}
+      chosen == [] -> {:error, "None of those can go on this shelf."}
+      true ->
+        Enum.each(chosen, fn key -> add_favorite(uuid, kind, key, allowed[key]) end)
+        {:ok, favorites(uuid), length(chosen)}
+    end
+  end
+
+  def add_favorites(_uuid, _kind, _keys), do: {:error, "None of those can go on this shelf."}
+
+  @doc """
+  Put a shelf in the order a drag left it: `ordered` is the keys (`\"movie:603\"`) as shown.
+  `{:ok, favorites}`, or `{:error, favorites}` — the shelf as it is — when the keys are not
+  exactly the shelf's titles.
+  """
+  def reorder_favorites(uuid, kind, ordered) when kind in [:movie, :tv, :anime, :manga] and is_list(ordered) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    shelf = Atom.to_string(kind)
+    keys = Enum.map(ordered, &parse_key/1)
+
+    %{rows: rows} = Repo.query!("select type, id from roki_favorites where user_uuid = $1 and kind = $2", [bin, shelf])
+    current = for [t, i] <- rows, into: MapSet.new(), do: {t, i}
+
+    if nil not in keys and length(keys) == MapSet.size(current) and MapSet.new(keys) == current do
+      Repo.transaction(fn ->
+        Repo.query!("update roki_favorites set position = position + 1000 where user_uuid = $1 and kind = $2", [bin, shelf])
+
+        keys
+        |> Enum.with_index(1)
+        |> Enum.each(fn {{t, i}, n} ->
+          Repo.query!("update roki_favorites set position = $4 where user_uuid = $1 and kind = $2 and type = $3 and id = $5", [bin, shelf, t, n, i])
+        end)
+      end)
+
+      {:ok, favorites(uuid)}
+    else
+      {:error, favorites(uuid)}
+    end
+  end
+
   @doc "The key a watched item is kept under on a shelf: TMDB's type and id, or MyAnimeList's."
   def favorite_key(%{type: nil, mal_id: mal}) when is_integer(mal), do: {"mal", mal}
   def favorite_key(%{type: type, id: id}), do: {type, id}

@@ -92,4 +92,60 @@ defmodule RokiWeb.ProfileLiveTest do
     assert Enum.map(favs.movie, & &1.position) == Enum.to_list(1..9)
     assert hd(favs.movie).id == 1
   end
+
+  test "manga is greyed out for everyone, and its shelf cannot be edited" do
+    user = register("mangafan")
+    {:ok, view, _} = live(signed_in(user), "/mangafan")
+    html = render_async(view)
+    assert html =~ "Top 10 Manga"
+    assert html =~ "Coming soon"
+    assert html =~ "opacity-50 grayscale"
+    refute has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=manga]")
+    assert has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=movie]")
+  end
+
+  test "editing a shelf: crosses, a drag hook, empty places that open the picker", %{conn: _conn} do
+    user = register("shelfedit")
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    for {id, title} <- [{1, "First Film"}, {2, "Second Film"}] do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated) values ($1, 'movie', $2, 'movie', $2, $3, false, now(), true)",
+        [bin, id, title]
+      )
+    end
+
+    {:ok, view, _} = live(signed_in(user), "/shelfedit")
+    render_async(view)
+    view |> element("button[phx-click=shelf_edit][phx-value-kind=movie]") |> render_click()
+
+    # Ten empty places, each one opens the picker; the grid is the drag hook's.
+    assert has_element?(view, "ul#shelf-movie[phx-hook=SortableGrid][data-sortable-event=shelf_reorder]")
+    assert has_element?(view, "button[phx-click=pick_open][phx-value-kind=movie]")
+
+    assert view |> render() |> String.split(~s(phx-click="pick_open")) |> length() == 11
+    render_click(view, "pick_open", %{"kind" => "movie"})
+    html = render_async(view)
+    assert html =~ "Add to Top 10 Movies"
+    assert html =~ "First Film"
+
+    # Tick both, add: they are on the shelf, in the picker's order, with crosses and grips.
+    view |> element("button[phx-click=pick_toggle][phx-value-key='movie:1']") |> render_click()
+    view |> element("button[phx-click=pick_toggle][phx-value-key='movie:2']") |> render_click()
+    assert render(view) =~ "2</b> of 10 selected"
+    view |> element("button", "Add 2 to the shelf") |> render_click()
+
+    refute render(view) =~ "Add to Top 10 Movies"
+    assert has_element?(view, "li.sortable-item[data-id='movie:1']")
+    assert has_element?(view, "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
+    assert has_element?(view, "li.sortable-item .pk-drag-handle")
+
+    # A drag: the new order is kept.
+    render_hook(view, "shelf_reorder", %{"ordered_ids" => ["movie:2", "movie:1"], "moved_id" => "movie:2", "kind" => "movie"})
+    assert Enum.map(Roki.Profile.favorites(user.uuid).movie, & &1.id) == [2, 1]
+
+    # A cross takes one off and the rest close up.
+    view |> element("li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]") |> render_click()
+    assert Enum.map(Roki.Profile.favorites(user.uuid).movie, &{&1.id, &1.position}) == [{1, 1}]
+  end
 end

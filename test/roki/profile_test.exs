@@ -42,6 +42,71 @@ defmodule Roki.ProfileTest do
     assert Profile.score_text(8.5) == "8.5"
   end
 
+  defp watched(uuid, rows) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    for {type, id, tmdb_type, tmdb_id, title, anime} <- rows do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated) values ($1, $2, $3, $4, $5, $6, $7, now(), true)",
+        [bin, type, id, tmdb_type, tmdb_id, title, anime]
+      )
+    end
+  end
+
+  test "a shelf takes only its own kind, as many as fit, and the picker lists the best rated first" do
+    watched(@uuid, [
+      {"movie", 1, "movie", 1, "Okay Film", false},
+      {"movie", 2, "movie", 2, "Great Film", false},
+      {"movie", 3, "movie", 3, "Unrated Film", false},
+      {"tv", 10, "tv", 10, "Some Show", false},
+      {"tv", 20, "tv", 20, "Some Anime", true},
+      {"mal", 30, nil, nil, "MAL Only Anime", true}
+    ])
+
+    Profile.note_rating(@uuid, {"movie", 1}, 6.0)
+    Profile.note_rating(@uuid, {"movie", 2}, 10.0)
+    Profile.note_rating(@uuid, {"tv", 10}, 9.0)
+    Profile.note_rating(@uuid, {"mal", 30}, 8.0)
+
+    # Each picker has its own kind and nothing else; best rated first, the unrated last.
+    assert Enum.map(Profile.picker(@uuid, :movie), &{&1.title, &1.key}) ==
+             [{"Great Film", "movie:2"}, {"Okay Film", "movie:1"}, {"Unrated Film", "movie:3"}]
+
+    assert Enum.map(Profile.picker(@uuid, :tv), & &1.key) == ["tv:10"]
+    assert Enum.map(Profile.picker(@uuid, :anime), & &1.key) == ["mal:30", "tv:20"]
+    assert Profile.picker(@uuid, :manga) == []
+
+    # A film cannot go on the shows shelf, nor a show on the films shelf, however it is asked.
+    assert {:error, msg} = Profile.add_favorites(@uuid, :tv, ["movie:1"])
+    assert msg =~ "None of those"
+    assert {:error, _} = Profile.add_favorites(@uuid, :movie, ["tv:10", "nonsense", "movie:999"])
+    assert {:error, _} = Profile.add_favorites(@uuid, :manga, ["movie:1"])
+
+    # Several at once; the stray one in the list is left out.
+    assert {:ok, favs, 2} = Profile.add_favorites(@uuid, :movie, ["movie:2", "tv:10", "movie:1"])
+    assert Enum.map(favs.movie, &{&1.id, &1.position}) == [{2, 1}, {1, 2}]
+    assert favs.tv == []
+
+    # What is on the shelf is marked in the picker, and cannot be added twice.
+    assert Enum.find(Profile.picker(@uuid, :movie), &(&1.key == "movie:2")).on_shelf
+    assert {:error, _} = Profile.add_favorites(@uuid, :movie, ["movie:2"])
+
+    # Drag order: the shelf as it was dropped; anything but exactly its titles is refused.
+    assert {:ok, favs} = Profile.reorder_favorites(@uuid, :movie, ["movie:1", "movie:2"])
+    assert Enum.map(favs.movie, & &1.id) == [1, 2]
+    assert {:error, same} = Profile.reorder_favorites(@uuid, :movie, ["movie:1"])
+    assert Enum.map(same.movie, & &1.id) == [1, 2]
+    assert {:error, _} = Profile.reorder_favorites(@uuid, :movie, ["movie:1", "movie:3"])
+
+    # The shelf only has ten places.
+    for n <- 100..110, do: watched(@uuid, [{"movie", n, "movie", n, "Film #{n}", false}])
+    keys = for n <- 100..110, do: "movie:#{n}"
+    assert {:ok, favs, 8} = Profile.add_favorites(@uuid, :movie, keys)
+    assert length(favs.movie) == 10
+    assert {:error, msg} = Profile.add_favorites(@uuid, :movie, ["movie:3"])
+    assert msg =~ "holds 10"
+  end
+
   test "a banner is a media file; anything else named there is no banner" do
     assert Profile.banner_url(%{banner: "0199f7a1-0000-7000-8000-000000000002"}) =~ ~r{/file/0199f7a1-0000-7000-8000-000000000002/original/}
     assert Profile.banner_url(%{banner: "a-1.jpg"}) == nil

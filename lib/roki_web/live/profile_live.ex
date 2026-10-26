@@ -48,7 +48,10 @@ defmodule RokiWeb.ProfileLive do
           favorites: nil,
           shelf: nil,
           shelf_error: nil,
-          candidates: [],
+          picking: nil,
+          pick_list: nil,
+          picks: MapSet.new(),
+          pick_shown: 60,
           query: ""
         )
         |> then(fn s ->
@@ -115,70 +118,108 @@ defmodule RokiWeb.ProfileLive do
 
   # ── events: the shelves ─────────────────────────────────────────────
 
-  # Open a shelf for editing: what may go on it is the owner's watched titles of that kind.
+  # Edit a shelf: its titles get a cross in a corner and a grip to drag by, and its empty
+  # places open the picker.
   def handle_event("shelf_edit", %{"kind" => kind}, %{assigns: %{owner?: true}} = socket) do
     case Profile.shelf(kind) do
-      nil ->
-        {:noreply, socket}
-
+      nil -> {:noreply, socket}
+      :manga -> {:noreply, socket}
       shelf ->
-        if socket.assigns.shelf == shelf do
-          {:noreply, assign(socket, shelf: nil, candidates: [], query: "", shelf_error: nil)}
-        else
-          uuid = socket.assigns.uuid
-
-          {:noreply,
-           socket
-           |> assign(shelf: shelf, candidates: [], query: "", shelf_error: nil)
-           |> start_async(:candidates, fn -> {shelf, Profile.candidates(uuid, shelf)} end)}
-        end
+        {:noreply,
+         assign(socket,
+           shelf: if(socket.assigns.shelf == shelf, do: nil, else: shelf),
+           picking: nil,
+           shelf_error: nil
+         )}
     end
   end
 
-  def handle_event("shelf_close", _params, socket),
-    do: {:noreply, assign(socket, shelf: nil, candidates: [], query: "", shelf_error: nil)}
-
-  def handle_event("shelf_search", %{"q" => q}, socket), do: {:noreply, assign(socket, :query, String.trim(q))}
-
-  def handle_event("shelf_add", %{"type" => type, "id" => id, "title" => title}, %{assigns: %{owner?: true, shelf: shelf}} = socket)
-      when shelf != nil do
-    with {n, ""} <- Integer.parse(to_string(id)),
-         {:ok, favorites} <- Profile.add_favorite(socket.assigns.uuid, shelf, {type, n}, title) do
-      {:noreply, socket |> assign(favorites: favorites, shelf_error: nil) |> mark_candidates()}
-    else
-      {:error, why} -> {:noreply, assign(socket, :shelf_error, why)}
-      _ -> {:noreply, socket}
-    end
-  end
-
-  def handle_event("shelf_remove", %{"type" => type, "id" => id}, %{assigns: %{owner?: true}} = socket) do
-    with {n, ""} <- Integer.parse(to_string(id)),
+  def handle_event("shelf_remove", %{"key" => key}, %{assigns: %{owner?: true}} = socket) do
+    with {type, n} <- Profile.parse_key(key),
          {:ok, favorites} <- Profile.remove_favorite(socket.assigns.uuid, {type, n}) do
-      {:noreply, socket |> assign(favorites: favorites, shelf_error: nil) |> mark_candidates()}
+      {:noreply, assign(socket, favorites: favorites, shelf_error: nil)}
     else
       _ -> {:noreply, socket}
     end
   end
 
-  def handle_event("shelf_move", %{"type" => type, "id" => id, "dir" => dir}, %{assigns: %{owner?: true}} = socket)
-      when dir in ["up", "down"] do
-    with {n, ""} <- Integer.parse(to_string(id)),
-         {:ok, favorites} <- Profile.move_favorite(socket.assigns.uuid, {type, n}, String.to_existing_atom(dir)) do
-      {:noreply, assign(socket, favorites: favorites)}
+  # A drag ended: the shelf is kept in the order it was left in.
+  def handle_event("shelf_reorder", %{"ordered_ids" => ids, "kind" => kind} = params, %{assigns: %{owner?: true}} = socket)
+      when is_list(ids) do
+    with shelf when shelf in [:movie, :tv, :anime] <- Profile.shelf(kind) do
+      {status, favorites} = Profile.reorder_favorites(socket.assigns.uuid, shelf, ids)
+
+      {:noreply,
+       socket
+       |> assign(favorites: favorites)
+       |> push_event("sortable:flash", %{uuid: params["moved_id"], status: if(status == :ok, do: "ok", else: "error")})}
     else
       _ -> {:noreply, socket}
+    end
+  end
+
+  # The picker: this shelf's own kind of title from what was watched, best rated first.
+  def handle_event("pick_open", %{"kind" => kind}, %{assigns: %{owner?: true, favorites: favs}} = socket)
+      when is_map(favs) do
+    case Profile.shelf(kind) do
+      shelf when shelf in [:movie, :tv, :anime] ->
+        uuid = socket.assigns.uuid
+
+        {:noreply,
+         socket
+         |> assign(picking: shelf, pick_list: nil, picks: MapSet.new(), pick_shown: 60, query: "", shelf_error: nil)
+         |> start_async(:pick_list, fn -> {shelf, Profile.picker(uuid, shelf, favs)} end)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("pick_close", _params, socket),
+    do: {:noreply, assign(socket, picking: nil, pick_list: nil, picks: MapSet.new(), query: "", shelf_error: nil)}
+
+  def handle_event("pick_search", %{"q" => q}, socket),
+    do: {:noreply, assign(socket, query: String.trim(q), pick_shown: 60)}
+
+  def handle_event("pick_more", _params, socket), do: {:noreply, update(socket, :pick_shown, &(&1 + 60))}
+
+  # Select or let go of one; no more than the shelf has places left.
+  def handle_event("pick_toggle", %{"key" => key}, %{assigns: %{owner?: true, picking: kind}} = socket) when kind != nil do
+    picks = socket.assigns.picks
+    left = places_left(socket.assigns.favorites, kind)
+
+    cond do
+      MapSet.member?(picks, key) -> {:noreply, assign(socket, picks: MapSet.delete(picks, key), shelf_error: nil)}
+      MapSet.size(picks) >= left -> {:noreply, assign(socket, :shelf_error, "Only #{left} #{if left == 1, do: "place is", else: "places are"} left on this shelf.")}
+      true -> {:noreply, assign(socket, picks: MapSet.put(picks, key), shelf_error: nil)}
+    end
+  end
+
+  # The best rated that fit, in one press.
+  def handle_event("pick_best", _params, %{assigns: %{owner?: true, picking: kind, pick_list: list}} = socket)
+      when kind != nil and is_list(list) do
+    left = places_left(socket.assigns.favorites, kind)
+    keys = list |> Enum.reject(& &1.on_shelf) |> Enum.take(left) |> Enum.map(& &1.key)
+    {:noreply, assign(socket, picks: MapSet.new(keys), shelf_error: nil)}
+  end
+
+  def handle_event("pick_add", _params, %{assigns: %{owner?: true, picking: kind, pick_list: list, picks: picks}} = socket)
+      when kind != nil and is_list(list) do
+    # In the order the list shows them, the best rated first.
+    keys = for i <- list, MapSet.member?(picks, i.key), do: i.key
+
+    case Profile.add_favorites(socket.assigns.uuid, kind, keys) do
+      {:ok, favorites, _n} ->
+        {:noreply, assign(socket, favorites: favorites, picking: nil, pick_list: nil, picks: MapSet.new(), query: "", shelf_error: nil)}
+
+      {:error, why} ->
+        {:noreply, assign(socket, :shelf_error, why)}
     end
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
-  # Which candidates are on a shelf already, after a change.
-  defp mark_candidates(%{assigns: %{candidates: cands, favorites: favs}} = socket) when is_map(favs) do
-    taken = for {_, items} <- favs, i <- items, into: MapSet.new(), do: Profile.favorite_key(i)
-    assign(socket, :candidates, Enum.map(cands, &Map.put(&1, :on_shelf, MapSet.member?(taken, Profile.favorite_key(&1)))))
-  end
-
-  defp mark_candidates(socket), do: socket
+  defp places_left(favorites, kind), do: Profile.top() - length((favorites || %{})[kind] || [])
 
   # The picture uploaded with the form, if any, becomes the banner.
   defp store_banner(socket, profile) do
@@ -204,10 +245,10 @@ defmodule RokiWeb.ProfileLive do
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
 
-  def handle_async(:candidates, {:ok, {shelf, list}}, %{assigns: %{shelf: shelf}} = socket),
-    do: {:noreply, assign(socket, :candidates, list)}
+  def handle_async(:pick_list, {:ok, {kind, list}}, %{assigns: %{picking: kind}} = socket),
+    do: {:noreply, assign(socket, :pick_list, list)}
 
-  def handle_async(:candidates, _other, socket), do: {:noreply, socket}
+  def handle_async(:pick_list, _other, socket), do: {:noreply, socket}
 
   # ── view ───────────────────────────────────────────────────────────
 
@@ -227,12 +268,12 @@ defmodule RokiWeb.ProfileLive do
 
   defp thousands(n), do: to_string(n)
 
-  # The candidates that match what was typed, newest first, at most forty.
-  defp matching(candidates, "") , do: Enum.take(candidates, 40)
+  # The picker's titles that match what was typed, still best rated first.
+  defp matching(list, ""), do: list
 
-  defp matching(candidates, query) do
+  defp matching(list, query) do
     q = String.downcase(query)
-    candidates |> Enum.filter(&String.contains?(String.downcase(&1.title || ""), q)) |> Enum.take(40)
+    Enum.filter(list, &String.contains?(String.downcase(&1.title || ""), q))
   end
 
   @impl true
@@ -278,7 +319,7 @@ defmodule RokiWeb.ProfileLive do
               Say something about yourself — a few words, a favourite quote, what you are into. Press here to write it.
             </button>
           </p>
-          <form :if={@bio_editing?} phx-submit="bio_save" class="flex flex-wrap items-center gap-2 px-4 pb-4 sm:px-6">
+          <form :if={@bio_editing?} id="bio-form" phx-submit="bio_save" class="flex flex-wrap items-center gap-2 px-4 pb-4 sm:px-6">
             <input
               type="text"
               name="bio"
@@ -325,83 +366,227 @@ defmodule RokiWeb.ProfileLive do
 
         <.edit_panel :if={@owner? and @editing?} profile={@profile} uploads={@uploads} error={@error} banner={@banner} user={@user} />
 
-        <%!-- The shelves: a visitor sees the ones with something on them. --%>
-        <section :for={{kind, label} <- Profile.shelves()} :if={@favorites == nil or @owner? or (@favorites[kind] || []) != []} class="space-y-3">
+        <%!-- The shelves. A visitor sees the ones with something on them; manga is greyed out
+              until it exists on roki. --%>
+        <section
+          :for={{kind, label} <- Profile.shelves()}
+          :if={kind == :manga or @favorites == nil or @owner? or (@favorites[kind] || []) != []}
+          class={["space-y-3", kind == :manga && "opacity-50 grayscale"]}
+        >
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-xl font-semibold">Top {Profile.top()} {label}</h2>
-            <span :if={@favorites} class="text-sm text-base-content/60">{length(@favorites[kind] || [])}</span>
-            <button :if={@owner? and kind != :manga} type="button" phx-click="shelf_edit" phx-value-kind={kind} class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}>
-              <.icon name="hero-pencil-square" class="h-3.5 w-3.5" /> {if @shelf == kind, do: "Done", else: "Edit"}
+            <span :if={@favorites && kind != :manga} class="text-sm text-base-content/60">{length(@favorites[kind] || [])}/{Profile.top()}</span>
+            <span :if={kind == :manga} class="badge badge-ghost">Coming soon</span>
+            <button
+              :if={@owner? and kind != :manga and @favorites != nil}
+              type="button"
+              phx-click="shelf_edit"
+              phx-value-kind={kind}
+              class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}
+            >
+              <.icon name={if @shelf == kind, do: "hero-check", else: "hero-pencil-square"} class="h-3.5 w-3.5" />
+              {if @shelf == kind, do: "Done", else: "Edit"}
             </button>
           </div>
 
-          <ul :if={@favorites == nil} class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10" aria-busy="true">
+          <%!-- Manga: the places are there, nothing can go in them yet. --%>
+          <div :if={kind == :manga} class="space-y-2">
+            <ul class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10" aria-hidden="true">
+              <li :for={_ <- 1..Profile.top()} class="aspect-[2/3] rounded-box border-2 border-dashed border-base-content/30"></li>
+            </ul>
+            <p class="text-sm">Manga is coming to roki. This shelf opens then.</p>
+          </div>
+
+          <ul :if={kind != :manga and @favorites == nil} class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10" aria-busy="true">
             <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
           </ul>
 
-          <p :if={@favorites != nil and (@favorites[kind] || []) == [] and kind == :manga} class="text-sm text-base-content/50">
-            Manga is coming to roki; the shelf is waiting for it.
-          </p>
-          <p :if={@favorites != nil and (@favorites[kind] || []) == [] and kind != :manga} class="text-sm text-base-content/50">
-            {if @owner?, do: "Nothing on this shelf yet. Press Edit and pick from what you watched.", else: "Nothing here yet."}
-          </p>
-
-          <ul :if={(@favorites[kind] || []) != []} class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10">
+          <%!-- Looking: the posters as they are, each a link to its page. --%>
+          <ul
+            :if={kind != :manga and @shelf != kind and (@favorites[kind] || []) != []}
+            class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
+          >
             <li :for={i <- @favorites[kind]} class="space-y-1">
               <.poster item={i} cached_titles={@cached_titles} compact />
-              <div :if={@owner? and @shelf == kind} class="flex justify-center gap-1">
-                <button type="button" phx-click="shelf_move" phx-value-type={i.type || "mal"} phx-value-id={i.id || i.mal_id} phx-value-dir="up" class="btn btn-xs btn-square" aria-label="Move up" disabled={i.position == 1}>←</button>
-                <button type="button" phx-click="shelf_remove" phx-value-type={i.type || "mal"} phx-value-id={i.id || i.mal_id} class="btn btn-xs btn-square text-error" aria-label="Take off the shelf">×</button>
-                <button type="button" phx-click="shelf_move" phx-value-type={i.type || "mal"} phx-value-id={i.id || i.mal_id} phx-value-dir="down" class="btn btn-xs btn-square" aria-label="Move down" disabled={i.position == length(@favorites[kind])}>→</button>
-              </div>
             </li>
           </ul>
+          <p :if={kind != :manga and @shelf != kind and @favorites != nil and (@favorites[kind] || []) == []} class="text-sm text-base-content/50">
+            {if @owner?, do: "Nothing on this shelf yet. Press Edit to add what you loved.", else: "Nothing here yet."}
+          </p>
 
-          <.shelf_picker :if={@owner? and @shelf == kind} kind={kind} label={label} candidates={matching(@candidates, @query)} query={@query} error={@shelf_error} count={length(@favorites[kind] || [])} cached_titles={@cached_titles} />
+          <%!-- Editing: a cross in a corner takes one off, the grip along the bottom drags it to
+                a new place, and the empty places open the picker. --%>
+          <div :if={@owner? and @shelf == kind and @favorites != nil} class="space-y-2">
+            <p class="text-sm text-base-content/60">
+              Drag a poster by its grip to reorder, × takes it off, and an empty place adds more.
+            </p>
+            <ul
+              id={"shelf-#{kind}"}
+              phx-hook="SortableGrid"
+              data-sortable-event="shelf_reorder"
+              data-sortable-scope-kind={kind}
+              data-sortable-handle=".pk-drag-handle"
+              class="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-10"
+            >
+              <li
+                :for={i <- @favorites[kind]}
+                id={"fav-#{kind}-#{i.type || "mal"}-#{i.id || i.mal_id}"}
+                data-id={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
+                class="sortable-item space-y-1"
+              >
+                <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
+                  <img :if={i.poster} src={Roki.Images.local(i.poster)} alt={i.title} class="h-full w-full object-cover" draggable="false" />
+                  <span :if={!i.poster} class="flex h-full items-center justify-center p-2 text-center text-xs">{i.title}</span>
+                  <span class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow">#{i.position}</span>
+                  <button
+                    type="button"
+                    phx-click="shelf_remove"
+                    phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
+                    class="btn btn-circle btn-xs btn-error absolute left-1.5 top-1.5 shadow"
+                    aria-label={"Take #{i.title} off the shelf"}
+                  >
+                    <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
+                  </button>
+                  <div class="pk-drag-handle absolute inset-x-0 bottom-0 flex cursor-grab items-center justify-center gap-1 bg-black/65 py-2 text-xs font-medium text-white active:cursor-grabbing" title="Drag to reorder">
+                    <.icon name="hero-arrows-up-down-micro" class="h-3.5 w-3.5 rotate-90" /> drag
+                  </div>
+                </div>
+                <div class="truncate text-xs">{i.title}</div>
+              </li>
+              <li
+                :for={_ <- 1..places_left(@favorites, kind)//1}
+                class="sortable-ignore"
+              >
+                <button
+                  type="button"
+                  phx-click="pick_open"
+                  phx-value-kind={kind}
+                  class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-1 rounded-box border-2 border-dashed border-primary/50 text-primary transition hover:border-primary hover:bg-primary/10"
+                >
+                  <.icon name="hero-plus" class="h-6 w-6" />
+                  <span class="text-xs font-medium">Add</span>
+                </button>
+              </li>
+            </ul>
+          </div>
         </section>
       </div>
+
+      <.picker
+        :if={@owner? and @picking}
+        kind={@picking}
+        label={Keyword.get(Profile.shelves(), @picking)}
+        list={@pick_list}
+        picks={@picks}
+        query={@query}
+        shown={@pick_shown}
+        error={@shelf_error}
+        left={places_left(@favorites, @picking)}
+      />
     </Layouts.app>
     """
   end
 
   attr :kind, :atom, required: true
   attr :label, :string, required: true
-  attr :candidates, :list, required: true
+  attr :list, :any, required: true, doc: "nil while loading"
+  attr :picks, :any, required: true
   attr :query, :string, default: ""
+  attr :shown, :integer, default: 60
   attr :error, :string, default: nil
-  attr :count, :integer, default: 0
-  attr :cached_titles, :any, default: nil
+  attr :left, :integer, required: true
 
-  # What may go on the shelf: the owner's watched titles of that kind, a search box to find one.
-  defp shelf_picker(assigns) do
+  # The picker: a view of its own over the page — the user's watched titles of the shelf's kind,
+  # best rated first, to tick as many as fit and add in one go.
+  defp picker(assigns) do
+    matches = if is_list(assigns.list), do: matching(assigns.list, assigns.query), else: []
+    assigns = assign(assigns, matches: matches, selected: MapSet.size(assigns.picks))
+
     ~H"""
-    <div class="space-y-3 rounded-box border border-base-300 bg-base-200 p-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <h3 class="font-semibold">Pick from what you watched</h3>
-        <span class="text-sm text-base-content/60">{@count} of {Profile.top()} places taken · use ← × → under a poster to order it</span>
-        <form phx-change="shelf_search" phx-submit="shelf_search" class="ml-auto">
-          <input type="text" name="q" value={@query} placeholder={"Search your #{String.downcase(@label)}…"} autocomplete="off" phx-debounce="200" class="input input-bordered input-sm w-56" />
-        </form>
-      </div>
-      <p :if={@error} class="text-sm text-error">{@error}</p>
-      <p :if={@candidates == [] and @query == ""} class="text-sm text-base-content/50">Nothing watched of this kind yet.</p>
-      <p :if={@candidates == [] and @query != ""} class="text-sm text-base-content/50">Nothing watched matches "{@query}".</p>
-      <ul :if={@candidates != []} class="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
-        <li :for={c <- @candidates} class="space-y-1">
-          <.poster item={c} cached_titles={@cached_titles} compact />
-          <button
-            type="button"
-            phx-click="shelf_add"
-            phx-value-type={c.type || "mal"}
-            phx-value-id={c.id || c.mal_id}
-            phx-value-title={c.title}
-            disabled={c.on_shelf}
-            class={["btn btn-xs w-full", c.on_shelf && "btn-ghost"]}
-          >
-            {if c.on_shelf, do: "On a shelf", else: "Add"}
+    <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={"Add to Top 10 #{@label}"} phx-window-keydown="pick_close" phx-key="Escape">
+      <div class="absolute inset-0 bg-black/60" phx-click="pick_close"></div>
+      <div class="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-box bg-base-100 shadow-2xl sm:max-h-[90vh] sm:rounded-box">
+        <div class="space-y-3 border-b border-base-300 p-4">
+          <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <h2 class="text-lg font-semibold sm:text-xl">Add to Top {Profile.top()} {@label}</h2>
+              <p class="text-sm text-base-content/60">
+                Your watched {String.downcase(@label)}, best rated first. {@left} {if @left == 1, do: "place is", else: "places are"} left — tick the ones to add.
+              </p>
+            </div>
+            <button type="button" phx-click="pick_close" class="btn btn-sm btn-circle btn-ghost" aria-label="Close">
+              <.icon name="hero-x-mark" class="h-5 w-5" />
+            </button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <form id="pick-search" phx-change="pick_search" phx-submit="pick_search" class="min-w-0 flex-1 sm:max-w-xs">
+              <input type="text" name="q" value={@query} placeholder={"Search your #{String.downcase(@label)}…"} autocomplete="off" phx-debounce="200" class="input input-bordered input-sm w-full" />
+            </form>
+            <button type="button" phx-click="pick_best" class="btn btn-sm">
+              <.icon name="hero-star" class="h-4 w-4" /> Pick the top {@left}
+            </button>
+            <span :if={is_list(@list)} class="text-sm text-base-content/60">{length(@matches)} to choose from</span>
+          </div>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <ul :if={@list == nil} class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
+            <li :for={_ <- 1..16} class="skeleton aspect-[2/3] rounded-box"></li>
+          </ul>
+          <p :if={@list == [] } class="py-10 text-center text-base-content/60">
+            Nothing watched of this kind yet. What you finish shows up here.
+          </p>
+          <p :if={is_list(@list) and @list != [] and @matches == []} class="py-10 text-center text-base-content/60">
+            Nothing watched matches "{@query}".
+          </p>
+
+          <ul :if={@matches != []} class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
+            <li :for={c <- Enum.take(@matches, @shown)}>
+              <button
+                type="button"
+                phx-click="pick_toggle"
+                phx-value-key={c.key}
+                disabled={c.on_shelf}
+                aria-pressed={to_string(MapSet.member?(@picks, c.key))}
+                class={[
+                  "group relative block w-full overflow-hidden rounded-box bg-base-300 text-left shadow transition",
+                  "aspect-[2/3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
+                  MapSet.member?(@picks, c.key) && "ring-4 ring-primary",
+                  c.on_shelf && "cursor-not-allowed opacity-40",
+                  !c.on_shelf && !MapSet.member?(@picks, c.key) && "hover:scale-[1.02]"
+                ]}
+              >
+                <img :if={c.poster} src={Roki.Images.local(c.poster)} alt="" loading="lazy" class="h-full w-full object-cover" draggable="false" />
+                <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-6 text-xs font-medium leading-tight text-white">
+                  <span class="line-clamp-2">{c.title}</span>
+                </span>
+                <span :if={c.score != nil} class="badge badge-warning badge-sm absolute left-1.5 top-1.5 shadow">★ {Profile.score_text(c.score)}</span>
+                <span
+                  :if={MapSet.member?(@picks, c.key)}
+                  class="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-content shadow"
+                >
+                  <.icon name="hero-check-micro" class="h-4 w-4" />
+                </span>
+                <span :if={c.on_shelf} class="absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white">On the shelf</span>
+              </button>
+            </li>
+          </ul>
+          <div :if={length(@matches) > @shown} class="flex justify-center pt-4">
+            <button type="button" phx-click="pick_more" class="btn btn-ghost btn-sm">Show {min(length(@matches) - @shown, 60)} more</button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 border-t border-base-300 bg-base-100 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <p class="min-w-0 flex-1 text-sm">
+            <b>{@selected}</b> of {@left} selected
+            <span :if={@error} class="ml-2 text-error">{@error}</span>
+          </p>
+          <button type="button" phx-click="pick_close" class="btn btn-ghost">Cancel</button>
+          <button type="button" phx-click="pick_add" class="btn btn-primary" disabled={@selected == 0}>
+            Add{if @selected > 0, do: " #{@selected}", else: ""} to the shelf
           </button>
-        </li>
-      </ul>
+        </div>
+      </div>
     </div>
     """
   end
