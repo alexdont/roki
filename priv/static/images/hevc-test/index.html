@@ -122,6 +122,8 @@
     { id: "hlsC", name: "HEVC video only through HLS (C)", src: "hlsC/master.m3u8", hls: true },
     { id: "hlsE", name: "HEVC through HLS, closed GOPs, B-frames, main 4.1 (E)", src: "hlsE/master.m3u8", hls: true },
     { id: "hlsEjs", name: "E through hls.js and Managed MediaSource", src: "hlsE/master.m3u8", hls: true, js: true },
+    { id: "frag", name: "HEVC as a fragmented MP4 file, played directly (G)", src: "hevc-frag.mp4" },
+    { id: "cmaf", name: "HEVC as a CMAF fragmented MP4 file, played directly (H)", src: "hevc-cmaf.mp4" },
     { id: "hlsD", name: "H.264 through the same fMP4 HLS (D, control)", src: "hlsD/master.m3u8", hls: true },
   ]
   const holder = $("#clips")
