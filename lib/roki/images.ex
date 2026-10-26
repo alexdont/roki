@@ -147,6 +147,25 @@ defmodule Roki.Images do
     :ok
   end
 
+  @doc """
+  Hold a picture named by its source address, fetching it when the site does not yet: `:ok`
+  when it is held, `:skip` for an address the site keeps no copies of, else `{:error, reason}`.
+  """
+  def hold(url) when is_binary(url) do
+    case key(url) do
+      nil ->
+        :skip
+
+      key ->
+        case :ets.lookup(@table, key) do
+          [_] -> :ok
+          [] -> with {:ok, _} <- ensure(short(key)), do: :ok
+        end
+    end
+  end
+
+  def hold(_), do: :skip
+
   @doc "How many pictures the site holds."
   def count, do: :ets.info(@table, :size)
 end
