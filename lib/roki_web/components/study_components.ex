@@ -252,8 +252,27 @@ defmodule RokiWeb.StudyComponents do
                 <.menus />
 
                 <div data-role="ep-menu" class="study-pop" role="menu" hidden>
-                  <div class="study-pop-head">
-                    <span>Episodes</span>
+                  <%!-- Previous and Next live here too: on a phone the bar has no room for them. --%>
+                  <div class="study-pop-head gap-2">
+                    <button
+                      type="button"
+                      data-role="ep-prev"
+                      hidden
+                      class="btn btn-xs gap-1"
+                      title="Play the previous episode"
+                    >
+                      <.icon name="hero-backward" class="h-3.5 w-3.5" /> Prev
+                    </button>
+                    <span class="min-w-0 flex-1 truncate">Episodes</span>
+                    <button
+                      type="button"
+                      data-role="ep-next"
+                      hidden
+                      class="btn btn-xs gap-1"
+                      title="Play the next episode"
+                    >
+                      Next <.icon name="hero-forward" class="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       data-role="pop-close"

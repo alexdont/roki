@@ -489,8 +489,11 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   .study-immersive .study-box { border-radius: 0; border-width: 0 0 0 1px; }
 }
 .study-immersive #study-ui[data-panel="closed"] .study-side { display: none; }
+/* On a phone or tablet the list is a sheet that slides up over the picture (the lines to reread,
+   a tap on one to jump there, a tap outside to put it away): always in the page, whatever the
+   wide layout's panel state says — the rule above would otherwise hide it, being more specific. */
 @media (max-width: 1023px) {
-  .study-immersive .study-side { display: block; }
+  .study-immersive #study-ui[data-panel] .study-side { display: block; }
 }
 /* The list and the menus keep the site's own colours: only the bar and the picture are black. */
 .study-immersive .study-box, .study-immersive .study-pop, .study-immersive .study-tip { color: var(--color-base-content); }
@@ -523,9 +526,22 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-ep-label { min-width: 0; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .study-bar2 .study-pop { left: auto; right: 0; }
 .study-bar2 [data-role="ep-menu"] { left: 0; right: auto; }
+/* A phone's bar: one row that must fit. Play and the episode on the left; on the right only
+   icons — audio, settings, subtitles (with the language, short), the list, fullscreen. Previous and
+   Next are in the episode menu instead. */
 @media (max-width: 639px) {
+  .study-bar2 { gap: 0.3rem; }
+  .study-bar2 .study-bar-group { gap: 0.25rem; }
+  .study-bar2 .study-bar-group:first-child { flex: 1 1 auto; }
+  .study-bar2 .study-bar-group:last-child { flex: 0 0 auto; }
   .study-bar2 .study-volume, .study-bar2 [data-role="mute"] { display: none; }
+  .study-bar2 [data-role="prev-btn"], .study-bar2 [data-role="next-btn"] { display: none !important; }
+  .study-bar2 [data-role="ep-btn"] { min-width: 0; flex: 0 1 auto; padding-inline: 0.5rem; }
   .study-ep-label { max-width: 7rem; }
+  .study-bar2 [data-role="audio-label"] { display: none; }
+  .study-bar2 [data-role="audio-btn"], .study-bar2 [data-role="lines-btn"] { width: 2rem; padding: 0; justify-content: center; }
+  .study-bar2 [data-role="subs-btn"] { padding-inline: 0.45rem; }
+  .study-bar2 [data-role="subs-label"] { max-width: 3.5rem; }
 }
 
 /* The colour choices for the lines. */

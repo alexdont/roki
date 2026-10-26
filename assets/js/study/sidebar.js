@@ -804,6 +804,11 @@ export const StudySidebar = {
     // ── the next episode: the page finds its sources and starts the best one
     this.nextBtn.addEventListener("click", () => this.pushEvent("next", {}))
     this.prevBtn.addEventListener("click", () => this.pushEvent("previous", {}))
+    // The same two at the top of the episode menu (the bar on a phone has no room for them).
+    this.epPrev = $("[data-role=ep-prev]")
+    this.epNext = $("[data-role=ep-next]")
+    if (this.epNext) this.epNext.addEventListener("click", () => { this.closePops(); this.pushEvent("next", {}) })
+    if (this.epPrev) this.epPrev.addEventListener("click", () => { this.closePops(); this.pushEvent("previous", {}) })
     this.el.querySelector("[data-role=subs-off]").addEventListener("click", () => this.setSelection([]))
 
     // ── audio tracks (a dual-audio release), on whichever player is in use
@@ -1297,6 +1302,8 @@ export const StudySidebar = {
     const label = this.nextBtn.querySelector("[data-role=next-label]")
     if (label) label.textContent = p.next || ""
     this.nextBtn.title = p.next ? `Play the next episode (${p.next})` : "Play the next episode"
+    if (this.epPrev) { this.epPrev.hidden = !p.prev; this.epPrev.title = this.prevBtn.title }
+    if (this.epNext) { this.epNext.hidden = !p.next; this.epNext.title = this.nextBtn.title }
     const osKey = JSON.stringify([p.os, p.os_langs, p.key])
     if (osKey !== this.osKey) {
       this.osKey = osKey
