@@ -117,10 +117,10 @@ defmodule Roki.Direct do
     do: Enum.find_value(streams, "", fn s -> if s.kind == kind, do: s.codec end)
 
   # Keyed like laev's remux (name and size), under a different hash, so the two never share a
-  # directory: laev's holds TS segments, this one an MP4.
+  # directory: laev's holds TS segments, this one an MP4. (v2: HEVC with its parameter sets.)
   defp id_for(stream) do
     :sha256
-    |> :crypto.hash("direct:#{stream[:filename]}-#{stream[:filesize]}")
+    |> :crypto.hash("direct:v2:#{stream[:filename]}-#{stream[:filesize]}")
     |> Base.encode16(case: :lower)
     |> binary_part(0, 16)
   end
@@ -218,15 +218,13 @@ defmodule Roki.Direct do
     subs = subtitle_tracks(streams)
     File.write(Path.join(dir, "subs.json"), Jason.encode!(subs))
 
-    args = ffmpeg_args(Keyword.fetch!(opts, :url), dir, streams, subs)
-    ffmpeg = System.find_executable("ffmpeg")
-
+    # One shell runs the pipeline (see `command/4`); its children are ended with it.
     port =
-      Port.open({:spawn_executable, ffmpeg}, [
+      Port.open({:spawn_executable, System.find_executable("sh")}, [
         :binary,
         :exit_status,
         :stderr_to_stdout,
-        args: args
+        args: ["-c", command(Keyword.fetch!(opts, :url), dir, streams, subs)]
       ])
 
     Process.send_after(self(), :idle_check, 60_000)
@@ -275,8 +273,12 @@ defmodule Roki.Direct do
   @impl true
   def terminate(_reason, %{port: port}) when is_port(port) do
     case Port.info(port, :os_pid) do
-      {:os_pid, os_pid} -> System.cmd("kill", ["-TERM", Integer.to_string(os_pid)])
-      _ -> :ok
+      {:os_pid, os_pid} ->
+        System.cmd("pkill", ["-TERM", "-P", Integer.to_string(os_pid)])
+        System.cmd("kill", ["-TERM", Integer.to_string(os_pid)])
+
+      _ ->
+        :ok
     end
 
     :ok
@@ -287,17 +289,19 @@ defmodule Roki.Direct do
   # Video copied as it is; audio copied when it is AAC already, else AAC stereo (what laev
   # does: a browser plays stereo regardless, and TrueHD 7.1 cannot be put in AAC as it is).
   # Fragments at keyframes, at least two seconds long, in the MP4 muxer's own form.
-  defp ffmpeg_args(url, dir, streams, subs) do
+  #
+  # HEVC goes through MPEG-TS on the way: a release often keeps the parameter sets inside the
+  # video rather than in the container, and an MP4 written straight from it has an empty `hvcC`
+  # that nothing decodes. Read back from TS, ffmpeg's parser puts them where `hvc1` needs them.
+  defp command(url, dir, streams, subs) do
     video = codec_in(streams, "video")
     audio = codec_in(streams, "audio")
-    tag = if video in ["hevc", "h265"], do: ["-tag:v", "hvc1"], else: []
+    has_audio = Enum.any?(streams, &(&1.kind == "audio"))
 
     audio_args =
       if audio == "aac",
-        do: ["-c:a", "copy"],
-        else: ["-c:a", "aac", "-b:a", "192k", "-ac", "2"]
-
-    has_audio = Enum.any?(streams, &(&1.kind == "audio"))
+        do: ~w(-c:a copy),
+        else: ~w(-c:a aac -b:a 192k -ac 2)
 
     sub_outputs =
       Enum.flat_map(subs, fn s ->
@@ -312,21 +316,29 @@ defmodule Roki.Direct do
         ]
       end)
 
-    ["-nostdin", "-loglevel", "error", "-rw_timeout", "20000000", "-i", url, "-map", "0:v:0"] ++
-      if(has_audio, do: ["-map", "0:a:0"], else: []) ++
-      ["-sn", "-c:v", "copy"] ++
-      tag ++
-      audio_args ++
-      [
-        "-movflags",
-        "frag_keyframe+empty_moov+default_base_moof",
-        "-min_frag_duration",
-        "2000000",
-        "-f",
-        "mp4",
-        Path.join(dir, "media.mp4")
-      ] ++ sub_outputs
+    read = ~w(ffmpeg -nostdin -loglevel error -rw_timeout 20000000 -i) ++ [url]
+    maps = ~w(-map 0:v:0) ++ if(has_audio, do: ~w(-map 0:a:0), else: []) ++ ~w(-sn)
+
+    mp4 =
+      ~w(-movflags frag_keyframe+empty_moov+default_base_moof -min_frag_duration 2000000 -f mp4) ++
+        [Path.join(dir, "media.mp4")]
+
+    if video in ["hevc", "h265"] do
+      first = read ++ maps ++ ~w(-c:v copy) ++ audio_args ++ ~w(-f mpegts -) ++ sub_outputs
+
+      second =
+        ~w(ffmpeg -nostdin -loglevel error -f mpegts -i - -map 0:v:0) ++
+          if(has_audio, do: ~w(-map 0:a:0 -bsf:a aac_adtstoasc), else: []) ++
+          ~w(-c copy -tag:v hvc1) ++ mp4
+
+      shell(first) <> " | " <> shell(second)
+    else
+      shell(read ++ maps ++ ~w(-c:v copy) ++ audio_args ++ mp4 ++ sub_outputs)
+    end
   end
+
+  defp shell(args),
+    do: Enum.map_join(args, " ", &("'" <> String.replace(&1, "'", "'\\''") <> "'"))
 
   @image_subs ["hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle"]
 
