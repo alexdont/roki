@@ -142,7 +142,7 @@ defmodule RokiWeb.WatchLive do
                  if(hash, do: 3, else: 1)
                ),
              pair = if(hash, do: pair, else: within_cap(res, pair)),
-             {:ok, pair} <- choose(res, pair),
+             {:ok, pair} <- choose(res, pair, caps),
              :ok <- announce(parent, token, "Getting the video ready…"),
              {:ok, pair, player} <-
                start_or_next(parent, token, uuid, caps, res, pair, hash == nil, skip, 4) do
@@ -197,7 +197,7 @@ defmodule RokiWeb.WatchLive do
       {:error, reason} ->
         tried = [source.hash | tried]
         send(parent, {:tried, token, tried})
-        next = if auto? and left > 0 and skippable?(reason), do: next_pair(res, tried)
+        next = if auto? and left > 0 and skippable?(reason), do: next_pair(res, tried, caps)
 
         if next do
           announce(parent, token, "That release didn't work — trying another…")
@@ -213,14 +213,14 @@ defmodule RokiWeb.WatchLive do
   defp skippable?({:expired, _}), do: false
   defp skippable?(_), do: true
 
-  defp next_pair(res, tried) do
+  defp next_pair(res, tried, caps) do
     left = Enum.reject(res.playable, fn {source, _} -> source.hash in tried end)
 
     case Enum.filter(left, fn {source, _} ->
            Laev.Sources.resolution_at_most?(source.resolution, res.cap)
          end) do
       [] -> nil
-      within -> pick(%{res | playable: within})
+      within -> pick(%{res | playable: within}, caps)
     end
   end
 
@@ -265,17 +265,17 @@ defmodule RokiWeb.WatchLive do
     :ok
   end
 
-  defp choose(res, nil) do
-    case pick(res) do
+  defp choose(res, nil, caps) do
+    case pick(res, caps) do
       nil -> {:error, :none_playable}
       pair -> {:ok, pair}
     end
   end
 
-  defp choose(_res, pair), do: {:ok, pair}
+  defp choose(_res, pair, _caps), do: {:ok, pair}
 
-  defp pick(res) do
-    case Resolver.pick(res.playable, res.cap, res.good, :browser) do
+  defp pick(res, caps) do
+    case Resolver.pick(res.playable, res.cap, res.good, :browser, caps) do
       {:play, pair} -> pair
       _ -> List.first(res.playable)
     end

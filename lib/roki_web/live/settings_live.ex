@@ -28,14 +28,15 @@ defmodule RokiWeb.SettingsLive do
   ]
 
   # The resolution ceiling is two settings: laev's own (external player and terminal app, any
-  # value) and the site's (the browser player, nothing above 1080p), shown one under the other.
+  # value) and the site's (the browser player; 4K only where the browser decodes the video
+  # itself, 1080p elsewhere), shown one under the other.
   @web_hints %{
     "sources_cache" =>
       "Releases already found and checked are kept this long, so Play starts at once instead of searching again. Retry on a title looks for new ones.",
     "external_app" =>
       "What Play opens when this device uses an external player. It starts by itself; if your device asks, allow it. The download option gives you an .m3u file to open yourself.",
     "browser_max_resolution" =>
-      "For the browser player, up to 1080p: a browser cannot decode HEVC, so more would mean the server re-encoding the release. Set the 4K you want under the external player."
+      "For the browser player. 4K plays where the browser decodes the release's video itself (HEVC on Apple devices and most recent PCs); any other browser stays at 1080p, since more would mean the server re-encoding the release."
   }
   @web_labels %{
     "browser_max_resolution" => "Resolution ceiling — browser player",

@@ -45,10 +45,11 @@ defmodule Roki.Direct do
 
   @doc """
   The browser's decoding abilities as the page reported them on connecting
-  (`%{"hevc" => true, …}`), as a map of atoms. Anything missing is "no".
+  (`%{"hevc" => true, …}`), as a map of atoms. Anything missing is "no". `uhd` is whether
+  it decodes one of those codecs at 4K.
   """
   def caps(params) when is_map(params) do
-    for key <- [:hevc, :av1, :vp9], into: %{} do
+    for key <- [:hevc, :av1, :vp9, :uhd], into: %{} do
       {key, Map.get(params, Atom.to_string(key)) == true}
     end
   end

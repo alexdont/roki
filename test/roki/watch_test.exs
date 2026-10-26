@@ -34,6 +34,24 @@ defmodule Roki.WatchTest do
     assert {:play, ^h264} = Watch.auto_choice([hevc4k, h264], "2160p")
   end
 
+  test "a browser that decodes HEVC at 4K is handed the 4K release" do
+    hevc4k = pair("4k hevc", "2160p", "h265", 50_000_000_000)
+    h264 = pair("1080 x264", "1080p", "h264", 9_000_000_000)
+    caps = %{hevc: true, av1: false, vp9: false, uhd: true}
+
+    assert {:play, ^hevc4k} = Watch.auto_choice([hevc4k, h264], "2160p", caps)
+    # Held to the account's own cap all the same.
+    assert {:play, ^h264} = Watch.auto_choice([hevc4k, h264], "1080p", caps)
+  end
+
+  test "the browser ceiling is 4K only on a device that decodes it, and never above the setting" do
+    assert Watch.browser_limit(%{}, %{uhd: true}) == "2160p"
+    assert Watch.browser_limit(%{}, %{hevc: true}) == "1080p"
+    assert Watch.browser_limit(%{}, %{}) == "1080p"
+    assert Watch.browser_limit(%{"browser_max_resolution" => "720p"}, %{uhd: true}) == "720p"
+    assert Watch.browser_limit(%{"browser_max_resolution" => "1080p"}, %{uhd: true}) == "1080p"
+  end
+
   test "with nothing to copy, a re-encode is held to 1080p" do
     hevc4k = pair("4k hevc", "2160p", "h265", 50_000_000_000)
     hevc1080 = pair("1080 hevc", "1080p", "h265", 5_000_000_000)

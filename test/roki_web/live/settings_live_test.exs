@@ -119,7 +119,7 @@ defmodule RokiWeb.SettingsLiveTest do
     assert html =~ "can only be changed in the terminal app"
   end
 
-  test "the browser player's own resolution cap saves, and starts at 1080p", %{
+  test "the browser player's own resolution cap saves, and starts at 4K", %{
     conn: conn,
     user: user
   } do
@@ -128,7 +128,7 @@ defmodule RokiWeb.SettingsLiveTest do
     html = render_async(view, 3000)
 
     assert html =~ "browser player"
-    assert has_element?(view, "#w-browser_max_resolution option[selected]", "1080p")
+    assert has_element?(view, "#w-browser_max_resolution option[selected]", "4K")
 
     html =
       render_hook(view, "change", %{

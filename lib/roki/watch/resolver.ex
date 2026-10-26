@@ -45,7 +45,7 @@ defmodule Roki.Watch.Resolver do
 
     with :ok <- Watch.subscription(uuid),
          ctx = Watch.ctx(uuid, title, season, episode),
-         cap = Watch.ceiling(uuid, ctx, mode, web),
+         cap = Watch.ceiling(uuid, ctx, mode, web, caps),
          {:ok, res} <-
            from_cache(uuid, token, ctx, cap, key, cached)
            |> fresh_if_none(fn ->
@@ -544,7 +544,7 @@ defmodule Roki.Watch.Resolver do
   end
 
   @doc "What to choose with nobody asked: the release that started last time, else the best."
-  def pick(playable, cap, good, mode) do
+  def pick(playable, cap, good, mode, caps \\ %{}) do
     # The release that worked last time goes first — unless it is above what this player takes:
     # a 4K one opened in an external player is not what the browser should be handed.
     known =
@@ -554,7 +554,7 @@ defmodule Roki.Watch.Resolver do
 
     case known do
       nil when mode == :external -> Watch.auto_choice_external(playable, cap)
-      nil -> Watch.auto_choice(playable, cap)
+      nil -> Watch.auto_choice(playable, cap, caps)
       pair -> {:play, pair}
     end
   end
@@ -588,7 +588,7 @@ defmodule Roki.Watch.Resolver do
 
   def failure(:too_heavy),
     do:
-      "That release is 4K H.265 — a browser can't play it, and converting it here is too slow. Pick a 1080p or H.264 release, or switch to the external player."
+      "That release is 4K H.265 — this browser doesn't decode it, and converting it here is too slow. Pick a 1080p or H.264 release, or switch to the external player."
 
   def failure(:busy),
     do:

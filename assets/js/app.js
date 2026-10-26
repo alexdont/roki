@@ -59,6 +59,9 @@ function deviceCaps() {
       hevc: ok('video/mp4; codecs="hvc1.1.6.L120.B0"'),
       av1: ok('video/mp4; codecs="av01.0.08M.08"'),
       vp9: ok('video/mp4; codecs="vp09.00.40.08"'),
+      // 4K: HEVC Main 10 at level 5.1, or AV1 at level 5.0. A device that decodes the codec at
+      // 1080p but not at this level keeps the browser at 1080p.
+      uhd: ok('video/mp4; codecs="hvc1.2.4.L153.B0"') || ok('video/mp4; codecs="av01.0.12M.08"'),
     }
   } catch { return {} }
 }

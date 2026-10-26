@@ -354,7 +354,12 @@ defmodule Roki.Laev do
   # Settings that exist only on this site (laev has no such thing), kept beside the account's
   # laev state. Disconnecting laev removes them with the rest of the directory.
   @web_settings %{
-    "browser_max_resolution" => %{default: "1080p", allowed: ~w(480p 720p 1080p)},
+    # 4K only reaches a browser that decodes the release's video itself (`Roki.Watch.browser_limit/2`).
+    "browser_max_resolution" => %{
+      default: "2160p",
+      allowed: ~w(480p 720p 1080p 2160p),
+      labels: %{"2160p" => "4K"}
+    },
     # How long found sources are kept so the next Play skips the search.
     "sources_cache" => %{
       default: "12",

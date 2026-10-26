@@ -30,7 +30,10 @@ defmodule Roki.Watch do
 
   # How many releases one probe round checks (laev's own page size).
   @probe_page 8
+  # The most the server re-encodes: a 4K re-encode on software never keeps up with playing.
   @transcode_cap "1080p"
+  # The most a browser is handed when it decodes the video itself.
+  @browser_cap "2160p"
   @max_encoders 2
 
   # ── 1. the title ───────────────────────────────────────────────────
@@ -821,12 +824,11 @@ defmodule Roki.Watch do
   @doc """
   The highest resolution to start by itself for this title on this device: what the user last
   picked for it by hand, else the setting for the player in use — laev's ceiling for an
-  external player, the site's own browser cap for the page (default 1080p; a browser cannot
-  decode HEVC, so more is a heavy re-encode, and the cap is never above 1080p). The two are
+  external player, the site's own browser cap for the page (`browser_limit/2`). The two are
   independent settings. `nil` is no ceiling. Run in the user's scope.
   """
-  def ceiling(uuid, ctx, mode, web) do
-    limit = web["browser_max_resolution"] || @transcode_cap
+  def ceiling(uuid, ctx, mode, web, caps \\ %{}) do
+    limit = browser_limit(web, caps)
 
     Roki.Laev.run(uuid, fn ->
       pref =
@@ -842,6 +844,17 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  The browser player's ceiling on this device: the account's setting (4K by default), held to
+  1080p unless the browser said it decodes HEVC or AV1 at 4K itself (`caps`) — above that a
+  release it cannot decode would be a re-encode, which never keeps up at 4K.
+  """
+  def browser_limit(web, caps) do
+    setting = web["browser_max_resolution"] || @browser_cap
+    device = if Map.get(caps || %{}, :uhd) == true, do: @browser_cap, else: @transcode_cap
+    cap_to(setting, device)
+  end
+
   @doc "The lower of a ceiling and a limit (`nil` is no ceiling)."
   def cap_to(nil, limit), do: limit
   def cap_to(cap, limit), do: if(Sources.resolution_at_most?(limit, cap), do: limit, else: cap)
@@ -850,11 +863,12 @@ defmodule Roki.Watch do
   What plays when nobody is asked — laev's own rule: the best release not above the ceiling,
   never a cam rip. `{:play, {source, stream}}` or `{:ask, why}`.
   """
-  def auto_choice(playable, cap) do
-    # A browser cannot decode HEVC/AV1, so those are re-encoded on this server by software:
-    # a 4K one takes every core and ~7 GB. h264 is copied into HLS for free. So the pick is the
-    # best h264 (or unlabelled) release first, and only without one a re-encode — at most 1080p.
-    cheap = Enum.reject(playable, &heavy?/1)
+  def auto_choice(playable, cap, caps \\ %{}) do
+    # A video this browser does not decode itself (`caps`) is re-encoded on this server by
+    # software: a 4K one takes every core and ~7 GB. H.264, and what the browser decodes, is
+    # copied for next to nothing. So the pick is the best copied release first, and only
+    # without one a re-encode — at most 1080p.
+    cheap = Enum.reject(playable, &heavy?(&1, caps))
 
     with :none <- pick(cheap, cap),
          :none <- pick(playable, at_most_cap(cap)) do

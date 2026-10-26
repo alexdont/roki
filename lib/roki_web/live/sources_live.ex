@@ -325,7 +325,7 @@ defmodule RokiWeb.SourcesLive do
 
     if socket.assigns.auto == :pending do
       case preferred(socket, res) ||
-             Resolver.pick(res.playable, res.cap, res.good, socket.assigns.mode) do
+             Resolver.pick(res.playable, res.cap, res.good, socket.assigns.mode, socket.assigns.caps) do
         {:play, pair} -> socket |> assign(auto: :done) |> start(pair)
         # A release that was kept from the last episode: a {source, stream} pair as it is.
         {%{} = _source, %{} = _stream} = pair -> socket |> assign(auto: :done) |> start(pair)
@@ -483,13 +483,11 @@ defmodule RokiWeb.SourcesLive do
 
   defp new_cap(%{assigns: %{ctx: nil, cap: cap}}, _mode), do: cap
 
-  defp new_cap(%{assigns: %{uuid: uuid, ctx: ctx}}, mode),
-    do: Watch.ceiling(uuid, ctx, mode, Roki.Laev.web_settings(uuid))
+  defp new_cap(%{assigns: %{uuid: uuid, ctx: ctx, caps: caps}}, mode),
+    do: Watch.ceiling(uuid, ctx, mode, Roki.Laev.web_settings(uuid), caps)
 
-  defp limit(:browser, uuid),
-    do: Roki.Laev.web_settings(uuid)["browser_max_resolution"] || "1080p"
-
-  defp limit(:external, _uuid), do: nil
+  defp limit(:browser, uuid, caps), do: Watch.browser_limit(Roki.Laev.web_settings(uuid), caps)
+  defp limit(:external, _uuid, _caps), do: nil
 
   defp to_int(v) do
     case Integer.parse(to_string(v)) do
@@ -611,7 +609,7 @@ defmodule RokiWeb.SourcesLive do
           current={@current}
           mode={@mode}
           busy={@busy?}
-          limit={limit(@mode, @uuid)}
+          limit={limit(@mode, @uuid, @caps)}
         />
       </div>
 
