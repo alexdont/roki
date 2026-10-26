@@ -60,9 +60,12 @@ defmodule Roki.TitlesTest do
     assert Roki.Images.local("https://image.tmdb.org/t/p/w1280/x.png") == "/img/w1280/x.png"
     assert Roki.Images.local("https://image.tmdb.org/t/p/w342/../etc") == "https://image.tmdb.org/t/p/w342/../etc"
     assert Roki.Images.local("https://image.tmdb.org/t/p/w9/x.jpg") == "https://image.tmdb.org/t/p/w9/x.jpg"
-    assert Roki.Images.local("/banners/a.jpg") == "/banners/a.jpg"
+    assert Roki.Images.local("https://cdn.myanimelist.net/images/anime/1234/56789l.jpg") == "/img/mal/anime/1234/56789l.jpg"
+    assert Roki.Images.local("https://cdn.myanimelist.net/images/anime/../x.jpg") == "https://cdn.myanimelist.net/images/anime/../x.jpg"
+    assert Roki.Images.local("/phoenix_kit/file/x/original/t") == "/phoenix_kit/file/x/original/t"
     assert Roki.Images.local(nil) == nil
-    assert Roki.Images.file("w342", "../x.jpg") == {:error, :bad_name}
-    assert Roki.Images.file("huge", "x.jpg") == {:error, :bad_size}
+    assert Roki.Images.ensure("w342/../x.jpg") == {:error, :bad_name}
+    assert Roki.Images.ensure("huge/x.jpg") == {:error, :bad_name}
+    assert Roki.Images.source_url("mal/anime/1/2.jpg") == "https://cdn.myanimelist.net/images/anime/1/2.jpg"
   end
 end

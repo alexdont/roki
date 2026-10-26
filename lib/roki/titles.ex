@@ -65,7 +65,7 @@ defmodule Roki.Titles do
   def remember(items) when is_list(items) do
     rows =
       for %{type: type, id: id} = i <- items,
-          type in ["movie", "tv"] and is_integer(id),
+          type in ["movie", "tv", "mal"] and is_integer(id),
           name = i[:title],
           is_binary(name) and name != "",
           do: {type, id, name, i[:year], poster_path(i[:poster_path] || i[:poster]), i[:overview]}
@@ -139,14 +139,17 @@ defmodule Roki.Titles do
   @doc "The card of one title, or nil."
   def card(type, id), do: cards([{type, id}])[{type, id}]
 
-  @doc "A TMDB image path (`/abc.jpg`) as a URL at `size`, or nil."
+  @doc "A TMDB image path (`/abc.jpg`) as a URL at `size` (a whole address, MyAnimeList's, as it is), or nil."
   def poster_url(nil, _size), do: nil
   def poster_url("", _size), do: nil
+  def poster_url("https://" <> _ = url, _size), do: url
   def poster_url(path, size), do: @image <> size <> path
 
-  # A TMDB image URL back to its path; a path stays one; anything else is nothing.
+  # A TMDB image URL back to its path; a path stays one; a MyAnimeList picture keeps its whole
+  # address (there is one size of it); anything else is nothing.
   defp poster_path(nil), do: nil
   defp poster_path("/" <> _ = path), do: path
+  defp poster_path("https://cdn.myanimelist.net/" <> _ = url), do: url
 
   defp poster_path(@image <> rest) do
     case String.split(rest, "/", parts: 2) do

@@ -101,57 +101,43 @@ defmodule Roki.Profile do
 
   # ── the banner ────────────────────────────────────────────────────
 
-  @doc "Where banners are kept: beside laev's accounts, in the data that survives a container."
-  def banner_dir,
-    do: Application.get_env(:roki, :banner_dir) || Path.join(System.user_home!(), "roki-banners")
+  @doc "The address a profile's banner is served at (a file in the media library, `Roki.Media`), or nil without one."
+  def banner_url(%{banner: uuid}) when is_binary(uuid) and uuid != "",
+    do: if(Roki.Media.uuid?(uuid), do: Roki.Media.url(uuid))
 
-  @doc "The address a profile's banner is served at, or nil without one."
-  def banner_url(%{banner: name}) when is_binary(name) and name != "", do: "/banners/#{name}"
   def banner_url(_profile), do: nil
-
-  @doc "The file behind a banner name, when the name is one this module writes; nil otherwise."
-  def banner_file(name) when is_binary(name) do
-    if Regex.match?(~r/^[0-9a-f-]{36}-\d+\.jpg$/, name), do: Path.join(banner_dir(), name)
-  end
-
-  def banner_file(_), do: nil
 
   @doc """
   Keep an uploaded picture as the user's banner: made into a JPEG no wider than 1800 px (a
-  phone's photo is far larger than any screen it is shown on), under a name that changes with
-  every upload so browsers never show a stale one. The old file goes. `{:ok, profile}` or
-  `{:error, message}`.
+  phone's photo is far larger than any screen it is shown on) and put into the media library
+  under the user's name, in the "Profile banners" folder. `{:ok, profile}` or `{:error, message}`.
   """
   def store_banner(uuid, path) when is_binary(uuid) and is_binary(path) do
-    dir = banner_dir()
-    File.mkdir_p!(dir)
-    name = "#{uuid}-#{System.os_time(:second)}.jpg"
-    out = Path.join(dir, name)
+    out = Path.join(System.tmp_dir!(), "roki-banner-#{System.unique_integer([:positive])}.jpg")
 
     args =
       ~w(-nostdin -loglevel error -y -i) ++
         [path, "-frames:v", "1", "-vf", "scale='min(1800,iw)':-2", "-q:v", "4", out]
 
-    case System.cmd("ffmpeg", args, stderr_to_stdout: true) do
-      {_, 0} ->
-        old = get(uuid).banner
-        set_banner(uuid, name)
-        if old, do: File.rm(Path.join(dir, old))
+    try do
+      with {_, 0} <- System.cmd("ffmpeg", args, stderr_to_stdout: true),
+           {:ok, file_uuid} <- Roki.Media.store(out, user: uuid, folder: "Profile banners", filename: "banner-#{System.os_time(:second)}.jpg") do
+        set_banner(uuid, file_uuid)
         {:ok, get(uuid)}
+      else
+        {out_text, code} when is_integer(code) ->
+          {:error, "That picture could not be read (#{String.slice(String.trim(out_text), 0, 80)})."}
 
-      {out_text, _} ->
-        File.rm(out)
-        {:error, "That picture could not be read (#{String.slice(String.trim(out_text), 0, 80)})."}
+        {:error, reason} ->
+          {:error, "The picture could not be kept (#{inspect(reason) |> String.slice(0, 80)})."}
+      end
+    after
+      File.rm(out)
     end
   end
 
-  @doc "Take the banner off the profile (and its file off the disk)."
+  @doc "Take the banner off the profile (the file stays in the media library, the user's to keep or delete)."
   def clear_banner(uuid) when is_binary(uuid) do
-    case get(uuid).banner do
-      nil -> :ok
-      old -> File.rm(Path.join(banner_dir(), old))
-    end
-
     set_banner(uuid, nil)
     :ok
   end
@@ -264,9 +250,13 @@ defmodule Roki.Profile do
         }
       end)
 
-    cards = Roki.Titles.cards(for i <- items, i.type != nil, do: {i.type, i.id})
-    Enum.map(items, fn i -> %{i | poster: cards[{i.type, i.id}][:poster], title: i.title || cards[{i.type, i.id}][:title]} end)
+    cards = Roki.Titles.cards(for i <- items, do: card_key(i))
+    Enum.map(items, fn i -> %{i | poster: cards[card_key(i)][:poster], title: i.title || cards[card_key(i)][:title]} end)
   end
+
+  # A title's card is TMDB's; an anime with no TMDB title has MyAnimeList's, under its MAL id.
+  defp card_key(%{type: nil, mal_id: mal}) when is_integer(mal), do: {"mal", mal}
+  defp card_key(i), do: {i.type, i.id}
 
   @doc """
   Posters for the shown rows that have none yet, by {type, id}: read from TMDB through laev
@@ -279,7 +269,40 @@ defmodule Roki.Profile do
       for %{type: type, id: id, title: title} <- items, poster = found[{type, id}], do: %{type: type, id: id, title: title, poster: poster}
     )
 
-    found
+    # An anime no TMDB title stands for: MyAnimeList's own picture, kept under the MAL id.
+    mal =
+      for %{type: nil, mal_id: mal, poster: nil} <- items, is_integer(mal), reduce: %{} do
+        acc ->
+          case mal_picture(uuid, mal) do
+            nil -> acc
+            url -> Map.put(acc, {"mal", mal}, url)
+          end
+      end
+
+    names = Map.new(items, fn i -> {i[:mal_id], i[:title]} end)
+    Roki.Titles.remember_later(for {{"mal", id}, url} <- mal, do: %{type: "mal", id: id, title: names[id] || "MAL #{id}", poster: url})
+    Map.merge(found, mal)
+  end
+
+  # MyAnimeList's picture of an anime (the main one), read with the site's client id; nil when
+  # there is none or MyAnimeList is not set up.
+  defp mal_picture(uuid, mal_id) do
+    Roki.Laev.run(uuid, fn ->
+      with client when is_binary(client) and client != "" <- Laev.MAL.client_id(),
+           {:ok, %{status: 200, body: %{"main_picture" => %{} = pic}}} <-
+             Req.get("https://api.myanimelist.net/v2/anime/#{mal_id}",
+               headers: [{"x-mal-client-id", client}],
+               params: [fields: "main_picture"],
+               retry: false,
+               receive_timeout: 10_000
+             ) do
+        pic["medium"] || pic["large"]
+      else
+        _ -> nil
+      end
+    end)
+  rescue
+    _ -> nil
   end
 
   @doc "The kinds a profile's history is filtered by."

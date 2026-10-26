@@ -160,7 +160,8 @@ defmodule RokiWeb.ProfileLive do
       when is_map(posters) and is_list(items) and posters != %{} do
     items =
       Enum.map(items, fn i ->
-        if i.poster == nil and posters[{i.type, i.id}], do: %{i | poster: posters[{i.type, i.id}]}, else: i
+        key = if i.type == nil and is_integer(i.mal_id), do: {"mal", i.mal_id}, else: {i.type, i.id}
+        if i.poster == nil and posters[key], do: %{i | poster: posters[key]}, else: i
       end)
 
     {:noreply, assign(socket, :history, items)}

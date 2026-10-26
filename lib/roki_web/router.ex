@@ -38,10 +38,9 @@ defmodule RokiWeb.Router do
     get "/account/services", AccountController, :services
     # Where MyAnimeList sends people back after they approve the site's app.
     get "/mal/callback", MalController, :callback
-    # A profile's banner (Roki.Profile).
-    get "/banners/:file", BannerController, :show
-    # TMDB's pictures from the site's own copy (Roki.Images).
-    get "/img/:size/:file", ImageController, :show
+    # A picture the site has not kept yet: fetched into the media library, then served from it.
+    get "/img/mal/*path", ImageController, :mal
+    get "/img/:size/:file", ImageController, :tmdb
   end
 
   scope "/", RokiWeb do

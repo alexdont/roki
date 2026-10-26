@@ -43,11 +43,9 @@ defmodule Roki.ProfileTest do
     assert Profile.score_text(8.5) == "8.5"
   end
 
-  test "banner names are the site's own, nothing else is served" do
-    assert Profile.banner_file("0199f7a1-0000-7000-8000-000000000001-1700000000.jpg") =~ ~r{/roki-banners/0199f7a1}
-    assert Profile.banner_file("../etc/passwd") == nil
-    assert Profile.banner_file("x.jpg") == nil
-    assert Profile.banner_url(%{banner: "a-1.jpg"}) == "/banners/a-1.jpg"
+  test "a banner is a media file; anything else named there is no banner" do
+    assert Profile.banner_url(%{banner: "0199f7a1-0000-7000-8000-000000000002"}) =~ ~r{/file/0199f7a1-0000-7000-8000-000000000002/original/}
+    assert Profile.banner_url(%{banner: "a-1.jpg"}) == nil
     assert Profile.banner_url(%{banner: nil}) == nil
   end
 end
