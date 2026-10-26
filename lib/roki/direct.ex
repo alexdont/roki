@@ -120,7 +120,7 @@ defmodule Roki.Direct do
   # directory: laev's holds TS segments, this one an MP4. (v2: HEVC with its parameter sets.)
   defp id_for(stream) do
     :sha256
-    |> :crypto.hash("direct:v2:#{stream[:filename]}-#{stream[:filesize]}")
+    |> :crypto.hash("direct:v3:#{stream[:filename]}-#{stream[:filesize]}")
     |> Base.encode16(case: :lower)
     |> binary_part(0, 16)
   end
@@ -295,6 +295,10 @@ defmodule Roki.Direct do
   # HEVC goes through MPEG-TS on the way: a release often keeps the parameter sets inside the
   # video rather than in the container, and an MP4 written straight from it has an empty `hvcC`
   # that nothing decodes. Read back from TS, ffmpeg's parser puts them where `hvc1` needs them.
+  #
+  # `delay_moov` holds the header back until the first fragment: the AAC decoder configuration
+  # comes out of the TS stream with its first packet, and a header written before that has none,
+  # which Safari refuses to decode (ffmpeg plays it anyway, so a local check does not show it).
   defp command(url, dir, streams, subs) do
     video = codec_in(streams, "video")
     audio = codec_in(streams, "audio")
@@ -322,7 +326,7 @@ defmodule Roki.Direct do
     maps = ~w(-map 0:v:0) ++ if(has_audio, do: ~w(-map 0:a:0), else: []) ++ ~w(-sn)
 
     mp4 =
-      ~w(-movflags frag_keyframe+empty_moov+default_base_moof -min_frag_duration 2000000 -f mp4) ++
+      ~w(-movflags frag_keyframe+empty_moov+default_base_moof+delay_moov -min_frag_duration 2000000 -f mp4) ++
         [Path.join(dir, "media.mp4")]
 
     if video in ["hevc", "h265"] do
