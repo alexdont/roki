@@ -202,6 +202,7 @@ defmodule RokiWeb.WatchComponents do
   end
 
   attr :mode, :atom, default: :browser
+  attr :caps, :map, default: %{}
   attr :playable, :list, required: true
   attr :rest, :list, required: true
   attr :current, :any, default: nil
@@ -247,9 +248,9 @@ defmodule RokiWeb.WatchComponents do
               <span class="badge badge-sm badge-ghost">{source.size_human}</span>
               <span class="badge badge-sm badge-ghost">{provider(stream)}</span>
               <span
-                :if={Watch.heavy?(source)}
+                :if={Watch.heavy?(source, @caps)}
                 class="badge badge-sm badge-warning"
-                title="Not h264: re-encoded on the server, slower to start"
+                title="Not h264, and not a codec this browser decodes: re-encoded on the server, slower to start"
               >
                 re-encoded
               </span>

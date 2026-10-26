@@ -606,6 +606,7 @@ defmodule RokiWeb.SourcesLive do
         <.sources
           :if={@playable != []}
           playable={@playable}
+          caps={@caps}
           rest={@rest}
           current={@current}
           mode={@mode}

@@ -173,12 +173,14 @@ defmodule Roki.Direct do
   def playlist(id) do
     case Roki.Fmp4.scan(media(id)) do
       %{init: init, fragments: fragments} ->
-        longest = fragments |> Enum.map(& &1.duration) |> Enum.max(fn -> 4 end)
+        # Fragments end at keyframes, so their length is the release's own; the target is kept
+        # high enough that it seldom has to change once the player has read it.
+        longest = fragments |> Enum.map(& &1.duration) |> Enum.max(fn -> 10 end)
 
         head = [
           "#EXTM3U",
           "#EXT-X-VERSION:7",
-          "#EXT-X-TARGETDURATION:#{max(ceil(longest), 4)}",
+          "#EXT-X-TARGETDURATION:#{max(ceil(longest), 10)}",
           "#EXT-X-MEDIA-SEQUENCE:0",
           "#EXT-X-PLAYLIST-TYPE:EVENT",
           "#EXT-X-INDEPENDENT-SEGMENTS",
@@ -198,7 +200,7 @@ defmodule Roki.Direct do
         Enum.join(head ++ body ++ tail, "\n") <> "\n"
 
       nil ->
-        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
+        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
     end
   end
 
