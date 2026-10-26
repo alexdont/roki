@@ -27,6 +27,8 @@ defmodule Roki.Application do
       # Conversions that only change the container (the browser decodes the video itself).
       {Registry, keys: :unique, name: Roki.Direct.Registry},
       {DynamicSupervisor, name: Roki.Direct.Supervisor, strategy: :one_for_one},
+      # Removes conversions nobody has fetched for six hours (laev's own sweep waits a day).
+      Roki.CacheSweeper,
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)
       # {Roki.Worker, arg},
