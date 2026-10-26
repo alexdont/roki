@@ -59,6 +59,7 @@ defmodule RokiWeb.WatchLive do
           skip: [],
           heavy_ok: false,
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
+          caps: caps_param(socket),
           episodes: nil,
           up_next: nil,
           up_prev: nil
@@ -103,6 +104,7 @@ defmodule RokiWeb.WatchLive do
       socket.assigns
 
     heavy_ok = socket.assigns.heavy_ok
+    caps = socket.assigns.caps
     # Releases that did not work for this episode are left out, a chosen one included.
     skip = socket.assigns.skip
     hash = if hash in skip, do: nil, else: hash
@@ -125,15 +127,16 @@ defmodule RokiWeb.WatchLive do
                  false,
                  :browser,
                  true,
-                 heavy_ok
+                 heavy_ok,
+                 caps
                ),
-             res = without(parent, token, uuid, heavy_ok, res, skip),
+             res = without(parent, token, uuid, heavy_ok, caps, res, skip),
              {res, pair} <-
                locate(
                  parent,
                  token,
                  uuid,
-                 heavy_ok,
+                 {heavy_ok, caps},
                  res,
                  hash || prefer,
                  if(hash, do: 3, else: 1)
@@ -142,7 +145,7 @@ defmodule RokiWeb.WatchLive do
              {:ok, pair} <- choose(res, pair),
              :ok <- announce(parent, token, "Getting the video ready…"),
              {:ok, pair, player} <-
-               start_or_next(parent, token, uuid, res, pair, hash == nil, skip, 4) do
+               start_or_next(parent, token, uuid, caps, res, pair, hash == nil, skip, 4) do
           {:ok, token, res, pair, player}
         else
           {:error, ^token, reason} -> {:error, token, reason}
@@ -153,9 +156,9 @@ defmodule RokiWeb.WatchLive do
   end
 
   # What did not work before is left out; when that is all that was checked, look at more.
-  defp without(_parent, _token, _uuid, _heavy_ok, res, []), do: res
+  defp without(_parent, _token, _uuid, _heavy_ok, _caps, res, []), do: res
 
-  defp without(parent, token, uuid, heavy_ok, res, skip) do
+  defp without(parent, token, uuid, heavy_ok, caps, res, skip) do
     keep = Enum.reject(res.playable, fn {source, _} -> source.hash in skip end)
     res = %{res | playable: keep}
 
@@ -172,10 +175,11 @@ defmodule RokiWeb.WatchLive do
           [],
           res.key,
           hours,
-          Resolver.light?(:browser, uuid, heavy_ok)
+          Resolver.light?(:browser, uuid, heavy_ok),
+          caps
         )
 
-      without(parent, token, uuid, heavy_ok, %{res | playable: all, rest: rest}, skip)
+      without(parent, token, uuid, heavy_ok, caps, %{res | playable: all, rest: rest}, skip)
     else
       res
     end
@@ -185,8 +189,8 @@ defmodule RokiWeb.WatchLive do
   # use) and the choice was ours rather than the user's, go on with the next best instead of
   # stopping. The ones that failed are told to the page so a retry leaves them out.
   @unskippable [:busy, :over_limit, :no_provider]
-  defp start_or_next(parent, token, uuid, res, {source, _} = pair, auto?, tried, left) do
-    case start(uuid, res.ctx, pair) do
+  defp start_or_next(parent, token, uuid, caps, res, {source, _} = pair, auto?, tried, left) do
+    case start(uuid, res.ctx, pair, caps) do
       {:ok, player} ->
         {:ok, pair, player}
 
@@ -197,7 +201,7 @@ defmodule RokiWeb.WatchLive do
 
         if next do
           announce(parent, token, "That release didn't work — trying another…")
-          start_or_next(parent, token, uuid, res, next, auto?, tried, left - 1)
+          start_or_next(parent, token, uuid, caps, res, next, auto?, tried, left - 1)
         else
           {:error, reason}
         end
@@ -222,9 +226,9 @@ defmodule RokiWeb.WatchLive do
 
   # A shared address names a release. It may not be among the first ones checked, so look further
   # (a few pages) before settling for the best.
-  defp locate(_parent, _token, _uuid, _heavy_ok, res, nil, _pages), do: {res, nil}
+  defp locate(_parent, _token, _uuid, _how, res, nil, _pages), do: {res, nil}
 
-  defp locate(parent, token, uuid, heavy_ok, res, hash, pages) do
+  defp locate(parent, token, uuid, {heavy_ok, caps} = how, res, hash, pages) do
     case Resolver.find(res.playable, hash) do
       nil when pages > 0 and res.rest != [] ->
         hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
@@ -239,10 +243,11 @@ defmodule RokiWeb.WatchLive do
             res.playable,
             res.key,
             hours,
-            Resolver.light?(:browser, uuid, heavy_ok)
+            Resolver.light?(:browser, uuid, heavy_ok),
+            caps
           )
 
-        locate(parent, token, uuid, heavy_ok, %{res | playable: all, rest: rest}, hash, pages - 1)
+        locate(parent, token, uuid, how, %{res | playable: all, rest: rest}, hash, pages - 1)
 
       pair ->
         {res, pair}
@@ -283,7 +288,13 @@ defmodule RokiWeb.WatchLive do
         Enum.reject([prefer, "en", "fr", "ja", "es", "de", "pt", "it", "ru"], &(&1 in [nil, ""]))
       )
 
-  defp start(uuid, ctx, {source, stream}), do: Watch.start(uuid, ctx, source, stream)
+  defp start(uuid, ctx, {source, stream}, caps), do: Watch.start(uuid, ctx, source, stream, caps)
+
+  # What this browser said it decodes itself, sent with the connection (see app.js).
+  defp caps_param(socket) do
+    params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
+    Roki.Direct.caps(params["caps"])
+  end
 
   @impl true
   def handle_async(:title, {:ok, {:ok, title}}, socket) do

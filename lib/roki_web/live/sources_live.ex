@@ -64,6 +64,7 @@ defmodule RokiWeb.SourcesLive do
           failed_reason: nil,
           heavy_ok: false,
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
+          caps: caps_param(socket),
           busy?: false
         )
 
@@ -85,6 +86,12 @@ defmodule RokiWeb.SourcesLive do
     params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
 
     if params["player"] == "browser", do: :browser, else: :external
+  end
+
+  # What this browser said it decodes itself, sent with the connection (see app.js).
+  defp caps_param(socket) do
+    params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
+    Roki.Direct.caps(params["caps"])
   end
 
   defp platform_param(socket) do
@@ -165,6 +172,7 @@ defmodule RokiWeb.SourcesLive do
     token = socket.assigns.token + 1
     %{uuid: uuid, title: title, season: season, episode: episode, mode: mode} = socket.assigns
     heavy_ok = socket.assigns.heavy_ok
+    caps = socket.assigns.caps
     parent = self()
 
     socket
@@ -185,7 +193,19 @@ defmodule RokiWeb.SourcesLive do
       cached_at: nil
     )
     |> start_async(:pipeline, fn ->
-      Resolver.run(parent, token, uuid, title, season, episode, force?, mode, false, heavy_ok)
+      Resolver.run(
+        parent,
+        token,
+        uuid,
+        title,
+        season,
+        episode,
+        force?,
+        mode,
+        false,
+        heavy_ok,
+        caps
+      )
     end)
   end
 
@@ -334,11 +354,11 @@ defmodule RokiWeb.SourcesLive do
   # The browser's player is prepared *here*, before its page opens — so the page opens on a video
   # that is already running instead of starting it, which was a second wait after the first.
   defp start(%{assigns: %{mode: :browser}} = socket, {source, stream} = pair) do
-    %{uuid: uuid, ctx: ctx} = socket.assigns
+    %{uuid: uuid, ctx: ctx, caps: caps} = socket.assigns
 
     socket
     |> assign(starting: %{name: source.name}, current: pair, start_error: nil, auto: :done)
-    |> start_async(:prestart, fn -> {source, Watch.start(uuid, ctx, source, stream)} end)
+    |> start_async(:prestart, fn -> {source, Watch.start(uuid, ctx, source, stream, caps)} end)
   end
 
   defp start(socket, pair), do: hand_over(socket, pair)
@@ -388,12 +408,13 @@ defmodule RokiWeb.SourcesLive do
     parent = self()
     hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
     light? = Resolver.light?(socket.assigns.mode, uuid, socket.assigns.heavy_ok)
+    caps = socket.assigns.caps
 
     {:noreply,
      socket
      |> assign(busy?: true, phase: :working, status: "Checking more releases…")
      |> start_async(:more, fn ->
-       Resolver.more(parent, token, uuid, ctx, rest, have, key, hours, light?)
+       Resolver.more(parent, token, uuid, ctx, rest, have, key, hours, light?, caps)
      end)}
   end
 

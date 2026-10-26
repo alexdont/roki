@@ -48,6 +48,21 @@ const storedGrid = () => {
   try { return localStorage.getItem("roki:grid") } catch { return null }
 }
 
+// What this device decodes on its own, so the server can leave such video as it is instead of
+// re-encoding it. Asked of the media engine, not guessed from the browser's name: Chrome says
+// yes to HEVC only on a machine with a hardware decoder.
+function deviceCaps() {
+  try {
+    const MS = window.ManagedMediaSource || window.MediaSource
+    const ok = (t) => !!(MS && MS.isTypeSupported && MS.isTypeSupported(t))
+    return {
+      hevc: ok('video/mp4; codecs="hvc1.1.6.L120.B0"'),
+      av1: ok('video/mp4; codecs="av01.0.08M.08"'),
+      vp9: ok('video/mp4; codecs="vp09.00.40.08"'),
+    }
+  } catch { return {} }
+}
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: () => ({
@@ -56,6 +71,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     player: storedPlayer() || defaultPlayer(),
     grid: storedGrid(),
     place: placeParam(),
+    caps: deviceCaps(),
   }),
   hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, MenuExtras},
 })

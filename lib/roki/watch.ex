@@ -985,34 +985,55 @@ defmodule Roki.Watch do
   (ffmpeg) and waited for until the first segments are on disk. Also writes the history entry,
   so the title shows up in the user's History and as the thing to continue.
   """
-  def start(uuid, ctx, source, stream) do
+  def start(uuid, ctx, source, stream, caps \\ %{}) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
+    # A video the browser decodes itself (`caps`) is only copied, and takes no encoder slot.
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
-         :ok <- light_enough(uuid, source, stream),
+         :ok <- light_enough(uuid, source, stream, caps),
          :ok <- release_previous(uuid),
-         :ok <- allowed(source) do
+         :ok <- if(Roki.Direct.wanted?(source, caps), do: :ok, else: allowed(source)) do
       Roki.Keys.record(uuid, :play)
 
-      do_start(uuid, ctx, source, stream)
+      do_start(uuid, ctx, source, stream, caps)
     end
   end
+
+  @doc """
+  Whether a release's video is more than this browser can take as it is: not H.264, and not a
+  codec the browser said it decodes (`caps`). Only a heavy release costs the server a re-encode.
+  """
+  def heavy?(source, caps), do: heavy?(source) and not Roki.Direct.wanted?(source, caps)
 
   # Without the heavy permission only a video the browser can take as it is (or have copied) plays: the
   # name says so for most releases; one that does not is read from the file itself.
-  defp light_enough(uuid, source, stream) do
+  defp light_enough(uuid, source, stream, caps) do
     cond do
       Roki.Keys.heavy?(uuid) -> :ok
-      heavy?(source) -> {:error, :needs_heavy}
+      heavy?(source, caps) -> {:error, :needs_heavy}
       String.ends_with?(String.downcase(stream.filename || ""), [".mp4", ".m4v", ".webm"]) -> :ok
-      true -> check_video_codec(stream)
+      true -> check_video_codec(stream, caps)
     end
   end
 
-  defp check_video_codec(stream) do
-    case video_h264?(stream) do
+  defp check_video_codec(stream, caps) do
+    case light_video?(stream, caps) do
       false -> {:error, :needs_heavy}
       :unreachable -> {:error, :unreachable}
       _ -> :ok
+    end
+  end
+
+  @doc """
+  Whether the file's video (read from the file) plays without a re-encode: H.264, or a codec
+  this browser decodes (`caps`). `nil` when it could not be read, `:unreachable` when the host
+  did not answer.
+  """
+  def light_video?(stream, caps) do
+    case video_codec(stream.url) do
+      :unreachable -> :unreachable
+      c when c in [nil, ""] -> nil
+      "h264" -> true
+      c -> Roki.Direct.decodable?(c, caps)
     end
   end
 
@@ -1111,8 +1132,12 @@ defmodule Roki.Watch do
     key = {:remux, uuid}
 
     case Roki.TTLCache.fetch(key, 3 * 3600, fn -> :none end) do
-      {:ok, id} when is_binary(id) -> Laev.Remux.stop(id)
-      _ -> :ok
+      {:ok, id} when is_binary(id) ->
+        Laev.Remux.stop(id)
+        Roki.Direct.stop(id)
+
+      _ ->
+        :ok
     end
 
     Roki.TTLCache.delete(key)
@@ -1126,9 +1151,9 @@ defmodule Roki.Watch do
 
   defp remember_remux(_uuid, _src), do: :ok
 
-  defp do_start(uuid, ctx, source, stream) do
+  defp do_start(uuid, ctx, source, stream, caps) do
     Roki.Laev.run(uuid, fn ->
-      with {:ok, src} <- Laev.Playback.browser_source(ctx, stream, title: ctx.title),
+      with {:ok, src} <- browser_source(ctx, stream, caps),
            true <- src.playable || {:error, src[:reason] || :not_playable},
            :ok <- ready(src) do
         save_resume(ctx, source)
@@ -1147,6 +1172,30 @@ defmodule Roki.Watch do
          }}
       end
     end)
+  end
+
+  # The video copied for a browser that decodes it (`Roki.Direct`), else laev's conversion.
+  defp browser_source(ctx, stream, caps) do
+    case Roki.Direct.start(stream, caps) do
+      {:ok, id} ->
+        {:ok,
+         %{
+           kind: :remux,
+           remux_id: id,
+           dir: Roki.Direct.dir(id),
+           url: stream.url,
+           playable: true,
+           title: ctx.title,
+           filename: stream.filename,
+           resume_at: Laev.Position.saved_position(ctx) || 0
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :skip ->
+        Laev.Playback.browser_source(ctx, stream, title: ctx.title)
+    end
   end
 
   @doc """
@@ -1435,6 +1484,7 @@ defmodule Roki.Watch do
 
       System.monotonic_time(:millisecond) > deadline ->
         Laev.Remux.stop(id)
+        Roki.Direct.stop(id)
         {:error, :timeout}
 
       true ->
@@ -1444,6 +1494,10 @@ defmodule Roki.Watch do
   end
 
   defp segments_ready?(id) do
+    if Roki.Direct.direct?(id), do: Roki.Direct.ready?(id), else: segments_on_disk?(id)
+  end
+
+  defp segments_on_disk?(id) do
     dir = Laev.Remux.dir(id)
     # Several audio tracks: the video is in `s_0.m3u8`, under a master playlist.
     file = if File.exists?(Path.join(dir, "master.m3u8")), do: "s_0.m3u8", else: "index.m3u8"

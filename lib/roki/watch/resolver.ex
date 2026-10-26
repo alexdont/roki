@@ -30,7 +30,8 @@ defmodule Roki.Watch.Resolver do
         force?,
         mode,
         quick? \\ false,
-        heavy_ok? \\ false
+        heavy_ok? \\ false,
+        caps \\ %{}
       ) do
     key = key(title.type, title.id, season, episode)
     web = Roki.Laev.web_settings(uuid)
@@ -40,7 +41,7 @@ defmodule Roki.Watch.Resolver do
     # needs none (H.264). An account that is allowed heavy encoding gets the rest only when it asked
     # for it for this search (`heavy_ok?`); everyone else is sent to an external player.
     light? = light?(mode, uuid, heavy_ok?)
-    cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours) |> lighten(light?)
+    cached = if force?, do: nil, else: SourceCache.get(uuid, key, hours) |> lighten(light?, caps)
 
     with :ok <- Watch.subscription(uuid),
          ctx = Watch.ctx(uuid, title, season, episode),
@@ -61,7 +62,8 @@ defmodule Roki.Watch.Resolver do
                hours,
                force?,
                quick?,
-               light?
+               light?,
+               caps
              )
            end) do
       {:ok, res}
@@ -79,9 +81,9 @@ defmodule Roki.Watch.Resolver do
     do: mode == :browser and not (heavy_ok? and Roki.Keys.heavy?(uuid))
 
   @doc "Check the next page of unchecked releases: `{:ok, token, playable, rest}`."
-  def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false) do
+  def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false, caps \\ %{}) do
     {page, rest} = Watch.probe_page(rest)
-    {playable, late} = probe_page(parent, token, uuid, ctx, page, false, light?)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page, false, light?, caps)
     rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
     if hours > 0, do: SourceCache.put(uuid, key, all, rest, light?)
@@ -89,16 +91,16 @@ defmodule Roki.Watch.Resolver do
   end
 
   # A saved list made for another player: only its light releases, and none left means search again.
-  defp lighten(nil, _light?), do: nil
-  defp lighten(%{light: true}, false), do: nil
-  defp lighten(entry, false), do: entry
+  defp lighten(nil, _light?, _caps), do: nil
+  defp lighten(%{light: true}, false, _caps), do: nil
+  defp lighten(entry, false, _caps), do: entry
 
-  defp lighten(entry, true) do
-    playable = Enum.reject(entry.playable, &Watch.heavy?/1)
+  defp lighten(entry, true, caps) do
+    playable = Enum.reject(entry.playable, &Watch.heavy?(&1, caps))
 
     if playable == [],
       do: nil,
-      else: %{entry | playable: playable, rest: Enum.reject(entry.rest, &Watch.heavy?/1)}
+      else: %{entry | playable: playable, rest: Enum.reject(entry.rest, &Watch.heavy?(&1, caps))}
   end
 
   defp from_cache(_uuid, _token, _ctx, _cap, _key, nil), do: nil
@@ -135,7 +137,8 @@ defmodule Roki.Watch.Resolver do
          hours,
          force?,
          quick?,
-         light?
+         light?,
+         caps
        ) do
     send(parent, {:status, token, "Searching for releases…"})
     Roki.Keys.record(uuid, :search)
@@ -145,9 +148,9 @@ defmodule Roki.Watch.Resolver do
          sources =
            Watch.with_library(uuid, query, found) |> in_study_order(uuid) |> prioritise(ctx),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
-         {:ok, sources} <- only_light(sources, light?),
+         {:ok, sources} <- only_light(sources, light?, caps),
          {:ok, playable, rest} <-
-           probe_until_playable(parent, token, uuid, ctx, sources, [], quick?, light?) do
+           probe_until_playable(parent, token, uuid, ctx, sources, [], quick?, light?, caps) do
       # (A list made for a browser that may not re-encode is saved as such: it lacks the heavy releases.)
       if hours > 0, do: SourceCache.put(uuid, key, playable, rest, light?)
 
@@ -165,10 +168,10 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
-  defp only_light(sources, false), do: {:ok, sources}
+  defp only_light(sources, false, _caps), do: {:ok, sources}
 
-  defp only_light(sources, true) do
-    case Enum.reject(sources, &Watch.heavy?/1) do
+  defp only_light(sources, true, caps) do
+    case Enum.reject(sources, &Watch.heavy?(&1, caps)) do
       [] when sources != [] -> {:error, :only_heavy}
       light -> {:ok, light}
     end
@@ -249,12 +252,12 @@ defmodule Roki.Watch.Resolver do
     end
   end
 
-  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _quick?, _light?),
+  defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _quick?, _light?, _caps),
     do: {:error, :none_playable}
 
-  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?, light?) do
+  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?, light?, caps) do
     {page, rest} = Watch.probe_page(sources, if(quick?, do: 8, else: 12))
-    {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?, light?)
+    {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?, light?, caps)
     rest = late ++ rest
     # Starting in the browser is what is waited for: what is known from the names ranks it.
     ranked =
@@ -263,7 +266,7 @@ defmodule Roki.Watch.Resolver do
     cond do
       ranked != [] -> {:ok, ranked, rest}
       rest == [] -> {:error, :none_playable}
-      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], quick?, light?)
+      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], quick?, light?, caps)
     end
   end
 
@@ -274,7 +277,7 @@ defmodule Roki.Watch.Resolver do
 
   # One round of probing, 8 releases two at a time. Each answer is counted on the page as it
   # arrives; the task keeps the ones that play.
-  defp probe_page(parent, token, uuid, ctx, page, quick?, light?) do
+  defp probe_page(parent, token, uuid, ctx, page, quick?, light?, caps) do
     {:ok, agent} = Agent.start_link(fn -> %{done: 0, ok: [], seen: []} end)
     total = length(page)
     Roki.Keys.record(uuid, :probe, max(total, 1))
@@ -286,7 +289,7 @@ defmodule Roki.Watch.Resolver do
       # the video is gets its real codec read here, and one that would need re-encoding is dropped
       # now rather than offered and refused later.
       result = scene_retry(result, source, idx, ctx)
-      result = if light?, do: needs_reencode(source, result), else: result
+      result = if light?, do: needs_reencode(source, result, caps), else: result
 
       {done, ok} =
         Agent.get_and_update(agent, fn st ->
@@ -437,7 +440,7 @@ defmodule Roki.Watch.Resolver do
   defp probe_opts(opts, ctx),
     do: opts |> Keyword.put(:ctx, ctx) |> Keyword.put(:season, ctx.season)
 
-  defp needs_reencode(source, {:ok, stream} = result) do
+  defp needs_reencode(source, {:ok, stream} = result, caps) do
     cond do
       source.codec != nil ->
         result
@@ -446,11 +449,11 @@ defmodule Roki.Watch.Resolver do
         result
 
       true ->
-        if Watch.video_h264?(stream) == false, do: {:error, :needs_reencode}, else: result
+        if Watch.light_video?(stream, caps) == false, do: {:error, :needs_reencode}, else: result
     end
   end
 
-  defp needs_reencode(_source, result), do: result
+  defp needs_reencode(_source, result, _caps), do: result
 
   # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
   # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.

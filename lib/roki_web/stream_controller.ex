@@ -13,7 +13,7 @@ defmodule RokiWeb.StreamController do
   # The plain playlist, the multi-audio master and its per-rendition playlists and segments
   # (ffmpeg names renditions s_0, s_Japanese …), single-audio segments, and subtitle tracks:
   # the ones in the release (sub0.vtt) and ones fetched from a provider (ext-fr.vtt).
-  @allowed ~r/^(playlist\.m3u8|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
+  @allowed ~r/^(playlist\.m3u8|media\.mp4|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
 
   def file(conn, %{"id" => id, "file" => file}) do
     cond do
@@ -25,16 +25,44 @@ defmodule RokiWeb.StreamController do
 
       true ->
         Laev.Remux.touch(id)
-        path = Path.join(Laev.Remux.dir(id), resolve(id, file))
+        Roki.Direct.touch(id)
+        serve(conn, id, file)
+    end
+  end
 
-        if File.regular?(path) do
-          conn
-          |> put_resp_content_type(content_type(file))
-          |> put_resp_header("cache-control", cache_control(file))
-          |> send_file(200, path)
-        else
-          send_resp(conn, 404, "not ready")
-        end
+  # A conversion that copied the video (`Roki.Direct`) is one MP4 read by byte ranges, under a
+  # playlist made from what is written so far; laev's are files on disk.
+  defp serve(conn, id, "playlist.m3u8" = file) do
+    if Roki.Direct.direct?(id) do
+      conn
+      |> put_resp_content_type(content_type(file))
+      |> put_resp_header("cache-control", "no-store")
+      |> send_resp(200, Roki.Direct.playlist(id))
+    else
+      serve_file(conn, id, file)
+    end
+  end
+
+  defp serve(conn, id, "media.mp4") do
+    path = Roki.Direct.media(id)
+
+    if File.regular?(path),
+      do: RokiWeb.RangeFile.send(conn, path, "video/mp4"),
+      else: send_resp(conn, 404, "not ready")
+  end
+
+  defp serve(conn, id, file), do: serve_file(conn, id, file)
+
+  defp serve_file(conn, id, file) do
+    path = Path.join(Laev.Remux.dir(id), resolve(id, file))
+
+    if File.regular?(path) do
+      conn
+      |> put_resp_content_type(content_type(file))
+      |> put_resp_header("cache-control", cache_control(file))
+      |> send_file(200, path)
+    else
+      send_resp(conn, 404, "not ready")
     end
   end
 

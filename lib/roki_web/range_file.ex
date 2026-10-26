@@ -19,9 +19,12 @@ defmodule RokiWeb.RangeFile do
 
     conn =
       conn
-      |> put_resp_content_type(content_type)
+      |> put_resp_content_type(content_type, nil)
       |> put_resp_header("accept-ranges", "bytes")
-      |> put_resp_header("cache-control", "no-store")
+      |> put_resp_header(
+        "cache-control",
+        if(growing?, do: "no-store", else: "private, max-age=3600")
+      )
 
     case range(get_req_header(conn, "range"), size) do
       nil when growing? ->
