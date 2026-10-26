@@ -121,17 +121,17 @@ defmodule RokiWeb.Layouts do
           />
           <.top_icon
             :if={@username}
-            href={~p"/#{@username}/home"}
-            icon="hero-star"
-            label="Shelf"
-            active={active?(@current_path, ~p"/#{@username}/home")}
-          />
-          <.top_icon
-            :if={@username}
             href={~p"/#{@username}"}
             icon="hero-user-circle"
             label="Profile"
             active={@current_path == "/#{@username}"}
+          />
+          <.top_icon
+            :if={@username}
+            href={~p"/#{@username}/home"}
+            icon="hero-star"
+            label="Shelf"
+            active={active?(@current_path, ~p"/#{@username}/home")}
           />
         </div>
 
