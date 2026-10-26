@@ -222,11 +222,24 @@ defmodule Roki.AnimeCorner do
 
   @doc """
   The ranking table of a post's HTML: `[%{rank:, title:, votes:}]` for every row with a place,
-  a title and a share ("1st | Firefly Wedding | 9.23%"). Empty when there is no such table.
+  a title and a share ("1st | Firefly Wedding | 9.23%"). The first such table only: a season's
+  final post goes on with the polls by genre, the best couples, and who answered. Empty when
+  there is no such table.
   """
   def parse(html) do
-    ~r/<tr[^>]*>(.*?)<\/tr>/s
+    ~r/<table.*?<\/table>/s
     |> Regex.scan(html)
+    |> Enum.find_value([], fn [table] ->
+      case rows(table) do
+        [] -> nil
+        entries -> entries
+      end
+    end)
+  end
+
+  defp rows(table) do
+    ~r/<tr[^>]*>(.*?)<\/tr>/s
+    |> Regex.scan(table)
     |> Enum.flat_map(fn [_, row] ->
       cells = for [_, cell] <- Regex.scan(~r/<td[^>]*>(.*?)<\/td>/s, row), do: text(cell)
 

@@ -172,6 +172,14 @@ defmodule RokiWeb.CategoryLive do
     end
   end
 
+  # A season picked for the ranking: that season's latest poll.
+  def handle_event("corner_season", %{"season" => name, "year" => year}, socket) do
+    case Browse.season(name, year) do
+      nil -> {:noreply, socket}
+      season -> {:noreply, push_patch(socket, to: address(socket.assigns.kind, sort: :corner, season: season, week: nil))}
+    end
+  end
+
   def handle_event("size", %{"size" => size}, socket) when size in @sizes do
     {:noreply, socket |> assign(:size, size) |> push_event("roki:grid", %{size: size})}
   end
@@ -336,18 +344,17 @@ defmodule RokiWeb.CategoryLive do
                 {label}
                 <.icon :if={@sort == key} name="hero-check-micro" class="h-5 w-5" />
               </button>
-              <%!-- The poll's weeks, once the ranking is shown: the season's final first. --%>
-              <div :if={@sort == :corner and @corner} class="flex flex-wrap gap-1 px-3 pb-2 pt-1">
-                <.link
-                  :for={w <- @corner.weeks}
-                  patch={address(@kind, sort: :corner, season: @season, week: w)}
-                  phx-click={JS.hide(to: "#order-picker-panel")}
-                  class={["btn btn-xs", w == @corner.week && "btn-primary"]}
-                >
-                  {Roki.AnimeCorner.week_label(w)}
-                </.link>
-              </div>
             </div>
+          </.picker>
+
+          <%!-- The ranking's week: any season Anime Corner has polled, any week of it. --%>
+          <.picker
+            :if={@kind == :anime and @sort == :corner}
+            id="week-picker"
+            label="Week"
+            value={week_text(@corner, @season || @now)}
+          >
+            <.week_panel kind={@kind} season={@season || @now} corner={@corner} loading?={@loading?} now={@now} />
           </.picker>
 
           <div class="join" role="group" aria-label="Grid size">
@@ -531,10 +538,54 @@ defmodule RokiWeb.CategoryLive do
     """
   end
 
+  attr :kind, :atom, required: true
+  attr :season, :any, required: true
+  attr :corner, :any, default: nil
+  attr :loading?, :boolean, default: false
+  attr :now, :any, required: true
+
+  # A season to choose (Anime Corner has polled every one since 2020), and the weeks posted for
+  # it, the season's final ranking first once there is one.
+  defp week_panel(assigns) do
+    {year, name} = assigns.season
+    assigns = assign(assigns, year: year, name: name, years: elem(assigns.now, 0)..2020//-1)
+
+    ~H"""
+    <form phx-change="corner_season" class="flex gap-2 border-b border-base-300 p-2">
+      <select name="season" class="select select-bordered select-sm flex-1" aria-label="Season">
+        <option :for={s <- Laev.Season.all()} value={s} selected={s == @name}>
+          {String.capitalize(Atom.to_string(s))}
+        </option>
+      </select>
+      <select name="year" class="select select-bordered select-sm w-28" aria-label="Year">
+        <option :for={y <- @years} value={y} selected={y == @year}>{y}</option>
+      </select>
+    </form>
+    <div class="p-2">
+      <p :if={@corner == nil and @loading?} class="px-1 py-2 text-sm text-base-content/60">Looking for the polls…</p>
+      <p :if={@corner == nil and not @loading?} class="px-1 py-2 text-sm text-base-content/60">
+        No Anime Corner poll for {Laev.Season.label(@season)}.
+      </p>
+      <div :if={@corner} class="flex flex-wrap gap-1">
+        <.link
+          :for={w <- @corner.weeks}
+          patch={address(@kind, sort: :corner, season: @season, week: w)}
+          phx-click={JS.hide(to: "#week-picker-panel")}
+          class={["btn btn-sm", w == @corner.week && "btn-primary"]}
+        >
+          {Roki.AnimeCorner.week_label(w)}
+        </.link>
+      </div>
+    </div>
+    """
+  end
+
+  defp week_text(%{week: week}, season), do: "#{Roki.AnimeCorner.week_label(week)} · #{Laev.Season.label(season)}"
+  defp week_text(nil, season), do: Laev.Season.label(season)
+
   defp season_text(nil), do: "All anime"
   defp season_text(season), do: Laev.Season.label(season)
 
-  defp sort_text(_sorts, :corner, %{week: week}), do: "Anime Corner · #{Roki.AnimeCorner.week_label(week)}"
   defp sort_text(sorts, sort, _corner), do: Keyword.get(sorts, sort, "Popular")
 
   attr :size, :string, required: true

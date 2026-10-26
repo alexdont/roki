@@ -12,6 +12,8 @@ defmodule Roki.AnimeCornerTest do
   <tr><td>8th</td><td>Ranma &frac12; (2024) Season 3</td><td>2.15%</td></tr>
   <tr><td>73rd</td><td>Little Mouse&#8217;s Red Vest Season 2</td><td>0.03%</td></tr>
   </tbody></table></figure>
+  <h2>Best Ship or Couple</h2>
+  <table><tbody><tr><td>1st</td><td>Hikaru Indo x Yoshiki Tsujinaka</td><td>21.07%</td></tr></tbody></table>
   """
 
   test "the ranking table is read with its places, titles and shares" do
@@ -24,6 +26,8 @@ defmodule Roki.AnimeCornerTest do
            ] = AnimeCorner.parse(@html)
 
     assert AnimeCorner.parse("<p>no table</p>") == []
+    # A season's final post goes on with other polls; only the first table is the ranking.
+    assert AnimeCorner.parse("<table><tr><td>Male</td><td>72%</td></tr></table>" <> @html) |> length() == 5
   end
 
   test "what names a season is cut off, and a long title is tried ever shorter" do
