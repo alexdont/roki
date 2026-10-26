@@ -4,6 +4,10 @@ defmodule RokiWeb.CategoryLive do
   larger posters. Popular (what Featured shows) by default, or newest, oldest, top rated;
   the grid size is a choice at the top right, remembered in the browser. "Load more" adds a
   page at the bottom — the Featured page stays short because this is where "more" lives.
+
+  Anime can also be listed by season (`?season=fall&year=2026`) and in the order of Anime
+  Corner's weekly poll (`?sort=corner&week=3`, the latest week without one): the season's
+  anime as people voted them, each poster with its place and share.
   """
   use RokiWeb, :live_view
 
@@ -35,6 +39,8 @@ defmodule RokiWeb.CategoryLive do
        uuid: uuid,
        sort: :popular,
        season: nil,
+       week: nil,
+       corner: nil,
        season_count: 12,
        season_error: nil,
        place: RokiWeb.Place.from_params(socket),
@@ -64,10 +70,14 @@ defmodule RokiWeb.CategoryLive do
     season =
       if socket.assigns.kind == :anime, do: Browse.season(params["season"], params["year"])
 
-    changed? =
-      sort != socket.assigns.sort or season != socket.assigns.season or socket.assigns.page == 0
+    # The Anime Corner ranking of one week (`?week=3`, `?week=final`); the latest without.
+    week = if sort == :corner, do: Roki.AnimeCorner.week(params["week"])
 
-    socket = assign(socket, sort: sort, season: season, size: size)
+    changed? =
+      sort != socket.assigns.sort or season != socket.assigns.season or
+        week != socket.assigns.week or socket.assigns.page == 0
+
+    socket = assign(socket, sort: sort, season: season, week: week, size: size)
 
     {:noreply,
      if(connected?(socket) and changed?,
@@ -88,26 +98,39 @@ defmodule RokiWeb.CategoryLive do
   defp fetch_first(socket), do: fetch(socket, 1)
 
   defp fetch(socket, n, upto \\ nil) do
-    %{kind: kind, sort: sort, season: season, uuid: uuid} = socket.assigns
+    %{kind: kind, sort: sort, season: season, week: week, uuid: uuid} = socket.assigns
     last = upto || n
 
-    start_async(socket, {:page, {sort, season}, last}, fn ->
+    start_async(socket, {:page, {sort, season, week}, last}, fn ->
       results =
         if last > n,
-          do: RokiWeb.Place.pages(last, &Browse.page(kind, sort, &1, uuid, season)),
-          else: [Browse.page(kind, sort, n, uuid, season)]
+          do: RokiWeb.Place.pages(last, &Browse.page(kind, sort, &1, uuid, season, week)),
+          else: [Browse.page(kind, sort, n, uuid, season, week)]
 
       case Enum.find(results, &(not match?({:ok, _, _}, &1))) do
         nil ->
           items = Enum.flat_map(results, fn {:ok, items, _more?} -> items end)
           {:ok, _, more?} = List.last(results)
-          {:ok, last, Roki.Laev.annotate(uuid, items), more?, Roki.Laev.seen_keys(uuid, items)}
+
+          {:ok, last, Roki.Laev.annotate(uuid, items), more?, Roki.Laev.seen_keys(uuid, items),
+           corner_info(kind, sort, season, week, uuid)}
 
         error ->
           error
       end
     end)
   end
+
+  # Which week of the poll is shown, the weeks there are, and what could not be matched — for
+  # the line over the grid and the week choice. Already computed for the page: no request.
+  defp corner_info(:anime, :corner, season, week, uuid) do
+    case Roki.AnimeCorner.items(uuid, season || Laev.Season.current(), week) do
+      {:ok, info} -> Map.take(info, [:week, :url, :weeks, :missing])
+      _ -> nil
+    end
+  end
+
+  defp corner_info(_kind, _sort, _season, _week, _uuid), do: nil
 
   @impl true
   def handle_event("more", _params, %{assigns: %{more?: true, loading?: false}} = socket),
@@ -193,17 +216,25 @@ defmodule RokiWeb.CategoryLive do
   end
 
   defp view_path(socket, overrides) do
+    %{kind: kind, sort: sort, season: season, week: week} = socket.assigns
+    address(kind, Keyword.merge([sort: sort, season: season, week: week], overrides))
+  end
+
+  # The address of a view: order, season and (for the Anime Corner ranking) week.
+  defp address(kind, view) do
+    corner? = view[:sort] == :corner
+
     query =
-      [sort: socket.assigns.sort, season: socket.assigns.season]
-      |> Keyword.merge(overrides)
-      |> Enum.flat_map(fn
+      Enum.flat_map(view, fn
         {:sort, :popular} -> []
         {:season, nil} -> []
         {:season, {year, season}} -> [season: season, year: year]
+        {:week, w} when w == nil or not corner? -> []
+        {:week, w} -> [week: Roki.AnimeCorner.week_param(w)]
         other -> [other]
       end)
 
-    base = "/#{socket.assigns.kind}"
+    base = "/#{kind}"
     if query == [], do: base, else: base <> "?" <> URI.encode_query(query)
   end
 
@@ -212,11 +243,15 @@ defmodule RokiWeb.CategoryLive do
   defp upcoming_season?(_), do: false
 
   @impl true
-  def handle_async({:page, view, _n}, _result, %{assigns: %{sort: sort, season: season}} = socket)
-      when view != {sort, season},
+  def handle_async(
+        {:page, view, _n},
+        _result,
+        %{assigns: %{sort: sort, season: season, week: week}} = socket
+      )
+      when view != {sort, season, week},
       do: {:noreply, socket}
 
-  def handle_async({:page, _view, _n}, {:ok, {:ok, n, items, more?, seen}}, socket) do
+  def handle_async({:page, _view, _n}, {:ok, {:ok, n, items, more?, seen, corner}}, socket) do
     known = MapSet.new(socket.assigns.items, & &1.id)
     fresh = Enum.reject(items, &MapSet.member?(known, &1.id))
     uuid = socket.assigns.uuid
@@ -227,6 +262,7 @@ defmodule RokiWeb.CategoryLive do
         page: n,
         more?: more?,
         loading?: false,
+        corner: corner,
         seen: MapSet.union(socket.assigns.seen, seen)
       )
 
@@ -256,7 +292,7 @@ defmodule RokiWeb.CategoryLive do
       assign(assigns,
         grid: @grids[assigns.size],
         title: @titles[assigns.kind],
-        sorts: Browse.sorts(),
+        sorts: Browse.sorts(assigns.kind, assigns.season),
         now: Laev.Season.current()
       )
 
@@ -283,10 +319,10 @@ defmodule RokiWeb.CategoryLive do
           </.picker>
 
           <.picker
-            :if={@season == nil}
+            :if={@kind == :anime or @season == nil}
             id="order-picker"
             label="Order"
-            value={sort_text(@sorts, @sort)}
+            value={sort_text(@sorts, @sort, @corner)}
           >
             <div class="p-1">
               <button
@@ -300,6 +336,17 @@ defmodule RokiWeb.CategoryLive do
                 {label}
                 <.icon :if={@sort == key} name="hero-check-micro" class="h-5 w-5" />
               </button>
+              <%!-- The poll's weeks, once the ranking is shown: the season's final first. --%>
+              <div :if={@sort == :corner and @corner} class="flex flex-wrap gap-1 px-3 pb-2 pt-1">
+                <.link
+                  :for={w <- @corner.weeks}
+                  patch={address(@kind, sort: :corner, season: @season, week: w)}
+                  phx-click={JS.hide(to: "#order-picker-panel")}
+                  class={["btn btn-xs", w == @corner.week && "btn-primary"]}
+                >
+                  {Roki.AnimeCorner.week_label(w)}
+                </.link>
+              </div>
             </div>
           </.picker>
 
@@ -317,6 +364,20 @@ defmodule RokiWeb.CategoryLive do
           </div>
         </div>
       </div>
+
+      <%!-- Where the ranking comes from, and what of it is not on TMDB. --%>
+      <p :if={@sort == :corner and @corner} class="text-sm text-base-content/70">
+        Anime Corner's weekly poll, {String.downcase(Roki.AnimeCorner.week_label(@corner.week))} of {Laev.Season.label(
+          @season || @now
+        )}: {length(@items)} titles as people voted them.
+        <span :if={@corner.missing != []}>
+          Not found on TMDB: {Enum.join(@corner.missing, ", ")}.
+        </span>
+        <a href={@corner.url} target="_blank" rel="noopener" class="link">Open the post</a>
+      </p>
+      <p :if={@sort == :corner and @corner == nil and not @loading? and @error == nil and @items == []} class="alert text-sm">
+        Anime Corner has not posted a ranking for {Laev.Season.label(@season || @now)} yet.
+      </p>
 
       <p :if={@error == :no_tmdb_key} class="alert text-sm">
         Log in with a connected laev account to browse — titles are looked up with your own TMDB key.
@@ -360,7 +421,7 @@ defmodule RokiWeb.CategoryLive do
       </div>
 
       <p
-        :if={@items == [] and not @loading? and @error == nil}
+        :if={@items == [] and not @loading? and @error == nil and @sort != :corner}
         class="py-16 text-center text-base-content/60"
       >
         Nothing here.
@@ -473,7 +534,8 @@ defmodule RokiWeb.CategoryLive do
   defp season_text(nil), do: "All anime"
   defp season_text(season), do: Laev.Season.label(season)
 
-  defp sort_text(sorts, sort), do: Keyword.get(sorts, sort, "Popular")
+  defp sort_text(_sorts, :corner, %{week: week}), do: "Anime Corner · #{Roki.AnimeCorner.week_label(week)}"
+  defp sort_text(sorts, sort, _corner), do: Keyword.get(sorts, sort, "Popular")
 
   attr :size, :string, required: true
 

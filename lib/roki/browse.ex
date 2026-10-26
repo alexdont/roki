@@ -6,19 +6,28 @@ defmodule Roki.Browse do
   *Popular* is exactly what the Featured page shows (`Roki.Featured`: trending films and shows,
   anime airing now). The other orders — newest, oldest, top rated — are TMDB's discover lists,
   limited to what is already out and to titles enough people have rated that the oldest and the
-  newest are not obscure. Every page is remembered for an hour; who pays for the lookup is
+  newest are not obscure. Anime has one more: Anime Corner's weekly ranking of the season
+  (`Roki.AnimeCorner`). Every page is remembered for an hour; who pays for the lookup is
   `Roki.Laev.public/2`'s call, as everywhere else.
   """
 
   alias Roki.{Featured, TTLCache}
 
   @kinds [:movies, :shows, :anime]
-  @sorts [popular: "Popular", newest: "Newest", oldest: "Oldest", top: "Top rated"]
+  @sorts [popular: "Popular", newest: "Newest", oldest: "Oldest", top: "Top rated", corner: "Anime Corner ranking"]
   @ttl_s 60 * 60
   @base "https://api.themoviedb.org/3"
 
   def kinds, do: @kinds
   def sorts, do: @sorts
+
+  @doc """
+  The orders a kind offers: the Anime Corner ranking is anime's alone, and with a season chosen
+  the choice is between the season's own order and that ranking of the season.
+  """
+  def sorts(:anime, nil), do: @sorts
+  def sorts(:anime, _season), do: [popular: "Most popular", corner: "Anime Corner ranking"]
+  def sorts(_kind, _season), do: Keyword.delete(@sorts, :corner)
 
   @doc "The sort named by a string (from a URL), never made into an atom from the input."
   def sort(value),
@@ -26,16 +35,19 @@ defmodule Roki.Browse do
 
   @doc """
   `{:ok, items, more?}` for page `n`, or `{:error, reason}`. `season` (anime only) is
-  `{year, :summer}`: everything that premiered in that quarter, most popular first, which is how
-  laev's anime browser lists a season. It replaces the order.
+  `{year, :summer}`: everything of that quarter — what premiered in it, and what had episodes
+  in it —, most popular first. It replaces the order, except the Anime Corner ranking, which
+  then is that season's (of `week`, or the latest posted); without a season, this season's.
   """
-  def page(kind, sort, n, uuid, season \\ nil) when kind in @kinds and is_integer(n) and n >= 1 do
-    sort = if sort in Keyword.keys(@sorts), do: sort, else: :popular
+  def page(kind, sort, n, uuid, season \\ nil, week \\ nil)
+      when kind in @kinds and is_integer(n) and n >= 1 do
+    sort = if sort in Keyword.keys(sorts(kind, nil)), do: sort, else: :popular
     season = if kind == :anime, do: season
+    week = if sort == :corner, do: week
 
     with {:ok, {items, more?}} <-
-           TTLCache.fetch({:browse, kind, sort, season, n}, @ttl_s, fn ->
-             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season),
+           TTLCache.fetch({:browse, kind, sort, season, week, n}, @ttl_s, fn ->
+             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week),
                   do: {:ok, {items, more?}}
            end) do
       {:ok, items, more?}
@@ -56,14 +68,48 @@ defmodule Roki.Browse do
   @doc "The years the season picker offers: next year back to 1960 (anime television starts in 1963)."
   def years(today \\ Date.utc_today()), do: (today.year + 1)..1960//-1
 
-  defp fetch(:anime, _sort, n, uuid, {_year, _season} = season) do
+  # The ranking is one page; the titles are TMDB's, matched by Roki.AnimeCorner.
+  defp fetch(:anime, :corner, 1, uuid, season, week) do
+    with {:ok, %{items: items}} <- Roki.AnimeCorner.items(uuid, season || Laev.Season.current(), week),
+         do: {:ok, big(items), false}
+  end
+
+  defp fetch(:anime, :corner, _n, _uuid, _season, _week), do: {:ok, [], false}
+
+  # A season is what premiered in it (laev's list) and what had episodes in it: the new seasons
+  # of older shows, which a premiere window leaves out (Reincarnated as a Sword's second season
+  # started in 2022's), and the long-runners. Both lists are by popularity, a page of each.
+  defp fetch(:anime, _sort, n, uuid, {_year, _season} = season, _week) do
     Roki.Laev.public(uuid, fn ->
-      with {:ok, items, more?} <- Laev.Tmdb.discover_anime_season(season, n),
-           do: {:ok, big(items), more?}
+      with {:ok, premiered, more1?} <- Laev.Tmdb.discover_anime_season(season, n),
+           {:ok, airing, more2?} <- airing(season, n) do
+        items =
+          (airing ++ premiered)
+          |> Enum.uniq_by(& &1.id)
+          |> Enum.sort_by(&(&1.popularity || 0), :desc)
+
+        {:ok, big(items), more1? or more2?}
+      end
     end)
   end
 
-  defp fetch(kind, sort, n, uuid, _season), do: fetch(kind, sort, n, uuid)
+  defp fetch(kind, sort, n, uuid, _season, _week), do: fetch(kind, sort, n, uuid)
+
+  defp airing(season, n) do
+    {from, to} = Laev.Season.window(season)
+
+    with {:ok, body} <-
+           get("/discover/tv",
+             with_genres: 16,
+             with_original_language: "ja",
+             sort_by: "popularity.desc",
+             "air_date.gte": from,
+             "air_date.lte": to,
+             page: n
+           ) do
+      {:ok, Enum.map(body["results"] || [], &normalize(&1, "tv")), n < (body["total_pages"] || 1)}
+    end
+  end
 
   # Popular is the Featured page's own list, so the two never disagree.
   defp fetch(kind, :popular, n, uuid) do
