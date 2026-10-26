@@ -20,6 +20,10 @@ defmodule Roki.Activity do
 
   @topic "activity"
 
+  # Accounts that are for testing the site: what they do is not activity, so it is neither kept
+  # nor shown.
+  @silent ["test"]
+
   def topic, do: @topic
 
   # Watching this long (seconds into it) is what makes something "started": opening a title and
@@ -130,7 +134,10 @@ defmodule Roki.Activity do
           ]
         ).num_rows > 0
 
-      unless dup? do
+      silent? =
+        Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [uuid_bin, @silent]).num_rows > 0
+
+      unless dup? or silent? do
         Repo.query!(
           """
           insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind, seconds)
@@ -342,10 +349,11 @@ defmodule Roki.Activity do
           from roki_activity a
           left join phoenix_kit_users u on u.uuid = a.user_uuid
          where a.at > $1
+           and coalesce(u.username, '') <> all($2)
          order by a.at desc
          limit 1500
         """,
-        [since]
+        [since, @silent]
       ).rows
 
     rows
