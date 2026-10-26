@@ -108,7 +108,7 @@ defmodule Roki.Direct do
       running?(id, part) ->
         {:ok, id, part}
 
-      done?(id, part) ->
+      usable?(id, part) ->
         File.touch(dir(id))
         {:ok, id, part}
 
@@ -292,10 +292,25 @@ defmodule Roki.Direct do
   # A finished part reaches the end; one still running must be past the place, with room.
   defp covers?(id, part, from) do
     cond do
-      done?(id, part) -> true
+      usable?(id, part) -> true
       running?(id, part) -> reach(id, part) >= from + 10
       true -> false
     end
+  end
+
+  # A finished part is reused — unless it was written before audio files were cut into
+  # fragments (one fragment for the whole track, which no player gets through: the iPhone
+  # asks for the 60 MB again and again and shows nothing). That one is written again.
+  defp usable?(id, part), do: done?(id, part) and not stale_audio?(id, part)
+
+  defp stale_audio?(id, part) do
+    multi?(id) and
+      Enum.any?(tracks(id), fn t ->
+        case Roki.Fmp4.scan(file(id, part_name(t.file, ".mp4", part))) do
+          %{fragments: [%{duration: d}]} -> d > 10
+          _ -> false
+        end
+      end)
   end
 
   # How far into the file a part has been written, in seconds.
