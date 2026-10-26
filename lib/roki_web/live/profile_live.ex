@@ -200,6 +200,17 @@ defmodule RokiWeb.ProfileLive do
   defp joined(%{inserted_at: %DateTime{} = at}), do: "#{Enum.at(@months, at.month - 1)} #{at.year}"
   defp joined(_), do: nil
 
+  # One of the numbers, with thousands separated; a dash while they are not known.
+  defp stat(%{totals: t}, :films), do: thousands(t.films)
+  defp stat(%{totals: t}, :episodes), do: thousands(t.episodes)
+  defp stat(%{totals: t}, :hours), do: thousands(div(t.seconds || 0, 3600))
+  defp stat(_stats, _), do: "…"
+
+  defp thousands(n) when is_integer(n),
+    do: n |> Integer.to_string() |> String.reverse() |> String.replace(~r/(\d{3})(?=\d)/, "\\1,") |> String.reverse()
+
+  defp thousands(n), do: to_string(n)
+
   # The candidates that match what was typed, newest first, at most forty.
   defp matching(candidates, "") , do: Enum.take(candidates, 40)
 
@@ -249,19 +260,44 @@ defmodule RokiWeb.ProfileLive do
             </button>
           </div>
           <p :if={@profile.bio != ""} class="whitespace-pre-line px-4 pb-4 sm:px-6">{@profile.bio}</p>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pb-4 text-sm text-base-content/60 sm:px-6">
+          <%!-- Nothing written yet: a place held for it, and for the owner a way to write it. --%>
+          <p :if={@profile.bio == "" and @owner?} class="px-4 pb-4 sm:px-6">
+            <button type="button" phx-click="edit" class="text-left italic text-base-content/50 hover:text-base-content">
+              Say something about yourself — a few words, a favourite quote, what you are into. Press here to write it.
+            </button>
+          </p>
+          <p :if={@profile.bio == "" and not @owner?} class="px-4 pb-4 italic text-base-content/40 sm:px-6">
+            {@username} hasn't written anything here yet.
+          </p>
+
+          <%!-- The numbers, as the thing they are: big, with a word under each. --%>
+          <div class="grid grid-cols-2 gap-px overflow-hidden border-t border-base-300 bg-base-300 sm:grid-cols-4">
             <.link
               :if={@owner? or @profile.show_history}
               navigate={"/#{@username}/watched"}
-              class="link-hover font-medium text-base-content"
+              class="group bg-base-200 px-4 py-4 transition hover:bg-base-100 sm:px-6"
             >
-              <b>{@watched || "…"}</b> watched →
+              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{if @watched, do: thousands(@watched), else: "…"}</div>
+              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60 group-hover:text-primary">Watched →</div>
             </.link>
-            <span :if={match?(%{totals: _}, @stats)}><b class="text-base-content">{@stats.totals.films}</b> films</span>
-            <span :if={match?(%{totals: _}, @stats)}><b class="text-base-content">{@stats.totals.episodes}</b> episodes</span>
-            <span :if={match?(%{totals: _}, @stats)}><b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched</span>
+            <div :if={not (@owner? or @profile.show_history)} class="bg-base-200 px-4 py-4 sm:px-6">
+              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{if @watched, do: thousands(@watched), else: "…"}</div>
+              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Watched</div>
+            </div>
+            <div class="bg-base-200 px-4 py-4 sm:px-6">
+              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{stat(@stats, :films)}</div>
+              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Films</div>
+            </div>
+            <div class="bg-base-200 px-4 py-4 sm:px-6">
+              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{stat(@stats, :episodes)}</div>
+              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Episodes</div>
+            </div>
+            <div class="bg-base-200 px-4 py-4 sm:px-6">
+              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{stat(@stats, :hours)}</div>
+              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Hours watched</div>
+            </div>
           </div>
-          <p :if={@owner? and not @profile.public} class="mx-4 mb-4 alert text-sm sm:mx-6">
+          <p :if={@owner? and not @profile.public} class="mx-4 my-4 alert text-sm sm:mx-6">
             <.icon name="hero-lock-closed" class="h-4 w-4" />
             <span>Only you can see this page. Make it public under <b>Edit profile</b> to share it.</span>
           </p>

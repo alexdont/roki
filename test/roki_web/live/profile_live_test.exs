@@ -49,7 +49,7 @@ defmodule RokiWeb.ProfileLiveTest do
     # Now a visitor sees it, words and all, and the watched page with its controls.
     {:ok, _view, html} = live(conn, "/ownerone")
     assert html =~ "Mostly anime."
-    assert html =~ "watched →"
+    assert html =~ "Watched →"
 
     {:ok, _view, html} = live(conn, "/ownerone/watched")
     assert html =~ "By rating"
