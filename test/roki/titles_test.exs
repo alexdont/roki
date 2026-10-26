@@ -58,6 +58,10 @@ defmodule Roki.TitlesTest do
   test "pictures are named by the site's own address, everything else is left alone" do
     assert Roki.Images.local("https://image.tmdb.org/t/p/w342/abcDEF123.jpg") == "/img/w342/abcDEF123.jpg"
     assert Roki.Images.local("https://image.tmdb.org/t/p/w1280/x.png") == "/img/w1280/x.png"
+    # One file per picture, whatever size is asked for.
+    assert Roki.Images.key("https://image.tmdb.org/t/p/w342/abc.jpg") == Roki.Images.key("https://image.tmdb.org/t/p/w500/abc.jpg")
+    assert Roki.Images.variant_for("https://image.tmdb.org/t/p/original/abc.jpg") == "original"
+    assert Roki.Images.variant_for("https://cdn.myanimelist.net/images/anime/1/2.jpg") == "original"
     assert Roki.Images.local("https://image.tmdb.org/t/p/w342/../etc") == "https://image.tmdb.org/t/p/w342/../etc"
     assert Roki.Images.local("https://image.tmdb.org/t/p/w9/x.jpg") == "https://image.tmdb.org/t/p/w9/x.jpg"
     assert Roki.Images.local("https://cdn.myanimelist.net/images/anime/1234/56789l.jpg") == "/img/mal/anime/1234/56789l.jpg"

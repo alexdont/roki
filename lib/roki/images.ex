@@ -4,6 +4,12 @@ defmodule Roki.Images do
   pictures — kept in PhoenixKit's media library (`Roki.Media`, folder "roki / Pictures") and
   served from there.
 
+  One file per picture, whatever sizes pages ask for: TMDB's picture is fetched once at a
+  size big enough for every page (780 px across for a poster or a still, 1280 for a backdrop),
+  the library makes its smaller variants of it, and a page asking for a small size is given
+  the smallest variant that is at least as wide — a missing variant is stood in for by a
+  bigger one until it is made.
+
   A page names a picture through `local/1`: one the site already holds comes out as its media
   address; one it has never fetched comes out as `/img/…`, which fetches it, keeps it, and
   sends the browser on to the media address. Which pictures are held is a table
@@ -51,8 +57,8 @@ defmodule Roki.Images do
 
       key ->
         case :ets.lookup(@table, key) do
-          [{_, uuid}] -> Roki.Media.url(uuid)
-          [] -> "/img/" <> short(key)
+          [{_, uuid}] -> Roki.Media.url(uuid, variant_for(url))
+          [] -> "/img/" <> short(url)
         end
     end
   rescue
@@ -61,12 +67,12 @@ defmodule Roki.Images do
 
   def local(other), do: other
 
-  # The key of a picture the site keeps copies of: its address without the scheme and the
-  # host's fixed part, so `image.tmdb.org/t/p/w342/abc.jpg` is `tmdb/w342/abc.jpg` in short.
+  # The key of a picture the site keeps copies of: the picture, whatever size was asked for —
+  # `image.tmdb.org/abc.jpg` for any `image.tmdb.org/t/p/<size>/abc.jpg`.
   @doc false
   def key(@tmdb <> rest) do
     case String.split(rest, "/", parts: 2) do
-      [size, file] when size in @sizes -> if file?(file), do: "image.tmdb.org/t/p/" <> size <> "/" <> file
+      [size, file] when size in @sizes -> if file?(file), do: "image.tmdb.org/" <> file
       _ -> nil
     end
   end
@@ -74,8 +80,64 @@ defmodule Roki.Images do
   def key(@mal <> rest), do: if(mal_path?(rest), do: "cdn.myanimelist.net/images/" <> rest)
   def key(_), do: nil
 
-  defp short("image.tmdb.org/t/p/" <> rest), do: rest
-  defp short("cdn.myanimelist.net/images/" <> rest), do: "mal/" <> rest
+  # The short form a `/img/` address carries: the size asked for stays in it, so the fetch
+  # knows whether this is a poster or a backdrop.
+  defp short(@tmdb <> rest), do: rest
+  defp short(@mal <> rest), do: "mal/" <> rest
+
+  # The library's variant for the size a page asked for: the smallest that is at least as wide,
+  # else the original. A MyAnimeList picture is one size; a page gets its original.
+  @doc false
+  def variant_for(@tmdb <> rest) do
+    case String.split(rest, "/", parts: 2) do
+      ["original", _] -> "original"
+      ["w" <> n, _] -> variant_at_least(String.to_integer(n))
+      _ -> "original"
+    end
+  end
+
+  def variant_for(_url), do: "original"
+
+  defp variant_at_least(width) do
+    dimensions()
+    |> Enum.filter(fn {_name, w} -> is_integer(w) and w >= width end)
+    |> Enum.min_by(fn {_name, w} -> w end, fn -> {"original", nil} end)
+    |> elem(0)
+  end
+
+  # The enabled variants of the default set, widest last, remembered for an hour.
+  defp dimensions do
+    case :persistent_term.get({__MODULE__, :dimensions}, nil) do
+      {at, dims} when is_integer(at) ->
+        if System.os_time(:second) - at < 3600, do: dims, else: read_dimensions()
+
+      _ ->
+        read_dimensions()
+    end
+  end
+
+  defp read_dimensions do
+    dims =
+      try do
+        for d <- PhoenixKit.Modules.Storage.list_dimensions_for_type("image"), d.enabled, d.name != "original", is_integer(d.width), do: {d.name, d.width}
+      rescue
+        _ -> []
+      end
+
+    :persistent_term.put({__MODULE__, :dimensions}, {System.os_time(:second), dims})
+    dims
+  end
+
+  # The size a picture is fetched at, once, for every page: a backdrop at 1280 across, a
+  # poster or a still at 780.
+  defp master(@tmdb <> rest) do
+    case String.split(rest, "/", parts: 2) do
+      [size, file] when size in ["w1280", "original"] -> @tmdb <> "w1280/" <> file
+      [_size, file] -> @tmdb <> "w780/" <> file
+    end
+  end
+
+  defp master(url), do: url
 
   # TMDB names a picture by a short token and an extension; MyAnimeList by a kind, a shelf and
   # a number (`anime/1234/56789l.jpg`). Nothing else is fetched.
@@ -96,8 +158,8 @@ defmodule Roki.Images do
 
       {key, source_url} ->
         case :ets.lookup(@table, key) do
-          [{_, uuid}] -> {:ok, Roki.Media.url(uuid)}
-          [] -> fetch(key, source_url)
+          [{_, uuid}] -> {:ok, Roki.Media.url(uuid, variant_for(source_url))}
+          [] -> with {:ok, uuid} <- fetch(key, master(source_url)), do: {:ok, Roki.Media.url(uuid, variant_for(source_url))}
         end
     end
   end
@@ -123,7 +185,7 @@ defmodule Roki.Images do
            :ok <- File.write(tmp, body),
            {:ok, uuid} <- Roki.Media.store(tmp, folder: @folder, filename: file) do
         remember(key, uuid)
-        {:ok, Roki.Media.url(uuid)}
+        {:ok, uuid}
       else
         {:ok, %{status: status}} -> {:error, {:source, status}}
         {:error, reason} -> {:error, reason}
