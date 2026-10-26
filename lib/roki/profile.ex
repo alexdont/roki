@@ -173,6 +173,47 @@ defmodule Roki.Profile do
     read_watched(uuid)
   end
 
+  @doc """
+  The numbers on a profile, counted from what is finished: `%{watched:, films:}` at once from
+  the site's table; see `hours/1` for the rest.
+  """
+  def counts(uuid) when is_binary(uuid) do
+    items = history(uuid)
+    %{watched: length(items), films: Enum.count(items, &(&1.type == "movie"))}
+  end
+
+  @doc """
+  `%{hours:, episodes:}` for a profile: laev's total time and episodes, with each finished
+  film at least its whole runtime. Laev bills a title it played itself only the seconds it
+  measured — a film played for four minutes and then marked finished is four minutes — which
+  is right for its own statistics and wrong for a profile that says "3 films watched, 20
+  minutes". `{:error, why}` when laev's stats cannot be had.
+  """
+  def hours(uuid) when is_binary(uuid) do
+    with {:ok, %{totals: totals} = summary} <- Roki.Stats.summary(uuid) do
+      billed = Map.get(summary, :films, %{})
+      ids = for i <- history(uuid), i.type == "movie", do: i.id
+
+      runtimes =
+        if ids == [] do
+          %{}
+        else
+          Repo.query!("select id, (data->>'minutes')::int from roki_titles where type = 'movie' and id = any($1) and data is not null and jsonb_typeof(data) = 'object'", [ids]).rows
+          |> Map.new(fn [id, minutes] -> {id, minutes} end)
+        end
+
+      topped =
+        Enum.reduce(ids, 0, fn id, sum ->
+          case runtimes[id] do
+            minutes when is_integer(minutes) -> sum + max(minutes * 60 - Map.get(billed, id, 0), 0)
+            _ -> sum
+          end
+        end)
+
+      {:ok, %{hours: div((totals.seconds || 0) + topped, 3600), episodes: totals.episodes}}
+    end
+  end
+
   @doc "Forget when the finished titles were last copied, so the next look copies them again."
   def forget_history(uuid), do: TTLCache.delete({:watched_sync, uuid})
 

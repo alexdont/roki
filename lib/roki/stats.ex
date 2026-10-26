@@ -48,7 +48,11 @@ defmodule Roki.Stats do
   """
   def summary(uuid) do
     Roki.TTLCache.fetch({:stats_summary, uuid}, 10 * 60, fn ->
-      with {:ok, s} <- for_user(uuid), do: {:ok, %{totals: s.totals}}
+      with {:ok, s} <- for_user(uuid) do
+        # What each film was billed (seconds), for the profile's own hours (see Roki.Profile.counts/1).
+        films = for t <- s.titles, t.type == "movie", into: %{}, do: {t.id, t.seconds}
+        {:ok, %{totals: s.totals, films: films}}
+      end
     end)
   end
 

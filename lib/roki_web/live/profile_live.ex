@@ -45,6 +45,7 @@ defmodule RokiWeb.ProfileLive do
           notice: nil,
           stats: nil,
           watched: nil,
+          films: nil,
           favorites: nil,
           shelf: nil,
           shelf_error: nil,
@@ -71,8 +72,8 @@ defmodule RokiWeb.ProfileLive do
 
     socket
     |> start_async(:favorites, fn -> Profile.favorites(uuid) end)
-    |> start_async(:watched, fn -> length(Profile.history(uuid)) end)
-    |> then(fn s -> if Roki.Laev.connected?(uuid), do: start_async(s, :stats, fn -> Roki.Stats.summary(uuid) end), else: s end)
+    |> start_async(:watched, fn -> Profile.counts(uuid) end)
+    |> then(fn s -> if Roki.Laev.connected?(uuid), do: start_async(s, :stats, fn -> Profile.hours(uuid) end), else: s end)
   end
 
   # ── events: the profile ─────────────────────────────────────────────
@@ -252,7 +253,7 @@ defmodule RokiWeb.ProfileLive do
   @impl true
   def handle_async(:favorites, {:ok, favorites}, socket) when is_map(favorites), do: {:noreply, assign(socket, :favorites, favorites)}
   def handle_async(:favorites, _other, socket), do: {:noreply, assign(socket, :favorites, %{})}
-  def handle_async(:watched, {:ok, n}, socket) when is_integer(n), do: {:noreply, assign(socket, :watched, n)}
+  def handle_async(:watched, {:ok, %{watched: n, films: f}}, socket), do: {:noreply, assign(socket, watched: n, films: f)}
   def handle_async(:watched, _other, socket), do: {:noreply, socket}
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
@@ -278,9 +279,8 @@ defmodule RokiWeb.ProfileLive do
   end
 
   # One of the numbers, with thousands separated; a dash while they are not known.
-  defp stat(%{totals: t}, :films), do: thousands(t.films)
-  defp stat(%{totals: t}, :episodes), do: thousands(t.episodes)
-  defp stat(%{totals: t}, :hours), do: thousands(div(t.seconds || 0, 3600))
+  defp stat(%{episodes: n}, :episodes), do: thousands(n)
+  defp stat(%{hours: n}, :hours), do: thousands(n)
   defp stat(_stats, _), do: "…"
 
   defp thousands(n) when is_integer(n),
@@ -369,7 +369,7 @@ defmodule RokiWeb.ProfileLive do
               <div class="text-xs font-medium uppercase tracking-wide text-base-content/60 group-hover:text-primary">Watched →</div>
             </.link>
             <div class="bg-base-200 px-4 py-4 sm:px-6">
-              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{stat(@stats, :films)}</div>
+              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">{if @films, do: thousands(@films), else: "…"}</div>
               <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">Films</div>
             </div>
             <div class="bg-base-200 px-4 py-4 sm:px-6">

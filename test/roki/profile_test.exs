@@ -107,6 +107,17 @@ defmodule Roki.ProfileTest do
     assert msg =~ "holds 10"
   end
 
+  test "a profile's counts follow the finished titles" do
+    watched(@uuid, [
+      {"movie", 1, "movie", 1, "Film", false},
+      {"movie", 2, "movie", 2, "Other Film", false},
+      {"tv", 10, "tv", 10, "Show", false},
+      {"mal", 30, nil, nil, "MAL Anime", true}
+    ])
+
+    assert %{watched: 4, films: 2} = Profile.counts(@uuid)
+  end
+
   test "a shelf shows numbers only once its owner turns them on" do
     refute Profile.ranked?(Profile.get(@uuid), :movie)
     assert {:ok, p} = Profile.set_ranked(@uuid, :movie, true)

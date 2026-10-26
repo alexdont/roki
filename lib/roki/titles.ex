@@ -46,7 +46,7 @@ defmodule Roki.Titles do
             overview = excluded.overview, data = excluded.data, final = excluded.final,
             fetched_at = excluded.fetched_at, seen_at = excluded.seen_at
       """,
-      [type, id, title[:title], title[:year], title[:poster_path], title[:overview], Jason.encode!(title), final?(title), now]
+      [type, id, title[:title], title[:year], title[:poster_path], title[:overview], title, final?(title), now]
     )
 
     :ok

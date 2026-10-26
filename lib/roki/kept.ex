@@ -63,7 +63,7 @@ defmodule Roki.Kept do
       insert into roki_kept (kind, key, data, final, fetched_at) values ($1, $2, $3::jsonb, $4, $5)
       on conflict (kind, key) do update set data = excluded.data, final = excluded.final, fetched_at = excluded.fetched_at
       """,
-      [kind, key, Jason.encode!(data), final? == true, now]
+      [kind, key, data, final? == true, now]
     )
 
     :ok
