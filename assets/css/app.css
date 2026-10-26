@@ -545,6 +545,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   .study-ep-label { max-width: 7rem; }
   .study-bar2 [data-role="audio-label"] { display: none; }
   .study-bar2 [data-role="audio-btn"], .study-bar2 [data-role="lines-btn"] { width: 2rem; padding: 0; justify-content: center; }
+  .study-bar2 [data-role="lines-btn"] > span:not([class*="hero-"]) { display: none; }
   .study-bar2 [data-role="subs-btn"] { padding-inline: 0.45rem; }
   .study-bar2 [data-role="subs-label"] { max-width: 3.5rem; }
   /* A phone's rounded corners and home indicator: the bar sits a little higher and in from the
