@@ -155,9 +155,25 @@
       } else {
         v.src = c.src
       }
+      // Wait until it can start (a slow connection must not count as a failed decode), and keep
+      // the events: they say where a native stream gives up.
+      const events = []
+      for (const ev of ["loadstart", "loadedmetadata", "canplay", "stalled", "waiting", "error", "abort", "emptied"])
+        v.addEventListener(ev, () => events.push(ev), { once: false })
+      if (!c.hls || v.canPlayType("application/vnd.apple.mpegurl")) v.load()
+      await new Promise((resolve) => {
+        const done = () => { v.removeEventListener("canplay", done); v.removeEventListener("error", done); resolve() }
+        v.addEventListener("canplay", done); v.addEventListener("error", done)
+        setTimeout(done, 15000)
+      })
       v.currentTime = 0
-      const started = v.play()
-      if (started) await started.catch((e) => { throw new Error("play() refused: " + e.name) })
+      let started
+      try { started = v.play(); if (started) await started } catch (e) {
+        await sleep(600)
+        try { started = v.play(); if (started) await started } catch (e2) {
+          throw new Error(`play() refused: ${e2.name}; readyState=${v.readyState} networkState=${v.networkState} error=${v.error ? v.error.code + " " + (v.error.message || "") : "none"}; events=${events.join(",")}`)
+        }
+      }
       await sleep(4500)
       const t = v.currentTime
       const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null
@@ -166,7 +182,7 @@
       const dropped = q ? `${q.droppedVideoFrames}/${q.totalVideoFrames} dropped` : "dropped: n/a"
       const moving = t > 2.5
       const ok = moving && v.videoWidth > 0 && pic !== false
-      const err = v.error ? ` mediaError=${v.error.code}` : ""
+      const err = (v.error ? ` mediaError=${v.error.code} ${v.error.message || ""}` : "") + (ok ? "" : ` events=${events.join(",")}`)
       const herr = v._errs && v._errs.length ? ` hls=[${v._errs.join(",")}]` : ""
       const line = `${ok ? "PASS" : "FAIL"} advanced ${t.toFixed(1)}s, ${dims}, picture=${pic === null ? "unknown" : pic ? "yes" : "BLACK"}, ${dropped}${err}${herr}`
       set(line, ok ? "ok" : "no")
@@ -189,7 +205,7 @@
     $("#run").disabled = true
     $("#state").textContent = "running…"
     await capsDone
-    for (const c of CLIPS) await play(c)
+    for (const c of CLIPS) { await play(c); await sleep(700) }
     $("#state").textContent = "done — copy the box below"
     $("#run").disabled = false
   })
