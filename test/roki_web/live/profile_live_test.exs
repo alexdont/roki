@@ -46,10 +46,41 @@ defmodule RokiWeb.ProfileLiveTest do
     assert html =~ "Mostly anime."
     refute html =~ "Only you can see this page"
 
-    # Now a visitor sees it, words and all, with the watched list's controls.
+    # Now a visitor sees it, words and all, and the watched page with its controls.
     {:ok, _view, html} = live(conn, "/ownerone")
     assert html =~ "Mostly anime."
+    assert html =~ "watched →"
+
+    {:ok, _view, html} = live(conn, "/ownerone/watched")
     assert html =~ "By rating"
     assert html =~ "★ 10 only"
+  end
+
+  test "the shelves are the owner's to fill, ten a shelf, from what they watched", %{conn: conn} do
+    user = register("shelfowner")
+    {:ok, view, _html} = live(signed_in(user), "/shelfowner")
+    html = render_async(view)
+    assert html =~ "Top 10 Movies"
+    assert html =~ "Nothing on this shelf yet"
+
+    # A visitor to a private profile sees nothing; to a public one, only shelves with something on them.
+    {:ok, _, html} = live(conn, "/shelfowner")
+    assert html =~ "This profile is private."
+
+    assert {:ok, favs} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", 10_331}, "Easy A")
+    assert [%{title: "Easy A", position: 1, badge: "#1"}] = favs.movie
+    assert {:error, msg} = Roki.Profile.add_favorite(user.uuid, :tv, {"movie", 10_331}, "Easy A")
+    assert msg =~ "already"
+
+    for n <- 1..9, do: {:ok, _} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", n}, "Film #{n}")
+    assert {:error, msg} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", 99}, "One too many")
+    assert msg =~ "holds 10"
+
+    {:ok, favs} = Roki.Profile.move_favorite(user.uuid, {"movie", 9}, :up)
+    assert Enum.map(favs.movie, & &1.id) |> Enum.take(3) == [10_331, 1, 2]
+    assert Enum.map(Enum.drop(favs.movie, 8), & &1.id) == [9, 8]
+    {:ok, favs} = Roki.Profile.remove_favorite(user.uuid, {"movie", 10_331})
+    assert Enum.map(favs.movie, & &1.position) == Enum.to_list(1..9)
+    assert hd(favs.movie).id == 1
   end
 end

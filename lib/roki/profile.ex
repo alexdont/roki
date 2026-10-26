@@ -341,6 +341,7 @@ defmodule Roki.Profile do
 
   defp of_kind?(_item, :all), do: true
   defp of_kind?(item, :anime), do: item.anime
+  defp of_kind?(_item, :manga), do: false
   defp of_kind?(item, kind), do: not item.anime and item.type == Atom.to_string(kind)
 
   defp badge(nil), do: nil
@@ -359,6 +360,142 @@ defmodule Roki.Profile do
     do: ratings[{"mal", mal}] || ratings[{item.type, item.id}]
 
   defp score_of(ratings, item), do: ratings[{item.type, item.id}]
+
+  # ── the favourites ────────────────────────────────────────────────
+
+  @shelves [movie: "Movies", tv: "Shows", anime: "Anime", manga: "Manga"]
+  @top 10
+
+  @doc "The shelves a profile has, in order: `[movie: \"Movies\", tv: \"Shows\", anime: \"Anime\", manga: \"Manga\"]`."
+  def shelves, do: @shelves
+
+  @doc "A shelf named in an event or address, else nil."
+  def shelf(value), do: Enum.find_value(@shelves, fn {k, _} -> Atom.to_string(k) == value && k end)
+
+  @doc "How many a shelf holds."
+  def top, do: @top
+
+  @doc """
+  The favourites of a user, by shelf: `%{movie: [item], tv: [...], anime: [...], manga: [...]}`,
+  each item `%{type:, id:, mal_id:, title:, poster:, position:}` in the owner's order, with
+  the poster from the title store.
+  """
+  def favorites(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!("select kind, position, type, id, title from roki_favorites where user_uuid = $1 order by kind, position", [bin])
+
+    items = for [kind, position, type, id, title] <- rows, do: %{kind: kind, position: position, type: type, id: id, title: title}
+    cards = Roki.Titles.cards(Enum.map(items, &{&1.type, &1.id}))
+
+    items =
+      Enum.map(items, fn i ->
+        card = cards[{i.type, i.id}] || %{}
+        {type, id} = if i.type == "mal", do: {nil, nil}, else: {i.type, i.id}
+        %{type: type, id: id, mal_id: if(i.type == "mal", do: i.id), title: i.title || card[:title], poster: card[:poster], position: i.position, badge: "##{i.position}", kind: i.kind}
+      end)
+
+    for {kind, _} <- @shelves, into: %{}, do: {kind, Enum.filter(items, &(&1.kind == Atom.to_string(kind)))}
+  end
+
+  @doc """
+  Put a title on a shelf, at the end: `{:ok, favorites}`, or `{:error, message}` when the
+  shelf is full or the title is on a shelf already. `key` is `{"movie" | "tv" | "mal", id}`.
+  """
+  def add_favorite(uuid, kind, {type, id}, title) when kind in [:movie, :tv, :anime, :manga] and is_integer(id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    shelf = Atom.to_string(kind)
+    %{rows: [[n]]} = Repo.query!("select count(*) from roki_favorites where user_uuid = $1 and kind = $2", [bin, shelf])
+    %{rows: [[taken]]} = Repo.query!("select count(*) from roki_favorites where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
+
+    cond do
+      taken > 0 ->
+        {:error, "That one is on a shelf already."}
+
+      n >= @top ->
+        {:error, "The shelf holds #{@top}. Take one off first."}
+
+      true ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        Repo.query!(
+          "insert into roki_favorites (user_uuid, kind, position, type, id, title, inserted_at) values ($1, $2, $3, $4, $5, $6, $7)",
+          [bin, shelf, n + 1, type, id, title, now]
+        )
+
+        {:ok, favorites(uuid)}
+    end
+  end
+
+  @doc "Take a title off its shelf; the rest close up. `{:ok, favorites}`."
+  def remove_favorite(uuid, {type, id}) when is_integer(id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    Repo.transaction(fn ->
+      case Repo.query!("delete from roki_favorites where user_uuid = $1 and type = $2 and id = $3 returning kind", [bin, type, id]) do
+        %{rows: [[kind]]} -> renumber(bin, kind)
+        _ -> :ok
+      end
+    end)
+
+    {:ok, favorites(uuid)}
+  end
+
+  @doc "Move a title one place up or down its shelf (`:up` | `:down`). `{:ok, favorites}`."
+  def move_favorite(uuid, {type, id}, dir) when dir in [:up, :down] and is_integer(id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    Repo.transaction(fn ->
+      case Repo.query!("select kind, position from roki_favorites where user_uuid = $1 and type = $2 and id = $3", [bin, type, id]) do
+        %{rows: [[kind, pos]]} ->
+          other = if dir == :up, do: pos - 1, else: pos + 1
+          # Swap through a place no row has, since each place is taken once.
+          Repo.query!("update roki_favorites set position = 0 where user_uuid = $1 and kind = $2 and position = $3", [bin, kind, other])
+          Repo.query!("update roki_favorites set position = $3 where user_uuid = $1 and kind = $2 and position = $4", [bin, kind, other, pos])
+          Repo.query!("update roki_favorites set position = $3 where user_uuid = $1 and kind = $2 and position = 0", [bin, kind, pos])
+          renumber(bin, kind)
+
+        _ ->
+          :ok
+      end
+    end)
+
+    {:ok, favorites(uuid)}
+  end
+
+  # Places 1..n again, in the order they are.
+  defp renumber(bin, kind) do
+    %{rows: rows} = Repo.query!("select type, id from roki_favorites where user_uuid = $1 and kind = $2 order by position", [bin, kind])
+    # Through places no row has first, so no two rows share one on the way.
+    Repo.query!("update roki_favorites set position = position + 1000 where user_uuid = $1 and kind = $2", [bin, kind])
+
+    rows
+    |> Enum.with_index(1)
+    |> Enum.each(fn {[type, id], n} ->
+      Repo.query!("update roki_favorites set position = $4 where user_uuid = $1 and kind = $2 and type = $3 and id = $5", [bin, kind, type, n, id])
+    end)
+
+    :ok
+  end
+
+  @doc """
+  What may go on a shelf: the user's watched titles of that kind (`history/1` filtered), with
+  the ones already on a shelf marked `on_shelf: true`, the newest first. Manga has none yet.
+  """
+  def candidates(uuid, kind, favorites \\ nil) when kind in [:movie, :tv, :anime, :manga] do
+    favs = favorites || favorites(uuid)
+    taken = for {_, items} <- favs, i <- items, into: MapSet.new(), do: {i.type || "mal", i.id || i.mal_id}
+
+    uuid
+    |> history()
+    |> Enum.filter(&of_kind?(&1, kind))
+    |> Enum.map(fn i -> Map.put(i, :on_shelf, MapSet.member?(taken, {i.type || "mal", i.id || i.mal_id})) end)
+  end
+
+  @doc "The key a watched item is kept under on a shelf: TMDB's type and id, or MyAnimeList's."
+  def favorite_key(%{type: nil, mal_id: mal}) when is_integer(mal), do: {"mal", mal}
+  def favorite_key(%{type: type, id: id}), do: {type, id}
 
   # ── the ratings ───────────────────────────────────────────────────
 

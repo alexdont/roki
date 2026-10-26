@@ -1,12 +1,12 @@
 defmodule RokiWeb.ProfileLive do
   @moduledoc """
-  `/:username` — a user's public page: a banner and a few words of their own over what they
-  have watched, newest first or by their own ratings (`?sort=top`, `?kind=anime`, `?tens=1`
-  for the ten-out-of-tens), so a link to it says "this is what I watch and what I rate".
+  `/:username` — a user's page: a banner and a few words of their own, and under them their
+  top ten of each kind — films, shows, anime, manga — picked from what they watched, the way
+  one shows a shelf. Everything they finished is a page of its own (`/:username/watched`).
 
-  Private until its owner opens it (the owner always sees it, with a note saying so), and the
-  owner chooses whether the history and the ratings are on it. Everything is `Roki.Profile`'s;
-  the owner edits in a panel on the page itself.
+  Private until its owner opens it (the owner always sees it, with a note saying so).
+  Everything is `Roki.Profile`'s and read from this server; the owner edits in panels on the
+  page itself.
   """
   use RokiWeb, :live_view
 
@@ -15,8 +15,6 @@ defmodule RokiWeb.ProfileLive do
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Profile
-
-  @page 60
 
   @impl true
   def mount(%{"username" => username}, _session, socket) do
@@ -43,14 +41,13 @@ defmodule RokiWeb.ProfileLive do
           editing?: false,
           error: nil,
           notice: nil,
-          history: nil,
-          ratings: %{},
           stats: nil,
-          sort: :latest,
-          kind: :all,
-          tens?: false,
-          shown: @page,
-          page: @page
+          watched: nil,
+          favorites: nil,
+          shelf: nil,
+          shelf_error: nil,
+          candidates: [],
+          query: ""
         )
         |> then(fn s ->
           if owner?,
@@ -62,47 +59,20 @@ defmodule RokiWeb.ProfileLive do
     end
   end
 
-  @impl true
-  def handle_params(params, _uri, socket) do
-    {:noreply,
-     socket
-     |> assign(sort: Profile.sort(params["sort"]), kind: Profile.kind(params["kind"]), tens?: params["tens"] == "1", shown: @page)
-     |> fetch_posters()}
-  end
-
   # Everything here is read from this server — the owner's files, the site's tables, the media
-  # library — and nothing is asked of TMDB or MyAnimeList: the copies are kept current on a
-  # clock (`Roki.Refresher`) and by what is done on the site.
+  # library — and nothing is asked of TMDB or MyAnimeList.
   defp load(socket) do
-    %{uuid: uuid, owner?: owner?, profile: profile} = socket.assigns
+    uuid = socket.assigns.uuid
 
-    socket = start_async(socket, :ratings, fn -> Profile.ratings(uuid) end)
-
-    socket =
-      if owner? or profile.show_history,
-        do: start_async(socket, :history, fn -> Profile.history(uuid) end),
-        else: assign(socket, :history, [])
-
-    if Roki.Laev.connected?(uuid),
-      do: start_async(socket, :stats, fn -> Roki.Stats.summary(uuid) end),
-      else: socket
+    socket
+    |> start_async(:favorites, fn -> Profile.favorites(uuid) end)
+    |> start_async(:watched, fn -> length(Profile.history(uuid)) end)
+    |> then(fn s -> if Roki.Laev.connected?(uuid), do: start_async(s, :stats, fn -> Roki.Stats.summary(uuid) end), else: s end)
   end
 
-  # Posters come with the history, from the title store; a title the store has no card for yet
-  # shows without one until the refresher has been by.
-  defp fetch_posters(socket), do: socket
-
-  defp arranged(%{assigns: a}) when is_list(a.history),
-    do: Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.tens?)
-
-  defp arranged(_socket), do: []
-
-  # ── events ─────────────────────────────────────────────────────────
+  # ── events: the profile ─────────────────────────────────────────────
 
   @impl true
-  def handle_event("more", _params, socket),
-    do: {:noreply, socket |> update(:shown, &(&1 + @page)) |> fetch_posters()}
-
   def handle_event("edit", _params, %{assigns: %{owner?: true}} = socket),
     do: {:noreply, assign(socket, editing?: not socket.assigns.editing?, error: nil)}
 
@@ -116,7 +86,7 @@ defmodule RokiWeb.ProfileLive do
       {:noreply,
        socket
        |> assign(profile: profile, visible?: true, editing?: false, error: nil, notice: "Saved.")
-       |> then(&if(&1.assigns.history == nil, do: load(&1), else: &1))}
+       |> then(&if(&1.assigns.favorites == nil, do: load(&1), else: &1))}
     else
       {:error, why} -> {:noreply, assign(socket, :error, why)}
     end
@@ -127,7 +97,72 @@ defmodule RokiWeb.ProfileLive do
     {:noreply, assign(socket, :profile, Profile.get(uuid))}
   end
 
+  # ── events: the shelves ─────────────────────────────────────────────
+
+  # Open a shelf for editing: what may go on it is the owner's watched titles of that kind.
+  def handle_event("shelf_edit", %{"kind" => kind}, %{assigns: %{owner?: true}} = socket) do
+    case Profile.shelf(kind) do
+      nil ->
+        {:noreply, socket}
+
+      shelf ->
+        if socket.assigns.shelf == shelf do
+          {:noreply, assign(socket, shelf: nil, candidates: [], query: "", shelf_error: nil)}
+        else
+          uuid = socket.assigns.uuid
+
+          {:noreply,
+           socket
+           |> assign(shelf: shelf, candidates: [], query: "", shelf_error: nil)
+           |> start_async(:candidates, fn -> {shelf, Profile.candidates(uuid, shelf)} end)}
+        end
+    end
+  end
+
+  def handle_event("shelf_close", _params, socket),
+    do: {:noreply, assign(socket, shelf: nil, candidates: [], query: "", shelf_error: nil)}
+
+  def handle_event("shelf_search", %{"q" => q}, socket), do: {:noreply, assign(socket, :query, String.trim(q))}
+
+  def handle_event("shelf_add", %{"type" => type, "id" => id, "title" => title}, %{assigns: %{owner?: true, shelf: shelf}} = socket)
+      when shelf != nil do
+    with {n, ""} <- Integer.parse(to_string(id)),
+         {:ok, favorites} <- Profile.add_favorite(socket.assigns.uuid, shelf, {type, n}, title) do
+      {:noreply, socket |> assign(favorites: favorites, shelf_error: nil) |> mark_candidates()}
+    else
+      {:error, why} -> {:noreply, assign(socket, :shelf_error, why)}
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("shelf_remove", %{"type" => type, "id" => id}, %{assigns: %{owner?: true}} = socket) do
+    with {n, ""} <- Integer.parse(to_string(id)),
+         {:ok, favorites} <- Profile.remove_favorite(socket.assigns.uuid, {type, n}) do
+      {:noreply, socket |> assign(favorites: favorites, shelf_error: nil) |> mark_candidates()}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("shelf_move", %{"type" => type, "id" => id, "dir" => dir}, %{assigns: %{owner?: true}} = socket)
+      when dir in ["up", "down"] do
+    with {n, ""} <- Integer.parse(to_string(id)),
+         {:ok, favorites} <- Profile.move_favorite(socket.assigns.uuid, {type, n}, String.to_existing_atom(dir)) do
+      {:noreply, assign(socket, favorites: favorites)}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  # Which candidates are on a shelf already, after a change.
+  defp mark_candidates(%{assigns: %{candidates: cands, favorites: favs}} = socket) when is_map(favs) do
+    taken = for {_, items} <- favs, i <- items, into: MapSet.new(), do: Profile.favorite_key(i)
+    assign(socket, :candidates, Enum.map(cands, &Map.put(&1, :on_shelf, MapSet.member?(taken, Profile.favorite_key(&1)))))
+  end
+
+  defp mark_candidates(socket), do: socket
 
   # The picture uploaded with the form, if any, becomes the banner.
   defp store_banner(socket, profile) do
@@ -146,46 +181,36 @@ defmodule RokiWeb.ProfileLive do
   # ── async results ──────────────────────────────────────────────────
 
   @impl true
-  def handle_async(:history, {:ok, items}, socket) when is_list(items),
-    do: {:noreply, socket |> assign(:history, items) |> fetch_posters()}
-
-  def handle_async(:history, _other, socket), do: {:noreply, assign(socket, :history, [])}
-
-  def handle_async(:ratings, {:ok, ratings}, socket) when is_map(ratings), do: {:noreply, assign(socket, :ratings, ratings)}
-  def handle_async(:ratings, _other, socket), do: {:noreply, socket}
-
+  def handle_async(:favorites, {:ok, favorites}, socket) when is_map(favorites), do: {:noreply, assign(socket, :favorites, favorites)}
+  def handle_async(:favorites, _other, socket), do: {:noreply, assign(socket, :favorites, %{})}
+  def handle_async(:watched, {:ok, n}, socket) when is_integer(n), do: {:noreply, assign(socket, :watched, n)}
+  def handle_async(:watched, _other, socket), do: {:noreply, socket}
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
 
+  def handle_async(:candidates, {:ok, {shelf, list}}, %{assigns: %{shelf: shelf}} = socket),
+    do: {:noreply, assign(socket, :candidates, list)}
+
+  def handle_async(:candidates, _other, socket), do: {:noreply, socket}
+
   # ── view ───────────────────────────────────────────────────────────
-
-  defp address(username, view) do
-    query =
-      Enum.flat_map(view, fn
-        {:sort, :top} -> [sort: "top"]
-        {:kind, k} when k != :all -> [kind: Atom.to_string(k)]
-        {:tens, true} -> [tens: "1"]
-        _ -> []
-      end)
-
-    if query == [], do: "/#{username}", else: "/#{username}?" <> URI.encode_query(query)
-  end
 
   @months ~w(January February March April May June July August September October November December)
 
   defp joined(%{inserted_at: %DateTime{} = at}), do: "#{Enum.at(@months, at.month - 1)} #{at.year}"
   defp joined(_), do: nil
 
-  defp day(%{dated?: true, at: at}) do
-    d = DateTime.from_unix!(at)
-    "#{String.slice(Enum.at(@months, d.month - 1), 0, 3)} #{d.day}, #{d.year}"
-  end
+  # The candidates that match what was typed, newest first, at most forty.
+  defp matching(candidates, "") , do: Enum.take(candidates, 40)
 
-  defp day(_), do: nil
+  defp matching(candidates, query) do
+    q = String.downcase(query)
+    candidates |> Enum.filter(&String.contains?(String.downcase(&1.title || ""), q)) |> Enum.take(40)
+  end
 
   @impl true
   def render(assigns) do
-    assigns = assign(assigns, items: arranged(%{assigns: assigns}), banner: assigns.profile && Profile.banner_url(assigns.profile))
+    assigns = assign(assigns, banner: assigns.profile && Profile.banner_url(assigns.profile))
 
     ~H"""
     <Layouts.app
@@ -203,7 +228,7 @@ defmodule RokiWeb.ProfileLive do
         <p class="text-base-content/60">This profile is private.</p>
       </div>
 
-      <div :if={@visible?} class="space-y-8">
+      <div :if={@visible?} class="space-y-10">
         <section class="overflow-hidden rounded-box bg-base-200">
           <div
             class={["h-40 w-full bg-cover bg-center sm:h-60", !@banner && "bg-gradient-to-r from-primary/40 via-base-300 to-secondary/40"]}
@@ -224,11 +249,18 @@ defmodule RokiWeb.ProfileLive do
             </button>
           </div>
           <p :if={@profile.bio != ""} class="whitespace-pre-line px-4 pb-4 sm:px-6">{@profile.bio}</p>
-          <p :if={match?(%{totals: _}, @stats)} class="flex flex-wrap gap-x-4 px-4 pb-4 text-sm text-base-content/60 sm:px-6">
-            <span><b class="text-base-content">{@stats.totals.films}</b> films</span>
-            <span><b class="text-base-content">{@stats.totals.episodes}</b> episodes</span>
-            <span><b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched</span>
-          </p>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pb-4 text-sm text-base-content/60 sm:px-6">
+            <.link
+              :if={@owner? or @profile.show_history}
+              navigate={"/#{@username}/watched"}
+              class="link-hover font-medium text-base-content"
+            >
+              <b>{@watched || "…"}</b> watched →
+            </.link>
+            <span :if={match?(%{totals: _}, @stats)}><b class="text-base-content">{@stats.totals.films}</b> films</span>
+            <span :if={match?(%{totals: _}, @stats)}><b class="text-base-content">{@stats.totals.episodes}</b> episodes</span>
+            <span :if={match?(%{totals: _}, @stats)}><b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched</span>
+          </div>
           <p :if={@owner? and not @profile.public} class="mx-4 mb-4 alert text-sm sm:mx-6">
             <.icon name="hero-lock-closed" class="h-4 w-4" />
             <span>Only you can see this page. Make it public under <b>Edit profile</b> to share it.</span>
@@ -238,70 +270,84 @@ defmodule RokiWeb.ProfileLive do
 
         <.edit_panel :if={@owner? and @editing?} profile={@profile} uploads={@uploads} error={@error} banner={@banner} />
 
-        <section :if={@owner? or @profile.show_history} class="space-y-4">
+        <%!-- The shelves: a visitor sees the ones with something on them. --%>
+        <section :for={{kind, label} <- Profile.shelves()} :if={@favorites == nil or @owner? or (@favorites[kind] || []) != []} class="space-y-3">
           <div class="flex flex-wrap items-center gap-2">
-            <h2 class="mr-2 text-xl font-semibold">Watched</h2>
-            <div class="join">
-              <.link
-                :for={{s, label} <- [latest: "Latest", top: "By rating"]}
-                patch={address(@username, sort: s, kind: @kind, tens: @tens?)}
-                class={["btn btn-sm join-item", @sort == s && "btn-primary"]}
-              >
-                {label}
-              </.link>
-            </div>
-            <div class="join">
-              <.link
-                :for={{k, label} <- Profile.kinds()}
-                patch={address(@username, sort: @sort, kind: k, tens: @tens?)}
-                class={["btn btn-sm join-item", @kind == k && "btn-primary"]}
-              >
-                {label}
-              </.link>
-            </div>
-            <.link
-              :if={@owner? or @profile.show_ratings}
-              patch={address(@username, sort: :top, kind: @kind, tens: not @tens?)}
-              class={["btn btn-sm", @tens? && "btn-primary"]}
-            >
-              ★ 10 only
-            </.link>
+            <h2 class="text-xl font-semibold">Top {Profile.top()} {label}</h2>
+            <span :if={@favorites} class="text-sm text-base-content/60">{length(@favorites[kind] || [])}</span>
+            <button :if={@owner? and kind != :manga} type="button" phx-click="shelf_edit" phx-value-kind={kind} class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}>
+              <.icon name="hero-pencil-square" class="h-3.5 w-3.5" /> {if @shelf == kind, do: "Done", else: "Edit"}
+            </button>
           </div>
 
-          <ul :if={@history == nil} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
-            <li :for={_ <- 1..8} class="space-y-1">
-              <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
-              <div class="skeleton h-4 w-3/4 rounded"></div>
-            </li>
+          <ul :if={@favorites == nil} class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10" aria-busy="true">
+            <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
           </ul>
 
-          <p :if={@history == [] } class="text-sm text-base-content/50">
-            {if @owner?, do: "Nothing finished yet. What you watch to the end shows up here.", else: "Nothing here yet."}
+          <p :if={@favorites != nil and (@favorites[kind] || []) == [] and kind == :manga} class="text-sm text-base-content/50">
+            Manga is coming to roki; the shelf is waiting for it.
           </p>
-          <p :if={@history != nil and @history != [] and @items == []} class="text-sm text-base-content/50">
-            Nothing of that kind{if @tens?, do: " rated 10", else: ""}.
+          <p :if={@favorites != nil and (@favorites[kind] || []) == [] and kind != :manga} class="text-sm text-base-content/50">
+            {if @owner?, do: "Nothing on this shelf yet. Press Edit and pick from what you watched.", else: "Nothing here yet."}
           </p>
 
-          <ul :if={@items != []} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-            <li :for={i <- Enum.take(@items, @shown)} class="space-y-1">
+          <ul :if={(@favorites[kind] || []) != []} class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10">
+            <li :for={i <- @favorites[kind]} class="space-y-1">
               <.poster item={i} cached_titles={@cached_titles} compact />
-              <div class="flex items-center justify-between text-xs text-base-content/50">
-                <span>{day(i)}</span>
-                <span :if={i.score != nil and (@owner? or @profile.show_ratings)} class="font-semibold text-warning">★ {Profile.score_text(i.score)}</span>
+              <div :if={@owner? and @shelf == kind} class="flex justify-center gap-1">
+                <button type="button" phx-click="shelf_move" phx-value-type={i.type || "mal"} phx-value-id={i.id || i.mal_id} phx-value-dir="up" class="btn btn-xs btn-square" aria-label="Move up" disabled={i.position == 1}>←</button>
+                <button type="button" phx-click="shelf_remove" phx-value-type={i.type || "mal"} phx-value-id={i.id || i.mal_id} class="btn btn-xs btn-square text-error" aria-label="Take off the shelf">×</button>
+                <button type="button" phx-click="shelf_move" phx-value-type={i.type || "mal"} phx-value-id={i.id || i.mal_id} phx-value-dir="down" class="btn btn-xs btn-square" aria-label="Move down" disabled={i.position == length(@favorites[kind])}>→</button>
               </div>
             </li>
           </ul>
 
-          <button :if={length(@items) > @shown} phx-click="more" class="btn btn-ghost btn-sm">
-            Show {min(length(@items) - @shown, @page)} more
-          </button>
+          <.shelf_picker :if={@owner? and @shelf == kind} kind={kind} label={label} candidates={matching(@candidates, @query)} query={@query} error={@shelf_error} count={length(@favorites[kind] || [])} cached_titles={@cached_titles} />
         </section>
-
-        <p :if={not @owner? and not @profile.show_history} class="text-sm text-base-content/50">
-          {@username} keeps their watch history to themselves.
-        </p>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :kind, :atom, required: true
+  attr :label, :string, required: true
+  attr :candidates, :list, required: true
+  attr :query, :string, default: ""
+  attr :error, :string, default: nil
+  attr :count, :integer, default: 0
+  attr :cached_titles, :any, default: nil
+
+  # What may go on the shelf: the owner's watched titles of that kind, a search box to find one.
+  defp shelf_picker(assigns) do
+    ~H"""
+    <div class="space-y-3 rounded-box border border-base-300 bg-base-200 p-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <h3 class="font-semibold">Pick from what you watched</h3>
+        <span class="text-sm text-base-content/60">{@count} of {Profile.top()} places taken · use ← × → under a poster to order it</span>
+        <form phx-change="shelf_search" phx-submit="shelf_search" class="ml-auto">
+          <input type="text" name="q" value={@query} placeholder={"Search your #{String.downcase(@label)}…"} autocomplete="off" phx-debounce="200" class="input input-bordered input-sm w-56" />
+        </form>
+      </div>
+      <p :if={@error} class="text-sm text-error">{@error}</p>
+      <p :if={@candidates == [] and @query == ""} class="text-sm text-base-content/50">Nothing watched of this kind yet.</p>
+      <p :if={@candidates == [] and @query != ""} class="text-sm text-base-content/50">Nothing watched matches "{@query}".</p>
+      <ul :if={@candidates != []} class="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
+        <li :for={c <- @candidates} class="space-y-1">
+          <.poster item={c} cached_titles={@cached_titles} compact />
+          <button
+            type="button"
+            phx-click="shelf_add"
+            phx-value-type={c.type || "mal"}
+            phx-value-id={c.id || c.mal_id}
+            phx-value-title={c.title}
+            disabled={c.on_shelf}
+            class={["btn btn-xs w-full", c.on_shelf && "btn-ghost"]}
+          >
+            {if c.on_shelf, do: "On a shelf", else: "Add"}
+          </button>
+        </li>
+      </ul>
+    </div>
     """
   end
 
@@ -342,7 +388,7 @@ defmodule RokiWeb.ProfileLive do
       <div class="space-y-2">
         <label :for={{key, label, hint} <- [
           {:public, "Public profile", "anyone with the link can see this page"},
-          {:show_history, "Show what I watched", "the list below, newest first"},
+          {:show_history, "Show what I watched", "the watched page, newest first"},
           {:show_ratings, "Show my ratings", "the stars, and the by-rating order"}
         ]} class="flex cursor-pointer items-start gap-3">
           <input type="hidden" name={"profile[#{key}]"} value="false" />
