@@ -1285,6 +1285,8 @@ export const StudySidebar = {
         // and (when coming back to it) a start where you left off instead of the live edge.
         liveDurationInfinity: false,
         startPosition: p.resume > 0 ? p.resume : -1,
+        // The subtitle renditions are for players that draw their own; this page draws them.
+        subtitleDisplay: false,
       }))
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.refreshAudio())
       hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => this.refreshAudio())

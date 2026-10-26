@@ -224,9 +224,13 @@ defmodule Roki.Direct do
   (languages in order of preference, as `["en", "ko"]`) the release has as the default.
   """
   def playlist(id, prefer \\ nil) do
-    if multi?(id),
-      do: master_playlist(tracks(id), bandwidth(id), prefer),
-      else: media_playlist(id, "media.mp4")
+    subs = Roki.Subs.tracks(id)
+
+    cond do
+      multi?(id) -> master_playlist(tracks(id), bandwidth(id), prefer, subs)
+      subs != [] -> master_playlist([], bandwidth(id), prefer, subs)
+      true -> media_playlist(id, "media.mp4")
+    end
   end
 
   @doc """
@@ -235,7 +239,7 @@ defmodule Roki.Direct do
   else the first track (the player remembers the one picked and switches to it). Without a CODECS attribute on
   purpose — hls.js on Firefox stops at the HEVC string.
   """
-  def master_playlist(tracks, bandwidth, prefer \\ nil) do
+  def master_playlist(tracks, bandwidth, prefer \\ nil, subs \\ []) do
     chosen = default_track(tracks, prefer)
 
     renditions =
@@ -248,10 +252,14 @@ defmodule Roki.Direct do
         ~s(#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="#{t.name}"#{lang},DEFAULT=#{default},AUTOSELECT=YES,URI="#{t.file}.m3u8")
       end)
 
+    audio = if tracks == [], do: "", else: ~s(,AUDIO="aud")
+    subtitles = if subs == [], do: "", else: ~s(,SUBTITLES="subs")
+
     Enum.join(
       ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-INDEPENDENT-SEGMENTS"] ++
         renditions ++
-        [~s(#EXT-X-STREAM-INF:BANDWIDTH=#{bandwidth},AUDIO="aud"), "video.m3u8"],
+        Roki.Subs.renditions(subs) ++
+        [~s(#EXT-X-STREAM-INF:BANDWIDTH=#{bandwidth}#{audio}#{subtitles}), "video.m3u8"],
       "\n"
     ) <> "\n"
   end
@@ -273,7 +281,7 @@ defmodule Roki.Direct do
   the list is cut down to one entry per file, named by its language, with the preferred
   language the default.
   """
-  def tidy_master(content, prefer \\ nil) do
+  def tidy_master(content, prefer \\ nil, subs \\ []) do
     lines = String.split(content, "\n")
     media = Enum.filter(lines, &String.starts_with?(&1, "#EXT-X-MEDIA:TYPE=AUDIO"))
 
@@ -286,7 +294,7 @@ defmodule Roki.Direct do
       |> unique_names()
 
     if tracks == [] do
-      content
+      with_subtitles(content, subs)
     else
       chosen = default_track(tracks, prefer)
 
@@ -301,9 +309,32 @@ defmodule Roki.Direct do
 
       {before, after_media} = Enum.split_while(lines, &(not String.starts_with?(&1, "#EXT-X-MEDIA:TYPE=AUDIO")))
       rest = Enum.reject(after_media, &String.starts_with?(&1, "#EXT-X-MEDIA:TYPE=AUDIO"))
-      Enum.join(before ++ renditions ++ rest, "\n")
+      with_subtitles(Enum.join(before ++ renditions ++ rest, "\n"), subs)
     end
   end
+
+  @doc """
+  A master playlist with subtitle renditions added: their `#EXT-X-MEDIA` lines before the
+  variant, which gets `SUBTITLES="subs"`. Nothing changes without tracks.
+  """
+  def with_subtitles(master, []), do: master
+
+  def with_subtitles(master, subs) do
+    master
+    |> String.split("\n")
+    |> Enum.flat_map(fn line ->
+      if String.starts_with?(line, "#EXT-X-STREAM-INF:") do
+        Roki.Subs.renditions(subs) ++ [line <> ~s(,SUBTITLES="subs")]
+      else
+        [line]
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  @doc "laev's single-audio media playlist under a master, so subtitle renditions can ride along."
+  def wrap_media(media_name, subs),
+    do: with_subtitles("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-STREAM-INF:BANDWIDTH=8000000\n#{media_name}\n", subs)
 
   defp attr(line, name) do
     case Regex.run(~r/(?:^|,)#{name}="([^"]*)"/, line) do
@@ -468,7 +499,7 @@ defmodule Roki.Direct do
 
     sub_outputs =
       Enum.flat_map(subs, fn s ->
-        ["-map", "0:#{s.index}", "-c:s", "webvtt", "-f", "webvtt", Path.join(dir, "#{s.file}.vtt")]
+        ["-map", "0:#{s.index}", "-c:s", "webvtt", "-flush_packets", "1", "-f", "webvtt", Path.join(dir, "#{s.file}.vtt")]
       end)
 
     read = ~w(ffmpeg -nostdin -loglevel error -rw_timeout 20000000 -i) ++ [url]

@@ -13,7 +13,7 @@ defmodule RokiWeb.StreamController do
   # The plain playlist, the multi-audio master and its per-rendition playlists and segments
   # (ffmpeg names renditions s_0, s_Japanese …), single-audio segments, and subtitle tracks:
   # the ones in the release (sub0.vtt) and ones fetched from a provider (ext-fr.vtt).
-  @allowed ~r/^(playlist\.m3u8|media\.mp4|video\.m3u8|audio\d\.m3u8|audio\d\.mp4|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
+  @allowed ~r/^(playlist\.m3u8|media\.mp4|video\.m3u8|audio\d\.m3u8|audio\d\.mp4|(?:sub\d+|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?)(?:\.m3u8|\.\d+\.vtt)|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
 
   def file(conn, %{"id" => id, "file" => file}) do
     cond do
@@ -39,14 +39,22 @@ defmodule RokiWeb.StreamController do
 
       Laev.Remux.entry_playlist(id) == "master.m3u8" ->
         case File.read(Path.join(Laev.Remux.dir(id), "master.m3u8")) do
-          {:ok, content} -> playlist(conn, Roki.Direct.tidy_master(content, prefer(conn, id)))
+          {:ok, content} -> playlist(conn, Roki.Direct.tidy_master(content, prefer(conn, id), Roki.Subs.tracks(id)))
           _ -> send_resp(conn, 404, "not ready")
         end
+
+      # laev's plain playlist: under a master when there are subtitles to list, else as it is.
+      File.exists?(Path.join(Laev.Remux.dir(id), "index.m3u8")) and Roki.Subs.tracks(id) != [] ->
+        playlist(conn, Roki.Direct.wrap_media("index.m3u8", Roki.Subs.tracks(id)))
 
       true ->
         serve_file(conn, id, file)
     end
   end
+
+  # A subtitle track as HLS renditions: its playlist (`sub0.m3u8`) and its pieces (`sub0.12.vtt`).
+  defp serve(conn, id, "sub" <> _ = file), do: subtitle_or_file(conn, id, file)
+  defp serve(conn, id, "ext-" <> _ = file), do: subtitle_or_file(conn, id, file)
 
   # The media playlists behind a direct master: the video's, and one per audio track.
   defp serve(conn, id, "video.m3u8"), do: direct_playlist(conn, id, "media.mp4")
@@ -79,6 +87,35 @@ defmodule RokiWeb.StreamController do
     end
   rescue
     _ -> nil
+  end
+
+  # The whole file (`sub0.vtt`, what the page draws from) is served as it is; its playlist and
+  # pieces (`sub0.m3u8`, `sub0.12.vtt`) are made on request.
+  defp subtitle_or_file(conn, id, file) do
+    if String.ends_with?(file, ".vtt") and not Regex.match?(~r/\.\d+\.vtt$/, file),
+      do: serve_file(conn, id, file),
+      else: subtitle(conn, id, file)
+  end
+
+  defp subtitle(conn, id, file) do
+    content =
+      cond do
+        String.ends_with?(file, ".m3u8") ->
+          Roki.Subs.playlist(id, String.replace_suffix(file, ".m3u8", ""))
+
+        true ->
+          [_, base, k] = Regex.run(~r/^(.+)\.(\d+)\.vtt$/, file)
+          Roki.Subs.segment(id, base, String.to_integer(k))
+      end
+
+    if content do
+      conn
+      |> put_resp_content_type(content_type(file))
+      |> put_resp_header("cache-control", "no-store")
+      |> send_resp(200, content)
+    else
+      send_resp(conn, 404, "not ready")
+    end
   end
 
   defp direct_playlist(conn, id, name) do
