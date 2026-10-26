@@ -47,3 +47,6 @@ npm-debug.log
 core
 core.*
 *.core
+
+# PhoenixKit's media library (the local bucket): uploads and the pictures the site keeps, not source.
+/priv/media/
