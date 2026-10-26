@@ -28,7 +28,7 @@ defmodule RokiWeb.ProfileLiveTest do
     assert html =~ "quietone"
     assert html =~ "written anything here yet"
     # Empty shelves are the owner's to see, not a visitor's.
-    refute render_async(view) =~ "Top 10 Movies"
+    refute render_async(view) =~ "Favorite Movies"
   end
 
   test "the owner writes the words where they go, and the rest from the banner's button", %{conn: conn} do
@@ -69,12 +69,12 @@ defmodule RokiWeb.ProfileLiveTest do
     user = register("shelfowner")
     {:ok, view, _html} = live(signed_in(user), "/shelfowner")
     html = render_async(view)
-    assert html =~ "Top 10 Movies"
+    assert html =~ "Favorite Movies"
     assert html =~ "Nothing on this shelf yet"
 
     # A visitor sees only the shelves with something on them.
     {:ok, visitor, _} = live(conn, "/shelfowner")
-    refute render_async(visitor) =~ "Top 10 Movies"
+    refute render_async(visitor) =~ "Favorite Movies"
 
     assert {:ok, favs} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", 10_331}, "Easy A")
     assert [%{title: "Easy A", position: 1, badge: "#1"}] = favs.movie
@@ -97,7 +97,7 @@ defmodule RokiWeb.ProfileLiveTest do
     user = register("mangafan")
     {:ok, view, _} = live(signed_in(user), "/mangafan")
     html = render_async(view)
-    assert html =~ "Top 10 Manga"
+    assert html =~ "Favorite Manga"
     assert html =~ "Coming soon"
     assert html =~ "opacity-50 grayscale"
     refute has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=manga]")
@@ -126,7 +126,7 @@ defmodule RokiWeb.ProfileLiveTest do
     assert view |> render() |> String.split(~s(phx-click="pick_open")) |> length() == 11
     render_click(view, "pick_open", %{"kind" => "movie"})
     html = render_async(view)
-    assert html =~ "Add to Top 10 Movies"
+    assert html =~ "Add to your favorite movies"
     assert html =~ "First Film"
 
     # Tick both, add: they are on the shelf, in the picker's order, with crosses and grips.
@@ -135,7 +135,7 @@ defmodule RokiWeb.ProfileLiveTest do
     assert render(view) =~ "2</b> of 10 selected"
     view |> element("button", "Add 2 to the shelf") |> render_click()
 
-    refute render(view) =~ "Add to Top 10 Movies"
+    refute render(view) =~ "Add to your favorite movies"
     assert has_element?(view, "li.sortable-item[data-id='movie:1']")
     assert has_element?(view, "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
     assert has_element?(view, "li.sortable-item .pk-drag-handle")
@@ -144,8 +144,11 @@ defmodule RokiWeb.ProfileLiveTest do
     refute has_element?(view, "li.sortable-item .badge-primary")
     render_click(view, "shelf_ranked", %{"kind" => "movie"})
     assert has_element?(view, "li.sortable-item .badge-primary", "#1")
+    assert render(view) =~ "Top 10 Movies"
     render_click(view, "shelf_ranked", %{"kind" => "movie"})
     refute has_element?(view, "li.sortable-item .badge-primary")
+    assert render(view) =~ "10 Favorite Movies"
+    refute render(view) =~ "Top 10 Movies"
 
     # A drag: the new order is kept.
     render_hook(view, "shelf_reorder", %{"ordered_ids" => ["movie:2", "movie:1"], "moved_id" => "movie:2", "kind" => "movie"})

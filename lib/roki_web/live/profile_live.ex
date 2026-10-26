@@ -269,6 +269,14 @@ defmodule RokiWeb.ProfileLive do
   defp joined(%{inserted_at: %DateTime{} = at}), do: "#{Enum.at(@months, at.month - 1)} #{at.year}"
   defp joined(_), do: nil
 
+  # A shelf is "10 Favorite Movies" — ten, none above another — until its owner turns the
+  # numbers on, and then it is "Top 10 Movies".
+  defp shelf_title(profile, kind, label) do
+    if Profile.ranked?(profile, kind),
+      do: "Top #{Profile.top()} #{label}",
+      else: "#{Profile.top()} Favorite #{label}"
+  end
+
   # One of the numbers, with thousands separated; a dash while they are not known.
   defp stat(%{totals: t}, :films), do: thousands(t.films)
   defp stat(%{totals: t}, :episodes), do: thousands(t.episodes)
@@ -386,7 +394,7 @@ defmodule RokiWeb.ProfileLive do
           class={["space-y-3", kind == :manga && "opacity-50 grayscale"]}
         >
           <div class="flex flex-wrap items-center gap-2">
-            <h2 class="text-xl font-semibold">Top {Profile.top()} {label}</h2>
+            <h2 class="text-xl font-semibold">{shelf_title(@profile, kind, label)}</h2>
             <span :if={@favorites && kind != :manga} class="text-sm text-base-content/60">{length(@favorites[kind] || [])}/{Profile.top()}</span>
             <span :if={kind == :manga} class="badge badge-ghost">Coming soon</span>
             <button
@@ -530,13 +538,13 @@ defmodule RokiWeb.ProfileLive do
     assigns = assign(assigns, matches: matches, selected: MapSet.size(assigns.picks))
 
     ~H"""
-    <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={"Add to Top 10 #{@label}"} phx-window-keydown="pick_close" phx-key="Escape">
+    <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={"Add to your favorite #{String.downcase(@label)}"} phx-window-keydown="pick_close" phx-key="Escape">
       <div class="absolute inset-0 bg-black/60" phx-click="pick_close"></div>
       <div class="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-box bg-base-100 shadow-2xl sm:max-h-[90vh] sm:rounded-box">
         <div class="space-y-3 border-b border-base-300 p-4">
           <div class="flex items-start gap-3">
             <div class="min-w-0 flex-1">
-              <h2 class="text-lg font-semibold sm:text-xl">Add to Top {Profile.top()} {@label}</h2>
+              <h2 class="text-lg font-semibold sm:text-xl">Add to your favorite {String.downcase(@label)}</h2>
               <p class="text-sm text-base-content/60">
                 Your watched {String.downcase(@label)}, best rated first. {@left} {if @left == 1, do: "place is", else: "places are"} left — tick the ones to add.
               </p>
