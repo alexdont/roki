@@ -950,11 +950,52 @@ export const StudySidebar = {
     })
   },
 
-  // The season's episodes, from what the page put on the root; a pick goes to the server.
+  // The episode menu: the title's seasons along the top (when there are several), then the
+  // episodes of the one chosen — this season's from what the page put on the root, another's
+  // asked of the server. A pick goes to the server.
   buildEpisodes() {
-    const box = this.el.querySelector("[data-role=ep-list]")
     let eps = []
+    let seasons = []
     try { eps = JSON.parse(this.el.dataset.episodes || "[]") } catch {}
+    try { seasons = JSON.parse(this.el.dataset.seasons || "[]") } catch {}
+    const current = Number(this.el.dataset.season)
+    this.epSeason = current
+    this.renderSeasons(seasons, current)
+    this.renderEpisodes(eps, current)
+  },
+
+  renderSeasons(seasons, active) {
+    const box = this.el.querySelector("[data-role=ep-list]")
+    let row = box.previousElementSibling
+    if (!row || !row.classList.contains("study-seasons")) {
+      row = document.createElement("div")
+      row.className = "study-seasons"
+      box.before(row)
+    }
+    row.textContent = ""
+    row.hidden = seasons.length < 2
+    for (const s of seasons) {
+      const chip = document.createElement("button")
+      chip.type = "button"
+      chip.className = "btn btn-xs" + (s.n === active ? " btn-primary" : "")
+      chip.textContent = s.n === 0 ? "Specials" : `S${s.n}`
+      chip.title = (s.name || `Season ${s.n}`) + (s.count ? ` · ${s.count} episodes` : "")
+      chip.addEventListener("click", () => {
+        if (s.n === this.epSeason) return
+        this.epSeason = s.n
+        this.renderSeasons(seasons, s.n)
+        box.textContent = "Loading…"
+        this.pushEvent("season_episodes", {season: s.n}, (reply) => {
+          if (this.epSeason !== s.n) return // another was picked while this one loaded
+          this.renderEpisodes((reply && reply.episodes) || [], s.n)
+        })
+      })
+      row.appendChild(chip)
+    }
+  },
+
+  renderEpisodes(eps, season) {
+    const box = this.el.querySelector("[data-role=ep-list]")
     box.textContent = ""
     let now = null
     for (const e of eps) {
@@ -971,11 +1012,12 @@ export const StudySidebar = {
       row.append(badge, name)
       if (!e.ok) row.style.opacity = "0.4"
       if (e.now) now = row
-      else row.addEventListener("click", () => { this.closePops(); this.pushEvent("goto", {episode: e.n}) })
+      else row.addEventListener("click", () => { this.closePops(); this.pushEvent("goto", {season, episode: e.n}) })
       box.appendChild(row)
     }
     if (!eps.length) box.textContent = "No episode list for this one."
     if (now) requestAnimationFrame(() => { box.scrollTop = now.offsetTop - box.clientHeight / 2 })
+    else box.scrollTop = 0
   },
 
   openPop(name) {

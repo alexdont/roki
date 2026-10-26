@@ -535,13 +535,15 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
-  # A pick from the player's episode menu.
+  # A pick from the player's episode menu: an episode of this season, or of another.
   def handle_event(
         "goto",
-        %{"episode" => n},
+        %{"episode" => n} = params,
         %{assigns: %{type: "tv", id: id, season: s}} = socket
       )
       when is_integer(n) do
+    s = if is_integer(params["season"]) and params["season"] >= 0, do: params["season"], else: s
+
     query =
       case socket.assigns.current do
         {source, _} -> [prefer: source.hash]
@@ -554,6 +556,20 @@ defmodule RokiWeb.WatchLive do
        replace: true
      )}
   end
+
+  # Another season picked in the episode menu: its episodes, for the menu to list.
+  def handle_event("season_episodes", %{"season" => s}, %{assigns: %{type: "tv", id: id, uuid: uuid}} = socket)
+      when is_integer(s) and s >= 0 do
+    episodes =
+      case Watch.episodes(id, s, uuid) do
+        {:ok, eps} -> for e <- eps, do: %{n: e.number, name: e.name, ok: e.aired?, now: s == socket.assigns.season and e.number == socket.assigns.episode}
+        _ -> []
+      end
+
+    {:reply, %{season: s, episodes: episodes}, socket}
+  end
+
+  def handle_event("season_episodes", _params, socket), do: {:reply, %{episodes: []}, socket}
 
   # A pick from the audio menu: this title in that language from now on (a study session for it),
   # the subtitle language as it is for this page. The same episode, found again.
@@ -791,6 +807,8 @@ defmodule RokiWeb.WatchLive do
       study?={@study != nil}
       episodes={if is_list(@episodes), do: @episodes, else: []}
       current={@episode}
+      seasons={if @title, do: @title.seasons, else: []}
+      season={@season}
       label={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
       home={if @title, do: ~p"/title/#{@type}/#{@id}", else: ~p"/home"}
     />

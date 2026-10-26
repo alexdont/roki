@@ -44,6 +44,12 @@ defmodule RokiWeb.StudyComponents do
     doc: "the season's episodes, `%{number:, name:, aired?:}`, for the episode menu (immersive)"
 
   attr :current, :integer, default: nil, doc: "the episode that is playing"
+
+  attr :seasons, :list,
+    default: [],
+    doc: "the title's seasons, `%{number:, name:, episodes:}`, for the season row of the episode menu"
+
+  attr :season, :integer, default: nil, doc: "the season that is playing"
   attr :home, :string, default: "/home", doc: "where closing goes when there is no page behind"
 
   slot :controls,
@@ -57,6 +63,10 @@ defmodule RokiWeb.StudyComponents do
           Jason.encode!(
             for e <- assigns.episodes,
                 do: %{n: e.number, name: e.name, ok: e.aired?, now: e.number == assigns.current}
+          ),
+        seasons_json:
+          Jason.encode!(
+            for s <- assigns.seasons, do: %{n: s.number, name: s.name, count: s[:episodes] || 0}
           )
       )
 
@@ -70,6 +80,8 @@ defmodule RokiWeb.StudyComponents do
       data-immersive={to_string(@immersive?)}
       data-study={to_string(@study?)}
       data-episodes={@eps_json}
+      data-seasons={@seasons_json}
+      data-season={@season}
       data-home={@home}
       class={if @immersive?, do: "study-immersive", else: "space-y-3"}
     >
