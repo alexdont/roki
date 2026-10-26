@@ -2,8 +2,9 @@ defmodule Roki.Warm do
   @moduledoc """
   Fill the site's own copies for an account in one go, instead of as pages are looked at:
   the finished titles and the ratings (`Roki.Profile`), the whole title of each
-  (`Roki.Titles`, through `Roki.Watch.title/3`), and their posters in the media library
-  (`Roki.Images`) at the two sizes pages show — the list's and the title page's.
+  (`Roki.Titles`, through `Roki.Watch.title/3`), the episodes of every season and the
+  recommendations (`Roki.Kept`), and their posters in the media library (`Roki.Images`) at
+  the two sizes pages show — the list's and the title page's.
 
   Everything here is what a page would have done on its first visit, so nothing is fetched
   twice: a title already kept is a lookup, a picture already held is skipped. Run it for an
@@ -51,6 +52,27 @@ defmodule Roki.Warm do
         match?({:ok, _}, Roki.Watch.title(type, id, uuid))
       end)
 
+    # What the title page shows besides: the episodes of every season of a show, and what
+    # TMDB recommends — one read each for what is not kept yet.
+    seasons =
+      Enum.reduce(keys, 0, fn
+        {"tv", id}, n ->
+          case Roki.Titles.get("tv", id) do
+            {:ok, %{seasons: seasons}, _} when is_list(seasons) ->
+              n + Enum.count(seasons, &match?({:ok, _}, Roki.Watch.episodes(id, &1.number, uuid)))
+
+            _ ->
+              n
+          end
+
+        _, n ->
+          n
+      end)
+
+    Logger.info("warm #{uuid}: #{seasons} seasons of episodes")
+    similar = Enum.count(keys, fn {type, id} -> match?({:ok, _}, Roki.Similar.for_title(uuid, type, id)) end)
+    Logger.info("warm #{uuid}: #{similar} recommendation lists")
+
     # The pictures, at the list's size and the title page's, four at a time.
     posters =
       Roki.Profile.history(uuid)
@@ -69,7 +91,7 @@ defmodule Roki.Warm do
       |> Task.async_stream(&Roki.Images.hold/1, max_concurrency: 4, timeout: 60_000, on_timeout: :kill_task)
       |> Enum.count(&match?({:ok, :ok}, &1))
 
-    counts = %{watched: length(items), ratings: map_size(Roki.Profile.ratings(uuid)), titles: titles, pictures: pictures}
+    counts = %{watched: length(items), ratings: map_size(Roki.Profile.ratings(uuid)), titles: titles, seasons: seasons, similar: similar, pictures: pictures}
     Logger.info("warm #{uuid}: done #{inspect(counts)}")
     counts
   end

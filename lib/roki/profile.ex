@@ -371,6 +371,29 @@ defmodule Roki.Profile do
   end
 
   @doc """
+  One rating from the site's copy: `{:ok, score}`; `:none` when the copy is recent (a day) and
+  has no rating of it; `:unknown` when the copy is old or was never made, so the source should
+  be asked.
+  """
+  def rating(uuid, {type, id}) when is_binary(uuid) and is_binary(type) and is_integer(id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    case Repo.query!("select score from roki_ratings where user_uuid = $1 and type = $2 and id = $3", [bin, type, id]) do
+      %{rows: [[score]]} ->
+        {:ok, score * 1.0}
+
+      _ ->
+        case get(uuid).ratings_synced_at do
+          %NaiveDateTime{} = at ->
+            if NaiveDateTime.diff(NaiveDateTime.utc_now(), at) < 24 * 3600, do: :none, else: :unknown
+
+          _ ->
+            :unknown
+        end
+    end
+  end
+
+  @doc """
   A rating made or taken back on the site, noted here at once: `target` is `{"mal", id}` or
   `{"movie" | "tv", id}`, `score` the rating or nil for none.
   """

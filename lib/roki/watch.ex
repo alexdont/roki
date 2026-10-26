@@ -325,23 +325,44 @@ defmodule Roki.Watch do
   """
   def my_rating(uuid, title, entry \\ nil) do
     Roki.Laev.run(uuid, fn ->
-      case rating_target(title, entry) do
-        {:mal, mal} ->
-          case Laev.MAL.list_status(mal) do
-            %{score: n} when is_integer(n) and n > 0 -> {:mal, {:ok, n * 1.0}}
-            _ -> {:mal, {:ok, nil}}
-          end
+      target = rating_target(title, entry)
 
-        :tmdb ->
-          if Laev.Tmdb.account?() do
-            {:tmdb,
-             {:ok,
-              if(title.type == "movie",
-                do: Laev.Tmdb.movie_rating(title.id),
-                else: Laev.Tmdb.tv_rating(title.id)
-              )}}
-          else
-            {:tmdb, :no_account}
+      key =
+        case target do
+          {:mal, mal} -> {"mal", mal}
+          :tmdb -> {title.type, title.id}
+        end
+
+      provider = if match?({:mal, _}, target), do: :mal, else: :tmdb
+
+      # The site's own copy of the ratings answers first: a rating it has, or none when the
+      # copy was made lately (an hour's worth of lag at most against a rating made elsewhere).
+      case Roki.Profile.rating(uuid, key) do
+        {:ok, score} ->
+          {provider, {:ok, score}}
+
+        :none ->
+          {provider, {:ok, nil}}
+
+        :unknown ->
+          case target do
+            {:mal, mal} ->
+              case Laev.MAL.list_status(mal) do
+                %{score: n} when is_integer(n) and n > 0 -> {:mal, {:ok, n * 1.0}}
+                _ -> {:mal, {:ok, nil}}
+              end
+
+            :tmdb ->
+              if Laev.Tmdb.account?() do
+                {:tmdb,
+                 {:ok,
+                  if(title.type == "movie",
+                    do: Laev.Tmdb.movie_rating(title.id),
+                    else: Laev.Tmdb.tv_rating(title.id)
+                  )}}
+              else
+                {:tmdb, :no_account}
+              end
           end
       end
     end)
@@ -540,25 +561,42 @@ defmodule Roki.Watch do
 
   @doc "Episodes of one season: `{:ok, [%{number, name, overview, still, air_date, minutes, aired?}]}`."
   def episodes(tv_id, season, uuid \\ nil) when is_integer(tv_id) and is_integer(season) do
-    TTLCache.fetch({:episodes, tv_id, season}, @episodes_ttl, fn ->
-      Roki.Laev.public(uuid, fn ->
-        with {:ok, %{"episodes" => eps}} <- Tmdb.season(tv_id, season) do
-          today = Date.to_iso8601(Date.utc_today())
+    today = Date.to_iso8601(Date.utc_today())
 
-          {:ok,
-           for e <- eps do
-             %{
-               number: e["episode_number"],
-               name: e["name"],
-               overview: blank(e["overview"]),
-               still: Tmdb.poster_url(e["still_path"], "w300"),
-               air_date: blank(e["air_date"]),
-               minutes: e["runtime"],
-               aired?: is_binary(e["air_date"]) and e["air_date"] != "" and e["air_date"] <= today
-             }
-           end}
-        end
-      end)
+    with {:ok, eps} <-
+           TTLCache.fetch({:episodes, 2, tv_id, season}, @episodes_ttl, fn ->
+             # Kept beside the titles: a season whose episodes have all aired (the last one a
+             # fortnight ago) is never read again; one still airing is read again every few days.
+             Roki.Kept.fetch(
+               "episodes",
+               "#{tv_id}:#{season}",
+               3 * 24 * 3600,
+               fn -> read_episodes(tv_id, season, uuid) end,
+               fn eps -> eps != [] and Enum.all?(eps, &aired_by?(&1.air_date, Date.add(Date.utc_today(), -14))) end
+             )
+           end) do
+      # Whether an episode is out is counted at the time of asking, not of keeping.
+      {:ok, Enum.map(eps, &Map.put(&1, :aired?, is_binary(&1.air_date) and &1.air_date <= today))}
+    end
+  end
+
+  defp aired_by?(date, day), do: is_binary(date) and date != "" and date <= Date.to_iso8601(day)
+
+  defp read_episodes(tv_id, season, uuid) do
+    Roki.Laev.public(uuid, fn ->
+      with {:ok, %{"episodes" => eps}} <- Tmdb.season(tv_id, season) do
+        {:ok,
+         for e <- eps do
+           %{
+             number: e["episode_number"],
+             name: e["name"],
+             overview: blank(e["overview"]),
+             still: Tmdb.poster_url(e["still_path"], "w300"),
+             air_date: blank(e["air_date"]),
+             minutes: e["runtime"]
+           }
+         end}
+      end
     end)
   end
 

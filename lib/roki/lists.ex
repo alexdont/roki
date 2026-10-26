@@ -85,20 +85,25 @@ defmodule Roki.Lists do
     end
   end
 
-  @doc "One of TMDB's collections as a franchise (cached a day), `{:error, _}` when it is not a series."
+  @doc """
+  One of TMDB's collections as a franchise (kept beside the titles for a fortnight — a new film
+  joins now and then — and in memory a day), `{:error, _}` when it is not a series.
+  """
   def tmdb_collection(id, uuid \\ nil) when is_integer(id) do
-    TTLCache.fetch({:collection, id}, @collection_ttl, fn ->
-      Roki.Laev.public(uuid, fn ->
-        case Laev.Tmdb.collection(id) do
-          {:ok, %{"parts" => parts, "name" => name}} when length(parts) > 1 ->
-            {:ok, collection_franchise(id, name, parts)}
+    TTLCache.fetch({:collection, 2, id}, @collection_ttl, fn ->
+      Roki.Kept.fetch("collection", Integer.to_string(id), 14 * 24 * 3600, fn ->
+        Roki.Laev.public(uuid, fn ->
+          case Laev.Tmdb.collection(id) do
+            {:ok, %{"parts" => parts, "name" => name}} when length(parts) > 1 ->
+              {:ok, collection_franchise(id, name, parts)}
 
-          {:ok, _} ->
-            {:error, :not_found}
+            {:ok, _} ->
+              {:error, :not_found}
 
-          {:error, _} = error ->
-            error
-        end
+            {:error, _} = error ->
+              error
+          end
+        end)
       end)
     end)
   end
