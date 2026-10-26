@@ -120,6 +120,39 @@ defmodule Roki.ProfileTest do
     assert Roki.Laev.news(before, before) == []
   end
 
+  test "a backdated watch date puts a title back in the history, and stays through a rebuild" do
+    watched(@uuid, [
+      {"movie", 1, "movie", 1, "Seen Last Week", false},
+      {"movie", 2, "movie", 2, "Found Years Later", false},
+      {"tv", 3, "tv", 3, "Another Old One", false}
+    ])
+
+    # Marked just now, all three: the order is the order of marking.
+    assert {:ok, 2} = Profile.set_watched_at(@uuid, ["movie:2", "tv:3", "movie:999"], ~D[2019-06-15])
+    items = Profile.history(@uuid)
+
+    # The newest is the one never backdated; the two old ones are in 2019, in the order given.
+    assert Enum.map(items, & &1.title) == ["Seen Last Week", "Found Years Later", "Another Old One"]
+    assert Enum.map(items, &DateTime.from_unix!(&1.at).year) |> Enum.take(-2) == [2019, 2019]
+    assert hd(items).key == "movie:1"
+
+    # A later rebuild from laev's marks stamps everything today again; the dates are laid back.
+    {:ok, bin} = Ecto.UUID.dump(@uuid)
+    Roki.Repo.query!("update roki_watched set at = now() where user_uuid = $1", [bin])
+    assert :ok = Profile.reapply_dates(@uuid)
+    assert Enum.map(Profile.history(@uuid), & &1.title) == ["Seen Last Week", "Found Years Later", "Another Old One"]
+
+    # Putting one of the old ones on a later day moves just it.
+    assert {:ok, 1} = Profile.set_watched_at(@uuid, ["movie:2"], ~D[2022-01-01])
+    assert Enum.map(Profile.history(@uuid), & &1.title) == ["Seen Last Week", "Found Years Later", "Another Old One"]
+    assert DateTime.from_unix!(Enum.at(Profile.history(@uuid), 1).at).year == 2022
+
+    # Taking one off the list takes its date with it.
+    assert {:ok, 1} = Profile.remove_watched(@uuid, ["movie:2"])
+    assert Enum.map(Profile.history(@uuid), & &1.key) == ["movie:1", "tv:3"]
+    assert Roki.Repo.query!("select count(*) from roki_watch_dates where user_uuid = $1 and id = 2", [bin]).rows == [[0]]
+  end
+
   test "a profile's counts follow the finished titles" do
     watched(@uuid, [
       {"movie", 1, "movie", 1, "Film", false},

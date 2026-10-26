@@ -1089,6 +1089,31 @@ defmodule Roki.Watch do
     end)
   end
 
+  @doc """
+  Take the whole-title mark off a film, a show or an anime entry (`type` as the site's watched
+  list names it: `"movie"`, `"tv"`, or `"mal"` with a MyAnimeList id). A show's anime entries
+  go with it. What was watched episode by episode stays marked.
+  """
+  def unmark(uuid, type, id) when type in ["movie", "tv", "mal"] and is_integer(id) do
+    Roki.Laev.run(uuid, fn ->
+      case type do
+        "mal" ->
+          Laev.Position.set_watched(%{mal_id: id}, false)
+
+        "tv" ->
+          Laev.Position.set_watched(%{type: "tv", tmdb_id: id, season: nil, episode: nil}, false)
+          for mal <- Laev.AnimeMap.mal_ids("tv", id), do: Laev.Position.set_watched(%{mal_id: mal}, false)
+
+        "movie" ->
+          Laev.Position.set_watched(%{type: "movie", tmdb_id: id, season: nil, episode: nil}, false)
+      end
+
+      Laev.Sync.live_push()
+    end)
+
+    library_changed(uuid)
+  end
+
   @doc "Mark this episode or film watched (an external player cannot report progress)."
   def mark_watched(uuid, ctx) do
     Roki.Laev.run(uuid, fn ->

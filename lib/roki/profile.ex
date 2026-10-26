@@ -214,6 +214,65 @@ defmodule Roki.Profile do
     end
   end
 
+  @doc """
+  Say when things were watched: `keys` (`\"movie:603\"`, `\"tv:1396\"`, `\"mal:5114\"`, as the
+  history lists them) are put on `date` — in the order given, the first the latest of the day, so
+  a batch keeps its order — wherever they were in the history. Kept across every later sync, so
+  a film found years afterwards and marked finished can go back where it belongs instead of
+  topping the list. `{:ok, how_many}`.
+  """
+  def set_watched_at(uuid, keys, %Date{} = date) when is_binary(uuid) and is_list(keys) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    parsed = keys |> Enum.map(&parse_key/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    base = DateTime.new!(date, ~T[12:00:00], "Etc/UTC")
+    total = length(parsed)
+
+    {:ok, dated} =
+      Repo.transaction(fn ->
+        for {{type, id}, i} <- Enum.with_index(parsed), reduce: 0 do
+          count ->
+            at = DateTime.add(base, total - i, :second)
+
+            %{num_rows: n} =
+              Repo.query!("update roki_watched set at = $4, dated = true where user_uuid = $1 and type = $2 and id = $3", [bin, type, id, at])
+
+            # Only what is on the list can be dated.
+            if n > 0 do
+              Repo.query!(
+                """
+                insert into roki_watch_dates (user_uuid, type, id, watched_at) values ($1, $2, $3, $4)
+                on conflict (user_uuid, type, id) do update set watched_at = excluded.watched_at
+                """,
+                [bin, type, id, at]
+              )
+
+              count + 1
+            else
+              count
+            end
+        end
+      end)
+
+    {:ok, dated}
+  end
+
+  @doc """
+  Take titles off the watched list: the marks go (in laev, so the terminal app and the other
+  devices agree), their dates and their rows with them. A rating stays a rating. `{:ok, how_many}`.
+  """
+  def remove_watched(uuid, keys) when is_binary(uuid) and is_list(keys) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    parsed = keys |> Enum.map(&parse_key/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    for {type, id} <- parsed do
+      Roki.Watch.unmark(uuid, type, id)
+      Repo.query!("delete from roki_watched where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
+      Repo.query!("delete from roki_watch_dates where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
+    end
+
+    {:ok, length(parsed)}
+  end
+
   @doc "Forget when the finished titles were last copied, so the next look copies them again."
   def forget_history(uuid), do: TTLCache.delete({:watched_sync, uuid})
 
@@ -264,8 +323,29 @@ defmodule Roki.Profile do
           [bin | params]
         )
       end)
+
+      apply_dates(bin)
     end)
 
+    :ok
+  end
+
+  # The dates the owner set, laid back over what the rebuild just wrote.
+  defp apply_dates(bin) do
+    Repo.query!(
+      """
+      update roki_watched w set at = d.watched_at, dated = true
+        from roki_watch_dates d
+       where w.user_uuid = $1 and d.user_uuid = w.user_uuid and d.type = w.type and d.id = w.id
+      """,
+      [bin]
+    )
+  end
+
+  @doc "Lay the owner's dates over the finished titles again (after anything that rewrote them)."
+  def reapply_dates(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    apply_dates(bin)
     :ok
   end
 
@@ -281,6 +361,7 @@ defmodule Roki.Profile do
     items =
       Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated] ->
         %{
+          key: "#{type}:#{id}",
           type: tt,
           id: tid,
           mal_id: if(type == "mal", do: id),
@@ -294,7 +375,11 @@ defmodule Roki.Profile do
       end)
 
     cards = Roki.Titles.cards(for i <- items, do: card_key(i))
-    Enum.map(items, fn i -> %{i | poster: cards[card_key(i)][:poster], title: i.title || cards[card_key(i)][:title]} end)
+
+    Enum.map(items, fn i ->
+      card = cards[card_key(i)] || %{}
+      i |> Map.put(:year, card[:year]) |> Map.merge(%{poster: card[:poster], title: i.title || card[:title]})
+    end)
   end
 
   # A title's card is TMDB's; an anime with no TMDB title has MyAnimeList's, under its MAL id.

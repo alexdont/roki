@@ -160,4 +160,61 @@ defmodule RokiWeb.ProfileLiveTest do
     view |> element("li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]") |> render_click()
     assert Enum.map(Roki.Profile.favorites(user.uuid).movie, &{&1.id, &1.position}) == [{1, 1}]
   end
+
+  test "the watched page: rows and a grid, and only the owner selects, backdates and removes" do
+    user = register("historian")
+    other = register("visitor")
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    for {id, title} <- [{1, "Newest Film"}, {2, "Forgotten Film"}] do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated) values ($1, 'movie', $2, 'movie', $2, $3, false, now(), true)",
+        [bin, id, title]
+      )
+    end
+
+    # A visitor has the views, and no way to change anything.
+    {:ok, visitor, _} = live(signed_in(other), "/historian/watched")
+    html = render_async(visitor)
+    assert html =~ "Newest Film"
+    refute has_element?(visitor, "button[aria-label=More]")
+    render_click(visitor, "select_mode", %{})
+    refute render(visitor) =~ "Edit watch date"
+    render_click(visitor, "remove", %{})
+    assert Roki.Profile.history(user.uuid) |> length() == 2
+
+    # The owner: the list view carries the details, the three dots turn on select mode.
+    {:ok, view, _} = live(signed_in(user), "/historian/watched?view=rows")
+    html = render_async(view)
+    assert html =~ "Forgotten Film"
+    assert html =~ "not rated"
+    assert has_element?(view, "button[aria-label=More]")
+
+    view |> element("button[aria-label=More]") |> render_click()
+    view |> element("button", "Select") |> render_click()
+    assert render(view) =~ "0</b> selected"
+
+    # Pick the forgotten one, put it years back: it drops under the other, which keeps its place.
+    view |> element("button[phx-click=select_toggle][phx-value-key='movie:2']") |> render_click()
+    assert render(view) =~ "1</b> selected"
+    view |> element("button", "Edit watch date") |> render_click()
+    assert has_element?(view, "#date-form input[type=date]")
+
+    # The future is refused.
+    future = Date.utc_today() |> Date.add(30) |> Date.to_iso8601()
+    view |> form("#date-form", %{date: future}) |> render_submit()
+    assert render(view) =~ "has happened"
+
+    view |> form("#date-form", %{date: "2018-03-09"}) |> render_submit()
+    html = render(view)
+    assert html =~ "set to March 9, 2018"
+    assert html =~ "March 2018"
+    assert Enum.map(Roki.Profile.history(user.uuid), & &1.title) == ["Newest Film", "Forgotten Film"]
+
+    # Remove the newest.
+    view |> element("button[phx-click=select_toggle][phx-value-key='movie:1']") |> render_click()
+    view |> element("button", "Remove") |> render_click()
+    assert render(view) =~ "1 title taken off"
+    assert Enum.map(Roki.Profile.history(user.uuid), & &1.title) == ["Forgotten Film"]
+  end
 end
