@@ -122,6 +122,8 @@
     { id: "hlsC", name: "HEVC video only through HLS (C)", src: "hlsC/master.m3u8", hls: true },
     { id: "hlsE", name: "HEVC through HLS, closed GOPs, B-frames, main 4.1 (E)", src: "hlsE/master.m3u8", hls: true },
     { id: "hlsF", name: "A real release (10-bit HEVC), video copied as it is (F)", src: "hlsF/master.m3u8", hls: true },
+    { id: "hlsFjs", name: "The real release (F) through hls.js and Managed MediaSource instead of native HLS", src: "hlsF/master.m3u8", hls: true, js: true },
+    { id: "hlsEjs", name: "E through hls.js and Managed MediaSource", src: "hlsE/master.m3u8", hls: true, js: true },
     { id: "hlsD", name: "H.264 through the same fMP4 HLS (D, control)", src: "hlsD/master.m3u8", hls: true },
   ]
   const holder = $("#clips")
@@ -152,7 +154,7 @@
     v.removeAttribute("src"); v._errs = null; v.load()
     let hls = null
     try {
-      if (c.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
+      if (c.hls && (c.js || !v.canPlayType("application/vnd.apple.mpegurl"))) {
         if (!window.Hls || !Hls.isSupported()) { set("FAIL: no HLS support", "no"); say(`${c.name}: FAIL no HLS support`); return }
         hls = new Hls()
         const errs = []
@@ -167,7 +169,7 @@
       const events = []
       for (const ev of ["loadstart", "loadedmetadata", "canplay", "stalled", "waiting", "error", "abort", "emptied"])
         v.addEventListener(ev, () => events.push(ev), { once: false })
-      if (!c.hls || v.canPlayType("application/vnd.apple.mpegurl")) v.load()
+      if (!hls) v.load()
       await new Promise((resolve) => {
         const done = () => { v.removeEventListener("canplay", done); v.removeEventListener("error", done); resolve() }
         v.addEventListener("canplay", done); v.addEventListener("error", done)
