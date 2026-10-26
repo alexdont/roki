@@ -173,9 +173,10 @@
       })
       v.currentTime = 0
       let started
-      try { started = v.play(); if (started) await started } catch (e) {
+      const settle = (p) => (p ? Promise.race([p, sleep(8000)]) : null)
+      try { started = v.play(); await settle(started) } catch (e) {
         await sleep(600)
-        try { started = v.play(); if (started) await started } catch (e2) {
+        try { started = v.play(); await settle(started) } catch (e2) {
           throw new Error(`play() refused: ${e2.name}; readyState=${v.readyState} networkState=${v.networkState} error=${v.error ? v.error.code + " " + (v.error.message || "") : "none"}; events=${events.join(",")}`)
         }
       }
