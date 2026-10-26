@@ -13,7 +13,7 @@ defmodule RokiWeb.StreamController do
   # The plain playlist, the multi-audio master and its per-rendition playlists and segments
   # (ffmpeg names renditions s_0, s_Japanese …), single-audio segments, and subtitle tracks:
   # the ones in the release (sub0.vtt) and ones fetched from a provider (ext-fr.vtt).
-  @allowed ~r/^(playlist\.m3u8|media\.mp4|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
+  @allowed ~r/^(playlist\.m3u8|media\.mp4|video\.m3u8|audio\d\.m3u8|audio\d\.mp4|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
 
   def file(conn, %{"id" => id, "file" => file}) do
     cond do
@@ -33,25 +33,69 @@ defmodule RokiWeb.StreamController do
   # A conversion that copied the video (`Roki.Direct`) is one MP4 read by byte ranges, under a
   # playlist made from what is written so far; laev's are files on disk.
   defp serve(conn, id, "playlist.m3u8" = file) do
-    if Roki.Direct.direct?(id) do
-      conn
-      |> put_resp_content_type(content_type(file))
-      |> put_resp_header("cache-control", "no-store")
-      |> send_resp(200, Roki.Direct.playlist(id))
-    else
-      serve_file(conn, id, file)
+    cond do
+      Roki.Direct.direct?(id) ->
+        playlist(conn, Roki.Direct.playlist(id, prefer(conn)))
+
+      Laev.Remux.entry_playlist(id) == "master.m3u8" ->
+        case File.read(Path.join(Laev.Remux.dir(id), "master.m3u8")) do
+          {:ok, content} -> playlist(conn, Roki.Direct.tidy_master(content, prefer(conn)))
+          _ -> send_resp(conn, 404, "not ready")
+        end
+
+      true ->
+        serve_file(conn, id, file)
     end
   end
 
-  defp serve(conn, id, "media.mp4") do
-    path = Roki.Direct.media(id)
+  # The media playlists behind a direct master: the video's, and one per audio track.
+  defp serve(conn, id, "video.m3u8"), do: direct_playlist(conn, id, "media.mp4")
 
-    if File.regular?(path),
-      do: RokiWeb.RangeFile.send(conn, path, "video/mp4"),
-      else: send_resp(conn, 404, "not ready")
+  defp serve(conn, id, "audio" <> _ = file) do
+    if String.ends_with?(file, ".m3u8"),
+      do: direct_playlist(conn, id, String.replace_suffix(file, ".m3u8", ".mp4")),
+      else: direct_file(conn, id, file, "audio/mp4")
   end
 
+  defp serve(conn, id, "media.mp4"), do: direct_file(conn, id, "media.mp4", "video/mp4")
+
   defp serve(conn, id, file), do: serve_file(conn, id, file)
+
+  defp playlist(conn, content) do
+    conn
+    |> put_resp_content_type(content_type("playlist.m3u8"))
+    |> put_resp_header("cache-control", "no-store")
+    |> send_resp(200, content)
+  end
+
+  # The account's language (laev's setting), the audio track to start with when there is one.
+  defp prefer(conn) do
+    case conn.assigns[:phoenix_kit_current_user] do
+      %{uuid: uuid} when is_binary(uuid) -> Roki.Laev.run(uuid, fn -> Laev.Config.lang() end)
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp direct_playlist(conn, id, name) do
+    if Roki.Direct.direct?(id) do
+      conn
+      |> put_resp_content_type(content_type(name <> ".m3u8"))
+      |> put_resp_header("cache-control", "no-store")
+      |> send_resp(200, Roki.Direct.media_playlist(id, name))
+    else
+      send_resp(conn, 404, "not ready")
+    end
+  end
+
+  defp direct_file(conn, id, name, type) do
+    path = Roki.Direct.file(id, name)
+
+    if File.regular?(path),
+      do: RokiWeb.RangeFile.send(conn, path, type),
+      else: send_resp(conn, 404, "not ready")
+  end
 
   defp serve_file(conn, id, file) do
     path = Path.join(Laev.Remux.dir(id), resolve(id, file))
