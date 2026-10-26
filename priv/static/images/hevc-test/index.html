@@ -116,7 +116,10 @@
     { id: "h264", name: "H.264 1080p (control)", src: "h264-1080.mp4" },
     { id: "hevc", name: "HEVC 1080p, plain file", src: "hevc1080.mp4" },
     { id: "hevc4k", name: "HEVC 4K, plain file", src: "hevc2160.mp4" },
-    { id: "hls", name: "HEVC 1080p through HLS (how roki streams)", src: "hls/index.m3u8", hls: true },
+    { id: "hls", name: "HEVC 1080p through HLS, plain playlist (A)", src: "hls/index.m3u8", hls: true },
+    { id: "hlsB", name: "HEVC 1080p through HLS, master playlist with codecs, 2 s segments (B)", src: "hlsB/master.m3u8", hls: true },
+    { id: "hlsC", name: "HEVC video only through HLS (C)", src: "hlsC/master.m3u8", hls: true },
+    { id: "hlsD", name: "H.264 through the same fMP4 HLS (D, control)", src: "hlsD/master.m3u8", hls: true },
   ]
   const holder = $("#clips")
   for (const c of CLIPS) {
