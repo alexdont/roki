@@ -996,27 +996,24 @@ defmodule RokiWeb.SettingsLive do
             Connect MyAnimeList
           </button>
 
-          <ol :if={@mal.url} class="space-y-3 text-sm">
-            <li class="space-y-1">
-              <div>
-                <span class="font-semibold">1.</span> Open MyAnimeList and press Allow.
-              </div>
-              <a href={@mal.url} target="_blank" rel="noopener" class="btn btn-sm btn-primary">
-                Open MyAnimeList
-              </a>
-            </li>
-            <li>
-              <span class="font-semibold">2.</span>
-              Your browser then tries to open an address starting with <code>localhost:8723</code>
-              and shows an error page. That is expected. Copy the whole address from the address bar.
-            </li>
-            <li class="space-y-1">
-              <div><span class="font-semibold">3.</span> Paste it here.</div>
-              <form id="mal-finish" phx-submit="mal_finish" class="flex flex-wrap items-center gap-2">
+          <div :if={@mal.url} class="space-y-3 text-sm">
+            <p>
+              Open MyAnimeList, press <strong>Allow</strong>, and you come back here connected.
+            </p>
+            <a href={@mal.url} class="btn btn-sm btn-primary">
+              Open MyAnimeList
+            </a>
+            <details class="text-base-content/70">
+              <summary class="cursor-pointer">Didn't come back here?</summary>
+              <p class="mt-2">
+                If the browser showed an error page instead, copy the whole address it ended up on
+                and paste it here.
+              </p>
+              <form id="mal-finish" phx-submit="mal_finish" class="mt-2 flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   name="pasted"
-                  placeholder="http://localhost:8723/callback?code=…"
+                  placeholder="…/mal/callback?code=…"
                   autocomplete="off"
                   autocapitalize="off"
                   spellcheck="false"
@@ -1026,8 +1023,8 @@ defmodule RokiWeb.SettingsLive do
                   <span :if={@mal.busy} class="loading loading-spinner loading-xs"></span> Connect
                 </button>
               </form>
-            </li>
-          </ol>
+            </details>
+          </div>
         </div>
       </div>
 

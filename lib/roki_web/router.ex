@@ -36,6 +36,8 @@ defmodule RokiWeb.Router do
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.
     get "/account/services", AccountController, :services
+    # Where MyAnimeList sends people back after they approve the site's app.
+    get "/mal/callback", MalController, :callback
   end
 
   scope "/", RokiWeb do

@@ -460,11 +460,20 @@ defmodule Roki.Laev do
   end
 
   @pending_ttl 15 * 60
+  @mal_auth "https://myanimelist.net/v1/oauth2/authorize"
+  @mal_token "https://myanimelist.net/v1/oauth2/token"
+
+  @doc """
+  Where MyAnimeList sends people back to once they approve: this site's own callback, which the
+  site's MyAnimeList app has to name as its redirect URL. (The terminal app's own app names
+  `localhost` instead; a MyAnimeList app has one redirect, so the site needs an app of its own.)
+  """
+  def mal_redirect, do: RokiWeb.Endpoint.url() <> "/mal/callback"
 
   @doc """
   Start a login: remember a fresh state and PKCE verifier, and return the address to approve at.
-  The terminal app waits for MyAnimeList's redirect on `localhost`; a site cannot, so the
-  redirect is left to fail in the browser and its address is pasted back (`mal_finish/2`).
+  MyAnimeList then sends the browser to `mal_redirect/0` with a code, and `mal_finish/2` is
+  given it — by the callback, or pasted in by hand should the browser land elsewhere.
   """
   def mal_begin(uuid) do
     run(uuid, fn ->
@@ -477,23 +486,36 @@ defmodule Roki.Laev do
           Jason.encode!(%{state: state, verifier: verifier, at: System.os_time(:second)})
         )
 
-        {:ok, MAL.authorize_url(state, verifier)}
+        {:ok, mal_authorize_url(state, verifier)}
       else
         {:error, "Add your MyAnimeList client ID under Connections first."}
       end
     end)
   end
 
+  # laev's authorize address, with this site's redirect in place of the terminal app's.
+  defp mal_authorize_url(state, verifier) do
+    @mal_auth <>
+      "?" <>
+      URI.encode_query(%{
+        "response_type" => "code",
+        "client_id" => MAL.client_id(),
+        "state" => state,
+        "code_challenge" => verifier,
+        "code_challenge_method" => "plain",
+        "redirect_uri" => mal_redirect()
+      })
+  end
+
   @doc """
-  Finish it with what was pasted: the address the browser ended up on
-  (`http://localhost:8723/callback?code=…&state=…`), or just the code. `{:ok, username}` or
-  `{:error, why}`.
+  Finish it with what MyAnimeList sent back: the callback's query (`?code=…&state=…`), the whole
+  address, or just the code. `{:ok, username}` or `{:error, why}`.
   """
   def mal_finish(uuid, pasted) do
     run(uuid, fn ->
       with {:ok, pending} <- read_pending(),
            {:ok, code} <- pasted_code(pasted, pending["state"]),
-           {:ok, _tokens} <- MAL.exchange_code(code, pending["verifier"]) do
+           {:ok, _tokens} <- mal_exchange(code, pending["verifier"]) do
         File.rm(pending_path())
         {:ok, MAL.username() || "your account"}
       else
@@ -508,6 +530,43 @@ defmodule Roki.Laev do
           {:error, "Could not connect. Start again."}
       end
     end)
+  end
+
+  # The code for tokens, naming this site's redirect (it has to be the one the approval named),
+  # kept where laev keeps them (`mal.json` in the user's data directory), so the rest of laev's
+  # MyAnimeList client — the refresh, the list, the ratings — applies as it is.
+  defp mal_exchange(code, verifier) do
+    body = %{
+      "grant_type" => "authorization_code",
+      "client_id" => MAL.client_id(),
+      "code" => code,
+      "code_verifier" => verifier,
+      "redirect_uri" => mal_redirect()
+    }
+
+    body =
+      case MAL.client_secret() do
+        s when is_binary(s) and s != "" -> Map.put(body, "client_secret", s)
+        _ -> body
+      end
+
+    case Req.post(@mal_token, form: body, retry: false, receive_timeout: 15_000) do
+      {:ok, %{status: 200, body: %{"access_token" => at} = b}} ->
+        data = %{
+          "access_token" => at,
+          "refresh_token" => b["refresh_token"],
+          "expires_at" => System.os_time(:second) + (b["expires_in"] || 2_400_000)
+        }
+
+        File.write(Path.join(Laev.Scope.dir(), "mal.json"), Jason.encode!(data))
+        {:ok, data}
+
+      {:ok, %{status: s, body: b}} ->
+        {:error, {:mal, s, inspect(b)}}
+
+      {:error, e} ->
+        {:error, e}
+    end
   end
 
   @doc "Forget the MyAnimeList login."
