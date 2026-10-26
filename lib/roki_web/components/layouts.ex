@@ -126,6 +126,13 @@ defmodule RokiWeb.Layouts do
             label="Shelf"
             active={active?(@current_path, ~p"/#{@username}/home")}
           />
+          <.top_icon
+            :if={@username}
+            href={~p"/#{@username}"}
+            icon="hero-user-circle"
+            label="Profile"
+            active={@current_path == "/#{@username}"}
+          />
         </div>
 
         <%!-- PhoenixKit's own account menu: avatar, Settings (which opens this site's settings
@@ -138,12 +145,6 @@ defmodule RokiWeb.Layouts do
             current_path={@current_path}
           />
           <template data-role="menu-extras">
-            <li :if={@username} data-menu-extras>
-              <.link navigate={~p"/#{@username}"} class="flex items-center gap-3">
-                <.icon name="hero-user-circle" class="h-4 w-4" />
-                <span>My profile</span>
-              </.link>
-            </li>
             <li :if={@username} data-menu-extras>
               <.link navigate={~p"/#{@username}/settings"} class="flex items-center gap-3">
                 <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
