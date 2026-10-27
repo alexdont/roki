@@ -33,6 +33,8 @@ defmodule Roki.Application do
       Roki.CacheSweeper,
       # Warms every account's copies (titles, ratings, pictures) on a clock, so pages never have to.
       Roki.Refresher,
+      # Tells people when something they saved comes out (new episodes, saved films).
+      Roki.Releases,
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)
       # {Roki.Worker, arg},

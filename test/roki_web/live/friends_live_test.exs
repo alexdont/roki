@@ -135,6 +135,28 @@ defmodule RokiWeb.FriendsLiveTest do
     assert length(told(ann)) == 1
   end
 
+  test "when two people ask each other, both are friends and each is told the right thing", %{ann: ann, bob: bob} do
+    {:ok, _} = Social.request(ann.uuid, bob.uuid)
+    {:ok, _} = Social.request(bob.uuid, ann.uuid)
+
+    assert Social.relationship(ann.uuid, bob.uuid).connected
+    # Bob heard that ann asked; ann hears that bob accepted (his asking was the answer).
+    assert Enum.map(told(bob), & &1.text) == ["friendann sent you a friend request"]
+    assert Enum.map(told(ann), & &1.text) == ["friendbob accepted your friend request"]
+    assert Social.pending_count(bob.uuid) == 0
+  end
+
+  test "asking again after taking a request back tells them again; a refused ask (already friends) says nothing", %{ann: ann, bob: bob} do
+    {:ok, _} = Social.request(ann.uuid, bob.uuid)
+    {:ok, _} = Social.cancel(ann.uuid, bob.uuid)
+    {:ok, _} = Social.request(ann.uuid, bob.uuid)
+    assert length(told(bob)) == 2
+
+    {:ok, _} = Social.accept(bob.uuid, ann.uuid)
+    assert {:error, :already_connected} = Social.request(ann.uuid, bob.uuid)
+    assert length(told(bob)) == 2
+  end
+
   test "a comment on a profile tells its owner, a reply tells the one replied to, and never the writer", %{ann: ann, bob: bob} do
     {:ok, first} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "hello bob"})
     assert [%{text: "friendann commented on your profile", link: "/friendbob"}] = told(bob)

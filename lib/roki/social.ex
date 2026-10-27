@@ -100,6 +100,19 @@ defmodule Roki.Social do
     _ -> :ok
   end
 
+  @doc "Tell `target` what came out (`Roki.Releases.notice/2`): not from anyone, so no actor."
+  def notify_release(target, %{text: text, icon: icon, link: link}) do
+    PhoenixKit.Activity.log("roki", "roki.release",
+      target_uuid: target,
+      resource_type: "title",
+      metadata: %{"notification_text" => text, "notification_icon" => icon, "notification_link" => link}
+    )
+
+    :ok
+  rescue
+    _ -> :error
+  end
+
   defp notify_accepted(accepter, requester),
     do: notify("friend_accepted", accepter, requester, "#{name(accepter)} accepted your friend request", "hero-user-group", "/#{name(accepter)}")
 
