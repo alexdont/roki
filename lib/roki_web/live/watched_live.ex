@@ -2,7 +2,7 @@ defmodule RokiWeb.WatchedLive do
   @moduledoc """
   `/:username/watched` — everything a user finished, as a grid of posters or as rows (title,
   kind, year, their rating, when), newest first or by their own ratings (`?sort=top`,
-  `?kind=anime`, `?status=progress` (or `up_to_date`, `on_hold`, `finished`) for one kind of entry, `?months=0` for one list without month headings, `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
+  `?kind=anime`, `?genre=horror` for one genre, `?status=progress` (or `up_to_date`, `on_hold`, `finished`) for one kind of entry, `?months=0` for one list without month headings, `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
   everyone, like the profile; everything is read from this server (`Roki.Profile`).
 
   The owner has a button that turns on *select mode* (and off again): tick any number of
@@ -48,6 +48,8 @@ defmodule RokiWeb.WatchedLive do
           view: :grid,
           rating: nil,
           status: nil,
+          genre: nil,
+          genre_waits: 0,
           months?: true,
           shown: @page,
           page: @page,
@@ -74,6 +76,7 @@ defmodule RokiWeb.WatchedLive do
        q: params["q"] |> to_string() |> String.trim() |> String.slice(0, 80),
        months?: params["months"] != "0",
        status: status_param(params["status"]),
+       genre: Roki.Genres.parse(params["genre"]),
        rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10"))
      )
      |> take_place()}
@@ -97,6 +100,7 @@ defmodule RokiWeb.WatchedLive do
   defp arranged(%{assigns: a}) when is_list(a.history) do
     list = Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.rating)
     list = if a.status, do: Enum.filter(list, &(&1.status == a.status)), else: list
+    list = if a.genre, do: Enum.filter(list, &Roki.Genres.match?(a.genre, &1.type, &1.genres)), else: list
 
     if a.q == "" do
       list
@@ -110,7 +114,11 @@ defmodule RokiWeb.WatchedLive do
 
   @statuses [{"finished", "Finished"}, {"progress", "In progress"}, {"up_to_date", "Up to date"}, {"on_hold", "On hold"}]
 
-  defp filters_on(status, rating), do: Enum.count([status, rating], &(&1 != nil))
+  defp rating_note(:none), do: " without a rating"
+  defp rating_note(nil), do: ""
+  defp rating_note(n), do: " rated #{n}"
+
+  defp filters_on(status, rating, genre), do: Enum.count([status, rating, genre], &(&1 != nil))
 
   defp status_param(value), do: if(value in Enum.map(@statuses, &elem(&1, 0)), do: value)
 
@@ -201,23 +209,46 @@ defmodule RokiWeb.WatchedLive do
   # ── async results ──────────────────────────────────────────────────
 
   @impl true
-  def handle_async(:history, {:ok, items}, socket) when is_list(items), do: {:noreply, assign(socket, :history, items)}
+  def handle_async(:history, {:ok, items}, socket) when is_list(items), do: {:noreply, socket |> assign(:history, items) |> wait_for_genres()}
   def handle_async(:history, _other, socket), do: {:noreply, assign(socket, :history, [])}
   def handle_async(:ratings, {:ok, ratings}, socket) when is_map(ratings), do: {:noreply, assign(socket, :ratings, ratings)}
   def handle_async(:ratings, _other, socket), do: {:noreply, socket}
+
+  # Genres are read from TMDB in the background, once for each title. While some are still to come
+  # the page looks again every few seconds, so a filtered list fills in by itself.
+  @impl true
+  def handle_info(:reread_genres, socket) do
+    uuid = socket.assigns.uuid
+    {:noreply, start_async(socket, :history, fn -> Profile.history_all(uuid) end)}
+  end
+
+  def handle_info(_other, socket), do: {:noreply, socket}
+
+  defp genres_pending(history) when is_list(history), do: Enum.count(history, &(&1.genres == nil and is_integer(&1.id)))
+  defp genres_pending(_), do: 0
+
+  defp wait_for_genres(%{assigns: %{history: history, genre_waits: waits}} = socket) do
+    if connected?(socket) and genres_pending(history) > 0 and waits < 90 do
+      Process.send_after(self(), :reread_genres, 5_000)
+      assign(socket, :genre_waits, waits + 1)
+    else
+      socket
+    end
+  end
 
   # ── view ───────────────────────────────────────────────────────────
 
   # The address of a view: the assigns, with `overrides` (a new search, a new view …) laid on.
   defp address(a, overrides) do
-    v = %{sort: a.sort, kind: a.kind, rating: a.rating, status: a.status, months: a.months?, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
+    v = %{sort: a.sort, kind: a.kind, rating: a.rating, status: a.status, genre: a.genre, months: a.months?, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
 
     query =
-      Enum.flat_map([:sort, :kind, :rating, :status, :months, :q, :view], fn
+      Enum.flat_map([:sort, :kind, :rating, :status, :genre, :months, :q, :view], fn
         :sort -> if v.sort == :top, do: [sort: "top"], else: []
         :kind -> if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
         :rating -> if v.rating, do: [rating: v.rating], else: []
         :status -> if v.status, do: [status: v.status], else: []
+        :genre -> if v.genre, do: [genre: v.genre], else: []
         :months -> if v.months, do: [], else: [months: "0"]
         :q -> if v.q != "", do: [q: v.q], else: []
         :view -> if v.view == :rows, do: [view: "rows"], else: []
@@ -342,7 +373,7 @@ defmodule RokiWeb.WatchedLive do
               <div tabindex="0" role="button" class="btn btn-sm h-9 gap-1 rounded-full border-0 bg-base-200 px-3 font-medium" aria-label="Sort and filter">
                 <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
                 {if @sort == :top, do: "Rating", else: "Latest"}
-                <span :if={filters_on(@status, @rating) > 0} class="badge badge-primary badge-xs">{filters_on(@status, @rating)}</span>
+                <span :if={filters_on(@status, @rating, @genre) > 0} class="badge badge-primary badge-xs">{filters_on(@status, @rating, @genre)}</span>
               </div>
               <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
                 <p class="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">Sort</p>
@@ -351,6 +382,7 @@ defmodule RokiWeb.WatchedLive do
                 </div>
                 <.months_toggle a={assigns} class="mt-3" />
                 <.status_picker a={assigns} />
+                <.genre_picker a={assigns} />
                 <.rating_picker :if={@owner? or @profile.show_ratings} a={assigns} />
               </div>
             </div>
@@ -366,6 +398,15 @@ defmodule RokiWeb.WatchedLive do
               </.link>
               <.months_toggle a={assigns} pill />
               <div class="dropdown">
+                <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @genre && "btn-primary", !@genre && "bg-base-200"]}>
+                  {if @genre, do: Roki.Genres.label(@genre), else: "Genre"}
+                  <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
+                </div>
+                <div tabindex="0" class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+                  <.genre_picker a={assigns} heading={false} />
+                </div>
+              </div>
+              <div class="dropdown">
                 <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @status && "btn-primary", !@status && "bg-base-200"]}>
                   {if @status, do: status_label(@status), else: "Status"}
                   <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
@@ -376,7 +417,11 @@ defmodule RokiWeb.WatchedLive do
               </div>
               <div :if={@owner? or @profile.show_ratings} class="dropdown">
                 <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @rating && "btn-primary", !@rating && "bg-base-200"]}>
-                  {if @rating, do: "★ #{@rating}", else: "★ Rating"}
+                  {cond do
+                    @rating == :none -> "Not rated"
+                    @rating -> "★ #{@rating}"
+                    true -> "★ Rating"
+                  end}
                   <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
                 </div>
                 <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
@@ -388,6 +433,9 @@ defmodule RokiWeb.WatchedLive do
         </div>
 
         <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">{@notice}</p>
+        <p :if={@genre && genres_pending(@history) > 0} class="text-sm text-base-content/60">
+          Still reading the genres of {genres_pending(@history)} titles. They join the list as they arrive.
+        </p>
 
         <ul :if={@history == nil} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
           <li :for={_ <- 1..8} class="space-y-1">
@@ -400,7 +448,7 @@ defmodule RokiWeb.WatchedLive do
           {if @owner?, do: "Nothing finished yet. What you watch to the end shows up here.", else: "Nothing here yet."}
         </p>
         <p :if={@history != nil and @history != [] and @items == []} class="text-sm text-base-content/50">
-          {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{if @rating, do: " rated #{@rating}", else: ""}."}
+          {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{rating_note(@rating)}."}
         </p>
 
         <div :if={is_list(@history)} id="watched-list" phx-hook="KeepPlace" data-page={div(@shown + @page - 1, @page)} data-restore-y={@place_y} class="space-y-6">
@@ -547,6 +595,44 @@ defmodule RokiWeb.WatchedLive do
     """
   end
 
+  # Which genre: every one, or one of those the kind on show has (films and shows do not share them all).
+  attr :a, :map, required: true
+  attr :heading, :boolean, default: true
+
+  defp genre_picker(assigns) do
+    options =
+      case assigns.a.kind do
+        :movie -> Roki.Genres.options(:movies)
+        :all -> Roki.Genres.all()
+        _ -> Roki.Genres.options(:shows)
+      end
+
+    assigns = assign(assigns, :options, options)
+
+    ~H"""
+    <div>
+      <p :if={@heading} class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">Genre</p>
+      <div class="grid grid-cols-3 gap-1.5">
+        <.link
+          patch={address(@a, genre: nil)}
+          onclick="document.activeElement.blur()"
+          class={["btn btn-sm rounded-full border-0 px-1", @a.genre == nil && "btn-primary", @a.genre != nil && "bg-base-200"]}
+        >
+          All
+        </.link>
+        <.link
+          :for={{slug, label} <- @options}
+          patch={address(@a, genre: slug)}
+          onclick="document.activeElement.blur()"
+          class={["btn btn-sm rounded-full border-0 px-1 text-xs", @a.genre == slug && "btn-primary", @a.genre != slug && "bg-base-200"]}
+        >
+          {label}
+        </.link>
+      </div>
+    </div>
+    """
+  end
+
   # Which entries: everything, or only what was finished / is in progress / is up to date / is on hold.
   attr :a, :map, required: true
   attr :heading, :boolean, default: true
@@ -613,6 +699,13 @@ defmodule RokiWeb.WatchedLive do
           {n}
         </.link>
       </div>
+      <.link
+        patch={address(@a, rating: if(@a.rating == :none, do: nil, else: :none))}
+        onclick="document.activeElement.blur()"
+        class={["btn btn-sm mt-1.5 w-full rounded-full border-0", @a.rating == :none && "btn-primary", @a.rating != :none && "bg-base-200"]}
+      >
+        Not rated yet
+      </.link>
       <.link
         :if={@a.rating}
         patch={address(@a, rating: nil)}

@@ -325,6 +325,8 @@ defmodule Roki.Profile do
         items = finished ++ unfinished
         Roki.Titles.remember(for i <- items, i.type != nil, do: %{type: i.type, id: i.id, title: i.title, poster: i.poster})
         replace_watched(uuid, items)
+        # What genres these are, read behind the page (once each, kept).
+        Roki.Genres.fill_later(for(i <- items, i.type in ["movie", "tv"], is_integer(i.id), do: {i.type, i.id}), uuid)
         {:ok, :done}
       end)
     end
@@ -422,12 +424,12 @@ defmodule Roki.Profile do
 
     %{rows: rows} =
       Repo.query!(
-        "select type, id, tmdb_type, tmdb_id, season, title, anime, at, dated, status, note from roki_watched where user_uuid = $1 order by dated desc, at desc",
+        "select w.type, w.id, w.tmdb_type, w.tmdb_id, w.season, w.title, w.anime, w.at, w.dated, w.status, w.note, t.genres from roki_watched w left join roki_titles t on t.type = w.tmdb_type and t.id = w.tmdb_id where w.user_uuid = $1 order by w.dated desc, w.at desc",
         [bin]
       )
 
     items =
-      Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated, status, note] ->
+      Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated, status, note, genres] ->
         %{
           key: "#{type}:#{id}",
           type: tt,
@@ -440,7 +442,9 @@ defmodule Roki.Profile do
           at: at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix(),
           dated?: dated,
           status: status,
-          note: note
+          note: note,
+          # TMDB's genre ids, once read (`Roki.Genres`); nil until then.
+          genres: genres
         }
       end)
 
@@ -525,7 +529,14 @@ defmodule Roki.Profile do
     items
     |> Enum.filter(&of_kind?(&1, kind))
     |> Enum.map(&Map.put(&1, :score, score_of(ratings, &1)))
-    |> Enum.filter(&(rating == nil or (&1.score != nil and trunc(&1.score) == rating)))
+    |> Enum.filter(fn i ->
+      case rating do
+        nil -> true
+        # Only what has no rating yet — to find what is left to rate.
+        :none -> i.score == nil
+        n -> i.score != nil and trunc(i.score) == n
+      end
+    end)
     |> then(fn list ->
       case order do
         :top ->
@@ -540,10 +551,13 @@ defmodule Roki.Profile do
   end
 
   defp rating_filter(true), do: 10
+  defp rating_filter(:none), do: :none
   defp rating_filter(n) when is_integer(n) and n in 1..10, do: n
   defp rating_filter(_), do: nil
 
-  @doc "A rating filter from an address: `\"7\"` is 7, anything outside 1 to 10 is none."
+  @doc "A rating filter from an address: `\"7\"` is 7, `\"none\"` is the unrated, anything else is no filter."
+  def rating_param("none"), do: :none
+
   def rating_param(value) do
     case Integer.parse(to_string(value)) do
       {n, ""} when n in 1..10 -> n

@@ -212,6 +212,63 @@ defmodule RokiWeb.ProfileLiveTest do
     assert render(view) =~ "1</b> selected"
   end
 
+  test "the watched page filters by genre (each kind's own ids) and by having no rating" do
+    user = register("genrefan")
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    for {type, id, title, genres} <- [
+          {"movie", 1, "Scary Film", [27, 53]},
+          {"movie", 2, "Funny Film", [35]},
+          {"tv", 3, "Action Show", [10759]},
+          {"movie", 4, "Unread Film", nil}
+        ] do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated, status) values ($1, $2, $3, $2, $3, $4, false, now(), true, 'finished')",
+        [bin, type, id, title]
+      )
+
+      Roki.Repo.query!("insert into roki_titles (type, id, name, genres, seen_at) values ($1, $2, $3, $4, now())", [type, id, title, genres])
+    end
+
+    # Rated: the scary one. Unrated: the rest.
+    Roki.Repo.query!("insert into roki_ratings (user_uuid, type, id, score) values ($1, 'movie', 1, 8)", [bin])
+
+    {:ok, view, _} = live(signed_in(user), "/genrefan/watched?genre=horror")
+    html = render_async(view)
+    assert html =~ "Scary Film"
+    refute html =~ "Funny Film"
+    refute html =~ "Action Show"
+
+    # A film's Action is not a show's Action: each kind is matched by its own ids.
+    {:ok, view, _} = live(signed_in(user), "/genrefan/watched?genre=action")
+    html = render_async(view)
+    assert html =~ "Action Show"
+    refute html =~ "Scary Film"
+
+    # A title whose genres are not read yet is not guessed at.
+    {:ok, view, _} = live(signed_in(user), "/genrefan/watched?genre=comedy")
+    html = render_async(view)
+    assert html =~ "Funny Film"
+    refute html =~ "Unread Film"
+    assert html =~ "Still reading the genres of 1 titles"
+
+    # A genre that is not on the list is no filter.
+    {:ok, view, _} = live(signed_in(user), "/genrefan/watched?genre=nonsense")
+    assert render_async(view) =~ "Scary Film"
+
+    # "Not rated yet": only what has no rating.
+    {:ok, view, _} = live(signed_in(user), "/genrefan/watched?rating=none")
+    html = render_async(view)
+    assert html =~ "Funny Film"
+    assert html =~ "Action Show"
+    refute html =~ "Scary Film"
+
+    assert Enum.map(Roki.Profile.arrange(Roki.Profile.history(user.uuid), Roki.Profile.ratings(user.uuid), :all, :latest, :none), & &1.title) |> Enum.sort() ==
+             ["Action Show", "Funny Film", "Unread Film"]
+
+    assert Roki.Profile.rating_param("none") == :none
+  end
+
   test "the watched page: rows and a grid, and only the owner selects, backdates and removes" do
     user = register("historian")
     other = register("visitor")
