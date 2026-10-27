@@ -19,12 +19,12 @@
       name="roki-player-default"
       content={RokiWeb.PlayerMode.default_for(assigns[:phoenix_kit_current_user])}
     />
-    <%!-- The tab: the orange play button, and "Roki - <what is on the page>" so it is easy to find
+    <%!-- The tab: the orange play button, and "<what is on the page> · Roki" so it is easy to find
           among many tabs. --%>
     <link rel="icon" type="image/svg+xml" href={~p"/images/icon.svg"} />
     <link rel="icon" type="image/png" sizes="192x192" href={~p"/images/icon-192.png"} />
     <link rel="shortcut icon" href="/favicon.ico" />
-    <.live_title default="Roki" prefix="Roki - " phx-no-format>{assigns[:page_title]}</.live_title>
+    <.live_title default="Roki" suffix=" · Roki" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <!-- PhoenixKit JS Hooks -->
     <script src={~p"/assets/vendor/phoenix_kit.js"}>
