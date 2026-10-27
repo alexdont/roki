@@ -347,7 +347,7 @@ defmodule RokiWeb.ProfileLive do
     assigns = assign(assigns, banner: assigns.profile && Profile.banner_url(assigns.profile))
 
     ~H"""
-    <Layouts.app
+    <Layouts.app socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}

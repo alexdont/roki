@@ -12,6 +12,13 @@ config :swoosh, api_client: Swoosh.ApiClient.Finch
 # Sync keys travel in the address and as a `token` parameter; never print them.
 config :phoenix, :filter_parameters, ["password", "token"]
 
+# Who is told when something is said in a comment thread, and how a thread is named in the
+# moderation list (Roki.CommentHandler).
+config :phoenix_kit, :comment_resource_handlers, %{
+  "profile" => Roki.CommentHandler.Profile,
+  "title" => Roki.CommentHandler.Title
+}
+
 # The admin tab "API access": who uses the owner's keys (Roki.Keys, RokiWeb.Admin.KeyAccessLive).
 config :phoenix_kit, :admin_dashboard_tabs, [
   %{

@@ -35,6 +35,10 @@ defmodule RokiWeb.Layouts do
     default: nil,
     doc: "PhoenixKit's scope for the signed-in user (nil for a visitor)"
 
+  attr :socket, :any,
+    default: nil,
+    doc: "the page's LiveView socket: the notifications bell is a nested LiveView and needs it"
+
   attr :current_path, :string, default: "/"
   attr :wide, :boolean, default: false, doc: "full-width content, for the home page"
 
@@ -59,18 +63,24 @@ defmodule RokiWeb.Layouts do
       {"Anime", ~p"/anime"}
     ]
 
+    # Whom the bell is for: a signed-in person, on a page that passed its socket.
+    bell_user =
+      if username && assigns.socket && PhoenixKit.Notifications.enabled?(),
+        do: PhoenixKit.Users.Auth.Scope.user(scope)
+
     assigns =
       assigns
       |> assign(:scope, scope)
       |> assign(:username, username)
+      |> assign(:bell_user, bell_user)
       |> assign(:sections, sections)
 
     ~H"""
     <header class="relative border-b border-base-300/60">
-      <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-1 px-4 sm:px-6 lg:px-8">
+      <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-1 px-3 sm:px-6 lg:px-8">
         <a
           href={~p"/home"}
-          class="flex items-center gap-2 pr-3 text-lg font-bold tracking-tight"
+          class="flex items-center gap-2 pr-1.5 text-lg font-bold tracking-tight min-[420px]:pr-3"
           aria-label="roki — home"
         >
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
@@ -106,7 +116,7 @@ defmodule RokiWeb.Layouts do
               |> JS.toggle(to: "#search-pop", display: "flex")
               |> JS.focus(to: "#search-input")
             }
-            class="flex items-center px-3 text-base-content/70 transition hover:bg-base-200 hover:text-base-content"
+            class="flex items-center px-2 text-base-content/70 transition hover:bg-base-200 hover:text-base-content min-[420px]:px-3"
             aria-label="Search"
             title="Search"
           >
@@ -133,6 +143,22 @@ defmodule RokiWeb.Layouts do
             label="Shelf"
             active={active?(@current_path, ~p"/#{@username}/home")}
           />
+          <%!-- Notifications: PhoenixKit's bell, a sticky nested LiveView, so its count keeps up
+                as pages change. Sized down to sit with the other icons. --%>
+          <div
+            :if={@bell_user}
+            class="flex items-center max-sm:[&_.dropdown-content]:!fixed max-sm:[&_.dropdown-content]:!inset-x-2 max-sm:[&_.dropdown-content]:!top-14 max-sm:[&_.dropdown-content]:!mt-0 max-sm:[&_.dropdown-content]:!w-auto [&_label]:flex [&_label]:h-10 [&_label]:min-h-0 [&_label]:w-9 min-[420px]:[&_label]:w-10 [&_label]:items-center [&_label]:justify-center [&_label]:p-0"
+          >
+            {Phoenix.Component.live_render(@socket, PhoenixKitWeb.Live.NotificationsBell,
+              id: "pk-notifications-bell",
+              sticky: true,
+              session: %{
+                "user_uuid" => @bell_user.uuid,
+                "locale" => nil,
+                "can_open_inbox" => false
+              }
+            )}
+          </div>
         </div>
 
         <%!-- PhoenixKit's own account menu: avatar, Settings (which opens this site's settings
@@ -398,7 +424,7 @@ defmodule RokiWeb.Layouts do
       aria-label={@label}
       title={@label}
       class={[
-        "flex items-center border-b-2 px-2 transition hover:bg-base-200 min-[380px]:px-3",
+        "flex items-center border-b-2 px-1.5 transition hover:bg-base-200 min-[420px]:px-3",
         if(@active,
           do: "border-primary text-primary",
           else: "border-transparent text-base-content/70 hover:text-base-content"

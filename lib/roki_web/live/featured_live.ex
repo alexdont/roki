@@ -153,7 +153,7 @@ defmodule RokiWeb.FeaturedLive do
       )
 
     ~H"""
-    <Layouts.app
+    <Layouts.app socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}

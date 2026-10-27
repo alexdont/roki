@@ -434,6 +434,7 @@ defmodule RokiWeb.TitleLive do
 
     {:noreply,
      socket
+     |> tap(fn _ -> Task.start(fn -> Roki.Social.remember_title(title.type, title.id, title.title) end) end)
      |> start_async(:similar, fn ->
        # What this person has watched, saved and rated of them, worked out alongside.
        with {:ok, cards} <- Roki.Similar.for_title(uuid, title.type, title.id) do
@@ -535,7 +536,7 @@ defmodule RokiWeb.TitleLive do
       )
 
     ~H"""
-    <Layouts.app
+    <Layouts.app socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}

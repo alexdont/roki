@@ -29,8 +29,19 @@ defmodule Roki.Social do
 
   def relationship(_viewer, _other), do: nil
 
-  @doc "Ask `other` to be a friend. If they had already asked, both are accepted."
-  def request(viewer, other), do: Conn.request_connection(viewer, other)
+  @doc """
+  Ask `other` to be a friend. If they had already asked, both are accepted. Either way the other
+  person is told (`notify/5`): there is a request for them to answer, or a new friend.
+  """
+  def request(viewer, other) do
+    with {:ok, _} = ok <- Conn.request_connection(viewer, other) do
+      if Conn.connected?(viewer, other),
+        do: notify_accepted(viewer, other),
+        else: notify("friend_request", viewer, other, "#{name(viewer)} sent you a friend request", "hero-user-plus", "/#{name(other)}/friends")
+
+      ok
+    end
+  end
 
   @doc "Take back a request `viewer` sent to `other`."
   def cancel(viewer, other) do
@@ -43,8 +54,14 @@ defmodule Roki.Social do
   @doc "Accept the request `other` sent to `viewer`."
   def accept(viewer, other) do
     case incoming(viewer, other) do
-      nil -> {:error, :not_found}
-      connection -> Conn.accept_connection(connection)
+      nil ->
+        {:error, :not_found}
+
+      connection ->
+        with {:ok, _} = ok <- Conn.accept_connection(connection) do
+          notify_accepted(viewer, other)
+          ok
+        end
     end
   end
 
@@ -61,6 +78,81 @@ defmodule Roki.Social do
 
   defp incoming(viewer, other),
     do: Enum.find(Conn.list_pending_requests(viewer, preload: false), &(&1.requester_uuid == other))
+
+  # ── notifications ──────────────────────────────────────────────────
+
+  # A notification is a logged activity aimed at someone (`PhoenixKit.Notifications` turns it into
+  # a row in their bell). Its words, icon and where a click goes ride in the metadata, which the
+  # bell shows as given, so nothing here has to be registered with PhoenixKit first. Nothing is
+  # raised: failing to tell someone never fails what was done.
+  @doc false
+  def notify(action, actor_uuid, target_uuid, text, icon, link) do
+    PhoenixKit.Activity.log("roki", "roki." <> action,
+      actor_uuid: actor_uuid,
+      target_uuid: target_uuid,
+      resource_type: "user",
+      resource_uuid: actor_uuid,
+      metadata: %{"notification_text" => text, "notification_icon" => icon, "notification_link" => link}
+    )
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp notify_accepted(accepter, requester),
+    do: notify("friend_accepted", accepter, requester, "#{name(accepter)} accepted your friend request", "hero-user-group", "/#{name(accepter)}")
+
+  @doc """
+  Tell `target` about a comment: `reply?` when it answers one of theirs, else it is on their
+  profile. `type` and `thread` say where it was written, so the click lands on it.
+  """
+  def notify_comment(target, commenter, type, thread, reply?) do
+    {where, link} = thread_place(type, thread)
+
+    text =
+      cond do
+        reply? and where != nil -> "#{name(commenter)} replied to your comment on #{where}"
+        reply? -> "#{name(commenter)} replied to your comment"
+        true -> "#{name(commenter)} commented on your profile"
+      end
+
+    notify("comment", commenter, target, text, "hero-chat-bubble-left-right", link)
+  end
+
+  # The words and the address of the thread a comment was written in.
+  defp thread_place("profile", owner), do: {nil, "/" <> (name(owner) || "")}
+
+  defp thread_place("title", thread) do
+    case Roki.CommentHandler.titles([thread])[thread] do
+      %{title: title, path: path} -> {title, path}
+      _ -> {nil, "/"}
+    end
+  end
+
+  defp thread_place(_type, _thread), do: {nil, "/"}
+
+  defp name(uuid) do
+    case PhoenixKit.Users.Auth.get_user(uuid) do
+      %{username: username} -> username
+      _ -> "Someone"
+    end
+  end
+
+  @doc """
+  Remember which title a comment thread is (see the `roki_comment_titles` migration), so what
+  mentions the thread can name it and link to it.
+  """
+  def remember_title(type, id, name) when type in ["movie", "tv"] and is_integer(id) do
+    Roki.Repo.query!(
+      "insert into roki_comment_titles (uuid, type, id, name) values ($1, $2, $3, $4) on conflict (uuid) do update set name = excluded.name",
+      [Ecto.UUID.dump!(title_uuid(type, id)), type, id, name]
+    )
+
+    :ok
+  end
+
+  def remember_title(_type, _id, _name), do: :ok
 
   @doc "How many friends someone has."
   def friend_count(uuid), do: Conn.connections_count(uuid)
