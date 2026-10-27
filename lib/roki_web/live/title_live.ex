@@ -844,7 +844,7 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <%!-- More for under the banner (the comments, on a wide screen). --%>
-      <div class="max-w-4xl">{render_slot(@inner_block)}</div>
+      <div>{render_slot(@inner_block)}</div>
     </section>
     """
   end
