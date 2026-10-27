@@ -149,7 +149,7 @@ defmodule RokiWeb.ProfileLiveTest do
     assert render(view) =~ "Top 10 Movies"
     render_click(view, "shelf_ranked", %{"kind" => "movie"})
     refute has_element?(view, "li.sortable-item .badge-primary")
-    assert render(view) =~ "10 Favorite Movies"
+    assert render(view) =~ "Favorite Movies"
     refute render(view) =~ "Top 10 Movies"
 
     # A drag: the new order is kept.

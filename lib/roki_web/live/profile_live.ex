@@ -289,12 +289,12 @@ defmodule RokiWeb.ProfileLive do
   defp joined(%{inserted_at: %DateTime{} = at}), do: "#{Enum.at(@months, at.month - 1)} #{at.year}"
   defp joined(_), do: nil
 
-  # A shelf is "10 Favorite Movies" — ten, none above another — until its owner turns the
-  # numbers on, and then it is "Top 10 Movies".
+  # A shelf is "Favorite Movies" — none above another — until its owner turns the numbers on,
+  # and then it is "Top 10 Movies".
   defp shelf_title(profile, kind, label) do
     if Profile.ranked?(profile, kind),
       do: "Top #{Profile.top()} #{label}",
-      else: "#{Profile.top()} Favorite #{label}"
+      else: "Favorite #{label}"
   end
 
   # One of the numbers, with thousands separated; a dash while they are not known.
@@ -414,7 +414,6 @@ defmodule RokiWeb.ProfileLive do
         >
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-xl font-semibold">{shelf_title(@profile, kind, label)}</h2>
-            <span :if={@favorites && kind != :manga} class="text-sm text-base-content/60">{length(@favorites[kind] || [])}/{Profile.top()}</span>
             <span :if={kind == :manga} class="badge badge-ghost">Coming soon</span>
             <button
               :if={@owner? and kind != :manga and @favorites != nil}
