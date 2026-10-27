@@ -25,8 +25,8 @@ defmodule Roki.MoodTest do
 
   test "a page that is held is served without asking TMDB, mixed or by kind, and peeked at" do
     films = [%{id: 1, type: "movie", title: "Held Scare", poster: nil, year: "2020", popularity: 1.0, vote: 7.0}]
-    Roki.TTLCache.put({:mood, "scared", :all, :popular, 1}, 60, {:ok, {films, true}})
-    on_exit(fn -> Roki.TTLCache.delete({:mood, "scared", :all, :popular, 1}) end)
+    Roki.TTLCache.put({:mood, 2, "scared", :all, :popular, 1}, 60, {:ok, {films, true}})
+    on_exit(fn -> Roki.TTLCache.delete({:mood, 2, "scared", :all, :popular, 1}) end)
 
     assert {:ok, [%{title: "Held Scare"}], true} = Mood.page("scared", :all, :popular, 1, nil)
     assert {:ok, [%{title: "Held Scare"}], true} = Mood.peek("scared")

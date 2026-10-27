@@ -460,8 +460,9 @@ defmodule RokiWeb.FeaturedLive do
             src={Roki.Images.local(lead.backdrop)}
             alt=""
             loading={if i == 0, do: "eager", else: "lazy"}
-            class="absolute inset-0 h-full w-full object-cover"
+            class="mood-backdrop absolute inset-0 h-full w-full object-cover"
           />
+          <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true"></div>
           <div
             class="absolute inset-0"
             style={"background: linear-gradient(90deg, hsl(#{m.hue} 70% 12% / 0.96) 0%, hsl(#{m.hue} 70% 12% / 0.80) 45%, hsl(#{m.hue} 70% 12% / 0.25) 100%), linear-gradient(0deg, hsl(#{m.hue} 70% 10% / 0.9) 0%, transparent 45%)"}
@@ -471,13 +472,16 @@ defmodule RokiWeb.FeaturedLive do
           <div class="relative flex h-full flex-col justify-between p-5 text-white sm:p-8">
             <div class="max-w-xl space-y-3">
               <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">What are you feeling like today?</p>
-              <h1 class="text-4xl font-black leading-[0.95] tracking-tight drop-shadow sm:text-6xl">
-                <span class="mr-2">{m.icon}</span>{m.label}
+              <h1
+                class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl"
+                style={"font-family: #{m.font}; --mood: hsl(#{m.hue} 90% 62%)"}
+              >
+                <span class="mr-2 text-4xl align-middle sm:text-5xl" aria-hidden="true">{m.icon}</span>{m.label}
               </h1>
               <p class="text-base text-white/80 sm:text-lg">{m.tagline}</p>
               <.link
                 navigate={~p"/mood/#{m.slug}"}
-                class="btn h-11 rounded-full border-0 bg-white px-5 text-base-content shadow-lg hover:bg-white/90"
+                class="btn h-11 rounded-full border-0 bg-white px-5 text-neutral-900 shadow-lg hover:bg-white/90"
               >
                 Show me <.icon name="hero-arrow-right" class="h-4 w-4" />
               </.link>
@@ -511,10 +515,10 @@ defmodule RokiWeb.FeaturedLive do
           role="tab"
           aria-selected={to_string(i == 0)}
           class="group relative shrink-0 overflow-hidden rounded-full border border-base-300 bg-base-100 px-3.5 py-2 text-sm font-semibold transition hover:border-base-content/30 aria-selected:border-transparent aria-selected:text-white aria-selected:shadow-md"
-          style={"--mood: hsl(#{m.hue} 75% 45%)"}
+          style={"--mood: hsl(#{m.hue} 75% 45%); --mood-font: #{m.font}"}
         >
           <span class="absolute inset-0 bg-[var(--mood)] opacity-0 transition-opacity duration-300 group-aria-selected:opacity-100" aria-hidden="true"></span>
-          <span class="relative"><span class="mr-1.5">{m.icon}</span>{m.label}</span>
+          <span class="relative"><span class="mr-1.5">{m.icon}</span><span class="group-aria-selected:[font-family:var(--mood-font)] group-aria-selected:text-base group-aria-selected:tracking-wide">{m.label}</span></span>
           <span data-mood-bar class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 bg-white/80" aria-hidden="true"></span>
         </.link>
       </div>

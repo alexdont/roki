@@ -54,6 +54,8 @@ export const MoodCarousel = {
       const on = k === i
       s.classList.toggle("opacity-0", !on)
       s.classList.toggle("pointer-events-none", !on)
+      if (on && !s.classList.contains("is-active")) s.classList.add("is-active")
+      if (!on) s.classList.remove("is-active")
       s.setAttribute("aria-hidden", String(!on))
       if (on) s.querySelectorAll('img[loading="lazy"]').forEach((img) => { img.loading = "eager" })
     })

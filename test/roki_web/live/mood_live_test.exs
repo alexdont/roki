@@ -9,12 +9,12 @@ defmodule RokiWeb.MoodLiveTest do
       %{id: 502, type: "tv", title: "Mood Show", poster: nil, year: "2021", popularity: 8.0, vote: 8.1}
     ]
 
-    Roki.TTLCache.put({:mood, "scared", :all, :popular, 1}, 60, {:ok, {items, false}})
-    Roki.TTLCache.put({:mood, "scared", :movies, :popular, 1}, 60, {:ok, {Enum.take(items, 1), false}})
+    Roki.TTLCache.put({:mood, 2, "scared", :all, :popular, 1}, 60, {:ok, {items, false}})
+    Roki.TTLCache.put({:mood, 2, "scared", :movies, :popular, 1}, 60, {:ok, {Enum.take(items, 1), false}})
 
     on_exit(fn ->
-      Roki.TTLCache.delete({:mood, "scared", :all, :popular, 1})
-      Roki.TTLCache.delete({:mood, "scared", :movies, :popular, 1})
+      Roki.TTLCache.delete({:mood, 2, "scared", :all, :popular, 1})
+      Roki.TTLCache.delete({:mood, 2, "scared", :movies, :popular, 1})
     end)
 
     :ok

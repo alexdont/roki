@@ -26,6 +26,11 @@
     <link rel="shortcut icon" href="/favicon.ico" />
     <.live_title default="Roki" suffix=" · Roki" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <%!-- The typefaces the moods' names are set in (Roki.Mood.fonts/0); a browser only fetches the
+          ones a page draws. --%>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href={"https://fonts.googleapis.com/css2?" <> Enum.map_join(Roki.Mood.fonts(), "&", &("family=" <> &1)) <> "&display=swap"} />
     <!-- PhoenixKit JS Hooks -->
     <script src={~p"/assets/vendor/phoenix_kit.js"}>
     </script>

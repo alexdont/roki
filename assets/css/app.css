@@ -637,3 +637,30 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 /* The end time stays at the right end now that the hover mark's elements follow it in the row. */
 .study-timeline [data-role=cur] { left: 0; }
 .study-timeline [data-role=dur] { right: 0; left: auto; }
+
+/* The mood picker on the home page and the mood pages: the name of a mood in its own typeface,
+   lit from behind in the mood's colour; the backdrop of the shown slide drifting slowly. */
+.mood-title {
+  color: #fff;
+  text-shadow:
+    0 2px 2px rgb(0 0 0 / 0.45),
+    0 0 28px var(--mood, transparent),
+    0 0 72px color-mix(in oklab, var(--mood, transparent) 55%, transparent);
+}
+
+@keyframes mood-drift {
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to { transform: scale(1.14) translate3d(-1.5%, -1%, 0); }
+}
+
+[data-mood].is-active .mood-backdrop {
+  animation: mood-drift 14s ease-out forwards;
+}
+
+.mood-grain {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-mood].is-active .mood-backdrop { animation: none; }
+}

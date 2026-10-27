@@ -11,26 +11,31 @@ defmodule Roki.Mood do
 
   alias Roki.Browse
 
-  # slug, label, tagline, film genre ids, show genre ids, show keyword ids, accent hue.
+  # slug, label, tagline, film genre ids, show genre ids, show keyword ids, accent hue, and the
+  # typeface its name is set in (Google Fonts, linked from the root layout; `@fonts` below lists
+  # what to ask for there).
   # A film's Thriller or Romance has no genre on TV: TMDB's keyword stands in there, as the
   # Horror filter does on Shows (see `Roki.Genres`).
   @moods [
-    %{slug: "scared", label: "Be scared", tagline: "Lights off. Something is in the hallway.", icon: "👻", movie: [27], tv: [], tv_kw: [315_058], hue: 350},
-    %{slug: "laugh", label: "Laugh", tagline: "No thinking required. Just the good kind of stupid.", icon: "😂", movie: [35], tv: [35], tv_kw: [], hue: 42},
-    %{slug: "love", label: "Fall in love", tagline: "Slow looks, bad timing, a very good last scene.", icon: "💘", movie: [10749], tv: [], tv_kw: [9840], hue: 335},
-    %{slug: "thrill", label: "Feel the thrill", tagline: "Hold your breath. Don't trust anyone.", icon: "🔪", movie: [53], tv: [80, 9648], tv_kw: [], hue: 200},
-    %{slug: "action", label: "Blow things up", tagline: "Loud, fast, and nobody reloads.", icon: "💥", movie: [28], tv: [10759], tv_kw: [], hue: 22},
-    %{slug: "escape", label: "Escape reality", tagline: "Other worlds, other rules, other skies.", icon: "🪐", movie: [14, 878], tv: [10765], tv_kw: [], hue: 268},
-    %{slug: "cry", label: "Have a good cry", tagline: "Tissues within reach. You'll be fine.", icon: "🥲", movie: [18], tv: [18], tv_kw: [], hue: 215},
-    %{slug: "mystery", label: "Solve a mystery", tagline: "Everyone's lying. Figure out who first.", icon: "🕵️", movie: [9648], tv: [9648], tv_kw: [], hue: 245},
-    %{slug: "adventure", label: "Go on an adventure", tagline: "Pack light. Come back different.", icon: "🧭", movie: [12], tv: [10759], tv_kw: [], hue: 150},
-    %{slug: "kid", label: "Feel like a kid", tagline: "Bright, kind, and over before bedtime.", icon: "🎈", movie: [16, 10751], tv: [16, 10762, 10751], tv_kw: [], hue: 48},
-    %{slug: "past", label: "Travel back in time", tagline: "Real people, old wars, better clothes.", icon: "🏛️", movie: [36, 10752], tv: [10768], tv_kw: [], hue: 30},
-    %{slug: "true", label: "Something true", tagline: "It happened. Someone filmed it.", icon: "🎥", movie: [99], tv: [99], tv_kw: [], hue: 185}
+    %{slug: "scared", font: "'Creepster', cursive", label: "Be scared", tagline: "Lights off. Something is in the hallway.", icon: "👻", movie: [27], tv: [], tv_kw: [315_058], hue: 350},
+    %{slug: "laugh", font: "'Bangers', cursive", label: "Laugh", tagline: "No thinking required. Just the good kind of stupid.", icon: "😂", movie: [35], tv: [35], tv_kw: [], hue: 42},
+    %{slug: "love", font: "'Pacifico', cursive", label: "Fall in love", tagline: "Slow looks, bad timing, a very good last scene.", icon: "💘", movie: [10749], tv: [], tv_kw: [9840], hue: 335},
+    %{slug: "thrill", font: "'Special Elite', monospace", label: "Feel the thrill", tagline: "Hold your breath. Don't trust anyone.", icon: "🔪", movie: [53], tv: [80, 9648], tv_kw: [], hue: 200},
+    %{slug: "action", font: "'Black Ops One', system-ui", label: "Blow things up", tagline: "Loud, fast, and nobody reloads.", icon: "💥", movie: [28], tv: [10759], tv_kw: [], hue: 22},
+    %{slug: "escape", font: "'Orbitron', sans-serif", label: "Escape reality", tagline: "Other worlds, other rules, other skies.", icon: "🪐", movie: [14, 878], tv: [10765], tv_kw: [], hue: 268},
+    %{slug: "cry", font: "'Playfair Display', serif", label: "Have a good cry", tagline: "Tissues within reach. You'll be fine.", icon: "🥲", movie: [18], tv: [18], tv_kw: [], hue: 215},
+    %{slug: "mystery", font: "'IM Fell English', serif", label: "Solve a mystery", tagline: "Everyone's lying. Figure out who first.", icon: "🕵️", movie: [9648], tv: [9648], tv_kw: [], hue: 245},
+    %{slug: "adventure", font: "'Rye', serif", label: "Go on an adventure", tagline: "Pack light. Come back different.", icon: "🧭", movie: [12], tv: [10759], tv_kw: [], hue: 150},
+    %{slug: "kid", font: "'Fredoka', sans-serif", label: "Feel like a kid", tagline: "Bright, kind, and over before bedtime.", icon: "🎈", movie: [16, 10751], tv: [16, 10762, 10751], tv_kw: [], hue: 48},
+    %{slug: "past", font: "'Cinzel', serif", label: "Travel back in time", tagline: "Real people, old wars, better clothes.", icon: "🏛️", movie: [36, 10752], tv: [10768], tv_kw: [], hue: 30},
+    %{slug: "true", font: "'Courier Prime', monospace", label: "Something true", tagline: "It happened. Someone filmed it.", icon: "🎥", movie: [99], tv: [99], tv_kw: [], hue: 185}
   ]
 
   @kinds [:all, :movies, :shows, :anime]
   @sorts [popular: "Popular", newest: "Newest", top: "Top rated"]
+
+  @doc "The Google Fonts families the moods' names are set in, as the `family=` query asks for them."
+  def fonts, do: ~w(Creepster Bangers Pacifico Special+Elite Black+Ops+One Orbitron:wght@700 Playfair+Display:ital,wght@1,700 IM+Fell+English Rye Fredoka:wght@700 Cinzel:wght@700 Courier+Prime:wght@700)
 
   def all, do: @moods
   def kinds, do: @kinds
@@ -55,13 +60,13 @@ defmodule Roki.Mood do
     with %{} = mood <- get(slug) || {:error, :no_such_mood},
          sort = if(sort in Keyword.keys(@sorts), do: sort, else: :popular),
          {:ok, {items, more?}} <-
-           Browse.cached_page({:mood, slug, kind, sort, n}, fn -> fetch(mood, kind, sort, n, uuid) end) do
+           Browse.cached_page({:mood, 2, slug, kind, sort, n}, fn -> fetch(mood, kind, sort, n, uuid) end) do
       {:ok, items, more?}
     end
   end
 
   @doc "A mood's page as it is already held, no request: `{:ok, items, more?}` or `:miss`."
-  def peek(slug, kind \\ :all, sort \\ :popular, n \\ 1), do: Browse.peek_page({:mood, slug, kind, sort, n})
+  def peek(slug, kind \\ :all, sort \\ :popular, n \\ 1), do: Browse.peek_page({:mood, 2, slug, kind, sort, n})
 
   @doc """
   The picker's slides: `%{slug => items}`, the first mixed page of every mood with the titles
@@ -152,9 +157,29 @@ defmodule Roki.Mood do
   # The question put to TMDB for one kind: the mood's genres (any of them), the keyword where TV
   # has no genre, anime narrowed to Japanese animation; only what is out, and only what enough
   # people have rated that the top and the newest are not obscure.
-  defp discover(mood, type, sort, n, anime?) do
+  #
+  # "Popular" leans new: what people want tonight is mostly what came out in the last few years,
+  # so it is the popular of those — with the all-time greats of the mood (a high score from very
+  # many people, whatever their age) dealt in one in four, because a classic is a classic.
+  @recent_years 8
+
+  defp discover(mood, type, :popular, n, anime?) do
+    today = Date.utc_today()
+    cutoff = Date.to_iso8601(%{today | year: today.year - @recent_years})
+    date = date_field(type)
+
+    with {:ok, recent, more?} <-
+           ask(mood, type, n, anime?, [sort_by: "popularity.desc", "vote_count.gte": 50, "#{date}.gte": cutoff]),
+         {:ok, classics, _} <-
+           ask(mood, type, n, anime?, [sort_by: "vote_average.desc", "vote_count.gte": classic_votes(type), "#{date}.lt": cutoff]) do
+      {:ok, deal(recent, classics, 3) |> Enum.uniq_by(& &1.id), more?}
+    end
+  end
+
+  defp discover(mood, type, sort, n, anime?), do: ask(mood, type, n, anime?, order_params(sort, date_field(type), type))
+
+  defp ask(mood, type, n, anime?, order) do
     genres = if type == "movie", do: mood.movie, else: mood.tv
-    date = if type == "movie", do: "primary_release_date", else: "first_air_date"
     today = Date.to_iso8601(Date.utc_today())
 
     genre_param =
@@ -169,11 +194,20 @@ defmodule Roki.Mood do
     lang_param = if anime?, do: [with_original_language: "ja"], else: []
     adult = if type == "movie", do: [include_adult: false], else: []
 
-    params =
-      [page: n, "#{date}.lte": today] ++ genre_param ++ kw_param ++ lang_param ++ adult ++ order_params(sort, date, type)
-
-    Browse.discover(type, params)
+    Browse.discover(type, [page: n, "#{date_field(type)}.lte": today] ++ genre_param ++ kw_param ++ lang_param ++ adult ++ order)
   end
+
+  defp date_field("movie"), do: "primary_release_date"
+  defp date_field(_tv), do: "first_air_date"
+
+  # Enough ratings that a great score means a great many people, not a fan club.
+  defp classic_votes("movie"), do: 2500
+  defp classic_votes(_tv), do: 600
+
+  # `every` of the first list, then one of the second, until both are out.
+  defp deal(main, [], _every), do: main
+  defp deal([], extra, _every), do: extra
+  defp deal(main, [x | extra], every), do: Enum.take(main, every) ++ [x | deal(Enum.drop(main, every), extra, every)]
 
   defp order_params(:popular, _date, _type), do: [sort_by: "popularity.desc", "vote_count.gte": 20]
   defp order_params(:newest, date, _type), do: [sort_by: "#{date}.desc", "vote_count.gte": 20]

@@ -202,7 +202,9 @@ defmodule RokiWeb.MoodLive do
           </.link>
           <div>
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Tonight I want to</p>
-            <h1 class="text-4xl font-black leading-none tracking-tight sm:text-6xl">{@mood.label}</h1>
+            <h1 class="mood-title text-5xl leading-none tracking-tight sm:text-7xl" style={"font-family: #{@mood.font}; --mood: hsl(#{@hue} 90% 70%)"}>
+              {@mood.label}
+            </h1>
             <p class="mt-2 max-w-xl text-white/80">{@mood.tagline}</p>
           </div>
 
@@ -211,7 +213,7 @@ defmodule RokiWeb.MoodLive do
               <.icon name="hero-magnifying-glass" class="h-5 w-5 shrink-0 opacity-70" />
               <input type="search" name="q" value={@q} placeholder={"Looking for something in particular? Search #{String.downcase(@mood.label)}…"} autocomplete="off" class="w-full bg-transparent text-white placeholder:text-white/60 focus:outline-none" />
             </label>
-            <button type="submit" class="btn h-12 rounded-2xl border-0 bg-white text-base-content hover:bg-white/90">Find</button>
+            <button type="submit" class="btn h-12 rounded-2xl border-0 bg-white text-neutral-900 hover:bg-white/90">Find</button>
           </form>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -222,7 +224,7 @@ defmodule RokiWeb.MoodLive do
                 phx-click="kind"
                 phx-value-kind={k}
                 aria-pressed={to_string(@kind == k)}
-                class={["rounded-full px-3.5 py-1.5 text-sm font-semibold transition", @kind == k && "bg-white text-base-content shadow", @kind != k && "text-white/80 hover:text-white"]}
+                class={["rounded-full px-3.5 py-1.5 text-sm font-semibold transition", @kind == k && "bg-white text-neutral-900 shadow", @kind != k && "text-white/80 hover:text-white"]}
               >
                 {label}
               </button>
@@ -234,7 +236,7 @@ defmodule RokiWeb.MoodLive do
                 phx-click="sort"
                 phx-value-sort={s}
                 aria-pressed={to_string(@sort == s)}
-                class={["rounded-full px-3.5 py-1.5 text-sm font-semibold transition", @sort == s && "bg-white text-base-content shadow", @sort != s && "text-white/80 hover:text-white"]}
+                class={["rounded-full px-3.5 py-1.5 text-sm font-semibold transition", @sort == s && "bg-white text-neutral-900 shadow", @sort != s && "text-white/80 hover:text-white"]}
               >
                 {label}
               </button>
