@@ -685,35 +685,52 @@ defmodule RokiWeb.TitleLive do
   attr :lib, :map, required: true
   attr :mal, :any, default: nil
 
-  # The top of the episodes page: where you are, and a way back to the title.
+  # The top of the episodes page: where you are, and a way back to the title — a banner like the
+  # title page's, smaller.
   defp episodes_header(assigns) do
     ~H"""
-    <div class="relative flex items-center gap-4">
-      <.link navigate={~p"/title/tv/#{@title.id}"} class="shrink-0" aria-label="Back to the title">
+    <div class="relative isolate overflow-visible rounded-3xl border border-base-300/70 bg-base-200">
+      <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl">
         <img
-          :if={@title.poster}
-          src={Roki.Images.local(@title.poster)}
-          alt={@title.title}
-          class="aspect-[2/3] w-16 rounded-lg bg-base-300 object-cover shadow sm:w-20"
+          :if={@title.backdrop}
+          src={Roki.Images.local(@title.backdrop)}
+          alt=""
+          class="h-full w-full object-cover opacity-60"
         />
-      </.link>
-      <div class="min-w-0 flex-1">
-        <.link
-          navigate={~p"/title/tv/#{@title.id}"}
-          class="text-sm text-base-content/60 hover:text-primary"
-        >
-          ← Back to the title
-        </.link>
-        <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">{@title.title}</h1>
+        <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55"></div>
       </div>
-      <.link
-        :if={@play.continue?}
-        navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
-        class="btn btn-primary"
-      >
-        <.icon name="hero-play-solid" class="h-5 w-5" /> {@play.verb} {@play.label}
-      </.link>
-      <.more_menu id="more-menu-eps" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
+
+      <div class="flex flex-wrap items-center gap-4 p-4 sm:flex-nowrap sm:gap-6 sm:p-6">
+        <.link navigate={~p"/title/tv/#{@title.id}"} class="shrink-0" aria-label="Back to the title">
+          <img
+            :if={@title.poster}
+            src={Roki.Images.local(@title.poster)}
+            alt={@title.title}
+            class="aspect-[2/3] w-16 rounded-xl bg-base-300 object-cover shadow-xl ring-1 ring-black/10 sm:w-24"
+          />
+        </.link>
+        <div class="min-w-0 flex-1 space-y-1.5 basis-40">
+          <.link
+            navigate={~p"/title/tv/#{@title.id}"}
+            class="inline-flex items-center gap-1 whitespace-nowrap text-sm text-base-content/60 hover:text-primary"
+          >
+            <.icon name="hero-chevron-left-micro" class="h-4 w-4" /> The title
+          </.link>
+          <h1 class="text-2xl font-bold leading-tight tracking-tight sm:text-4xl">{@title.title}</h1>
+          <p class="hidden text-sm text-base-content/60 sm:block">{meta(@title)}</p>
+          <p class="text-xs text-base-content/60 sm:hidden">{[@title.year, seasons_text(@title)] |> Enum.filter(& &1) |> Enum.join(" · ")}</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2 max-sm:w-full">
+          <.link
+            :if={@play.continue?}
+            navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
+            class="btn btn-primary h-11 rounded-xl px-4 shadow-md max-sm:flex-1 sm:h-12 sm:px-6"
+          >
+            <.icon name="hero-play-solid" class="h-5 w-5" /> {@play.verb} {@play.label}
+          </.link>
+          <.more_menu id="more-menu-eps" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
+        </div>
+      </div>
     </div>
     """
   end
@@ -919,7 +936,7 @@ defmodule RokiWeb.TitleLive do
         icon="check-circle"
         on_class="btn-success"
         busy={@busy}
-        label={if watched_state?(@title, @lib), do: watched_label(@title, @lib), else: watched_label(@title, @lib)}
+        label={pill_watched_label(@title, @lib)}
         title={
           if watched_state?(@title, @lib),
             do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
@@ -930,7 +947,7 @@ defmodule RokiWeb.TitleLive do
       <%!-- TMDB's average, and — once you have rated it — yours beside it in another colour. --%>
       <button
         phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-        class="btn btn-sm h-10 gap-2 rounded-full px-4"
+        class="btn btn-sm h-10 w-40 gap-2 rounded-full px-4"
         title={if @rating.value, do: "Your rating — click to change it", else: "Rate it on TMDB"}
         aria-label="Rate it"
       >
@@ -956,7 +973,7 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn btn-sm h-10 gap-2 rounded-full px-4", @on && @on_class]}
+      class={["btn btn-sm h-10 w-40 gap-2 whitespace-nowrap rounded-full px-4", @on && @on_class]}
       title={@title}
       aria-label={@title}
     >
@@ -1038,6 +1055,11 @@ defmodule RokiWeb.TitleLive do
 
   defp watched_state?(%{type: "movie"}, lib), do: lib.watched?
   defp watched_state?(_title, lib), do: lib.all_watched?
+
+  # The same, short enough for a pill of one width.
+  defp pill_watched_label(%{type: "movie"} = title, lib), do: watched_label(title, lib)
+  defp pill_watched_label(_title, %{all_watched?: true}), do: "Completed"
+  defp pill_watched_label(_title, _lib), do: "Mark completed"
 
   defp watched_label(%{type: "movie"}, %{watched?: true}), do: "Watched"
   defp watched_label(%{type: "movie"}, _lib), do: "Mark watched"
@@ -1185,8 +1207,6 @@ defmodule RokiWeb.TitleLive do
   defp episodes(assigns) do
     ~H"""
     <section class="space-y-4">
-      <h2 class="text-xl font-semibold">Episodes</h2>
-
       <%!-- The season: which one, and the whole of it watched — the dropdown, and the same
             square watched button the episode rows carry. --%>
       <div class="flex gap-2">
@@ -1199,7 +1219,7 @@ defmodule RokiWeb.TitleLive do
           <select
             name="season"
             aria-label="Season"
-            class="select select-bordered select-primary h-14 w-full text-lg font-semibold"
+            class="select select-bordered h-12 w-full rounded-xl text-base font-semibold sm:text-lg"
           >
             <option
               :for={sec <- @sections}
@@ -1219,7 +1239,7 @@ defmodule RokiWeb.TitleLive do
           :if={@can_play? and @rating.state == :ok and @rating.provider == :mal}
           type="button"
           phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-          class="btn h-14 shrink-0 gap-1.5 px-4"
+          class="btn h-12 shrink-0 gap-1.5 rounded-xl px-4"
           title="Rate this season on MyAnimeList"
           aria-label="Rate this season"
         >
@@ -1231,7 +1251,7 @@ defmodule RokiWeb.TitleLive do
           :if={@can_play? and is_list(@episodes) and @episodes != []}
           phx-click="toggle_season"
           class={[
-            "btn btn-square h-14 w-14 shrink-0",
+            "btn btn-square h-12 w-12 shrink-0 rounded-xl",
             season_all_watched?(@episodes, @watched) && "btn-success"
           ]}
           title={
@@ -1261,12 +1281,12 @@ defmodule RokiWeb.TitleLive do
       </div>
       <p :if={@episodes == []} class="text-base-content/60">No episodes listed for this season.</p>
 
-      <ul :if={is_list(@episodes)} class="divide-y divide-base-300 rounded-box border border-base-300">
+      <ul :if={is_list(@episodes)} class="space-y-2">
         <li
           :for={e <- @episodes}
           class={[
-            "relative flex items-center gap-3 p-3",
-            MapSet.member?(@watched, e.number) && "bg-base-200"
+            "relative flex items-center gap-3 rounded-2xl border border-base-300 bg-base-100 p-3 transition hover:border-base-content/20",
+            MapSet.member?(@watched, e.number) && "bg-base-200/60"
           ]}
         >
           <%!-- The whole row is one link to this episode's sources (a stretched link under the two
@@ -1275,7 +1295,7 @@ defmodule RokiWeb.TitleLive do
             "flex min-w-0 flex-1 gap-3",
             MapSet.member?(@watched, e.number) && "opacity-45 grayscale"
           ]}>
-            <div class="hidden h-[4.5rem] w-32 shrink-0 overflow-hidden rounded bg-base-300 sm:block">
+            <div class="hidden h-[4.5rem] w-32 shrink-0 overflow-hidden rounded-xl bg-base-300 sm:block">
               <img
                 :if={e.still}
                 src={Roki.Images.local(e.still)}
@@ -1318,7 +1338,7 @@ defmodule RokiWeb.TitleLive do
               phx-value-season={@season}
               phx-value-episode={e.number}
               class={[
-                "btn btn-square h-14 w-14",
+                "btn btn-square h-12 w-12 rounded-xl",
                 MapSet.member?(@watched, e.number) && "btn-success"
               ]}
               title={
@@ -1341,7 +1361,7 @@ defmodule RokiWeb.TitleLive do
             </button>
             <.link
               navigate={~p"/sources/tv/#{@title_id}/#{@season}/#{e.number}?#{[auto: 1]}"}
-              class="btn btn-primary h-14 w-14 px-0 text-base sm:w-auto sm:px-6"
+              class="btn btn-primary h-12 w-12 rounded-xl px-0 text-base sm:w-auto sm:px-6"
               aria-label="Play"
             >
               <.icon name="hero-play-solid" class="h-7 w-7" />
