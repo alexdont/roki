@@ -110,6 +110,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:results, %{})
           |> assign(:sync, nil)
           |> assign(:mal, %{status: :loading, url: nil, error: nil, busy: false})
+          |> assign(:tmdb, %{status: :loading, note: nil})
           |> assign(:carrying?, false)
           |> assign(:server, nil)
           |> assign(:busy, nil)
@@ -138,6 +139,7 @@ defmodule RokiWeb.SettingsLive do
     |> start_async(:sync_status, fn -> Laev.sync_status(uuid) end)
     |> start_async(:web, fn -> Laev.web_settings(uuid) end)
     |> start_async(:mal, fn -> Laev.mal_status(uuid) end)
+    |> start_async(:tmdb, fn -> Laev.tmdb_status(uuid) end)
     |> start_async(:os, fn -> Laev.os_login(uuid) end)
   end
 
@@ -286,6 +288,17 @@ defmodule RokiWeb.SettingsLive do
     end
   end
 
+  # TMDB: linking goes through the site's own pages (/tmdb/link and back); unlinking is here.
+  def handle_event("tmdb_logout", _params, socket) do
+    {:ok, synced?} = Laev.tmdb_logout(socket.assigns.uuid)
+
+    note =
+      if synced?,
+        do: "Unlinked here. Your laev key carries keys between devices, so another device that still has it can bring it back on a sync."
+
+    {:noreply, assign(socket, :tmdb, %{status: %{linked?: false, username: nil}, note: note})}
+  end
+
   def handle_event("mal_logout", _params, socket) do
     Laev.mal_logout(socket.assigns.uuid)
 
@@ -370,6 +383,11 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_async(:auto_sync, {:exit, _}, socket),
     do: {:noreply, assign(socket, auto_sync: :failed)}
+
+  def handle_async(:tmdb, {:ok, status}, socket),
+    do: {:noreply, update(socket, :tmdb, &%{&1 | status: status})}
+
+  def handle_async(:tmdb, _other, socket), do: {:noreply, update(socket, :tmdb, &%{&1 | status: %{linked?: false, username: nil}})}
 
   def handle_async(:mal, {:ok, status}, socket),
     do: {:noreply, update(socket, :mal, &%{&1 | status: status})}
@@ -601,6 +619,8 @@ defmodule RokiWeb.SettingsLive do
             <p :if={match?({:error, _}, @os_msg)} class="text-sm text-error">{elem(@os_msg, 1)}</p>
           </form>
         </section>
+
+        <.tmdb_section :if={@state == :ready} tmdb={@tmdb} username={@username} />
 
         <.mal_section :if={@state == :ready} mal={@mal} />
 
@@ -951,6 +971,50 @@ defmodule RokiWeb.SettingsLive do
       <p :if={match?({:ok, _}, @result)} class="text-sm text-success">✓ {elem(@result, 1)}</p>
       <p :if={match?({:error, _}, @result)} class="text-sm text-error">✗ {elem(@result, 1)}</p>
     </div>
+    """
+  end
+
+  attr :tmdb, :map, required: true
+  attr :username, :string, required: true
+
+  # TMDB: where film and show ratings are saved, on the person's own account.
+  defp tmdb_section(assigns) do
+    ~H"""
+    <section class="space-y-3">
+      <h2 class="text-xl font-semibold">TMDB</h2>
+
+      <p :if={@tmdb.status == :loading} class="text-sm text-base-content/60">Checking…</p>
+
+      <div :if={is_map(@tmdb.status) and @tmdb.status.linked?} class="space-y-2">
+        <p>
+          <span class="text-success">✓ Linked</span>
+          <span :if={@tmdb.status.username}> as <strong>{@tmdb.status.username}</strong></span>
+        </p>
+        <p class="text-sm text-base-content/60">
+          Your film and show ratings are saved on this TMDB account, and shown here from it.
+        </p>
+        <button
+          phx-click="tmdb_logout"
+          data-confirm="Unlink your TMDB account from this site? Your ratings stay on TMDB."
+          class="btn btn-sm btn-ghost text-error"
+        >
+          Unlink
+        </button>
+      </div>
+
+      <div :if={is_map(@tmdb.status) and not @tmdb.status.linked?} class="space-y-3">
+        <p class="text-sm text-base-content/70">
+          Film and show ratings are saved on your own TMDB account, so they stay yours. It is free:
+          make one at themoviedb.org if you do not have one, then link it here. Each TMDB account
+          can be linked by one person.
+        </p>
+        <a href={~p"/tmdb/link?#{[return: "/#{@username}/settings"]}"} class="btn btn-primary btn-sm">
+          Link my TMDB account
+        </a>
+      </div>
+
+      <p :if={@tmdb.note} class="text-sm text-base-content/60">{@tmdb.note}</p>
+    </section>
     """
   end
 

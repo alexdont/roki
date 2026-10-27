@@ -543,6 +543,27 @@ defmodule Roki.Laev do
     end)
   end
 
+  @doc "Whether a TMDB account is linked, and whose: `%{linked?:, username:}`. TMDB is asked who."
+  def tmdb_status(uuid) do
+    run(uuid, fn ->
+      linked? = Laev.Tmdb.account?()
+      %{linked?: linked?, username: if(linked?, do: Laev.Tmdb.account_name())}
+    end)
+  end
+
+  @doc """
+  Unlink the TMDB account from this one: its session goes, and so does the copy of its ratings
+  kept here (the rating belongs to the account it was made on). `{:ok, synced?}` — `synced?` is
+  true when the laev key carries keys between devices, which can bring the session back from a
+  device that still has it.
+  """
+  def tmdb_logout(uuid) do
+    synced? = run(uuid, fn -> Laev.Sync.keys_enabled?() end)
+    :ok = run(uuid, fn -> Laev.Config.write([{"TMDB_SESSION_ID", ""}]) end)
+    Roki.Profile.forget_tmdb_ratings(uuid)
+    {:ok, synced?}
+  end
+
   @pending_ttl 15 * 60
   @mal_auth "https://myanimelist.net/v1/oauth2/authorize"
   @mal_token "https://myanimelist.net/v1/oauth2/token"

@@ -54,6 +54,31 @@ defmodule RokiWeb.SettingsLiveTest do
     refute render(view) =~ "Auto-pick"
   end
 
+  test "without a TMDB account the page offers to link one, and says where to come back to", %{conn: conn, user: user} do
+    connect!(user)
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    html = render_async(view, 3000)
+
+    assert html =~ "TMDB"
+    assert html =~ "Link my TMDB account"
+    assert html =~ ~s(href="/tmdb/link?return=%2Fsettingstest%2Fsettings")
+    refute html =~ "Unlink"
+  end
+
+  test "unlinking takes the session and the copied TMDB ratings, and keeps the MyAnimeList ones", %{user: user} do
+    dir = connect!(user)
+    File.write!(Path.join(dir, "config"), File.read!(Path.join(dir, "config")) <> "TMDB_SESSION_ID=abc123\n")
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    for {type, id} <- [{"movie", 1}, {"tv", 2}, {"mal", 3}] do
+      Roki.Repo.query!("insert into roki_ratings (user_uuid, type, id, score) values ($1, $2, $3, 8)", [bin, type, id])
+    end
+
+    assert {:ok, false} = Roki.Laev.tmdb_logout(user.uuid)
+    assert Map.get(Laev.Config.read_dir(dir), :tmdb_session) in [nil, ""]
+    assert Roki.Profile.ratings(user.uuid) |> Map.keys() == [{"mal", 3}]
+  end
+
   test "the settings are laid out by group, with laev's own labels", %{conn: conn, user: user} do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")

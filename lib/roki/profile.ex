@@ -941,6 +941,14 @@ defmodule Roki.Profile do
   # read than ratings taken back; on 2026-10-27 one such read erased a few hundred of a user's
   # ratings. A short answer is merged in (what it holds is kept, nothing is deleted) and the copy
   # is not marked fresh, so the next look tries again.
+  @doc "Drop the copy of this account's TMDB ratings (films and shows); MyAnimeList ones stay."
+  def forget_tmdb_ratings(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    Repo.query!("delete from roki_ratings where user_uuid = $1 and type in ('movie', 'tv')", [bin])
+    TTLCache.delete({:ratings_refresh, uuid})
+    :ok
+  end
+
   defp replace_ratings(uuid, rows) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
