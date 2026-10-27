@@ -598,6 +598,20 @@ defmodule RokiWeb.TitleLive do
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
+        <%!-- What people here have said about it: comments, a thread of replies. One thread for the
+              title, the same for everyone, right under the Play controls. Plain text, so it needs no
+              editor script. --%>
+        <section :if={@title.type in ["movie", "tv"]} class="space-y-3" aria-label="Comments">
+          <.live_component
+            module={PhoenixKitComments.Web.CommentsComponent}
+            id="title-comments"
+            resource_type="title"
+            resource_uuid={Roki.Social.title_uuid(@title.type, @title.id)}
+            current_user={assigns[:phoenix_kit_current_user]}
+            rich_text={false}
+          />
+        </section>
+
         <%!-- A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
         <section :if={@similar != []} class="hidden space-y-3 sm:block" aria-label="More like this">
           <h2 class="text-lg font-semibold">More like this</h2>
@@ -610,19 +624,6 @@ defmodule RokiWeb.TitleLive do
               />
             </li>
           </ul>
-        </section>
-
-        <%!-- What people here have said about it: comments, a thread of replies. One thread for the
-              title, the same for everyone. Plain text, so it needs no editor script. --%>
-        <section :if={@title.type in ["movie", "tv"]} class="space-y-3" aria-label="Comments">
-          <.live_component
-            module={PhoenixKitComments.Web.CommentsComponent}
-            id="title-comments"
-            resource_type="title"
-            resource_uuid={Roki.Social.title_uuid(@title.type, @title.id)}
-            current_user={assigns[:phoenix_kit_current_user]}
-            rich_text={false}
-          />
         </section>
 
         <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
