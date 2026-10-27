@@ -932,40 +932,61 @@ defmodule Roki.Profile do
     end)
   end
 
+  # The copy is rewritten from what TMDB and MyAnimeList say — unless that is much smaller than
+  # the copy it would replace. Laev's TMDB paging hands back whatever pages it got when one
+  # fails, with no sign that it stopped early, so a short answer is far likelier to be a failed
+  # read than ratings taken back; on 2026-10-27 one such read erased a few hundred of a user's
+  # ratings. A short answer is merged in (what it holds is kept, nothing is deleted) and the copy
+  # is not marked fresh, so the next look tries again.
   defp replace_ratings(uuid, rows) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
+    rows = Enum.uniq_by(rows, fn {type, id, _, _} -> {type, id} end)
 
-    Repo.transaction(fn ->
-      Repo.query!("delete from roki_ratings where user_uuid = $1", [bin])
+    {:ok, outcome} =
+      Repo.transaction(fn ->
+        %{rows: [[old]]} = Repo.query!("select count(*) from roki_ratings where user_uuid = $1", [bin])
+        partial? = old >= 20 and length(rows) < old * 0.9
 
-      rows
-      |> Enum.uniq_by(fn {type, id, _, _} -> {type, id} end)
-      |> Enum.chunk_every(500)
-      |> Enum.each(fn chunk ->
-        {values, params} =
-          chunk
-          |> Enum.with_index()
-          |> Enum.map_reduce([], fn {{type, id, score, at}, i} , acc ->
-            n = i * 4
-            {"($1, $#{n + 2}, $#{n + 3}, $#{n + 4}, $#{n + 5})", acc ++ [type, id, score, at]}
-          end)
+        if partial? do
+          require Logger
+          Logger.warning("ratings read for #{uuid} returned #{length(rows)}, copy holds #{old}: merged, not replaced")
+        else
+          Repo.query!("delete from roki_ratings where user_uuid = $1", [bin])
+        end
 
-        Repo.query!(
-          "insert into roki_ratings (user_uuid, type, id, score, rated_at) values " <> Enum.join(values, ", "),
-          [bin | params]
-        )
+        rows
+        |> Enum.chunk_every(500)
+        |> Enum.each(fn chunk ->
+          {values, params} =
+            chunk
+            |> Enum.with_index()
+            |> Enum.map_reduce([], fn {{type, id, score, at}, i}, acc ->
+              n = i * 4
+              {"($1, $#{n + 2}, $#{n + 3}, $#{n + 4}, $#{n + 5})", acc ++ [type, id, score, at]}
+            end)
+
+          Repo.query!(
+            "insert into roki_ratings (user_uuid, type, id, score, rated_at) values " <>
+              Enum.join(values, ", ") <>
+              " on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = coalesce(excluded.rated_at, roki_ratings.rated_at)",
+            [bin | params]
+          )
+        end)
+
+        unless partial? do
+          Repo.query!(
+            """
+            insert into roki_profiles (user_uuid, ratings_synced_at, inserted_at, updated_at) values ($1, $2, $2, $2)
+            on conflict (user_uuid) do update set ratings_synced_at = excluded.ratings_synced_at
+            """,
+            [bin, now]
+          )
+        end
+
+        if partial?, do: :partial, else: :replaced
       end)
 
-      Repo.query!(
-        """
-        insert into roki_profiles (user_uuid, ratings_synced_at, inserted_at, updated_at) values ($1, $2, $2, $2)
-        on conflict (user_uuid) do update set ratings_synced_at = excluded.ratings_synced_at
-        """,
-        [bin, now]
-      )
-    end)
-
-    :ok
+    outcome
   end
 end
