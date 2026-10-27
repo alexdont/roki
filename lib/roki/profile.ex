@@ -190,6 +190,18 @@ defmodule Roki.Profile do
   minutes". `{:error, why}` when laev's stats cannot be had.
   """
   def hours(uuid) when is_binary(uuid) do
+    with {:ok, %{totals: totals}} <- totals(uuid) do
+      {:ok, %{hours: div(totals.seconds || 0, 3600), episodes: totals.episodes}}
+    end
+  end
+
+  @doc """
+  Laev's statistics summary with the profile's own reckoning laid over its totals: every
+  finished film at least its whole runtime, and the film count taken from what is finished
+  here. The home page and the profile both read this, so the two never show different numbers
+  for the same person. `{:error, why}` when laev's stats cannot be had.
+  """
+  def totals(uuid) when is_binary(uuid) do
     with {:ok, %{totals: totals} = summary} <- Roki.Stats.summary(uuid) do
       billed = Map.get(summary, :films, %{})
       ids = for i <- history(uuid), i.type == "movie", do: i.id
@@ -210,7 +222,7 @@ defmodule Roki.Profile do
           end
         end)
 
-      {:ok, %{hours: div((totals.seconds || 0) + topped, 3600), episodes: totals.episodes}}
+      {:ok, %{summary | totals: %{totals | seconds: (totals.seconds || 0) + topped, films: length(ids)}}}
     end
   end
 
