@@ -30,7 +30,50 @@ defmodule Roki.Images do
   def init(_) do
     :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
     load()
-    {:ok, nil}
+    {:ok, %{}}
+  end
+
+  # A picture is fetched once however many pages ask for it at the same time, and by a task of
+  # its own: a browser that gives up on the request (the page swapped the picture's address, the
+  # tab scrolled on) must not kill the fetch half-way and leave the picture neither held nor
+  # lost, which is what left posters grey until the page was reloaded.
+  @impl true
+  def handle_call({:fetch, key, url}, from, state) do
+    case state do
+      %{^key => waiting} ->
+        {:noreply, Map.put(state, key, [from | waiting])}
+
+      _ ->
+        server = self()
+
+        Task.start(fn ->
+          result =
+            try do
+              fetch(key, url)
+            rescue
+              e -> {:error, e}
+            end
+
+          send(server, {:fetched, key, result})
+        end)
+
+        {:noreply, Map.put(state, key, [from])}
+    end
+  end
+
+  @impl true
+  def handle_info({:fetched, key, result}, state) do
+    {waiting, state} = Map.pop(state, key, [])
+    for from <- waiting, do: GenServer.reply(from, result)
+    {:noreply, state}
+  end
+
+  def handle_info(_msg, state), do: {:noreply, state}
+
+  defp fetch_once(key, url) do
+    GenServer.call(__MODULE__, {:fetch, key, url}, 30_000)
+  catch
+    :exit, _ -> {:error, :timeout}
   end
 
   # Every picture held, into memory: a few thousand small rows.
@@ -159,7 +202,7 @@ defmodule Roki.Images do
       {key, source_url} ->
         case :ets.lookup(@table, key) do
           [{_, uuid}] -> {:ok, Roki.Media.url(uuid, variant_for(source_url))}
-          [] -> with {:ok, uuid} <- fetch(key, master(source_url)), do: {:ok, Roki.Media.url(uuid, variant_for(source_url))}
+          [] -> with {:ok, uuid} <- fetch_once(key, master(source_url)), do: {:ok, Roki.Media.url(uuid, variant_for(source_url))}
         end
     end
   end

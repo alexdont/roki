@@ -68,6 +68,23 @@ function deviceCaps() {
   } catch { return {} }
 }
 
+// A picture that fails to arrive (the connection dropped it, the server was busy fetching it)
+// is asked for again, a few times, a little later — a grey poster should fill in by itself, not
+// wait for a reload. `error` does not bubble, so it is caught on the way down.
+document.addEventListener("error", (e) => {
+  const img = e.target
+  if (!(img instanceof HTMLImageElement) || !img.src) return
+  const tries = Number(img.dataset.retries || 0)
+  if (tries >= 4) return
+  img.dataset.retries = String(tries + 1)
+  const src = img.currentSrc || img.src
+  setTimeout(() => {
+    if (!img.isConnected || (img.complete && img.naturalWidth > 0)) return
+    img.removeAttribute("src")
+    img.src = src
+  }, 800 * (tries + 1))
+}, true)
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: () => ({
