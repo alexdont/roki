@@ -935,8 +935,8 @@ defmodule Roki.Profile do
     end)
   end
 
-  # The copy is rewritten from what TMDB and MyAnimeList say — unless that is much smaller than
-  # the copy it would replace. Laev's TMDB paging hands back whatever pages it got when one
+  # The copy is rewritten from what TMDB and MyAnimeList say — unless that is smaller than the
+  # copy it would replace by more than a few ratings. Laev's TMDB paging hands back whatever pages it got when one
   # fails, with no sign that it stopped early, so a short answer is far likelier to be a failed
   # read than ratings taken back; on 2026-10-27 one such read erased a few hundred of a user's
   # ratings. A short answer is merged in (what it holds is kept, nothing is deleted) and the copy
@@ -957,7 +957,9 @@ defmodule Roki.Profile do
     {:ok, outcome} =
       Repo.transaction(fn ->
         %{rows: [[old]]} = Repo.query!("select count(*) from roki_ratings where user_uuid = $1", [bin])
-        partial? = old >= 20 and length(rows) < old * 0.9
+        # A failed page costs twenty ratings, so anything more than a few fewer than the copy
+        # already holds is taken for a failed read; a handful taken back on TMDB is not.
+        partial? = old >= 20 and length(rows) < old - max(3, round(old * 0.005))
 
         if partial? do
           require Logger
