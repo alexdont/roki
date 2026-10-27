@@ -593,25 +593,19 @@ defmodule RokiWeb.TitleLive do
           lib={@lib}
           lib_busy={@lib_busy}
           cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
-        />
+        >
+          <.title_comments :if={@title.type in ["movie", "tv"]} id="title-comments" title={@title} user={assigns[:phoenix_kit_current_user]} />
+        </.hero>
 
         <.study_sheet :if={@linked? and @study} title={@title} study={@study} />
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
-        <%!-- What people here have said about it: comments, a thread of replies. One thread for the
-              title, the same for everyone, right under the Play controls. Plain text, so it needs no
-              editor script. --%>
-        <section :if={@title.type in ["movie", "tv"]} class="space-y-3" aria-label="Comments">
-          <.live_component
-            module={PhoenixKitComments.Web.CommentsComponent}
-            id="title-comments"
-            resource_type="title"
-            resource_uuid={Roki.Social.title_uuid(@title.type, @title.id)}
-            current_user={assigns[:phoenix_kit_current_user]}
-            rich_text={false}
-          />
-        </section>
+        <%!-- A phone has one column, so its comments come after the details. A wide screen has them
+              in the hero, under the Play controls. --%>
+        <div :if={@title.type in ["movie", "tv"]} class="sm:hidden">
+          <.title_comments id="title-comments-phone" title={@title} user={assigns[:phoenix_kit_current_user]} />
+        </div>
 
         <%!-- A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
         <section :if={@similar != []} class="hidden space-y-3 sm:block" aria-label="More like this">
@@ -707,6 +701,27 @@ defmodule RokiWeb.TitleLive do
     """
   end
 
+  attr :id, :string, required: true
+  attr :title, :map, required: true
+  attr :user, :any, default: nil
+
+  # What people here have said about the title: comments, a thread of replies. One thread for the
+  # title, the same for everyone. Plain text, so it needs no editor script.
+  defp title_comments(assigns) do
+    ~H"""
+    <section class="space-y-3" aria-label="Comments">
+      <.live_component
+        module={PhoenixKitComments.Web.CommentsComponent}
+        id={@id}
+        resource_type="title"
+        resource_uuid={Roki.Social.title_uuid(@title.type, @title.id)}
+        current_user={@user}
+        rich_text={false}
+      />
+    </section>
+    """
+  end
+
   attr :cached?, :boolean, default: false
   attr :title, :map, required: true
   attr :resume, :any, default: nil
@@ -724,6 +739,9 @@ defmodule RokiWeb.TitleLive do
   attr :rating, :map, required: true
   attr :mal, :any, default: nil
   attr :study, :map, default: nil
+
+  slot :inner_block,
+    doc: "more for the right-hand column, under the Play controls (the comments, on a wide screen)"
 
   defp hero(assigns) do
     ~H"""
@@ -793,6 +811,9 @@ defmodule RokiWeb.TitleLive do
             </span>
           </div>
         </div>
+
+        <%!-- Under Play, in the room the poster's column leaves beside the Save and Rate buttons. --%>
+        {render_slot(@inner_block)}
       </div>
     </section>
     """
