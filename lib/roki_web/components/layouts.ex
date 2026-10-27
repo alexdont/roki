@@ -78,7 +78,7 @@ defmodule RokiWeb.Layouts do
       |> assign(:sections, sections)
 
     ~H"""
-    <header class="relative border-b border-base-300/60">
+    <header class="site-header relative border-b border-base-300/60">
       <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-1 px-3 sm:px-6 lg:px-8">
         <a
           href={~p"/home"}

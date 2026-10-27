@@ -51,7 +51,7 @@ defmodule RokiWeb.PosterComponents do
       )
 
     ~H"""
-    <.card href={@href} class={["group block space-y-1", @watched? && "opacity-50"]}>
+    <.card href={@href} class={["poster-card group block space-y-1", @watched? && "opacity-50"]}>
       <div
         class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow"
         data-peek={peek_key(@item)}
