@@ -172,6 +172,46 @@ defmodule RokiWeb.ProfileLiveTest do
     assert Enum.map(Roki.Profile.favorites(user.uuid).movie, & &1.id) == [2]
   end
 
+  test "the watched page also lists what was started and not finished, marked, and not selectable" do
+    user = register("halfway")
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    for {id, title, status, note} <- [{1, "Done Film", "finished", nil}, {2, "Half Show", "progress", "2/5 seasons"}, {3, "Current Show", "up_to_date", "3/3 seasons"}] do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated, status, note) values ($1, $2, $3, $2, $3, $4, false, now(), true, $5, $6)",
+        [bin, if(id == 1, do: "movie", else: "tv"), id, title, status, note]
+      )
+    end
+
+    # The finished history stays finished-only: counts, hours and shelf pickers read it.
+    assert Roki.Profile.history(user.uuid) |> Enum.map(& &1.title) == ["Done Film"]
+    assert Roki.Profile.history_all(user.uuid) |> length() == 3
+
+    {:ok, view, _} = live(signed_in(user), "/halfway/watched")
+    html = render_async(view)
+    assert html =~ "Half Show"
+    assert html =~ "In progress"
+    assert html =~ "Up to date"
+
+    # The count follows the status filter.
+    {:ok, view, _} = live(signed_in(user), "/halfway/watched?status=progress")
+    html = render_async(view)
+    assert html =~ "Half Show"
+    refute html =~ "Done Film"
+    refute html =~ "Current Show"
+
+    # Select mode only takes finished titles.
+    {:ok, view, _} = live(signed_in(user), "/halfway/watched")
+    render_async(view)
+    view |> element("button[phx-click=select_mode]") |> render_click()
+    assert has_element?(view, "button[phx-click=select_toggle][phx-value-key='movie:1']")
+    refute has_element?(view, "button[phx-click=select_toggle][phx-value-key='tv:2']")
+    render_click(view, "select_toggle", %{"key" => "tv:2"})
+    assert render(view) =~ "0</b> selected"
+    render_click(view, "select_all", %{})
+    assert render(view) =~ "1</b> selected"
+  end
+
   test "the watched page: rows and a grid, and only the owner selects, backdates and removes" do
     user = register("historian")
     other = register("visitor")

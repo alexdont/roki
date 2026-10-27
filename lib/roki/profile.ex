@@ -170,6 +170,17 @@ defmodule Roki.Profile do
   """
   def history(uuid) when is_binary(uuid) do
     sync_watched(uuid)
+    Enum.filter(read_watched(uuid), &(&1.status == "finished"))
+  end
+
+  @doc """
+  Everything watched, finished or not, in the same shape as `history/1` with `status`
+  (`"finished"`, `"progress"`, `"up_to_date"`, `"on_hold"`) and `note` on each. The watched page
+  reads this; the counts, the hours and the shelf pickers read `history/1`, which is only what
+  was finished.
+  """
+  def history_all(uuid) when is_binary(uuid) do
+    sync_watched(uuid)
     read_watched(uuid)
   end
 
@@ -302,7 +313,16 @@ defmodule Roki.Profile do
   defp sync_watched(uuid) do
     if Roki.Laev.connected?(uuid) and not TTLCache.cached?({:watched_sync, uuid}) do
       TTLCache.fetch({:watched_sync, uuid}, @history_ttl_s, fn ->
-        items = Roki.Laev.completed(uuid)
+        finished = Roki.Laev.completed(uuid) |> Enum.map(&Map.merge(%{status: "finished", note: nil}, &1))
+        # Started and not finished: the rest of what was watched. A title laev also calls
+        # finished stays finished.
+        unfinished =
+          case Roki.Laev.unfinished(uuid) do
+            list when is_list(list) -> list
+            _ -> []
+          end
+
+        items = finished ++ unfinished
         Roki.Titles.remember(for i <- items, i.type != nil, do: %{type: i.type, id: i.id, title: i.title, poster: i.poster})
         replace_watched(uuid, items)
         {:ok, :done}
@@ -319,10 +339,11 @@ defmodule Roki.Profile do
       items
       |> Enum.map(fn i ->
         {type, id} = if is_integer(i[:mal_id]), do: {"mal", i.mal_id}, else: {i.type, i.id}
-        {type, id, i.type, i.id, i[:season], i[:title], i[:anime] == true, DateTime.from_unix!(max(i.at || 0, 0)), i[:dated?] == true}
+        {type, id, i.type, i.id, i[:season], i[:title], i[:anime] == true, DateTime.from_unix!(max(i.at || 0, 0)), i[:dated?] == true,
+         i[:status] || "finished", i[:note]}
       end)
-      |> Enum.filter(fn {type, id, _, _, _, _, _, _, _} -> is_binary(type) and is_integer(id) end)
-      |> Enum.uniq_by(fn {type, id, _, _, _, _, _, _, _} -> {type, id} end)
+      |> Enum.filter(fn {type, id, _, _, _, _, _, _, _, _, _} -> is_binary(type) and is_integer(id) end)
+      |> Enum.uniq_by(fn {type, id, _, _, _, _, _, _, _, _, _} -> {type, id} end)
 
     Repo.transaction(fn ->
       before = Repo.query!("select type, id from roki_watched where user_uuid = $1", [bin]).rows |> MapSet.new(fn [t, i] -> {t, i} end)
@@ -334,13 +355,13 @@ defmodule Roki.Profile do
         {values, params} =
           chunk
           |> Enum.with_index()
-          |> Enum.map_reduce([], fn {{type, id, tt, tid, season, title, anime, at, dated}, i}, acc ->
-            n = i * 9
-            {"($1, " <> Enum.map_join(2..10, ", ", &"$#{n + &1}") <> ")", acc ++ [type, id, tt, tid, season, title, anime, at, dated]}
+          |> Enum.map_reduce([], fn {{type, id, tt, tid, season, title, anime, at, dated, status, note}, i}, acc ->
+            n = i * 11
+            {"($1, " <> Enum.map_join(2..12, ", ", &"$#{n + &1}") <> ")", acc ++ [type, id, tt, tid, season, title, anime, at, dated, status, note]}
           end)
 
         Repo.query!(
-          "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, season, title, anime, at, dated) values " <>
+          "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, season, title, anime, at, dated, status, note) values " <>
             Enum.join(values, ", "),
           [bin | params]
         )
@@ -365,7 +386,9 @@ defmodule Roki.Profile do
   defp date_marks(bin, rows, before) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    for {type, id, _, _, _, _, _, _, false} <- rows, not MapSet.member?(before, {type, id}) do
+    # Only a finished title is dated this way: one still in progress has the time laev last saw
+    # it, or none, and a started show is not "watched today" for having appeared.
+    for {type, id, _, _, _, _, _, _, false, "finished", _} <- rows, not MapSet.member?(before, {type, id}) do
       Repo.query!(
         "insert into roki_watch_dates (user_uuid, type, id, watched_at) values ($1, $2, $3, $4) on conflict (user_uuid, type, id) do nothing",
         [bin, type, id, now]
@@ -399,12 +422,12 @@ defmodule Roki.Profile do
 
     %{rows: rows} =
       Repo.query!(
-        "select type, id, tmdb_type, tmdb_id, season, title, anime, at, dated from roki_watched where user_uuid = $1 order by dated desc, at desc",
+        "select type, id, tmdb_type, tmdb_id, season, title, anime, at, dated, status, note from roki_watched where user_uuid = $1 order by dated desc, at desc",
         [bin]
       )
 
     items =
-      Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated] ->
+      Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated, status, note] ->
         %{
           key: "#{type}:#{id}",
           type: tt,
@@ -415,7 +438,9 @@ defmodule Roki.Profile do
           poster: nil,
           anime: anime,
           at: at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix(),
-          dated?: dated
+          dated?: dated,
+          status: status,
+          note: note
         }
       end)
 

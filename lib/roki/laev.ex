@@ -933,6 +933,53 @@ defmodule Roki.Laev do
   end
 
   @doc """
+  What this user has started and not finished, as the same kind of item as `completed/1`, plus
+  `status` (`"progress"`, `"up_to_date"` — every aired season watched, the show still going —
+  or `"on_hold"`) and `note` (laev's progress line, "2/5 seasons"). `at` is when it was last
+  watched; `dated?: false` when laev has no such time. Read from laev's Watchlist, which is
+  already on disk, so this makes no requests of its own.
+  """
+  def unfinished(uuid) do
+    run(uuid, fn ->
+      for row <- Laev.Shelf.rows(), is_map(row), is_binary(row[:title]) or is_integer(row[:mal_id]) do
+        at = row[:watched_at]
+
+        %{
+          type: row[:type],
+          id: row[:id],
+          season: nil,
+          mal_id: row[:mal_id],
+          title: row[:title],
+          poster: row[:poster],
+          anime: is_integer(row[:mal_id]),
+          at: if(is_integer(at), do: at, else: 0),
+          dated?: is_integer(at) and at > 0,
+          status: status_of(Laev.Shelf.section_of(row)),
+          note: note_of(row[:note])
+        }
+      end
+    end)
+  end
+
+  defp status_of(:on_hold), do: "on_hold"
+  defp status_of(:caught_up), do: "up_to_date"
+  defp status_of(_), do: "progress"
+
+  # " · caught up · 3/3 seasons" -> "3/3 seasons"; " · on hold" alone -> nil.
+  defp note_of(note) when is_binary(note) do
+    note
+    |> String.split(" · ", trim: true)
+    |> Enum.reject(&(&1 in ["on hold", "caught up"]))
+    |> Enum.join(" · ")
+    |> case do
+      "" -> nil
+      text -> text
+    end
+  end
+
+  defp note_of(_), do: nil
+
+  @doc """
   Posters for the finished titles being shown that laev has no card for yet: read from TMDB
   once each (laev remembers the card), eight at a time. `%{{type, id} => poster_url}`.
   """
