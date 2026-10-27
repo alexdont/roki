@@ -32,6 +32,9 @@ defmodule RokiWeb.Router do
     get "/hevc-test", PageController, :hevc_test
     get "/hevc-test/file/:how", PageController, :hevc_test_file
     get "/images/hevc-test", PageController, :hevc_test
+    # The player lab: the browser does the whole job itself (owner only).
+    get "/lab/sample/:name", LabController, :sample
+    get "/lab/bytes", LabController, :bytes
     # PhoenixKit's own account page (profile picture, name, email, password) is the account
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Player lab · Roki</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #0f1016; color: #eee; font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+    h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 22px 0 8px; color: #bbb; text-transform: uppercase; letter-spacing: .08em; }
+    .muted { color: #999; }
+    video { width: 100%; max-height: 62vh; background: #000; border-radius: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input[type=text], select { flex: 1; min-width: 240px; padding: 9px 12px; border-radius: 10px; border: 1px solid #333; background: #181a24; color: #eee; }
+    button { padding: 9px 16px; border-radius: 999px; border: 0; background: #ff6a13; color: #fff; font-weight: 600; cursor: pointer; }
+    button.alt { background: #2a2d3a; }
+    button:disabled { opacity: .5; cursor: default; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    td, th { padding: 5px 8px; border-bottom: 1px solid #222; text-align: left; white-space: nowrap; }
+    .ok { color: #3ddc97; } .no { color: #ff6b6b; } .maybe { color: #ffd166; }
+    pre { background: #12141c; border: 1px solid #222; border-radius: 10px; padding: 10px; font-size: 12px; max-height: 260px; overflow: auto; white-space: pre-wrap; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .stat { background: #12141c; border: 1px solid #222; border-radius: 10px; padding: 8px 10px; }
+    .stat b { display: block; font-size: 18px; } .stat span { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: .06em; }
+    label.chk { display: inline-flex; gap: 6px; align-items: center; color: #bbb; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Player lab</h1>
+  <p class="muted">The browser pulls the release itself, takes it apart, and feeds its own media engine — the server does nothing (or only passes bytes, for a host that refuses cross-origin reads). Everything below happens on this device.</p>
+
+  <h2>What this device can do</h2>
+  <table id="caps"><tbody></tbody></table>
+
+  <h2>Source</h2>
+  <div class="row">
+    <select id="preset">
+      <option value="/lab/sample/h264">Sample: H.264 + AAC + FLAC (90 s)</option>
+      <option value="/lab/sample/eac3">Sample: H.264 + E-AC-3 5.1 (60 s)</option>
+      <option value="/lab/sample/vp9">Sample: VP9 + Opus + FLAC (90 s)</option>
+      <option value="">A debrid link (paste below)</option>
+    </select>
+    <input id="url" type="text" placeholder="https://…real-debrid.com/… or …tb-cdn.io/…" />
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label class="chk"><input type="checkbox" id="relay" /> relay the bytes through the server (needed for Real-Debrid: no CORS)</label>
+    <label class="chk">start at <input id="from" type="number" value="0" min="0" style="width:70px;padding:6px 8px;border-radius:8px;border:1px solid #333;background:#181a24;color:#eee"> s</label>
+    <button id="probe" class="alt">Look inside</button>
+    <button id="start" disabled>Play</button>
+    <button id="stop" class="alt" disabled>Stop</button>
+  </div>
+
+  <h2>Tracks</h2>
+  <table id="tracks"><tbody><tr><td class="muted">Nothing probed yet.</td></tr></tbody></table>
+  <div class="row" style="margin-top:8px"><span class="muted">Audio track:</span> <select id="audio"><option value="">—</option></select> <span id="plan" class="muted"></span></div>
+
+  <h2>Player</h2>
+  <video id="video" controls playsinline></video>
+  <div class="stats" style="margin-top:8px">
+    <div class="stat"><b id="s-time">0.0</b><span>played (s)</span></div>
+    <div class="stat"><b id="s-buf">0.0</b><span>buffered to (s)</span></div>
+    <div class="stat"><b id="s-done">0.0</b><span>prepared (s)</span></div>
+    <div class="stat"><b id="s-speed">–</b><span>× realtime</span></div>
+    <div class="stat"><b id="s-bytes">0</b><span>MB written</span></div>
+    <div class="stat"><b id="s-frames">0</b><span>frames (dropped)</span></div>
+  </div>
+
+  <h2>Log</h2>
+  <pre id="log"></pre>
+</main>
+<script type="module" src="/lab/player.js"></script>
+</body>
+</html>
