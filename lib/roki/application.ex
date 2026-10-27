@@ -37,6 +37,8 @@ defmodule Roki.Application do
       Roki.Releases,
       # Tells people when a login of theirs stops working or is about to.
       Roki.Health,
+      # Tells the site's owner about new accounts and accounts that used up their daily plays.
+      Roki.AdminWatch,
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)
       # {Roki.Worker, arg},

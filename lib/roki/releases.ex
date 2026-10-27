@@ -173,7 +173,8 @@ defmodule Roki.Releases do
   # First to claim an event for a person is the one who tells them.
   defp claim(uuid, event), do: claim(uuid, event.type, event.id, event.season || 0, event.episode || 0, Atom.to_string(event.kind))
 
-  defp claim(uuid, type, id, season, episode, kind) do
+  @doc false
+  def claim(uuid, type, id, season, episode, kind) do
     %{num_rows: n} =
       Repo.query!(
         """
