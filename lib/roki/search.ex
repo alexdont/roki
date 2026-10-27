@@ -71,6 +71,63 @@ defmodule Roki.Search do
     end
   end
 
+  @doc """
+  Search, keeping only the titles of one genre. TMDB's search cannot filter, and laev drops the
+  genre ids from its results, so each result page's titles have their genres read once
+  (`Roki.Genres`, kept) and are filtered here. A page can hold few of one genre, so a call reads
+  on until it has `@genre_want` titles, the end, or `@genre_pages` pages. With `exact` it is the
+  pages `1..exact` and nothing more (coming back to a list that had that many).
+
+  `{:ok, items, more?, franchises, seen, last_page}`: `last_page` is how far it read, which is the
+  next call's start. No franchise lists: they are not filtered by genre.
+  """
+  def search_genre(client, uuid, query, from, genre, exact \\ nil) do
+    if exact do
+      results = RokiWeb.Place.pages(exact, &genre_page(client, uuid, query, &1, genre))
+
+      case Enum.find(results, &(not match?({:ok, _, _, _}, &1))) do
+        nil ->
+          items = Enum.flat_map(results, fn {:ok, items, _, _} -> items end)
+          {:ok, _, more?, _} = List.last(results)
+          seen = Enum.reduce(results, MapSet.new(), fn {:ok, _, _, s}, acc -> MapSet.union(acc, s) end)
+          {:ok, items, more?, [], seen, exact}
+
+        error ->
+          error
+      end
+    else
+      genre_collect(client, uuid, query, from, genre, from, [], MapSet.new())
+    end
+  end
+
+  @genre_want 8
+  @genre_pages 5
+
+  defp genre_collect(client, uuid, query, page, genre, from, acc, seen) do
+    case genre_page(client, uuid, query, page, genre) do
+      {:ok, items, more?, s} ->
+        acc = acc ++ items
+        seen = MapSet.union(seen, s)
+
+        if more? and length(acc) < @genre_want and page - from + 1 < @genre_pages,
+          do: genre_collect(client, uuid, query, page + 1, genre, from, acc, seen),
+          else: {:ok, acc, more?, [], seen, page}
+
+      error ->
+        error
+    end
+  end
+
+  defp genre_page(client, uuid, query, page, genre) do
+    with {:ok, items, more?, _franchises, seen} <- search(client, uuid, query, page) do
+      keys = for i <- items, do: {i.type, i.id}
+      Roki.Genres.fill(keys, uuid, 60)
+      known = Roki.Genres.known(keys)
+      kept = Enum.filter(items, &Roki.Genres.match?(genre, &1.type, known[{&1.type, &1.id}]))
+      {:ok, kept, more?, seen}
+    end
+  end
+
   @doc false
   def clean(query) do
     query

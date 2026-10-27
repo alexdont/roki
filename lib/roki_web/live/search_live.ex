@@ -26,6 +26,7 @@ defmodule RokiWeb.SearchLive do
      |> assign(:uuid, uuid)
      |> assign(:client, RokiWeb.Client.key(socket, uuid))
      |> assign(:q, "")
+     |> assign(:genre, nil)
      |> assign(:shelf, empty())
      |> assign(:place, RokiWeb.Place.from_params(socket))
      |> assign(:place_y, nil)
@@ -39,19 +40,20 @@ defmodule RokiWeb.SearchLive do
   @impl true
   def handle_params(params, _uri, socket) do
     q = params |> Map.get("q", "") |> Roki.Search.clean()
+    genre = Roki.Genres.parse(params["genre"])
 
     cond do
-      q == socket.assigns.q ->
+      q == socket.assigns.q and genre == socket.assigns.genre ->
         {:noreply, socket}
 
       String.length(q) < 2 ->
         {:noreply,
-         assign(socket, q: q, shelf: empty(), franchises: [], seen: MapSet.new(), error: nil)}
+         assign(socket, q: q, genre: genre, shelf: empty(), franchises: [], seen: MapSet.new(), error: nil)}
 
       true ->
         {:noreply,
          socket
-         |> assign(q: q, franchises: [], seen: MapSet.new(), error: nil)
+         |> assign(q: q, genre: genre, franchises: [], seen: MapSet.new(), error: nil)
          |> take_place()
          |> fetch(1, true)}
     end
@@ -64,8 +66,9 @@ defmodule RokiWeb.SearchLive do
   defp take_place(socket), do: assign(socket, :restore_pages, nil)
 
   defp fetch(socket, page, fresh?) do
-    %{q: q, uuid: uuid, client: client} = socket.assigns
-    last = if fresh?, do: socket.assigns[:restore_pages] || page, else: page
+    %{q: q, genre: genre, uuid: uuid, client: client} = socket.assigns
+    restore = if fresh?, do: socket.assigns[:restore_pages]
+    last = restore || page
 
     shelf =
       if fresh?,
@@ -74,7 +77,17 @@ defmodule RokiWeb.SearchLive do
 
     socket
     |> assign(:shelf, shelf)
-    |> start_async(:search, fn -> {q, last, search_pages(client, uuid, q, last)} end)
+    |> start_async(:search, fn ->
+      if genre do
+        # The page it read to is what comes back, so "Load more" carries on from there.
+        case Roki.Search.search_genre(client, uuid, q, page, genre, restore) do
+          {:ok, items, more?, franchises, seen, read_to} -> {q, genre, read_to, {:ok, items, more?, franchises, seen}}
+          error -> {q, genre, page, error}
+        end
+      else
+        {q, nil, last, search_pages(client, uuid, q, last)}
+      end
+    end)
   end
 
   # One page, or pages `1..last` joined (items in order, the franchises of the first page).
@@ -101,7 +114,11 @@ defmodule RokiWeb.SearchLive do
 
   @impl true
   def handle_event("search", %{"q" => q}, socket),
-    do: {:noreply, push_patch(socket, to: ~p"/search?#{[q: q]}")}
+    do: {:noreply, push_patch(socket, to: search_path(q, socket.assigns.genre))}
+
+  # A genre from the menu (or none): the same search, narrowed.
+  def handle_event("genre", %{"genre" => genre}, socket),
+    do: {:noreply, push_patch(socket, to: search_path(socket.assigns.q, Roki.Genres.parse(genre)))}
 
   def handle_event("placed", _params, socket), do: {:noreply, assign(socket, :place_y, nil)}
 
@@ -112,11 +129,14 @@ defmodule RokiWeb.SearchLive do
     end
   end
 
+  defp search_path(q, nil), do: ~p"/search?#{[q: q]}"
+  defp search_path(q, genre), do: ~p"/search?#{[q: q, genre: genre]}"
+
   @impl true
   def handle_async(
         :search,
-        {:ok, {q, page, {:ok, items, more?, franchises, seen}}},
-        %{assigns: %{q: q}} = socket
+        {:ok, {q, genre, page, {:ok, items, more?, franchises, seen}}},
+        %{assigns: %{q: q, genre: genre}} = socket
       ) do
     shelf = socket.assigns.shelf
     known = MapSet.new(shelf.items, &{&1.type, &1.id})
@@ -135,12 +155,12 @@ defmodule RokiWeb.SearchLive do
      })}
   end
 
-  def handle_async(:search, {:ok, {q, _page, {:error, reason}}}, %{assigns: %{q: q}} = socket),
+  def handle_async(:search, {:ok, {q, genre, _page, {:error, reason}}}, %{assigns: %{q: q, genre: genre}} = socket),
     do:
       {:noreply, assign(socket, error: reason, shelf: %{socket.assigns.shelf | loading?: false})}
 
   # An answer for a query the user has since replaced — success or failure.
-  def handle_async(:search, {:ok, {_old_q, _page, _result}}, socket), do: {:noreply, socket}
+  def handle_async(:search, {:ok, {_old_q, _old_genre, _page, _result}}, socket), do: {:noreply, socket}
 
   def handle_async(:search, {:exit, reason}, socket),
     do:
@@ -168,6 +188,32 @@ defmodule RokiWeb.SearchLive do
         />
         <button type="submit" class="btn btn-primary">Search</button>
       </form>
+
+      <%!-- The genre: the same search, only the titles of one. --%>
+      <div :if={@q != ""} class="mx-auto flex max-w-2xl items-center gap-2 pb-2">
+        <div class="dropdown">
+          <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @genre && "btn-primary", !@genre && "bg-base-200"]}>
+            {if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
+            <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
+          </div>
+          <div tabindex="0" class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+            <div class="grid grid-cols-3 gap-1.5">
+              <.link patch={search_path(@q, nil)} onclick="document.activeElement.blur()" class={["btn btn-sm rounded-full border-0 px-1", @genre == nil && "btn-primary", @genre != nil && "bg-base-200"]}>
+                All
+              </.link>
+              <.link
+                :for={{slug, label} <- Roki.Genres.all()}
+                patch={search_path(@q, slug)}
+                onclick="document.activeElement.blur()"
+                class={["btn btn-sm rounded-full border-0 px-1 text-xs", @genre == slug && "btn-primary", @genre != slug && "bg-base-200"]}
+              >
+                {label}
+              </.link>
+            </div>
+          </div>
+        </div>
+        <.link :if={@genre} patch={search_path(@q, nil)} class="text-sm text-base-content/60 hover:text-base-content">Clear</.link>
+      </div>
 
       <p :if={@q == ""} class="py-16 text-center text-base-content/60">
         Search by title. Add a year to narrow it — <code>heat 1995</code>.
@@ -201,7 +247,7 @@ defmodule RokiWeb.SearchLive do
         :if={@shelf.searched? and not @shelf.loading? and @shelf.items == [] and @error == nil}
         class="py-16 text-center text-base-content/60"
       >
-        Nothing on TMDB matches “{@q}”.
+        Nothing on TMDB matches “{@q}”{if @genre, do: " in #{Roki.Genres.label(@genre)}"}.
       </p>
 
       <section :if={@franchises != []} class="space-y-3">
