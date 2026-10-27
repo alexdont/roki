@@ -172,6 +172,40 @@ defmodule RokiWeb.FriendsLiveTest do
     assert length(told(ann)) == 1
   end
 
+  test "a like tells the one who wrote the comment, never the liker, and not for a dislike", %{ann: ann, bob: bob} do
+    {:ok, comment} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "worth a like"})
+    assert length(told(bob)) == 1
+
+    PhoenixKitComments.like_comment(comment.uuid, bob.uuid)
+    assert Enum.map(told(ann), & &1.text) == ["friendbob liked your comment"]
+
+    # Liking your own comment, or taking a like back and giving it again, tells no one new.
+    PhoenixKitComments.like_comment(comment.uuid, ann.uuid)
+    assert length(told(ann)) == 1
+
+    # A dislike is not announced.
+    {:ok, other} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "meh"})
+    PhoenixKitComments.dislike_comment(other.uuid, bob.uuid)
+    assert length(told(ann)) == 1
+  end
+
+  test "a name written as @username is told, unless they switched comment notices off", %{ann: ann, bob: bob} do
+    carol = register("friendcarol")
+
+    {:ok, _} = PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{content: "thanks @friendbob and @friendcarol, not @nobodyatall"})
+    assert Enum.map(told(bob), & &1.text) == ["friendann mentioned you in a comment"]
+    assert Enum.map(told(carol), & &1.text) == ["friendann mentioned you in a comment"]
+
+    Roki.Notify.set(carol.uuid, "comments", false)
+    {:ok, _} = PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{content: "again @friendcarol"})
+    assert length(told(carol)) == 1
+
+    # Naming yourself tells no one; the profile's owner is told once, as the owner, not twice.
+    {:ok, _} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "hello @friendbob @friendann"})
+    assert Enum.sort(Enum.map(told(bob), & &1.text)) == ["friendann commented on your profile", "friendann mentioned you in a comment"]
+    assert Roki.CommentHandler.mentioned("a @friendbob, @friendbob. and @friendbob") == [bob.uuid]
+  end
+
   test "a reply on a title names the title and links to it; the moderation list names it too", %{ann: ann, bob: bob} do
     Social.remember_title("movie", 603, "The Matrix")
     thread = Social.title_uuid("movie", 603)

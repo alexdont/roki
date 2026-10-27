@@ -124,20 +124,24 @@ defmodule Roki.Social do
     do: notify("friend_accepted", accepter, requester, "#{name(accepter)} accepted your friend request", "hero-user-group", "/#{name(accepter)}")
 
   @doc """
-  Tell `target` about a comment: `reply?` when it answers one of theirs, else it is on their
-  profile. `type` and `thread` say where it was written, so the click lands on it.
+  Tell `target` about something in a comment thread, from `commenter`. `kind` is `:comment` (on
+  their profile), `:reply` (to a comment of theirs), `:mention` (their name in one) or `:like`
+  (of a comment of theirs). `type` and `thread` say where, so the click lands on it.
   """
-  def notify_comment(target, commenter, type, thread, reply?) do
+  def notify_comment(target, commenter, type, thread, kind) do
     {where, link} = thread_place(type, thread)
+    who = name(commenter)
+    on = if where, do: " on #{where}", else: ""
 
-    text =
-      cond do
-        reply? and where != nil -> "#{name(commenter)} replied to your comment on #{where}"
-        reply? -> "#{name(commenter)} replied to your comment"
-        true -> "#{name(commenter)} commented on your profile"
+    {text, icon} =
+      case kind do
+        :comment -> {"#{who} commented on your profile", "hero-chat-bubble-left-right"}
+        :reply -> {"#{who} replied to your comment#{on}", "hero-chat-bubble-left-right"}
+        :mention -> {"#{who} mentioned you in a comment#{on}", "hero-at-symbol"}
+        :like -> {"#{who} liked your comment#{on}", "hero-heart"}
       end
 
-    notify("comment", commenter, target, text, "hero-chat-bubble-left-right", link)
+    notify("comment", commenter, target, text, icon, link)
   end
 
   # The words and the address of the thread a comment was written in.
