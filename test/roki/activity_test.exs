@@ -79,4 +79,51 @@ defmodule Roki.ActivityTest do
     assert Activity.watched_text(%{kind: "finished", seconds: 1412}) == nil
     assert Activity.watched_text(%{kind: "started", seconds: nil}) == nil
   end
+
+  describe "batching and describing" do
+    defp mv(user, id, at_min, kind, extra \\ %{}),
+      do: ev(user, id, at_min, Map.merge(%{type: "movie", season: nil, episode: nil, kind: kind}, extra))
+
+    test "films finished within an hour are one batch; hours apart stay separate" do
+      [b] = Activity.group([mv("a", 1, 0, "finished"), mv("a", 2, 10, "finished"), mv("a", 3, 20, "finished")])
+      assert b.batch? and b.count == 3 and length(b.items) == 3
+      assert Activity.describe(b).verb == "finished 3 films"
+
+      assert length(Activity.group([mv("a", 1, 0, "finished"), mv("a", 2, 300, "finished")])) == 2
+    end
+
+    test "different people and different kinds never batch together" do
+      assert length(Activity.group([mv("a", 1, 0, "finished"), mv("b", 2, 5, "finished")])) == 2
+      assert length(Activity.group([mv("a", 1, 0, "finished"), mv("a", 2, 5, "saved")])) == 2
+    end
+
+    test "backdated entries read as added to history, with the date" do
+      one = Activity.group([mv("a", 1, 0, "backdated", %{watched_on: ~D[2019-03-02]})]) |> hd()
+      d = Activity.describe(one)
+      assert d.verb == "added" and d.after == "to their history"
+      assert d.detail =~ "2019"
+
+      [b] = Activity.group([mv("a", 1, 0, "backdated", %{watched_on: ~D[2019-03-02]}), mv("a", 2, 3, "backdated", %{watched_on: ~D[2020-01-05]})])
+      d = Activity.describe(b)
+      assert b.batch? and d.verb == "added 2 films"
+      assert d.detail =~ "2019" and d.detail =~ "2020"
+    end
+
+    test "saved titles batch and say for later" do
+      [b] = Activity.group([mv("a", 1, 0, "saved"), mv("a", 2, 4, "saved")])
+      d = Activity.describe(b)
+      assert d.verb == "saved 2 films" and d.after == "for later"
+    end
+
+    test "episodes of a show are not batched as films" do
+      out = Activity.group([ev("a", 7, 1), ev("a", 7, 2), ev("a", 8, 3)])
+      assert length(out) == 2
+      refute Enum.any?(out, & &1.batch?)
+    end
+
+    test "a rating shows its score" do
+      [r] = Activity.group([mv("a", 1, 0, "rated", %{score: 8.5})])
+      assert Activity.describe(r).detail =~ "8.5"
+    end
+  end
 end

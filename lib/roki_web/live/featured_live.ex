@@ -30,6 +30,7 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:upcoming, %{})
       |> assign(:uuid, uuid(socket))
       |> assign(:activity, if(uuid(socket), do: nil, else: []))
+      |> assign(activity_kind: nil, activity_who: :all, activity_shown: 8)
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
@@ -38,10 +39,37 @@ defmodule RokiWeb.FeaturedLive do
   # Who finished what, newest first. Only for people signed in (it names other people); it stays
   # up to date: a finish anywhere tells every open page.
   defp load_activity(socket) do
-    if socket.assigns.uuid,
-      do: start_async(socket, :activity, fn -> Roki.Activity.recent(14) end),
-      else: socket
+    %{uuid: uuid, activity_kind: kind, activity_who: who} = socket.assigns
+
+    if uuid do
+      opts =
+        [kinds: kind && [kind]] ++
+          case who do
+            :mine -> [users: [uuid]]
+            :friends -> [users: Enum.map(Roki.Social.friends(uuid), & &1.uuid)]
+            _ -> []
+          end
+
+      start_async(socket, :activity, fn -> Roki.Activity.recent(60, Enum.reject(opts, &match?({_, nil}, &1))) end)
+    else
+      socket
+    end
   end
+
+  @impl true
+  def handle_event("activity_kind", %{"kind" => kind}, socket) do
+    kind = if kind in Roki.Activity.kinds(), do: kind
+    {:noreply, socket |> assign(activity_kind: kind, activity_shown: 8) |> load_activity()}
+  end
+
+  def handle_event("activity_who", %{"who" => who}, socket) do
+    who = Enum.find([:all, :friends, :mine], :all, &(Atom.to_string(&1) == who))
+    {:noreply, socket |> assign(activity_who: who, activity_shown: 8) |> load_activity()}
+  end
+
+  def handle_event("activity_more", _params, socket), do: {:noreply, update(socket, :activity_shown, &(&1 + 8))}
+
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
   def handle_info(:activity, socket), do: {:noreply, load_activity(socket)}
@@ -113,6 +141,8 @@ defmodule RokiWeb.FeaturedLive do
   def handle_async(:activity, {:ok, runs}, socket),
     do: {:noreply, assign(socket, :activity, runs)}
 
+  # (A filter change keeps the old list on screen until the new one is in.)
+
   def handle_async(:activity, _other, socket), do: {:noreply, socket}
 
   def handle_async(:progress, {:ok, lists}, socket), do: {:noreply, assign(socket, :lists, lists)}
@@ -120,6 +150,61 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async({:page, kind}, {:exit, reason}, socket),
     do: {:noreply, failed(socket, kind, reason)}
+
+  attr :run, :map, required: true
+
+  # One entry of the feed: who, what they did, to what, and the small print — a rating, the day
+  # something was really watched, how far in — with how long ago.
+  defp activity_row(assigns) do
+    assigns = assign(assigns, :d, Roki.Activity.describe(assigns.run))
+
+    ~H"""
+    <div class="flex items-center gap-3 p-3">
+      <%!-- A batch shows its first few posters, overlapping; each opens its title. --%>
+      <div :if={@run.batch?} class="flex shrink-0 -space-x-5">
+        <.link :for={i <- Enum.take(@run.items, 3)} navigate={~p"/title/#{i.type}/#{i.tmdb_id}"} class="block">
+          <.activity_poster poster={i.poster} class="h-14 w-10 ring-2 ring-base-100" />
+        </.link>
+      </div>
+
+      <.link :if={!@run.batch?} navigate={~p"/title/#{@run.type}/#{@run.tmdb_id}"} class="block shrink-0">
+        <.activity_poster poster={@run.poster} class="h-14 w-10" />
+      </.link>
+
+      <div class="min-w-0 flex-1 text-sm leading-snug">
+        <p class="line-clamp-2">
+          <span class="font-semibold">{@run.username}</span>
+          <span class="text-base-content/70">{@d.verb}</span>
+          <.link :if={@d.subject} navigate={~p"/title/#{@run.type}/#{@run.tmdb_id}"} class="font-semibold hover:underline">{@d.subject}</.link>
+          <span :if={@d.after} class="text-base-content/70">{@d.after}</span>
+        </p>
+        <p class="mt-0.5 flex items-center gap-1.5 text-xs text-base-content/60">
+          <.icon name={@d.icon} class={["h-4 w-4 shrink-0", tone_text(@d.tone)]} />
+          <span :if={@d.detail} class="min-w-0 truncate">{@d.detail}</span>
+          <span :if={@d.detail} aria-hidden="true">·</span>
+          <span class="shrink-0">{ago(@run.at)}</span>
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  attr :poster, :any, default: nil
+  attr :class, :string, default: ""
+
+  defp activity_poster(assigns) do
+    ~H"""
+    <img :if={@poster} src={Roki.Images.local(@poster)} alt="" loading="lazy" class={["rounded-md bg-base-300 object-cover", @class]} />
+    <div :if={!@poster} class={["rounded-md bg-base-300", @class]}></div>
+    """
+  end
+
+  # (Spelled out: Tailwind cannot see a class built from a name.)
+  defp tone_text("success"), do: "text-success"
+  defp tone_text("info"), do: "text-info"
+  defp tone_text("primary"), do: "text-primary"
+  defp tone_text("warning"), do: "text-warning"
+  defp tone_text("secondary"), do: "text-secondary"
 
   defp ago(%DateTime{} = at) do
     s = DateTime.diff(DateTime.utc_now(), at)
@@ -177,40 +262,67 @@ defmodule RokiWeb.FeaturedLive do
 
       <h1 :if={!@visitor?} class="text-2xl font-bold tracking-tight sm:text-3xl">Featured</h1>
 
-      <%!-- What people finished lately, newest on the left. Room is kept while it loads. --%>
-      <section :if={@activity != []} class="space-y-2" aria-label="Recent activity">
-        <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50">
-          Recent activity
-        </h2>
-        <div :if={@activity == nil} class="skeleton h-24 w-full rounded-box"></div>
-        <ul :if={@activity} class="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-          <li :for={run <- @activity} class="shrink-0">
-            <.link
-              navigate={~p"/title/#{run.type}/#{run.tmdb_id}"}
-              class="flex h-24 w-64 gap-3 rounded-box bg-base-200 p-2 transition hover:bg-base-300"
+      <%!-- What people did lately: finished, started, saved, rated, put on an earlier day. Narrowed
+            by kind and by whose. Room is kept while it loads. --%>
+      <section :if={@uuid} class="space-y-3" aria-label="Activity">
+        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h2 class="text-xl font-semibold">Activity</h2>
+          <div class="inline-flex rounded-full bg-base-200 p-0.5" role="group" aria-label="Whose activity">
+            <button
+              :for={{who, label} <- [all: "Everyone", friends: "Friends", mine: "Me"]}
+              type="button"
+              phx-click="activity_who"
+              phx-value-who={who}
+              aria-pressed={to_string(@activity_who == who)}
+              class={["rounded-full px-3 py-1 text-sm font-medium transition", @activity_who == who && "bg-base-100 shadow-sm", @activity_who != who && "text-base-content/70 hover:text-base-content"]}
             >
-              <img
-                :if={run.poster}
-                src={Roki.Images.local(run.poster)}
-                alt=""
-                loading="lazy"
-                class="aspect-[2/3] h-full rounded-md bg-base-300 object-cover"
-              />
-              <div :if={!run.poster} class="aspect-[2/3] h-full rounded-md bg-base-300"></div>
-              <div class="min-w-0 flex-1 text-sm leading-snug">
-                <p class="line-clamp-3">
-                  <span class="font-semibold">{run.username}</span>
-                  {Roki.Activity.verb(run)}
-                  <span class="font-semibold">{run.title}</span>
-                </p>
-                <p :if={Roki.Activity.watched_text(run)} class="text-xs text-base-content/70">
-                  {Roki.Activity.watched_text(run)} watched
-                </p>
-                <p class="mt-0.5 text-xs text-base-content/50">{ago(run.at)}</p>
-              </div>
-            </.link>
+              {label}
+            </button>
+          </div>
+        </div>
+
+        <div class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Kind of activity">
+          <button
+            type="button"
+            phx-click="activity_kind"
+            phx-value-kind=""
+            aria-pressed={to_string(@activity_kind == nil)}
+            class={["btn btn-sm shrink-0 rounded-full border-0", @activity_kind == nil && "btn-primary", @activity_kind != nil && "bg-base-200"]}
+          >
+            All
+          </button>
+          <button
+            :for={{kind, label} <- [{"finished", "Finished"}, {"started", "Started"}, {"saved", "Saved"}, {"rated", "Rated"}, {"backdated", "Backdated"}]}
+            type="button"
+            phx-click="activity_kind"
+            phx-value-kind={kind}
+            aria-pressed={to_string(@activity_kind == kind)}
+            class={["btn btn-sm shrink-0 rounded-full border-0", @activity_kind == kind && "btn-primary", @activity_kind != kind && "bg-base-200"]}
+          >
+            {label}
+          </button>
+        </div>
+
+        <div :if={@activity == nil} class="skeleton h-40 w-full rounded-box"></div>
+
+        <p :if={@activity == []} class="rounded-box border border-dashed border-base-300 px-4 py-8 text-center text-sm text-base-content/60">
+          {if @activity_who == :friends, do: "Nothing from your friends yet.", else: "Nothing here yet."}
+        </p>
+
+        <ul
+          :if={@activity not in [nil, []]}
+          class="grid grid-cols-[minmax(0,1fr)] gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 md:grid-cols-2"
+        >
+          <li :for={run <- Enum.take(@activity, @activity_shown)} class="min-w-0 bg-base-100">
+            <.activity_row run={run} />
           </li>
         </ul>
+
+        <div :if={is_list(@activity) and length(@activity) > @activity_shown} class="flex justify-center">
+          <button type="button" phx-click="activity_more" class="btn btn-ghost btn-sm rounded-full">
+            Show more
+          </button>
+        </div>
       </section>
 
       <div

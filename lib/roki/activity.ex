@@ -1,9 +1,20 @@
 defmodule Roki.Activity do
   @moduledoc """
-  Recent activity: who finished what. Every episode or film finished in the player (or marked
-  done when leaving an external player) is one row. The Featured page shows them grouped — a run
-  of one person's episodes of one show, close together in time, is a *binge* ("alex binged 25
-  episodes of Lupin"), newest first.
+  Recent activity: who did what. A row is one of five kinds:
+
+    * `finished` — an episode or film finished in the player (or marked done when leaving an
+      external player);
+    * `started` — watched ten minutes in;
+    * `backdated` — marked watched and then put on an earlier day (`watched_on`). It is *not* a
+      finish: nobody just watched it, they added it to their history. Backdating a title whose
+      finish was just recorded turns that finish into this (`backdated/3`);
+    * `saved` — put on the Saved list;
+    * `rated` — given a rating (`score`).
+
+  The Featured page shows them grouped, newest first — a run of one person's episodes of one
+  show, close together in time, is a *binge* ("alex binged 25 episodes of Lupin"), and several
+  films finished, saved or backdated by one person within an hour are one batch ("alex added 3
+  films to their history"). It can be narrowed to one kind and to whose (everyone, friends, me).
 
   Only people signed in to the site see it, and every account is in it: the site is a handful of
   friends, and the strip is what makes it feel shared.
@@ -19,6 +30,13 @@ defmodule Roki.Activity do
   @window_days 30
 
   @topic "activity"
+
+  @kinds ["finished", "started", "saved", "rated", "backdated"]
+  # Several of these by one person this close together are one batch.
+  @batch_gap_s 3600
+
+  @doc "The kinds of entry, in the order the filter lists them."
+  def kinds, do: @kinds
 
   # Accounts that are for testing the site: what they do is not activity, so it is neither kept
   # nor shown.
@@ -106,9 +124,22 @@ defmodule Roki.Activity do
 
   def started(_uuid, _what, _seconds), do: :ok
 
-  @doc "Insert one entry (`%{type, tmdb_id, title, poster, season, episode}`) unless it is a repeat."
-  def insert(uuid, %{} = what, kind) when kind in ["started", "finished"] do
-    Task.start(fn ->
+  @doc """
+  Insert one entry (`%{type, tmdb_id, title, poster, season, episode, watched_on, score}`) of one of
+  the `kinds/0`, behind the caller, unless it is a repeat.
+  """
+  def insert(uuid, %{} = what, kind) when kind in @kinds do
+    Task.start(fn -> insert_now(uuid, what, kind) end)
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  @doc false
+  def insert_now(uuid, %{} = what, kind) when kind in @kinds do
+    what = Map.merge(%{season: nil, episode: nil, poster: nil, watched_on: nil, score: nil}, what)
+
+    try do
       {:ok, uuid_bin} = Ecto.UUID.dump(uuid)
       now = DateTime.utc_now() |> DateTime.truncate(:second)
       # A start is one per episode per half day however long it is watched; a finish twice in
@@ -140,8 +171,8 @@ defmodule Roki.Activity do
       unless dup? or silent? do
         Repo.query!(
           """
-          insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind, seconds)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          insert into roki_activity (user_uuid, type, tmdb_id, season, episode, title, poster, at, kind, seconds, watched_on, score)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           """,
           [
             uuid_bin,
@@ -153,7 +184,9 @@ defmodule Roki.Activity do
             what.poster,
             now,
             kind,
-            Map.get(what, :seconds)
+            Map.get(what, :seconds),
+            what.watched_on,
+            what.score
           ]
         )
 
@@ -164,16 +197,72 @@ defmodule Roki.Activity do
         if kind == "finished" and what.type == "movie",
           do: Roki.Social.friend_activity(uuid, :finished, what.type, what.tmdb_id, what.title)
       end
-    end)
+    rescue
+      _ -> :ok
+    end
 
     :ok
-  rescue
-    _ -> :ok
   end
 
   @doc "Is this account one whose doings are not shown to anyone (the test account)?"
   def silent?(uuid) when is_binary(uuid) do
     Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [Ecto.UUID.dump!(uuid), @silent]).num_rows > 0
+  end
+
+  @doc "A title was put on the Saved list."
+  def saved(uuid, %{type: type, id: id, title: title} = t) when type in ["movie", "tv"] and is_integer(id),
+    do: insert(uuid, %{type: type, tmdb_id: id, title: title, poster: poster_url(t[:poster_path])}, "saved")
+
+  def saved(_uuid, _title), do: :ok
+
+  @doc "A title was rated (`score`, as given)."
+  def rated(uuid, %{type: type, id: id, title: title} = t, score) when type in ["movie", "tv"] and is_integer(id) and is_number(score),
+    do: insert(uuid, %{type: type, tmdb_id: id, title: title, poster: poster_url(t[:poster_path]), score: score * 1.0}, "rated")
+
+  def rated(_uuid, _title, _score), do: :ok
+
+  @doc """
+  Things the person put on an earlier day (`date`): `items` are `%{type, tmdb_id, title}`, the
+  film or show as TMDB knows it. A finish recorded for one in the last `@window_days` days — the
+  marking that came just before — *becomes* the backdating, since nobody finished it just now; a
+  title with no such finish gets an entry of its own. Not recorded at all for the test account.
+  Returns how many entries were turned or added.
+  """
+  def backdated(uuid, items, %Date{} = date) when is_binary(uuid) and is_list(items) do
+    if silent?(uuid) do
+      0
+    else
+      {:ok, bin} = Ecto.UUID.dump(uuid)
+      since = DateTime.utc_now() |> DateTime.add(-@window_days * 86_400) |> DateTime.to_naive() |> NaiveDateTime.truncate(:second)
+      now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+      counted =
+        for %{type: type, tmdb_id: id, title: title} = item <- items, type in ["movie", "tv"], is_integer(id) do
+          %{num_rows: turned} =
+            Repo.query!(
+              """
+              update roki_activity set kind = 'backdated', watched_on = $4
+               where user_uuid = $1 and type = $2 and tmdb_id = $3 and kind = 'finished' and at > $5
+              """,
+              [bin, type, id, date, since]
+            )
+
+          if turned == 0 do
+            Repo.query!(
+              """
+              insert into roki_activity (user_uuid, type, tmdb_id, title, poster, at, kind, watched_on)
+              values ($1, $2, $3, $4, $5, $6, 'backdated', $7)
+              """,
+              [bin, type, id, title, item[:poster], now, date]
+            )
+          end
+
+          1
+        end
+
+      if counted != [], do: Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
+      length(counted)
+    end
   end
 
   # ── from the terminal app ──────────────────────────────────────────
@@ -345,29 +434,35 @@ defmodule Roki.Activity do
   defp poster_url(path), do: Laev.Tmdb.poster_url(path, "w185")
 
   @doc """
-  The newest `limit` runs: `[%{username, type, tmdb_id, title, poster, count, season, episode,
-  at, binge?}]`, newest first.
+  The newest `limit` entries, grouped (see `group/1`): `[%{user, username, type, tmdb_id, title,
+  poster, count, season, episode, at, kind, seconds, watched_on, score, binge?, batch?, items}]`,
+  newest first. Options: `:kinds` (a list of `kinds/0`; default all) and `:users` (a list of user
+  uuids, to look at only theirs; default everyone).
   """
-  def recent(limit \\ 14) do
+  def recent(limit \\ 14, opts \\ []) do
     since = DateTime.utc_now() |> DateTime.add(-@window_days * 86_400)
+    kinds = (opts[:kinds] || @kinds) |> Enum.filter(&(&1 in @kinds))
+    users = if opts[:users], do: Enum.map(opts[:users], &Ecto.UUID.dump!/1)
 
     rows =
       Repo.query!(
         """
         select a.user_uuid::text, coalesce(nullif(u.username, ''), 'someone'), a.type, a.tmdb_id,
-               a.season, a.episode, a.title, a.poster, a.at, a.kind, a.seconds
+               a.season, a.episode, a.title, a.poster, a.at, a.kind, a.seconds, a.watched_on, a.score
           from roki_activity a
           left join phoenix_kit_users u on u.uuid = a.user_uuid
          where a.at > $1
            and coalesce(u.username, '') <> all($2)
+           and a.kind = any($3)
+           and ($4::uuid[] is null or a.user_uuid = any($4::uuid[]))
          order by a.at desc
          limit 1500
         """,
-        [since, @silent]
+        [since, @silent, kinds, users]
       ).rows
 
     rows
-    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at, kind, seconds] ->
+    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at, kind, seconds, watched_on, score] ->
       %{
         user: user,
         username: name,
@@ -379,7 +474,9 @@ defmodule Roki.Activity do
         poster: poster,
         at: to_utc(at),
         kind: kind,
-        seconds: seconds
+        seconds: seconds,
+        watched_on: watched_on,
+        score: score
       }
     end)
     |> group()
@@ -390,14 +487,25 @@ defmodule Roki.Activity do
   defp to_utc(%DateTime{} = at), do: at
 
   @doc """
-  Turn single finishes (newest first) into runs: one person, one title, no gap over six hours.
-  Pure, so it can be tested without a database.
+  Turn single entries into what the feed shows, newest first. Pure, so it can be tested without a
+  database.
+
+  Finishes and starts of one show by one person with no gap over six hours are a *run* (a binge
+  when it is three episodes or more). Saves, ratings and backdatings stand alone. Then several
+  films finished — or titles saved, or put on an earlier day — by one person within an hour
+  become one *batch*: `batch?: true`, `items` the entries, `count` how many.
   """
   def group(events) do
-    events
-    |> Enum.sort_by(& &1.at, {:asc, DateTime})
-    |> Enum.group_by(&{&1.user, &1.type, &1.tmdb_id})
-    |> Enum.flat_map(fn {_key, evs} -> runs(evs) end)
+    {played, other} = Enum.split_with(events, &(&1.kind in ["started", "finished"]))
+
+    runs =
+      played
+      |> Enum.sort_by(& &1.at, {:asc, DateTime})
+      |> Enum.group_by(&{&1.user, &1.type, &1.tmdb_id})
+      |> Enum.flat_map(fn {_key, evs} -> runs(evs) end)
+
+    (runs ++ Enum.map(other, &single/1))
+    |> batch()
     |> Enum.sort_by(& &1.at, {:desc, DateTime})
   end
 
@@ -433,6 +541,7 @@ defmodule Roki.Activity do
     count = shown |> Enum.uniq_by(&{&1.season, &1.episode}) |> length()
 
     %{
+      user: last.user,
       username: last.username,
       type: last.type,
       tmdb_id: last.tmdb_id,
@@ -444,8 +553,136 @@ defmodule Roki.Activity do
       at: last.at,
       kind: kind,
       seconds: if(kind == "started", do: last[:seconds]),
-      binge?: kind == "finished" and last.type == "tv" and count >= 3
+      watched_on: nil,
+      score: nil,
+      binge?: kind == "finished" and last.type == "tv" and count >= 3,
+      batch?: false,
+      items: []
     }
+  end
+
+  # A save, a rating or a backdating: one entry, on its own.
+  defp single(e) do
+    %{
+      user: e.user,
+      username: e.username,
+      type: e.type,
+      tmdb_id: e.tmdb_id,
+      title: e.title,
+      poster: e.poster,
+      count: 1,
+      season: e.season,
+      episode: e.episode,
+      at: e.at,
+      kind: e.kind,
+      seconds: nil,
+      watched_on: e[:watched_on],
+      score: e[:score],
+      binge?: false,
+      batch?: false,
+      items: []
+    }
+  end
+
+  # Films finished (and titles saved or backdated) by one person within an hour of each other.
+  defp batch(runs) do
+    {candidates, rest} = Enum.split_with(runs, &batchable?/1)
+
+    merged =
+      candidates
+      |> Enum.group_by(&{&1.user, &1.kind})
+      |> Enum.flat_map(fn {_key, items} ->
+        items
+        |> Enum.sort_by(& &1.at, {:asc, DateTime})
+        |> Enum.chunk_while(
+          [],
+          fn item, acc ->
+            case acc do
+              [] -> {:cont, [item]}
+              [last | _] -> if DateTime.diff(item.at, last.at) > @batch_gap_s, do: {:cont, Enum.reverse(acc), [item]}, else: {:cont, [item | acc]}
+            end
+          end,
+          fn
+            [] -> {:cont, []}
+            acc -> {:cont, Enum.reverse(acc), []}
+          end
+        )
+        |> Enum.map(&one_or_batch/1)
+      end)
+
+    rest ++ merged
+  end
+
+  defp batchable?(%{kind: kind}) when kind in ["saved", "backdated"], do: true
+  defp batchable?(%{kind: "finished", type: "movie"}), do: true
+  defp batchable?(_), do: false
+
+  defp one_or_batch([only]), do: only
+
+  defp one_or_batch(items) do
+    newest_first = Enum.reverse(items)
+    first = hd(newest_first)
+
+    %{first | batch?: true, count: length(items), items: newest_first, at: first.at, watched_on: nil}
+  end
+
+  @doc "How a feed entry reads: `%{verb, subject, after, detail, icon, tone}`; `subject` is the title when it is one."
+  def describe(%{batch?: true, kind: kind, count: n, items: items}) do
+    names = items |> Enum.map(& &1.title) |> Enum.take(3) |> Enum.join(", ") |> then(&if(n > 3, do: &1 <> "…", else: &1))
+    what = if Enum.all?(items, &(&1.type == "movie")), do: "#{n} films", else: "#{n} titles"
+
+    {verb, after_} =
+      case kind do
+        "finished" -> {"finished #{what}", nil}
+        "saved" -> {"saved #{what}", "for later"}
+        "backdated" -> {"added #{what}", "to their history"}
+      end
+
+    # When it was really watched comes first: it is what a backdating is about, and the names may be long.
+    detail = [if(kind == "backdated", do: dates_text(items)), names] |> Enum.reject(&is_nil/1) |> Enum.join(" · ")
+    Map.merge(%{verb: verb, subject: nil, after: after_, detail: detail}, look(kind))
+  end
+
+  def describe(%{kind: "backdated"} = e),
+    do: Map.merge(%{verb: "added", subject: e.title, after: "to their history", detail: dates_text([e])}, look("backdated"))
+
+  def describe(%{kind: "saved"} = e), do: Map.merge(%{verb: "saved", subject: e.title, after: "for later", detail: nil}, look("saved"))
+
+  def describe(%{kind: "rated"} = e),
+    do: Map.merge(%{verb: "rated", subject: e.title, after: nil, detail: score_text(e.score)}, look("rated"))
+
+  def describe(%{kind: kind} = e) do
+    {before, subject} = split_verb(e)
+    Map.merge(%{verb: before, subject: subject, after: nil, detail: if(watched_text(e), do: watched_text(e) <> " watched")}, look(kind))
+  end
+
+  # What a run reads as, with the title taken out of the sentence `verb/1` makes.
+  defp split_verb(e), do: {verb(e), e.title}
+
+  defp look("finished"), do: %{icon: "hero-check-circle", tone: "success"}
+  defp look("started"), do: %{icon: "hero-play-circle", tone: "info"}
+  defp look("saved"), do: %{icon: "hero-bookmark", tone: "primary"}
+  defp look("rated"), do: %{icon: "hero-star", tone: "warning"}
+  defp look("backdated"), do: %{icon: "hero-clock", tone: "secondary"}
+
+  defp score_text(nil), do: nil
+  defp score_text(score), do: "★ " <> Roki.Profile.score_text(score)
+
+  # "watched Oct 3", "watched Oct 3 – Oct 9" for entries put on different days.
+  defp dates_text(items) do
+    dates = items |> Enum.map(& &1.watched_on) |> Enum.reject(&is_nil/1) |> Enum.sort(Date)
+
+    case dates do
+      [] -> nil
+      [only] -> "watched " <> day(only)
+      many -> if List.first(many) == List.last(many), do: "watched " <> day(hd(many)), else: "watched #{day(List.first(many))} – #{day(List.last(many))}"
+    end
+  end
+
+  defp day(%Date{} = date) do
+    if date.year == Date.utc_today().year,
+      do: Calendar.strftime(date, "%b %-d"),
+      else: Calendar.strftime(date, "%b %-d, %Y")
   end
 
   @doc "\"23:32\" or \"1:05:09\": how far in a started entry is, or nil."

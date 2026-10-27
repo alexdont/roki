@@ -276,6 +276,17 @@ defmodule Roki.Profile do
         end
       end)
 
+    # The activity feed: a finish recorded a moment ago for these was a marking, and is now a
+    # backdating — it must not read as if they had just watched it.
+    items =
+      for {type, id} <- parsed,
+          [tmdb_type, tmdb_id, title] <- Repo.query!("select tmdb_type, tmdb_id, title from roki_watched where user_uuid = $1 and type = $2 and id = $3", [bin, type, id]).rows,
+          tmdb_type in ["movie", "tv"] and is_integer(tmdb_id) do
+        %{type: tmdb_type, tmdb_id: tmdb_id, title: title || "Untitled", poster: (Roki.Titles.card(tmdb_type, tmdb_id) || %{})[:poster]}
+      end
+
+    Roki.Activity.backdated(uuid, items, date)
+
     {:ok, dated}
   end
 

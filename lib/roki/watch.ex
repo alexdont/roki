@@ -402,8 +402,10 @@ defmodule Roki.Watch do
 
     with {:ok, rating} <- result do
       # Before the film is marked watched (rating it marks it): one piece of news, the rating.
-      if is_number(rating) and title.type in ["movie", "tv"],
-        do: Task.start(fn -> Roki.Social.friend_activity(uuid, :rated, title.type, title.id, title.title, rating) end)
+      if is_number(rating) and title.type in ["movie", "tv"] do
+        Task.start(fn -> Roki.Social.friend_activity(uuid, :rated, title.type, title.id, title.title, rating) end)
+        Roki.Activity.rated(uuid, title, rating)
+      end
 
       watched_by_rating(uuid, title)
     end
@@ -466,6 +468,9 @@ defmodule Roki.Watch do
           poster: title.poster_path && "https://image.tmdb.org/t/p/w342" <> title.poster_path
         })
       end)
+
+    # Saving is something to tell the feed about; taking it off is not.
+    if result == :added, do: Roki.Activity.saved(uuid, title)
 
     library_changed(uuid)
     result
