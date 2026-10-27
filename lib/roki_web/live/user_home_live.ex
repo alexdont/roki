@@ -45,6 +45,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:stats, nil)
           |> assign(:pulse, nil)
           |> assign(:completed, nil)
+          |> assign(:ratings, if(connected?(socket), do: Roki.Profile.ratings(uuid), else: %{}))
           |> assign(:completed_shown, @completed_page)
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
@@ -312,6 +313,7 @@ defmodule RokiWeb.UserHomeLive do
         pulse={@pulse}
         completed={@completed}
         completed_shown={@completed_shown}
+        ratings={@ratings}
         username={@username}
         cached_titles={@cached_titles}
       />
@@ -506,6 +508,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :pulse, :any, default: nil
   attr :completed, :any, default: nil
   attr :completed_shown, :integer, default: 100
+  attr :ratings, :map, default: %{}
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
 
@@ -635,6 +638,7 @@ defmodule RokiWeb.UserHomeLive do
         items={@completed}
         shown={@completed_shown}
         open={MapSet.member?(@open, "completed")}
+        ratings={@ratings}
         cached_titles={@cached_titles}
       />
     </div>
@@ -733,6 +737,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :items, :list, required: true
   attr :shown, :integer, required: true
   attr :open, :boolean, required: true
+  attr :ratings, :map, default: %{}
   attr :cached_titles, :any, default: nil
 
   defp completed(assigns) do
@@ -767,7 +772,11 @@ defmodule RokiWeb.UserHomeLive do
           <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
             <li :for={i <- group} class="space-y-1">
               <.poster item={i} cached_titles={@cached_titles} compact title?={false} />
-              <div :if={i.dated?} class="text-xs text-base-content/50">{day_label(i)}</div>
+              <% score = Roki.Profile.score_for(@ratings, i) %>
+              <div :if={i.dated? or score != nil} class="flex items-center justify-between text-xs text-base-content/50">
+                <span>{if i.dated?, do: day_label(i)}</span>
+                <span :if={score != nil} class="font-semibold text-warning">★ {Roki.Profile.score_text(score)}</span>
+              </div>
             </li>
           </ul>
         </div>

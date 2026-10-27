@@ -568,6 +568,9 @@ defmodule Roki.Profile do
 
   # An anime is rated on MyAnimeList when it has an entry there (the site rates it there too);
   # everything else on TMDB.
+  @doc "The rating a `ratings/1` map holds for a title (an item with `type`, `id` and maybe `mal_id`), or nil."
+  def score_for(ratings, item), do: score_of(ratings, item)
+
   defp score_of(ratings, %{mal_id: mal} = item) when is_integer(mal),
     do: ratings[{"mal", mal}] || ratings[{item.type, item.id}]
 
