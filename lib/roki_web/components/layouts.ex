@@ -112,7 +112,7 @@ defmodule RokiWeb.Layouts do
 
         <%!-- The right side is one quiet row: search, new episodes, the bell, then home (the star) and
               you, last. On a phone new episodes moves into the account menu. --%>
-        <div class="flex items-center gap-0.5 sm:gap-1">
+        <div class="flex items-stretch">
           <button
             type="button"
             phx-click={
@@ -139,7 +139,7 @@ defmodule RokiWeb.Layouts do
                 as pages change. Its button is restyled to match the others. --%>
           <div
             :if={@bell_user}
-            class="flex items-center max-sm:[&_.dropdown-content]:!fixed max-sm:[&_.dropdown-content]:!inset-x-2 max-sm:[&_.dropdown-content]:!top-14 max-sm:[&_.dropdown-content]:!mt-0 max-sm:[&_.dropdown-content]:!w-auto [&_label]:flex [&_label]:h-9 [&_label]:min-h-0 [&_label]:w-9 [&_label]:items-center [&_label]:justify-center [&_label]:rounded-full [&_label]:p-0 [&_label]:transition [&_label:hover]:bg-base-200"
+            class="flex items-stretch [&>*]:flex [&>*]:items-stretch [&_.dropdown]:flex [&_.dropdown]:items-stretch max-sm:[&_.dropdown-content]:!fixed max-sm:[&_.dropdown-content]:!inset-x-2 max-sm:[&_.dropdown-content]:!top-14 max-sm:[&_.dropdown-content]:!mt-0 max-sm:[&_.dropdown-content]:!w-auto [&_label]:flex [&_label]:h-full [&_label]:min-h-0 [&_label]:w-10 [&_label]:items-center [&_label]:justify-center [&_label]:rounded-none [&_label]:border-b-2 [&_label]:border-transparent [&_label]:p-0 [&_label]:transition [&_label:hover]:bg-base-200 min-[420px]:[&_label]:w-12"
           >
             {Phoenix.Component.live_render(@socket, PhoenixKitWeb.Live.NotificationsBell,
               id: "pk-notifications-bell",
@@ -160,7 +160,7 @@ defmodule RokiWeb.Layouts do
             active={active?(@current_path, ~p"/#{@username}/home")}
           />
 
-          <div :if={@username} class="sm:relative">
+          <div :if={@username} class="flex items-stretch sm:relative">
             <button
               type="button"
               id="account-button"
@@ -169,7 +169,7 @@ defmodule RokiWeb.Layouts do
                 |> JS.hide(to: "#search-pop")
                 |> JS.toggle(to: "#account-pop", display: "block")
               }
-              class="ml-1 flex items-center rounded-full ring-2 ring-transparent transition hover:ring-base-300"
+              class="flex items-center border-b-2 border-transparent px-2.5 transition hover:bg-base-200 min-[420px]:px-3.5"
               aria-label="Your account"
               aria-controls="account-pop"
             >
@@ -184,7 +184,7 @@ defmodule RokiWeb.Layouts do
               <div
                 :if={@username}
                 id="account-pop"
-                class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-0 sm:mt-2"
+                class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-0"
                 phx-click-away={JS.hide(to: "#account-pop")}
                 phx-window-keydown={JS.hide(to: "#account-pop")}
                 phx-key="escape"
@@ -246,7 +246,7 @@ defmodule RokiWeb.Layouts do
           </div>
 
           <%!-- A visitor gets the two ways in, nothing else. --%>
-          <div :if={!@username} class="flex items-center gap-1.5 pl-1">
+          <div :if={!@username} class="flex items-center gap-1.5 px-1">
             <a href={PhoenixKit.Utils.Routes.path("/users/log-in")} class="btn btn-ghost btn-sm">
               Log in
             </a>
@@ -497,7 +497,7 @@ defmodule RokiWeb.Layouts do
       title={@label}
       class={[
         icon_button(),
-        @active && "bg-primary/10 text-primary hover:bg-primary/15",
+        @active && "!border-primary !text-primary",
         @class
       ]}
     >
@@ -508,7 +508,7 @@ defmodule RokiWeb.Layouts do
 
   defp icon_button,
     do:
-      "grid h-9 w-9 place-items-center rounded-full text-base-content/70 transition hover:bg-base-200 hover:text-base-content"
+      "flex items-center justify-center border-b-2 border-transparent px-2.5 text-base-content/70 transition hover:bg-base-200 hover:text-base-content min-[420px]:px-3.5"
 
   attr :href, :string, required: true
   attr :icon, :string, required: true
