@@ -123,19 +123,19 @@ defmodule RokiWeb.ProfileLiveTest do
     assert has_element?(view, "ul#shelf-movie[phx-hook=SortableGrid][data-sortable-event=shelf_reorder]")
     assert has_element?(view, "button[phx-click=pick_open][phx-value-kind=movie]")
 
-    assert view |> render() |> String.split(~s(phx-click="pick_open")) |> length() == 11
+    assert view |> render() |> String.split(~s(phx-click="pick_open")) |> length() == 12
     render_click(view, "pick_open", %{"kind" => "movie"})
     html = render_async(view)
-    assert html =~ "Add to your favorite movies"
+    assert html =~ "Choose your favorite movies"
     assert html =~ "First Film"
 
     # Tick both, add: they are on the shelf, in the picker's order, with crosses and grips.
     view |> element("button[phx-click=pick_toggle][phx-value-key='movie:1']") |> render_click()
     view |> element("button[phx-click=pick_toggle][phx-value-key='movie:2']") |> render_click()
-    assert render(view) =~ "2</b> of 10 selected"
+    assert render(view) =~ "2</b> of 10 on the shelf"
     view |> element("button", "Add 2 to the shelf") |> render_click()
 
-    refute render(view) =~ "Add to your favorite movies"
+    refute render(view) =~ "Choose your favorite movies"
     assert has_element?(view, "li.sortable-item[data-id='movie:1']")
     assert has_element?(view, "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
     # The whole poster is what is dragged: no handle, no strip.
@@ -159,6 +159,17 @@ defmodule RokiWeb.ProfileLiveTest do
     # A cross takes one off and the rest close up.
     view |> element("li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]") |> render_click()
     assert Enum.map(Roki.Profile.favorites(user.uuid).movie, &{&1.id, &1.position}) == [{1, 1}]
+
+    # In the picker what is on the shelf is ticked, not greyed out: unticking it and ticking
+    # another swaps them on save.
+    render_click(view, "pick_open", %{"kind" => "movie"})
+    render_async(view)
+    assert has_element?(view, "button[phx-click=pick_toggle][phx-value-key='movie:1'][aria-pressed=true]")
+    refute has_element?(view, "button[phx-click=pick_toggle][disabled]")
+    view |> element("button[phx-click=pick_toggle][phx-value-key='movie:1']") |> render_click()
+    view |> element("button[phx-click=pick_toggle][phx-value-key='movie:2']") |> render_click()
+    view |> element("button", "Save changes") |> render_click()
+    assert Enum.map(Roki.Profile.favorites(user.uuid).movie, & &1.id) == [2]
   end
 
   test "the watched page: rows and a grid, and only the owner selects, backdates and removes" do

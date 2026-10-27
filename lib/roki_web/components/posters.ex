@@ -25,6 +25,10 @@ defmodule RokiWeb.PosterComponents do
     default: false,
     doc: "no caption under the poster: progress sits on the poster, the rest on hover"
 
+  attr :title?, :boolean,
+    default: true,
+    doc: "false: no title line under the poster (it stays as the hover text)"
+
   def poster(assigns) do
     assigns =
       assign(
@@ -61,6 +65,7 @@ defmodule RokiWeb.PosterComponents do
           :if={@item.poster}
           src={Roki.Images.local(@item.poster)}
           alt={@item.title}
+          title={if !@title?, do: @item.title}
           loading="lazy"
           class={[
             "h-full w-full object-cover transition group-hover:scale-105",
@@ -160,7 +165,7 @@ defmodule RokiWeb.PosterComponents do
           {@item.title}
         </div>
       </div>
-      <div class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
+      <div :if={@title?} class="truncate text-sm font-medium" title={@item.title}>{@item.title}</div>
       <div :if={!@compact} class="text-xs text-base-content/60">
         {if @watched?, do: "Watched · ", else: ""}{subtitle(@item)}
       </div>

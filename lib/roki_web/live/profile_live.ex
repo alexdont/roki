@@ -180,7 +180,7 @@ defmodule RokiWeb.ProfileLive do
 
         {:noreply,
          socket
-         |> assign(picking: shelf, pick_list: nil, picks: MapSet.new(), pick_shown: 60, query: "", shelf_error: nil)
+         |> assign(picking: shelf, pick_list: nil, picks: on_shelf_keys(favs, shelf), pick_shown: 60, query: "", shelf_error: nil)
          |> start_async(:pick_list, fn -> {shelf, Profile.picker(uuid, shelf, favs)} end)}
 
       _ ->
@@ -196,41 +196,60 @@ defmodule RokiWeb.ProfileLive do
 
   def handle_event("pick_more", _params, socket), do: {:noreply, update(socket, :pick_shown, &(&1 + 60))}
 
-  # Select or let go of one; no more than the shelf has places left.
+  # Tick or untick one. What is on the shelf starts ticked: unticking it takes it off when the
+  # picker is saved, and the place it frees can be ticked for something else. No more than
+  # the shelf holds can be ticked at once.
   def handle_event("pick_toggle", %{"key" => key}, %{assigns: %{owner?: true, picking: kind}} = socket) when kind != nil do
     picks = socket.assigns.picks
-    left = places_left(socket.assigns.favorites, kind)
 
     cond do
       MapSet.member?(picks, key) -> {:noreply, assign(socket, picks: MapSet.delete(picks, key), shelf_error: nil)}
-      MapSet.size(picks) >= left -> {:noreply, assign(socket, :shelf_error, "Only #{left} #{if left == 1, do: "place is", else: "places are"} left on this shelf.")}
+      MapSet.size(picks) >= Profile.top() -> {:noreply, assign(socket, :shelf_error, "The shelf holds #{Profile.top()}. Untick one to make room.")}
       true -> {:noreply, assign(socket, picks: MapSet.put(picks, key), shelf_error: nil)}
     end
   end
 
-  # The best rated that fit, in one press.
-  def handle_event("pick_best", _params, %{assigns: %{owner?: true, picking: kind, pick_list: list}} = socket)
+  # The best rated that fit, in one press: what is ticked stays, the rest of the places are
+  # filled from the top of the list.
+  def handle_event("pick_best", _params, %{assigns: %{owner?: true, picking: kind, pick_list: list, picks: picks}} = socket)
       when kind != nil and is_list(list) do
-    left = places_left(socket.assigns.favorites, kind)
-    keys = list |> Enum.reject(& &1.on_shelf) |> Enum.take(left) |> Enum.map(& &1.key)
-    {:noreply, assign(socket, picks: MapSet.new(keys), shelf_error: nil)}
+    room = Profile.top() - MapSet.size(picks)
+
+    keys = list |> Enum.reject(&MapSet.member?(picks, &1.key)) |> Enum.take(max(room, 0)) |> Enum.map(& &1.key)
+    {:noreply, assign(socket, picks: Enum.reduce(keys, picks, &MapSet.put(&2, &1)), shelf_error: nil)}
   end
 
-  def handle_event("pick_add", _params, %{assigns: %{owner?: true, picking: kind, pick_list: list, picks: picks}} = socket)
+  # Save the picker: what was unticked comes off the shelf, what was newly ticked goes on, in
+  # the order the list shows them, the best rated first.
+  def handle_event("pick_add", _params, %{assigns: %{owner?: true, picking: kind, pick_list: list, picks: picks, uuid: uuid}} = socket)
       when kind != nil and is_list(list) do
-    # In the order the list shows them, the best rated first.
-    keys = for i <- list, MapSet.member?(picks, i.key), do: i.key
+    removals = for i <- list, i.on_shelf, not MapSet.member?(picks, i.key), do: i.key
+    adds = for i <- list, not i.on_shelf, MapSet.member?(picks, i.key), do: i.key
 
-    case Profile.add_favorites(socket.assigns.uuid, kind, keys) do
+    Enum.each(removals, fn key ->
+      with {type, n} <- Profile.parse_key(key), do: Profile.remove_favorite(uuid, {type, n})
+    end)
+
+    result = if adds == [], do: {:ok, Profile.favorites(uuid), 0}, else: Profile.add_favorites(uuid, kind, adds)
+
+    case result do
       {:ok, favorites, _n} ->
         {:noreply, assign(socket, favorites: favorites, picking: nil, pick_list: nil, picks: MapSet.new(), query: "", shelf_error: nil)}
 
       {:error, why} ->
-        {:noreply, assign(socket, :shelf_error, why)}
+        {:noreply, assign(socket, favorites: Profile.favorites(uuid), shelf_error: why)}
     end
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  # The keys ("movie:603", "mal:5114") of what is on a shelf, as the picker names them.
+  defp on_shelf_keys(favorites, kind) do
+    for i <- (favorites || %{})[kind] || [], into: MapSet.new() do
+      {type, id} = Profile.favorite_key(i)
+      "#{type}:#{id}"
+    end
+  end
 
   defp places_left(favorites, kind), do: Profile.top() - length((favorites || %{})[kind] || [])
 
@@ -427,7 +446,7 @@ defmodule RokiWeb.ProfileLive do
             class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
           >
             <li :for={i <- @favorites[kind]} class="space-y-1">
-              <.poster item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)} cached_titles={@cached_titles} compact />
+              <.poster item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)} cached_titles={@cached_titles} compact title?={false} />
             </li>
           </ul>
           <p :if={kind != :manga and @shelf != kind and @favorites != nil and (@favorites[kind] || []) == []} class="text-sm text-base-content/50">
@@ -448,6 +467,9 @@ defmodule RokiWeb.ProfileLive do
                 />
                 Rank them 1 to {Profile.top()}
               </label>
+              <button type="button" phx-click="pick_open" phx-value-kind={kind} class="btn btn-sm btn-outline btn-primary rounded-full">
+                <.icon name="hero-squares-plus" class="h-4 w-4" /> Choose from watched
+              </button>
               <p class="text-sm text-base-content/60">
                 {if Profile.ranked?(@profile, kind),
                   do: "The numbers show: the order matters. Drag a poster to reorder.",
@@ -476,13 +498,12 @@ defmodule RokiWeb.ProfileLive do
                     type="button"
                     phx-click="shelf_remove"
                     phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                    class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-5 min-h-0 w-5 p-0 shadow sm:left-1.5 sm:top-1.5 sm:h-6 sm:w-6"
+                    class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-6 min-h-0 w-6 p-0 shadow sm:left-1.5 sm:top-1.5"
                     aria-label={"Take #{i.title} off the shelf"}
                   >
                     <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <div class="hidden truncate text-xs sm:block">{i.title}</div>
               </li>
               <%!-- Not "sortable-ignore": that filter makes SortableJS cancel the touch, and the
                     tap never becomes a click on a phone. Only .sortable-item is draggable anyway. --%>
@@ -530,18 +551,22 @@ defmodule RokiWeb.ProfileLive do
   # best rated first, to tick as many as fit and add in one go.
   defp picker(assigns) do
     matches = if is_list(assigns.list), do: matching(assigns.list, assigns.query), else: []
-    assigns = assign(assigns, matches: matches, selected: MapSet.size(assigns.picks))
+    on = if is_list(assigns.list), do: for(c <- assigns.list, c.on_shelf, into: MapSet.new(), do: c.key), else: MapSet.new()
+    added = if is_list(assigns.list), do: Enum.count(assigns.list, &(not &1.on_shelf and MapSet.member?(assigns.picks, &1.key))), else: 0
+    removed = Enum.count(on, &(not MapSet.member?(assigns.picks, &1)))
+
+    assigns = assign(assigns, matches: matches, selected: MapSet.size(assigns.picks), added: added, removed: removed)
 
     ~H"""
-    <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={"Add to your favorite #{String.downcase(@label)}"} phx-window-keydown="pick_close" phx-key="Escape">
+    <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={"Choose your favorite #{String.downcase(@label)}"} phx-window-keydown="pick_close" phx-key="Escape">
       <div class="absolute inset-0 bg-black/60" phx-click="pick_close"></div>
       <div class="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-box bg-base-100 shadow-2xl sm:max-h-[90vh] sm:rounded-box">
         <div class="space-y-3 border-b border-base-300 p-4">
           <div class="flex items-start gap-3">
             <div class="min-w-0 flex-1">
-              <h2 class="text-lg font-semibold sm:text-xl">Add to your favorite {String.downcase(@label)}</h2>
+              <h2 class="text-lg font-semibold sm:text-xl">Choose your favorite {String.downcase(@label)}</h2>
               <p class="text-sm text-base-content/60">
-                Your watched {String.downcase(@label)}, best rated first. {@left} {if @left == 1, do: "place is", else: "places are"} left — tick the ones to add.
+                Your watched {String.downcase(@label)}, best rated first. What is on the shelf is ticked: untick it to take it off, tick others to put them on.
               </p>
             </div>
             <button type="button" phx-click="pick_close" class="btn btn-sm btn-circle btn-ghost" aria-label="Close">
@@ -553,7 +578,7 @@ defmodule RokiWeb.ProfileLive do
               <input type="text" name="q" value={@query} placeholder={"Search your #{String.downcase(@label)}…"} autocomplete="off" phx-debounce="200" class="input input-bordered input-sm w-full" />
             </form>
             <button type="button" phx-click="pick_best" class="btn btn-sm">
-              <.icon name="hero-star" class="h-4 w-4" /> Pick the top {@left}
+              <.icon name="hero-star" class="h-4 w-4" /> Fill with my best
             </button>
             <span :if={is_list(@list)} class="text-sm text-base-content/60">{length(@matches)} to choose from</span>
           </div>
@@ -576,14 +601,13 @@ defmodule RokiWeb.ProfileLive do
                 type="button"
                 phx-click="pick_toggle"
                 phx-value-key={c.key}
-                disabled={c.on_shelf}
                 aria-pressed={to_string(MapSet.member?(@picks, c.key))}
                 class={[
                   "group relative block w-full overflow-hidden rounded-box bg-base-300 text-left shadow transition",
                   "aspect-[2/3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
                   MapSet.member?(@picks, c.key) && "ring-4 ring-primary",
-                  c.on_shelf && "cursor-not-allowed opacity-40",
-                  !c.on_shelf && !MapSet.member?(@picks, c.key) && "hover:scale-[1.02]"
+                  c.on_shelf && !MapSet.member?(@picks, c.key) && "opacity-50 grayscale",
+                  !MapSet.member?(@picks, c.key) && "hover:scale-[1.02]"
                 ]}
               >
                 <img :if={c.poster} src={Roki.Images.local(c.poster)} alt="" loading="lazy" class="h-full w-full object-cover" draggable="false" />
@@ -597,7 +621,8 @@ defmodule RokiWeb.ProfileLive do
                 >
                   <.icon name="hero-check-micro" class="h-4 w-4" />
                 </span>
-                <span :if={c.on_shelf} class="absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white">On the shelf</span>
+                <span :if={c.on_shelf and MapSet.member?(@picks, c.key)} class="absolute bottom-9 left-1.5 rounded-full bg-primary px-2 py-0.5 text-[0.65rem] font-semibold text-primary-content shadow">On shelf</span>
+                <span :if={c.on_shelf and !MapSet.member?(@picks, c.key)} class="absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white">Coming off</span>
               </button>
             </li>
           </ul>
@@ -608,12 +633,17 @@ defmodule RokiWeb.ProfileLive do
 
         <div class="flex flex-wrap items-center gap-3 border-t border-base-300 bg-base-100 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
           <p class="min-w-0 flex-1 text-sm">
-            <b>{@selected}</b> of {@left} selected
+            <b>{@selected}</b> of {Profile.top()} on the shelf
             <span :if={@error} class="ml-2 text-error">{@error}</span>
           </p>
           <button type="button" phx-click="pick_close" class="btn btn-ghost">Cancel</button>
-          <button type="button" phx-click="pick_add" class="btn btn-primary" disabled={@selected == 0}>
-            Add{if @selected > 0, do: " #{@selected}", else: ""} to the shelf
+          <button type="button" phx-click="pick_add" class="btn btn-primary" disabled={@added == 0 and @removed == 0}>
+            {cond do
+              @added > 0 and @removed > 0 -> "Save changes"
+              @removed > 0 -> "Take #{@removed} off"
+              @added > 0 -> "Add #{@added} to the shelf"
+              true -> "Save"
+            end}
           </button>
         </div>
       </div>

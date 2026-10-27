@@ -363,7 +363,7 @@ defmodule RokiWeb.WatchedLive do
                     (and the page does not move): while selecting, a clear button lies over it and
                     the ring and the tick are drawn on top. --%>
               <div class="relative">
-                <.poster item={i} cached_titles={@cached_titles} compact />
+                <.poster item={i} cached_titles={@cached_titles} compact title?={false} />
                 <button
                   :if={@select?}
                   type="button"
