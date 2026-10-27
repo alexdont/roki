@@ -28,14 +28,17 @@ defmodule Roki.Laev do
     Path.join(base_dir(), uuid)
   end
 
-  def run(uuid, fun) do
+  def run(uuid, fun), do: run_with(uuid, %{}, fun)
+
+  # `run/2` with settings laid over this one call only (never written anywhere).
+  defp run_with(uuid, extra, fun) do
     dir = dir(uuid)
     # Keys lent by the site owner (Roki.Keys) are added to this request's scope only, and only
     # where the account has none of its own.
     lent = Roki.Keys.overrides(uuid, Laev.Config.read_dir(dir))
     # (A study session's languages are laev scope overrides, which win over any of this.)
     try do
-      dir |> Laev.Scope.load(Map.merge(lent, app_keys())) |> Laev.Scope.run(fun)
+      dir |> Laev.Scope.load(lent |> Map.merge(app_keys()) |> Map.merge(extra)) |> Laev.Scope.run(fun)
     after
       scrub_env()
     end
@@ -577,21 +580,73 @@ defmodule Roki.Laev do
   nowhere else — not into the shared application settings, which every account would then read.
   """
   def tmdb_finish(uuid, token) when is_binary(token) do
-    with {:ok, %{uuid: ^uuid, return_to: return_to}} <- Roki.TTLCache.fetch({:tmdb_login, token}, 900, fn -> :miss end),
-         {:ok, session} <- run(uuid, fn -> Laev.Tmdb.finish_login(token) end),
-         :ok <- run(uuid, fn -> Laev.Config.write([{"TMDB_SESSION_ID", session}]) end) do
-      Roki.TTLCache.delete({:tmdb_login, token})
-      # Their ratings are on TMDB now: copy them here, and the rating button works at once.
-      Roki.TTLCache.delete({:ratings_refresh, uuid})
-      Task.start(fn -> Roki.Profile.refresh_ratings(uuid) end)
-      {:ok, return_to}
-    else
-      {:error, _} -> {:error, "TMDB did not accept that. Start again."}
-      _ -> {:error, "That link has expired. Start again."}
+    case Roki.TTLCache.fetch({:tmdb_login, token}, 900, fn -> :miss end) do
+      {:ok, %{uuid: ^uuid, return_to: return_to}} ->
+        Roki.TTLCache.delete({:tmdb_login, token})
+
+        with {:ok, session} <- run(uuid, fn -> Laev.Tmdb.finish_login(token) end),
+             name when is_binary(name) <- run_with(uuid, %{tmdb_session: session}, fn -> tmdb_name_of() end),
+             false <- tmdb_account_taken?(uuid, name) do
+          :ok = run(uuid, fn -> Laev.Config.write([{"TMDB_SESSION_ID", session}]) end)
+          # Their ratings are on TMDB now: copy them here, and the rating button works at once.
+          Roki.TTLCache.delete({:ratings_refresh, uuid})
+          Task.start(fn -> Roki.Profile.refresh_ratings(uuid) end)
+          {:ok, return_to}
+        else
+          true ->
+            {:error,
+             "That TMDB account is already used by someone else here, and ratings are saved on the " <>
+               "account they belong to. Make your own at themoviedb.org/signup (it is free), then link it.",
+             return_to}
+
+          _ ->
+            {:error, "TMDB did not accept that. Start again.", return_to}
+        end
+
+      _ ->
+        {:error, "That link has expired. Start again.", nil}
     end
   end
 
-  def tmdb_finish(_uuid, _token), do: {:error, "TMDB did not send anything back. Start again."}
+  def tmdb_finish(_uuid, _token), do: {:error, "TMDB did not send anything back. Start again.", nil}
+
+  # Who a session belongs to, asked of TMDB, lower-cased; nil when it cannot be told. (A session
+  # id is no use for this: every approval makes a new one, even for the same TMDB account.)
+  defp tmdb_name_of do
+    case Laev.Tmdb.account_name() do
+      name when is_binary(name) and name != "" -> String.downcase(name)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Is this TMDB account (a lower-cased username) already linked by a different account here? One
+  TMDB account is one person's ratings; sharing it is how one person's ratings ended up shown to,
+  and changed by, another. Each other account with a session is asked who it belongs to (and
+  remembered for ten minutes).
+  """
+  def tmdb_account_taken?(uuid, name) do
+    others =
+      for entry <- File.ls!(base_dir()),
+          {:ok, other} <- [Ecto.UUID.cast(entry)],
+          other != uuid,
+          tmdb_linked?(other),
+          do: other
+
+    Enum.any?(others, fn other ->
+      case Roki.TTLCache.fetch({:tmdb_name, other}, 600, fn ->
+             case run(other, fn -> Laev.Tmdb.account_name() end) do
+               n when is_binary(n) -> {:ok, String.downcase(n)}
+               _ -> :unknown
+             end
+           end) do
+        {:ok, ^name} -> true
+        _ -> false
+      end
+    end)
+  end
+
+  defp tmdb_linked?(uuid), do: Map.get(Laev.Config.read_dir(dir(uuid)), :tmdb_session) not in [nil, ""]
 
   @doc """
   Where MyAnimeList sends people back to once they approve: this site's own callback, which the

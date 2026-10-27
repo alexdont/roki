@@ -37,14 +37,14 @@ defmodule RokiWeb.TmdbController do
         result =
           if params["approved"] == "true",
             do: Roki.Laev.tmdb_finish(uuid, params["request_token"]),
-            else: {:error, "TMDB was not approved. Start again when you are ready."}
+            else: {:error, "TMDB was not approved. Start again when you are ready.", nil}
 
         case result do
           {:ok, return_to} ->
             conn |> put_flash(:info, "TMDB linked. Your ratings are saved there now.") |> redirect(to: safe_path(return_to))
 
-          {:error, why} ->
-            conn |> put_flash(:error, "TMDB: #{why}") |> redirect(to: "/")
+          {:error, why, return_to} ->
+            conn |> put_flash(:error, why) |> redirect(to: safe_path(return_to))
         end
 
       _ ->
