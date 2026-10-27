@@ -43,6 +43,8 @@ defmodule Roki.MixProject do
     [
       {:finch, "~> 0.18"},
       {:phoenix_kit, "~> 2.0"},
+      {:phoenix_kit_user_connections, "~> 0.1"},
+      {:phoenix_kit_comments, "~> 0.1"},
       # Terminal cinema as a library: per-user watchlist, stats, settings, playback.
       # Declares elixir ~> 1.20 though it compiles clean on 1.19.6 (this image) — warning only.
       {:laev, "~> 0.1.45"},

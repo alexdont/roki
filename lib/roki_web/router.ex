@@ -87,6 +87,7 @@ defmodule RokiWeb.Router do
       live "/:username/calendar", CalendarLive, :index
       live "/:username/settings", SettingsLive, :index
       live "/:username/watched", WatchedLive, :index
+      live "/:username/friends", FriendsLive, :index
       # The public profile. Last: a name is anything, so every fixed address goes before it.
       live "/:username", ProfileLive, :show
     end

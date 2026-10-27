@@ -9,6 +9,7 @@ defmodule RokiWeb.TitleLive do
   the player page (`WatchLive`) or, on an external player, the app.
   """
   use RokiWeb, :live_view
+  use PhoenixKitComments.Embed
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
@@ -609,6 +610,19 @@ defmodule RokiWeb.TitleLive do
               />
             </li>
           </ul>
+        </section>
+
+        <%!-- What people here have said about it: comments, a thread of replies. One thread for the
+              title, the same for everyone. Plain text, so it needs no editor script. --%>
+        <section :if={@title.type in ["movie", "tv"]} class="space-y-3" aria-label="Comments">
+          <.live_component
+            module={PhoenixKitComments.Web.CommentsComponent}
+            id="title-comments"
+            resource_type="title"
+            resource_uuid={Roki.Social.title_uuid(@title.type, @title.id)}
+            current_user={assigns[:phoenix_kit_current_user]}
+            rich_text={false}
+          />
         </section>
 
         <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>

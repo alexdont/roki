@@ -10,6 +10,7 @@ defmodule RokiWeb.ProfileLive do
   button on the banner.
   """
   use RokiWeb, :live_view
+  use PhoenixKitComments.Embed
 
   import RokiWeb.PosterComponents
   import PhoenixKitWeb.Components.Core.UserInfo, only: [user_avatar: 1]
@@ -21,6 +22,7 @@ defmodule RokiWeb.ProfileLive do
   def mount(%{"username" => username}, _session, socket) do
     scope = socket.assigns[:phoenix_kit_current_scope]
     viewer = if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
+    viewer_user = if viewer, do: Scope.user(scope)
     user = Profile.user(username)
 
     if user == nil do
@@ -38,6 +40,11 @@ defmodule RokiWeb.ProfileLive do
           uuid: user.uuid,
           owner?: owner?,
           profile: profile,
+          viewer: viewer_user,
+          friends_on?: Roki.Social.friends_on?(),
+          relation: Roki.Social.relationship(viewer, user.uuid),
+          friend_count: Roki.Social.friend_count(user.uuid),
+          pending_count: if(owner?, do: Roki.Social.pending_count(user.uuid), else: 0),
           visible?: true,
           editing?: false,
           bio_editing?: false,
@@ -99,6 +106,26 @@ defmodule RokiWeb.ProfileLive do
   end
 
   def handle_event("validate", _params, socket), do: {:noreply, socket}
+
+  # Friends: the buttons beside the name. Whatever the answer, the page then shows how the two
+  # stand now (a request may have been taken back or answered meanwhile).
+  def handle_event("friend_" <> action, _params, %{assigns: %{viewer: %{uuid: me}, owner?: false, uuid: them}} = socket)
+      when action in ~w(add cancel accept decline remove) do
+    _ =
+      case action do
+        "add" -> Roki.Social.request(me, them)
+        "cancel" -> Roki.Social.cancel(me, them)
+        "accept" -> Roki.Social.accept(me, them)
+        "decline" -> Roki.Social.decline(me, them)
+        "remove" -> Roki.Social.remove(me, them)
+      end
+
+    {:noreply,
+     assign(socket,
+       relation: Roki.Social.relationship(me, them),
+       friend_count: Roki.Social.friend_count(them)
+     )}
+  end
 
   def handle_event("save", %{"profile" => attrs}, %{assigns: %{owner?: true, uuid: uuid}} = socket) do
     with {:ok, profile} <- Profile.update(uuid, attrs),
@@ -350,6 +377,15 @@ defmodule RokiWeb.ProfileLive do
               <h1 class="truncate text-2xl font-bold sm:text-3xl">{@user.username}</h1>
               <p :if={joined(@user)} class="text-sm text-base-content/60">On roki since {joined(@user)}</p>
             </div>
+            <.friend_bar
+              :if={@friends_on?}
+              username={@username}
+              owner?={@owner?}
+              signed_in?={@viewer != nil}
+              relation={@relation}
+              count={@friend_count}
+              pending={@pending_count}
+            />
           </div>
           <p :if={@profile.bio != ""} class="whitespace-pre-line px-4 pb-4 sm:px-6">{@profile.bio}</p>
           <%!-- Nothing written yet: a place held for it; the owner presses it and writes there. --%>
@@ -520,6 +556,19 @@ defmodule RokiWeb.ProfileLive do
             </ul>
           </div>
         </section>
+
+        <%!-- Whatever anyone wants to say to them: comments, a thread of replies. Plain text, so it
+              needs no editor script. --%>
+        <section class="space-y-3" aria-label="Comments">
+          <.live_component
+            module={PhoenixKitComments.Web.CommentsComponent}
+            id="profile-comments"
+            resource_type="profile"
+            resource_uuid={@uuid}
+            current_user={@viewer}
+            rich_text={false}
+          />
+        </section>
       </div>
 
       <.picker
@@ -534,6 +583,54 @@ defmodule RokiWeb.ProfileLive do
         left={places_left(@favorites, @picking)}
       />
     </Layouts.app>
+    """
+  end
+
+  attr :username, :string, required: true
+  attr :owner?, :boolean, required: true
+  attr :signed_in?, :boolean, required: true
+  attr :relation, :any, required: true, doc: "how the viewer stands with them; nil for oneself or a visitor"
+  attr :count, :integer, required: true
+  attr :pending, :integer, required: true
+
+  # Beside the name: how many friends, and what the viewer can do about it — ask, take the request
+  # back, answer it, or end the friendship. On their own page, the requests waiting for them.
+  defp friend_bar(assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-2 sm:pb-1">
+      <.link navigate={"/#{@username}/friends"} class="btn btn-sm btn-ghost gap-1.5">
+        <.icon name="hero-users" class="h-4 w-4" />
+        {@count} {if @count == 1, do: "friend", else: "friends"}
+        <span :if={@owner? and @pending > 0} class="badge badge-primary badge-sm">{@pending} new</span>
+      </.link>
+
+      <%= if @signed_in? and not @owner? and @relation != nil and not @relation.blocked_by and not @relation.blocked do %>
+        <%= cond do %>
+          <% @relation.connected -> %>
+            <button
+              type="button"
+              phx-click="friend_remove"
+              data-confirm={"Remove #{@username} from your friends?"}
+              class="btn btn-sm btn-outline gap-1.5"
+            >
+              <.icon name="hero-check" class="h-4 w-4" /> Friends
+            </button>
+          <% @relation.connection_pending == :sent -> %>
+            <button type="button" phx-click="friend_cancel" class="btn btn-sm btn-outline gap-1.5">
+              <.icon name="hero-clock" class="h-4 w-4" /> Request sent · cancel
+            </button>
+          <% @relation.connection_pending == :received -> %>
+            <button type="button" phx-click="friend_accept" class="btn btn-sm btn-primary gap-1.5">
+              <.icon name="hero-check" class="h-4 w-4" /> Accept
+            </button>
+            <button type="button" phx-click="friend_decline" class="btn btn-sm btn-ghost">Decline</button>
+          <% true -> %>
+            <button type="button" phx-click="friend_add" class="btn btn-sm btn-primary gap-1.5">
+              <.icon name="hero-user-plus" class="h-4 w-4" /> Add friend
+            </button>
+        <% end %>
+      <% end %>
+    </div>
     """
   end
 
