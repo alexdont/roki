@@ -544,6 +544,55 @@ defmodule Roki.Laev do
   @mal_auth "https://myanimelist.net/v1/oauth2/authorize"
   @mal_token "https://myanimelist.net/v1/oauth2/token"
 
+  @doc "Where TMDB sends people back to once they approve: this site's own callback."
+  def tmdb_redirect, do: RokiWeb.Endpoint.url() <> "/tmdb/callback"
+
+  @doc """
+  Start linking a TMDB account, so this person's ratings are saved on their own account: ask TMDB
+  for a request token (with the site's lent API key when the account has none of its own) and
+  return the address to approve at. TMDB sends the browser to `tmdb_redirect/0` with the token,
+  which `tmdb_finish/2` then turns into a session. The token is remembered for a quarter of an
+  hour against this account only, so a token approved by one person cannot be finished by another.
+  `return_to` is where to go afterwards (a path on this site).
+  """
+  def tmdb_begin(uuid, return_to) do
+    run(uuid, fn ->
+      case Laev.Tmdb.start_login() do
+        {:ok, token, _url} ->
+          Roki.TTLCache.fetch({:tmdb_login, token}, 900, fn -> {:ok, %{uuid: uuid, return_to: return_to}} end)
+
+          {:ok,
+           "https://www.themoviedb.org/authenticate/#{token}?" <>
+             URI.encode_query(%{"redirect_to" => tmdb_redirect()})}
+
+        _ ->
+          {:error, "TMDB did not answer. Try again in a moment."}
+      end
+    end)
+  end
+
+  @doc """
+  Finish it with the token TMDB sent back: `{:ok, return_to}` once this account holds its own TMDB
+  session, `{:error, why}` otherwise. The session is written to this account's own config and
+  nowhere else — not into the shared application settings, which every account would then read.
+  """
+  def tmdb_finish(uuid, token) when is_binary(token) do
+    with {:ok, %{uuid: ^uuid, return_to: return_to}} <- Roki.TTLCache.fetch({:tmdb_login, token}, 900, fn -> :miss end),
+         {:ok, session} <- run(uuid, fn -> Laev.Tmdb.finish_login(token) end),
+         :ok <- run(uuid, fn -> Laev.Config.write([{"TMDB_SESSION_ID", session}]) end) do
+      Roki.TTLCache.delete({:tmdb_login, token})
+      # Their ratings are on TMDB now: copy them here, and the rating button works at once.
+      Roki.TTLCache.delete({:ratings_refresh, uuid})
+      Task.start(fn -> Roki.Profile.refresh_ratings(uuid) end)
+      {:ok, return_to}
+    else
+      {:error, _} -> {:error, "TMDB did not accept that. Start again."}
+      _ -> {:error, "That link has expired. Start again."}
+    end
+  end
+
+  def tmdb_finish(_uuid, _token), do: {:error, "TMDB did not send anything back. Start again."}
+
   @doc """
   Where MyAnimeList sends people back to once they approve: this site's own callback, which the
   site's MyAnimeList app has to name as its redirect URL. (The terminal app's own app names

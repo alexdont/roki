@@ -38,6 +38,10 @@ defmodule RokiWeb.Router do
     get "/account/services", AccountController, :services
     # Where MyAnimeList sends people back after they approve the site's app.
     get "/mal/callback", MalController, :callback
+    # Linking a TMDB account, so ratings are saved on the person's own account: begin, and where
+    # TMDB sends them back.
+    get "/tmdb/link", TmdbController, :link
+    get "/tmdb/callback", TmdbController, :callback
     # A picture the site has not kept yet: fetched into the media library, then served from it.
     get "/img/mal/*path", ImageController, :mal
     get "/img/:size/:file", ImageController, :tmdb

@@ -1764,9 +1764,19 @@ defmodule RokiWeb.TitleLive do
           </button>
         </div>
 
-        <p :if={@rating.state == :no_account} class="mt-4 text-sm text-base-content/70">
-          Ratings are sent with your TMDB account, which isn't linked in laev yet. Link it in the
-          terminal app (it comes across with your keys), then rate here.
+        <div :if={@rating.state == :no_account and @rating.provider != :mal} class="mt-4 space-y-3">
+          <p class="text-sm text-base-content/70">
+            Your rating is saved on your own TMDB account, so it is yours and only yours. You
+            have not linked one yet: it takes a minute, TMDB is free, and you come straight back
+            here to rate.
+          </p>
+          <a href={~p"/tmdb/link?#{[return: "/title/#{@title.type}/#{@title.id}"]}"} class="btn btn-primary btn-sm">
+            Link my TMDB account
+          </a>
+        </div>
+        <p :if={@rating.state == :no_account and @rating.provider == :mal} class="mt-4 text-sm text-base-content/70">
+          Anime ratings go to MyAnimeList. Connect your account on the
+          <.link navigate={~p"/account/services"} class="link">services page</.link>, then rate here.
         </p>
 
         <form
