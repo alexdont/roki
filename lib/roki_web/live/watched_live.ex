@@ -326,24 +326,31 @@ defmodule RokiWeb.WatchedLive do
           <%!-- Grid: the posters, a tick in the corner while selecting. --%>
           <ul :if={@view == :grid} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
             <li :for={i <- group} class="space-y-1">
-              <div :if={not @select?}>
+              <%!-- The same poster in both modes, so turning select mode on changes nothing's size
+                    (and the page does not move): while selecting, a clear button lies over it and
+                    the ring and the tick are drawn on top. --%>
+              <div class="relative">
                 <.poster item={i} cached_titles={@cached_titles} compact />
+                <button
+                  :if={@select?}
+                  type="button"
+                  phx-click="select_toggle"
+                  phx-value-key={i.key}
+                  aria-pressed={to_string(MapSet.member?(@selected, i.key))}
+                  aria-label={"Select #{i.title}"}
+                  class="absolute inset-0 z-10 cursor-pointer"
+                >
+                </button>
+                <div
+                  :if={@select?}
+                  class={[
+                    "pointer-events-none absolute inset-x-0 top-0 z-20 aspect-[2/3] rounded-box transition",
+                    MapSet.member?(@selected, i.key) && "ring-4 ring-primary"
+                  ]}
+                >
+                  <.tick selected={MapSet.member?(@selected, i.key)} />
+                </div>
               </div>
-              <button
-                :if={@select?}
-                type="button"
-                phx-click="select_toggle"
-                phx-value-key={i.key}
-                aria-pressed={to_string(MapSet.member?(@selected, i.key))}
-                class={[
-                  "relative block aspect-[2/3] w-full overflow-hidden rounded-box bg-base-300 shadow transition",
-                  MapSet.member?(@selected, i.key) && "ring-4 ring-primary"
-                ]}
-              >
-                <img :if={i.poster} src={Roki.Images.local(i.poster)} alt={i.title} loading="lazy" class="h-full w-full object-cover" draggable="false" />
-                <span :if={!i.poster} class="flex h-full items-center justify-center p-2 text-center text-xs">{i.title}</span>
-                <.tick selected={MapSet.member?(@selected, i.key)} />
-              </button>
               <div class="flex items-center justify-between text-xs text-base-content/50">
                 <span>{day(i)}</span>
                 <span :if={i.score != nil and (@owner? or @profile.show_ratings)} class="font-semibold text-warning">★ {Profile.score_text(i.score)}</span>
