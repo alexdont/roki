@@ -118,8 +118,16 @@ defmodule RokiWeb.PosterComponents do
             <div class="h-full rounded-full bg-primary" style={"width: #{bar(@prog, @item)}%"}></div>
           </div>
         </div>
+        <%!-- What this person rated it: the amber mark, in place of TMDB's own score. --%>
         <span
-          :if={@compact && !@prog && !@item[:resume_at] && rating(@item)}
+          :if={@item[:my_rating] && !@prog && !@item[:resume_at]}
+          title="Your rating"
+          class="absolute bottom-1.5 right-1.5 rounded-md bg-warning px-1.5 py-0.5 text-[0.65rem] font-bold leading-none text-warning-content shadow"
+        >
+          ★ {Roki.Profile.score_text(@item.my_rating)}
+        </span>
+        <span
+          :if={@compact && !@prog && !@item[:resume_at] && !@item[:my_rating] && rating(@item)}
           class="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[0.65rem] font-medium leading-none text-white"
         >
           ★ {rating(@item)}

@@ -49,6 +49,7 @@ defmodule RokiWeb.TitleLive do
         rate_mal: nil,
         rating_error: nil,
         similar: [],
+        similar_seen: MapSet.new(),
         study: nil,
         page_title: "Watch",
         title: nil,
@@ -432,13 +433,18 @@ defmodule RokiWeb.TitleLive do
 
     {:noreply,
      socket
-     |> start_async(:similar, fn -> Roki.Similar.for_title(uuid, title.type, title.id) end)
+     |> start_async(:similar, fn ->
+       # What this person has watched, saved and rated of them, worked out alongside.
+       with {:ok, cards} <- Roki.Similar.for_title(uuid, title.type, title.id) do
+         {:ok, Roki.Laev.annotate(uuid, cards), Roki.Laev.seen_keys(uuid, cards)}
+       end
+     end)
      |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title) end)
      |> select()}
   end
 
-  def handle_async(:similar, {:ok, {:ok, cards}}, socket),
-    do: {:noreply, assign(socket, :similar, cards)}
+  def handle_async(:similar, {:ok, {:ok, cards, seen}}, socket),
+    do: {:noreply, assign(socket, similar: cards, similar_seen: seen)}
 
   def handle_async(:similar, _other, socket), do: {:noreply, socket}
 
@@ -596,7 +602,11 @@ defmodule RokiWeb.TitleLive do
           <h2 class="text-lg font-semibold">More like this</h2>
           <ul class="grid grid-cols-3 gap-4 md:grid-cols-4 lg:grid-cols-6">
             <li :for={i <- Enum.take(@similar, 12)}>
-              <RokiWeb.PosterComponents.poster item={i} />
+              <RokiWeb.PosterComponents.poster
+                item={i}
+                seen={MapSet.member?(@similar_seen, {i.type, i.id})}
+                cached_titles={@cached_titles}
+              />
             </li>
           </ul>
         </section>

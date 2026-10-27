@@ -179,16 +179,45 @@ defmodule Roki.Laev do
   themselves are shared and never touched.
   """
   def annotate(uuid, items) do
-    if uuid && connected?(uuid), do: run(uuid, fn -> partial(items) end), else: items
+    if uuid && connected?(uuid) do
+      ratings = Roki.Profile.ratings(uuid)
+      run(uuid, fn -> partial(items, ratings) end)
+    else
+      items
+    end
   end
 
-  defp partial(items) do
+  # What this person rated a title, for a poster to show: their TMDB rating, else — for a show
+  # that is anime — their MyAnimeList score (one entry), or the average of their scores for its
+  # entries (a season each). nil when they have not rated it. Runs in their scope, which holds
+  # the table that says which entries a show is.
+  defp my_rating(ratings, %{type: type, id: id}) when is_integer(id) do
+    case ratings[{type, id}] do
+      nil when type == "tv" ->
+        scores = for mal <- Laev.AnimeMap.mal_ids("tv", id), score = ratings[{"mal", mal}], do: score
+
+        case scores do
+          [] -> nil
+          [score] -> score
+          many -> Float.round(Enum.sum(many) / length(many), 1)
+        end
+
+      score ->
+        score
+    end
+  end
+
+  defp my_rating(_ratings, _item), do: nil
+
+  defp partial(items, ratings) do
     anime = Laev.Position.anime_marks()
     shows = Laev.Position.episode_marks()
 
     Enum.map(items, fn item ->
       item =
         if Laev.Watchlist.has?(item.type, item.id), do: Map.put(item, :saved, true), else: item
+
+      item = if score = my_rating(ratings, item), do: Map.put(item, :my_rating, score), else: item
 
       case partial_text(item, anime, shows) do
         nil -> item
