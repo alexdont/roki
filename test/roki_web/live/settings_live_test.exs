@@ -79,6 +79,27 @@ defmodule RokiWeb.SettingsLiveTest do
     assert Roki.Profile.ratings(user.uuid) |> Map.keys() == [{"mal", 3}]
   end
 
+  test "notification switches: friends' activity starts off, a switch takes effect at once, and it is the person's own", %{conn: conn, user: user} do
+    # Open to someone who has not connected laev too: it is about the bell, not about laev.
+    {:ok, view, html} = live(conn, "/settingstest/settings")
+    assert html =~ "Notifications"
+    assert html =~ "New episodes and releases"
+
+    refute Roki.Notify.wants?(user.uuid, "friend_activity")
+    assert Roki.Notify.wants?(user.uuid, "release")
+
+    view |> element("input[phx-click=notify_toggle][phx-value-key=friend_activity]") |> render_click()
+    assert Roki.Notify.wants?(user.uuid, "friend_activity")
+
+    view |> element("input[phx-click=notify_toggle][phx-value-key=release]") |> render_click()
+    refute Roki.Notify.wants?(user.uuid, "release")
+    assert Roki.Notify.choices(user.uuid)["release"] == false
+
+    # A made-up kind is ignored, not stored.
+    render_click(view, "notify_toggle", %{"key" => "nonsense"})
+    refute Map.has_key?(Roki.Notify.choices(user.uuid), "nonsense")
+  end
+
   test "the settings are laid out by group, with laev's own labels", %{conn: conn, user: user} do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")

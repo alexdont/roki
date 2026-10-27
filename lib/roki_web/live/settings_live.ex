@@ -111,6 +111,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:sync, nil)
           |> assign(:mal, %{status: :loading, url: nil, error: nil, busy: false})
           |> assign(:tmdb, %{status: :loading, note: nil})
+          |> assign(:notify, Roki.Notify.choices(uuid))
           |> assign(:carrying?, false)
           |> assign(:server, nil)
           |> assign(:busy, nil)
@@ -285,6 +286,16 @@ defmodule RokiWeb.SettingsLive do
 
       {:error, {:rate_limited, secs}} ->
         {:noreply, update(socket, :mal, &%{&1 | error: "Slow down, try again in #{secs}s."})}
+    end
+  end
+
+  # Which kinds of notification to get: each a switch, taking effect at once.
+  def handle_event("notify_toggle", %{"key" => key}, socket) do
+    wanted = not Map.get(socket.assigns.notify, key, true)
+
+    case Roki.Notify.set(socket.assigns.uuid, key, wanted) do
+      :ok -> {:noreply, update(socket, :notify, &Map.put(&1, key, wanted))}
+      _ -> {:noreply, socket}
     end
   end
 
@@ -623,6 +634,8 @@ defmodule RokiWeb.SettingsLive do
         <.tmdb_section :if={@state == :ready} tmdb={@tmdb} username={@username} />
 
         <.mal_section :if={@state == :ready} mal={@mal} />
+
+        <.notify_section choices={@notify} />
 
         <section :if={@state == :ready} class="space-y-3">
           <h2 class="text-xl font-semibold">Sync</h2>
@@ -971,6 +984,38 @@ defmodule RokiWeb.SettingsLive do
       <p :if={match?({:ok, _}, @result)} class="text-sm text-success">✓ {elem(@result, 1)}</p>
       <p :if={match?({:error, _}, @result)} class="text-sm text-error">✗ {elem(@result, 1)}</p>
     </div>
+    """
+  end
+
+  attr :choices, :map, required: true
+
+  # What to be told about. Friend requests and replies to your own comments always arrive.
+  defp notify_section(assigns) do
+    assigns = assign(assigns, :kinds, Roki.Notify.kinds())
+
+    ~H"""
+    <section class="space-y-3">
+      <h2 class="text-xl font-semibold">Notifications</h2>
+      <p class="text-sm text-base-content/60">
+        What the bell tells you. Friend requests and replies to your own comments always arrive.
+      </p>
+      <ul class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300">
+        <li :for={{key, label, description, _default} <- @kinds} class="flex items-center gap-4 p-3">
+          <div class="min-w-0 flex-1">
+            <div class="font-medium">{label}</div>
+            <div class="text-sm text-base-content/60">{description}</div>
+          </div>
+          <input
+            type="checkbox"
+            class="toggle toggle-primary"
+            checked={Map.get(@choices, key, true)}
+            phx-click="notify_toggle"
+            phx-value-key={key}
+            aria-label={label}
+          />
+        </li>
+      </ul>
+    </section>
     """
   end
 
