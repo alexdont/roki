@@ -189,7 +189,7 @@ defmodule RokiWeb.UserHomeLive do
      socket
      |> assign(state: :ready, data: data, busy: nil)
      |> start_async(:eps, fn -> Laev.episode_progress(uuid, watchlist_items(data)) end)
-     |> start_async(:completed, fn -> Laev.completed(uuid) end)
+     |> start_async(:completed, fn -> Roki.Profile.history(uuid) end)
      |> start_async(:stats, fn -> Roki.Profile.totals(uuid) end)
      |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)}
   end
