@@ -762,77 +762,122 @@ defmodule RokiWeb.TitleLive do
 
   defp hero(assigns) do
     ~H"""
-    <section class="hidden gap-6 sm:flex">
-      <div class="w-[8.5rem] shrink-0 space-y-3 sm:w-56 sm:space-y-4">
+    <section class="hidden space-y-6 sm:block">
+      <%!-- The banner: the film's own backdrop, washed into the page colour so the words stay readable
+            in the light and the dark theme alike; the poster stands on it. --%>
+      <div class="relative isolate overflow-hidden rounded-3xl border border-base-300/70 bg-base-200">
         <img
-          :if={@title.poster}
-          src={Roki.Images.local(@title.poster)}
-          alt={@title.title}
-          class="aspect-[2/3] w-full rounded-box bg-base-300 object-cover shadow-lg"
+          :if={@title.backdrop}
+          src={Roki.Images.local(@title.backdrop)}
+          alt=""
+          class="absolute inset-0 -z-20 h-full w-full object-cover opacity-60"
         />
-        <div :if={!@title.poster} class="aspect-[2/3] w-full rounded-box bg-base-300"></div>
+        <div class="absolute inset-0 -z-10 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55"></div>
+        <div class="absolute inset-x-0 bottom-0 -z-10 h-24 bg-gradient-to-t from-base-100/70 to-transparent"></div>
 
-        <%!-- Under the poster, well away from Play: a slip here should not save or hold a title. --%>
-        <.library_buttons :if={@linked?} title={@title} lib={@lib} busy={@lib_busy} rating={@rating} />
-      </div>
-
-      <div class="min-w-0 flex-1 space-y-3">
-        <div class="relative flex items-start gap-3">
-          <div class="min-w-0 flex-1">
-            <h1 class="text-xl font-bold leading-tight tracking-tight sm:text-4xl">{@title.title}</h1>
-            <p class="text-sm text-base-content/60">
-              {meta(@title)}
-            </p>
-            <p :if={@title.tagline} class="mt-1 italic text-base-content/60">{@title.tagline}</p>
-          </div>
-          <.more_menu id="more-menu-desk" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
-        </div>
-
-        <p
-          :if={@title.overview}
-          class="line-clamp-6 max-w-3xl text-sm text-base-content/80 sm:line-clamp-none sm:text-base"
-        >
-          {@title.overview}
-        </p>
-
-        <div class="space-y-3 pt-2">
-          <%!-- Where it plays, then the button: one decision above the other. --%>
-          <div :if={@linked? and @title.type == "movie"} class="flex">
-            <.sources_link title={@title} />
-          </div>
-
-          <div class="flex flex-wrap items-center gap-3">
-            <.play_button
-              title={@title}
-              play={@play}
-              resume={@resume}
-              resume_secs={@resume_secs}
-              busy?={match?({:working, _}, @phase)}
-              class="h-12 w-full text-lg sm:h-14 sm:w-auto sm:min-w-[15rem] sm:text-xl"
+        <div class="flex gap-8 p-6 lg:p-8">
+          <div class="w-48 shrink-0 lg:w-60">
+            <img
+              :if={@title.poster}
+              src={Roki.Images.local(@title.poster)}
+              alt={@title.title}
+              class="aspect-[2/3] w-full rounded-2xl bg-base-300 object-cover shadow-2xl ring-1 ring-black/10"
             />
-            <button
-              :if={@linked? and @study}
-              type="button"
-              phx-click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
-              class="btn btn-outline hidden h-12 gap-2 lg:inline-flex sm:h-14"
-              title="Watch this in languages you choose, leaving your settings alone"
-            >
-              <.icon name="hero-academic-cap" class="h-5 w-5" /> Study
-            </button>
-            <span
-              :if={@cached?}
-              class="badge badge-success badge-outline gap-1"
-              title="Sources are cached: plays right away"
-            >
-              ⚡ cached
-            </span>
+            <div :if={!@title.poster} class="aspect-[2/3] w-full rounded-2xl bg-base-300"></div>
+          </div>
+
+          <div class="flex min-w-0 flex-1 flex-col gap-4">
+            <div class="flex items-start gap-3">
+              <div class="min-w-0 flex-1 space-y-2">
+                <h1 class="text-3xl font-bold leading-tight tracking-tight lg:text-5xl">{@title.title}</h1>
+                <.facts_row title={@title} rating={@rating} linked?={@linked?} />
+                <p :if={@title.tagline} class="italic text-base-content/60">{@title.tagline}</p>
+              </div>
+              <.more_menu id="more-menu-desk" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
+            </div>
+
+            <p :if={@title.overview} class="max-w-3xl leading-relaxed text-base-content/85">
+              {@title.overview}
+            </p>
+
+            <div class="mt-auto space-y-4 pt-2">
+              <div class="flex flex-wrap items-center gap-3">
+                <.play_button
+                  title={@title}
+                  play={@play}
+                  resume={@resume}
+                  resume_secs={@resume_secs}
+                  busy?={match?({:working, _}, @phase)}
+                  class="h-12 min-w-[14rem] rounded-xl text-lg lg:h-14 lg:text-xl"
+                />
+                <button
+                  :if={@linked? and @study}
+                  type="button"
+                  phx-click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
+                  class="btn btn-outline h-12 gap-2 rounded-xl lg:h-14"
+                  title="Watch this in languages you choose, leaving your settings alone"
+                >
+                  <.icon name="hero-academic-cap" class="h-5 w-5" /> Study
+                </button>
+                <.link
+                  :if={@linked? and @title.type == "movie"}
+                  navigate={~p"/sources/movie/#{@title.id}"}
+                  class="btn btn-ghost h-12 gap-2 rounded-xl lg:h-14"
+                  title="Choose which release to play"
+                >
+                  <.icon name="hero-queue-list" class="h-5 w-5" /> Sources
+                </.link>
+                <span
+                  :if={@cached?}
+                  class="badge badge-success badge-outline gap-1"
+                  title="Sources are cached: plays right away"
+                >
+                  ⚡ cached
+                </span>
+              </div>
+
+              <%!-- Away from Play: a slip here should not save or hold a title. --%>
+              <.action_pills :if={@linked?} title={@title} lib={@lib} busy={@lib_busy} rating={@rating} />
+            </div>
           </div>
         </div>
-
-        <%!-- Under Play, in the room the poster's column leaves beside the Save and Rate buttons. --%>
-        {render_slot(@inner_block)}
       </div>
+
+      <%!-- More for under the banner (the comments, on a wide screen). --%>
+      <div class="max-w-4xl">{render_slot(@inner_block)}</div>
     </section>
+    """
+  end
+
+  attr :title, :map, required: true
+  attr :rating, :map, required: true
+  attr :linked?, :boolean, default: false
+
+  # Year, length and the rest as quiet chips, the score beside them (yours in its own colour once
+  # you have rated it; a click changes it).
+  defp facts_row(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :chips,
+        Enum.filter(
+          [
+            assigns.title.year,
+            assigns.title.minutes && "#{assigns.title.minutes} min",
+            seasons_text(assigns.title),
+            episodes_text(assigns.title)
+          ],
+          & &1
+        )
+      )
+
+    ~H"""
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
+      <span :for={c <- @chips} class="rounded-full bg-base-content/10 px-3 py-1 font-medium">{c}</span>
+      <span :for={g <- Enum.take(@title.genres, 3)} class="rounded-full border border-base-content/20 px-3 py-1 text-base-content/70">
+        {g}
+      </span>
+    </div>
     """
   end
 
@@ -844,55 +889,55 @@ defmodule RokiWeb.TitleLive do
   # The icon classes below are built from a name, which Tailwind cannot see, so they are spelled
   # out here: hero-bookmark hero-bookmark-solid hero-pause-circle hero-pause-circle-solid
   # hero-check-circle hero-check-circle-solid
-  # What the terminal app has on a title: saved for later, on hold, watched (and back) — as icons,
-  # the same ones and the same colours as the hover card on a poster; the words are the tooltip.
-  defp library_buttons(assigns) do
+  # What the terminal app has on a title: saved for later, on hold, watched (and back), and your
+  # rating — as pills with their words, the same colours as the hover card on a poster.
+  defp action_pills(assigns) do
     ~H"""
-    <div class="flex flex-col gap-2 sm:gap-3">
-      <div class="flex gap-2 sm:gap-3">
-        <.lib_icon
-          event="toggle_saved"
-          on={@lib.saved?}
-          icon="bookmark"
-          on_class="btn-primary"
-          label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
-        />
-        <.lib_icon
-          :if={not @title.anime?}
-          event="toggle_hold"
-          on={@lib.held?}
-          icon="pause-circle"
-          on_class="btn-warning"
-          label={if @lib.held?, do: "On hold (click to take it off)", else: "Put on hold"}
-        />
-        <%!-- A film is watched or not; a series is completed or not (episodes below one by one).
-              The same button marks and unmarks. --%>
-        <.lib_icon
-          event="toggle_watched"
-          on={watched_state?(@title, @lib)}
-          icon="check-circle"
-          on_class="btn-success"
-          busy={@busy}
-          label={
-            if watched_state?(@title, @lib),
-              do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
-              else: watched_label(@title, @lib)
-          }
-        />
-      </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <.pill
+        event="toggle_saved"
+        on={@lib.saved?}
+        icon="bookmark"
+        on_class="btn-primary"
+        label={if @lib.saved?, do: "Saved", else: "Save"}
+        title={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
+      />
+      <.pill
+        :if={not @title.anime?}
+        event="toggle_hold"
+        on={@lib.held?}
+        icon="pause-circle"
+        on_class="btn-warning"
+        label={if @lib.held?, do: "On hold", else: "Hold"}
+        title={if @lib.held?, do: "On hold (click to take it off)", else: "Put on hold"}
+      />
+      <%!-- A film is watched or not; a series is completed or not (episodes below one by one).
+            The same button marks and unmarks. --%>
+      <.pill
+        event="toggle_watched"
+        on={watched_state?(@title, @lib)}
+        icon="check-circle"
+        on_class="btn-success"
+        busy={@busy}
+        label={if watched_state?(@title, @lib), do: watched_label(@title, @lib), else: watched_label(@title, @lib)}
+        title={
+          if watched_state?(@title, @lib),
+            do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
+            else: watched_label(@title, @lib)
+        }
+      />
 
       <%!-- TMDB's average, and — once you have rated it — yours beside it in another colour. --%>
       <button
         phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-        class="btn h-auto min-h-10 w-full justify-center gap-3 px-3 py-2 text-xs sm:h-12 sm:px-4 sm:text-sm"
+        class="btn btn-sm h-10 gap-2 rounded-full px-4"
         title={if @rating.value, do: "Your rating — click to change it", else: "Rate it on TMDB"}
         aria-label="Rate it"
       >
-        <span class="flex items-center gap-1.5">
-          <.icon name="hero-star-solid" class="h-4 w-4 shrink-0 text-warning sm:h-5 sm:w-5" />
-          <span class="font-semibold text-warning">{avg_text(@title)}</span>
-        </span>
+        <.icon name="hero-star-solid" class="h-4 w-4 text-warning" />
+        <span class="font-semibold text-warning">{avg_text(@title)}</span>
         <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
+        <span :if={!@rating.value} class="text-base-content/60">Rate</span>
       </button>
     </div>
     """
@@ -903,19 +948,21 @@ defmodule RokiWeb.TitleLive do
   attr :icon, :string, required: true
   attr :on_class, :string, required: true
   attr :label, :string, required: true
+  attr :title, :string, required: true
   attr :busy, :boolean, default: false
 
-  defp lib_icon(assigns) do
+  defp pill(assigns) do
     ~H"""
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-12 min-h-0 flex-1 px-0", @on && @on_class]}
-      title={@label}
-      aria-label={@label}
+      class={["btn btn-sm h-10 gap-2 rounded-full px-4", @on && @on_class]}
+      title={@title}
+      aria-label={@title}
     >
       <span :if={@busy} class="loading loading-spinner loading-sm"></span>
-      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-6 w-6" />
+      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-5 w-5" />
+      {@label}
     </button>
     """
   end
@@ -1461,8 +1508,8 @@ defmodule RokiWeb.TitleLive do
     ]}>
       <div class="relative flex shrink-0 items-start gap-2">
         <div class="min-w-0 flex-1">
-          <h1 class="text-xl font-bold leading-tight">{@title.title}</h1>
-          <p class="text-xs text-base-content/60">{meta(@title)}</p>
+          <h1 class="text-2xl font-bold leading-tight tracking-tight">{@title.title}</h1>
+          <p class="mt-0.5 text-xs text-base-content/60">{meta(@title)}</p>
         </div>
 
         <.more_menu id="more-menu-phone" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
@@ -1478,7 +1525,7 @@ defmodule RokiWeb.TitleLive do
             width allows — and the synopsis follows it directly, so there is no gap between them. --%>
       <div class="flex min-h-0 flex-1 flex-col gap-3 [container-type:size]">
         <div class="flex h-[min(calc(100cqh-7rem),105cqw)] shrink-0 gap-3 px-4">
-          <div class="relative aspect-[2/3] w-[min(calc((100cqh-7rem)*0.66667),70cqw)] shrink-0 self-start overflow-hidden rounded-box bg-base-300 shadow-lg">
+          <div class="relative aspect-[2/3] w-[min(calc((100cqh-7rem)*0.66667),70cqw)] shrink-0 self-start overflow-hidden rounded-2xl bg-base-300 shadow-xl ring-1 ring-black/10">
             <img
               :if={@title.poster}
               src={Roki.Images.local(@title.poster)}
@@ -1533,7 +1580,7 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
-      <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 rounded-t-3xl border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur [&_.btn]:rounded-2xl">
         <.play_button
           split?
           title={@title}
@@ -1570,7 +1617,7 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-auto min-h-0 w-full flex-1 rounded-box px-0", @on && @on_class]}
+      class={["btn h-auto min-h-0 w-full flex-1 rounded-2xl px-0 shadow-sm", if(@on, do: @on_class, else: "border-base-300 bg-base-100")]}
       title={@label}
       aria-label={@label}
     >
@@ -1709,7 +1756,7 @@ defmodule RokiWeb.TitleLive do
     ~H"""
     <button
       phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-      class="btn h-auto min-h-0 w-full flex-1 flex-col gap-0 rounded-box px-0 leading-tight"
+      class="btn h-auto min-h-0 w-full flex-1 flex-col gap-0 rounded-2xl border-base-300 bg-base-100 px-0 leading-tight shadow-sm"
       title="Rate it on TMDB"
       aria-label="Rate it on TMDB"
     >
@@ -1949,25 +1996,6 @@ defmodule RokiWeb.TitleLive do
         <p :if={@error} class="mt-3 text-sm text-error">{@error}</p>
       </div>
     </div>
-    """
-  end
-
-  attr :title, :map, required: true
-
-  # Straight to the sources (a film) or the episodes (a series), without starting anything.
-  defp sources_link(assigns) do
-    ~H"""
-    <.link
-      navigate={
-        if @title.type == "movie",
-          do: ~p"/sources/movie/#{@title.id}",
-          else: ~p"/title/tv/#{@title.id}/episodes"
-      }
-      class="btn btn-xs sm:btn-sm"
-    >
-      <.icon name="hero-queue-list" class="h-4 w-4" />
-      {if @title.type == "movie", do: "Sources", else: "Episodes"}
-    </.link>
     """
   end
 end
