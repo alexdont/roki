@@ -26,13 +26,15 @@ defmodule RokiWeb.HeaderTest do
     assert html =~ ~s(name="q")
   end
 
-  test "a visitor has no shelf or calendar buttons", %{conn: conn} do
+  test "a visitor has no home or new-episodes buttons, only the ways in", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/lists")
-    refute html =~ ~s(aria-label="Shelf")
-    refute html =~ ~s(aria-label="Calendar")
+    refute html =~ ~s(aria-label="Home")
+    refute html =~ ~s(aria-label="New episodes")
+    refute html =~ ~s(id="account-button")
+    assert html =~ "Log in"
   end
 
-  test "signed in: a star for the shelf, a calendar icon, and no settings link in the bar" do
+  test "signed in: home star, new episodes, and one account menu" do
     {:ok, user} =
       PhoenixKit.Users.Auth.register_user(%{
         "email" => "header-test@example.com",
@@ -45,12 +47,18 @@ defmodule RokiWeb.HeaderTest do
     {:ok, _view, html} = live(conn, "/lists")
 
     assert html =~ ~s(href="/headertest/home")
-    assert html =~ ~s(aria-label="Shelf")
+    assert html =~ ~s(aria-label="Home")
     assert html =~ "hero-star"
     assert html =~ ~s(href="/headertest/calendar")
     assert html =~ "hero-calendar-days"
-    # Playback & services is a row of the account menu, not an icon in the bar.
-    assert html =~ "Playback &amp; services"
+    assert html =~ ~s(aria-label="New episodes")
+    # Everything else is a row of the account menu, not an icon in the bar.
+    assert html =~ ~s(id="account-button")
+    assert html =~ ~s(href="/headertest/settings")
+    assert html =~ ~s(href="/headertest/friends")
+    assert html =~ "Log out"
+    refute html =~ "Playback &amp; services"
+    refute html =~ ~s(phx-hook="MenuExtras")
     refute html =~ ~s(href="/headertest/stats" data-phx-link)
   end
 

@@ -518,6 +518,17 @@ defmodule RokiWeb.SettingsLive do
           </a>
         </div>
 
+        <section class="space-y-1">
+          <h2 class="text-xl font-semibold">Appearance</h2>
+          <div class="flex items-center justify-between gap-4 border-b border-base-300 py-3">
+            <div>
+              <p class="font-medium">Theme</p>
+              <p class="text-sm text-base-content/60">Follow your device, or always light or dark.</p>
+            </div>
+            <Layouts.theme_toggle />
+          </div>
+        </section>
+
         <div :if={@state == :not_connected} class="alert">
           <span>Connect laev on your shelf to manage its settings.</span>
           <.link navigate={~p"/#{@username}/home"} class="btn btn-sm">Go to your shelf</.link>

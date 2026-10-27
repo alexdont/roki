@@ -27,7 +27,7 @@ defmodule RokiWeb.UserPagesTest do
 
     # their own pages open, and a user who has not connected laev is told to
     {:ok, view, html} = live(conn, "/guardtest/stats")
-    assert html =~ "Shelf"
+    assert html =~ ~s(aria-label="Home")
     assert render_async(view) =~ "Connect laev on your shelf"
 
     {:ok, cal, _} = live(conn, "/guardtest/calendar")
