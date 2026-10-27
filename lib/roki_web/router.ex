@@ -37,6 +37,7 @@ defmodule RokiWeb.Router do
     get "/lab/bytes", LabController, :bytes
     post "/lab/report", LabController, :report
     get "/lab/reports", LabController, :reports
+    get "/lab/links", LabController, :links
     # PhoenixKit's own account page (profile picture, name, email, password) is the account
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.

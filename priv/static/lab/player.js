@@ -69,7 +69,8 @@ async function probe(given) {
       rows.push(["video", `${t.codec || t.internalCodecId} ${t.displayWidth}×${t.displayHeight}`, codecString, mse, canDecode, mse ? "copy" : canDecode ? "copy (decodes)" : "cannot"])
     } else if (t.type === "audio") {
       const mse = codecString ? supportsType(mime("audio", codecString)) : false
-      const inMp4 = ["aac", "opus", "flac", "mp3"].includes(t.codec)
+      const inMp4 = ["aac", "opus", "mp3"].includes(t.codec) || (t.codec === "flac" && !state.caps.aacEnc && !state.caps.opusEnc)
+      // FLAC is re-encoded rather than copied: Chrome refuses a copied 24-bit FLAC sample entry.
       const plan = mse && inMp4 ? "copy" : canDecode ? (state.caps.aacEnc ? "decode → AAC" : state.caps.opusEnc ? "decode → Opus" : "cannot encode") : "needs server (no decoder here)"
       audios.push({track: t, plan, codecString})
       rows.push(["audio", `${t.codec || t.internalCodecId} ${t.numberOfChannels}ch ${t.sampleRate} Hz · ${t.languageCode}${t.name ? " · " + t.name : ""}`, codecString, mse, canDecode, plan])
@@ -123,33 +124,61 @@ async function play(seconds) {
   const sb = ms.addSourceBuffer(type)
   sb.mode = "segments"
 
-  // Fragments arrive in order; they are appended one at a time, as the buffer allows.
+  // Fragments arrive in order and are appended one at a time. The buffer is kept to AHEAD
+  // seconds past the playhead: a write waits (which holds the conversion, and so the download)
+  // until there is room, and what is BEHIND seconds behind the playhead is let go — a whole film
+  // pushed in at once fills the media engine's buffer (about 150 MB in Chrome) and every append
+  // after that fails, which is what broke the first real runs.
+  const AHEAD = 60, BEHIND = 30
   const queue = []
-  let bytes = 0, expectedPos = 0, finished = false
-  const pump = () => {
-    if (sb.updating || !queue.length) { if (finished && !queue.length && !sb.updating && ms.readyState === "open") { try { ms.endOfStream() } catch (e) {} } ; return }
-    const chunk = queue.shift()
-    try { sb.appendBuffer(chunk) } catch (e) { log("appendBuffer failed:", String(e)); }
+  let bytes = 0, expectedPos = 0, finished = false, waiting = null, waitMs = 0
+  const ahead = () => (v.buffered.length ? v.buffered.end(v.buffered.length - 1) - v.currentTime : 0)
+  const idle = () => new Promise((res) => (sb.updating ? sb.addEventListener("updateend", () => res(), {once: true}) : res()))
+  const evict = async () => {
+    if (!v.buffered.length || sb.updating) return
+    const start = v.buffered.start(0), keepFrom = v.currentTime - BEHIND
+    if (keepFrom - start > 10) { sb.remove(start, keepFrom); await idle() }
   }
-  sb.addEventListener("updateend", pump)
+  const pump = async () => {
+    if (sb.updating || !queue.length || v.error) { if (finished && !queue.length && !sb.updating && ms.readyState === "open") { try { ms.endOfStream() } catch (e) {} } ; return }
+    const chunk = queue[0]
+    try {
+      sb.appendBuffer(chunk)
+      queue.shift()
+    } catch (e) {
+      if (e.name === "QuotaExceededError") { log(`buffer full at ${ahead().toFixed(0)} s ahead — letting go of what was watched`); await evict(); if (!v.buffered.length || v.buffered.start(0) >= v.currentTime - BEHIND) await new Promise((r) => setTimeout(r, 1000)); pump(); return }
+      log("appendBuffer failed:", String(e))
+      queue.shift()
+    }
+  }
+  sb.addEventListener("updateend", () => { pump(); if (waiting && queue.length === 0 && ahead() < AHEAD) { const w = waiting; waiting = null; w() } })
   sb.addEventListener("error", () => log("SourceBuffer error", v.error && v.error.message))
+  const room = setInterval(() => { evict(); if (waiting && queue.length === 0 && !sb.updating && ahead() < AHEAD) { const w = waiting; waiting = null; w() } }, 500)
 
   const writable = new WritableStream({
-    write(chunk) {
+    async write(chunk) {
       if (chunk.position !== expectedPos) log(`out-of-order write at ${chunk.position} (expected ${expectedPos})`)
       expectedPos = chunk.position + chunk.data.byteLength
       bytes += chunk.data.byteLength
       queue.push(chunk.data)
       pump()
+      if (queue.length > 0 || ahead() >= AHEAD) {
+        const w0 = performance.now()
+        await new Promise((res) => { waiting = res })
+        waitMs += performance.now() - w0
+      }
     },
+    close() { clearInterval(room) },
+    abort() { clearInterval(room) },
   })
 
+  const t0 = performance.now()
+  let processed = 0
   const output = new MB.Output({
     format: new MB.Mp4OutputFormat({fastStart: "fragmented", minimumFragmentDuration: 2}),
     target: new MB.StreamTarget(writable, {chunked: true, chunkSize: 512 * 1024}),
   })
 
-  const t0 = performance.now()
   const conversion = await MB.Conversion.init({
     input, output,
     video: (t) => (t === video ? {} : {discard: true}),
@@ -160,20 +189,20 @@ async function play(seconds) {
   if (!conversion.isValid) { const why = conversion.discardedTracks.map((d) => `${d.track.type}: ${d.reason}`).join("; "); log("Conversion not valid:", why); return {error: "conversion not valid: " + why} }
   log(`Starting${from ? ` from ${from} s` : ""}: video copied, audio ${audio ? audio.plan : "none"}`)
 
-  let processed = 0
   conversion.onProgress = (p, time) => { processed = time }
   const ticker = setInterval(() => {
     const el = (performance.now() - t0) / 1000
     $("s-time").textContent = v.currentTime.toFixed(1)
     $("s-buf").textContent = v.buffered.length ? v.buffered.end(v.buffered.length - 1).toFixed(1) : "0.0"
     $("s-done").textContent = processed.toFixed(1)
-    $("s-speed").textContent = el > 0.5 ? (processed / el).toFixed(1) : "–"
+    const active = (performance.now() - t0 - waitMs) / 1000
+    $("s-speed").textContent = active > 0.5 ? `${(processed / active).toFixed(1)}${waitMs > 0 ? " (paced)" : ""}` : "–"
     $("s-bytes").textContent = (bytes / 1048576).toFixed(1)
     const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {totalVideoFrames: 0, droppedVideoFrames: 0}
     $("s-frames").textContent = `${q.totalVideoFrames} (${q.droppedVideoFrames})`
   }, 500)
 
-  state.run = {conversion, ticker, ms}
+  state.run = {conversion, ticker, ms, release: () => { if (waiting) { const w = waiting; waiting = null; w() } }}
   $("stop").disabled = false
   // Not awaited: play() only settles once there is something to play, which the conversion
   // below is about to provide.
@@ -185,7 +214,7 @@ async function play(seconds) {
     return {
       audio: audio ? `${audio.track.codec} ${audio.track.languageCode} — ${audio.plan}` : "none",
       type, played: +v.currentTime.toFixed(1), buffered: v.buffered.length ? +v.buffered.end(v.buffered.length - 1).toFixed(1) : 0,
-      prepared: +processed.toFixed(1), speed: +(processed / ((performance.now() - t0) / 1000)).toFixed(1), mb: +(bytes / 1048576).toFixed(1),
+      prepared: +processed.toFixed(1), speed: +(processed / Math.max(0.1, (performance.now() - t0 - waitMs) / 1000)).toFixed(1), pullMBps: +(bytes / 1048576 / Math.max(0.1, (performance.now() - t0 - waitMs) / 1000)).toFixed(1), mb: +(bytes / 1048576).toFixed(1),
       size: `${v.videoWidth}×${v.videoHeight}`, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames,
       mediaError: v.error ? v.error.message || String(v.error.code) : null, playRefused: playErr,
       log: $("log").textContent.slice(logStart).split("\n").filter(Boolean).slice(-8), ...extra,
@@ -210,6 +239,7 @@ async function play(seconds) {
 
 function stop(clearVideo = true) {
   if (state && state.run) {
+    if (state.run.release) state.run.release()
     try { state.run.conversion.cancel() } catch (e) {}
     clearInterval(state.run.ticker)
     state.run = null
@@ -221,6 +251,7 @@ function stop(clearVideo = true) {
 // ── the automatic run: every sample, then the pasted link, then the report ───────────────
 async function runAll() {
   const secs = Math.max(4, Number(new URLSearchParams(location.search).get("secs")) || 12)
+  const realSecs = Math.max(secs, 20)
   const cases = [
     {name: "H.264 + AAC (copy)", url: "/lab/sample/h264", audio: 0},
     {name: "H.264 + FLAC (copy or re-encode)", url: "/lab/sample/h264", audio: 1},
@@ -233,6 +264,16 @@ async function runAll() {
     cases.push({name: "Your link, direct (CORS?)", url: typed, audio: null, real: true})
     cases.push({name: "Your link, relayed", url: `/lab/bytes?u=${encodeURIComponent(typed)}`, audio: null, real: true})
   }
+  // Real releases the server has fresh links for: TorBox read directly (it allows it),
+  // Real-Debrid through the relay (it does not).
+  try {
+    const links = await (await fetch("/lab/links")).json()
+    for (const l of links) {
+      if (l.provider === "tb") cases.push({name: `${l.name} — direct`, url: l.url, audio: null, real: true, file: l.file, size: l.size})
+      else cases.push({name: `${l.name} — relayed`, url: `/lab/bytes?u=${encodeURIComponent(l.url)}`, audio: null, real: true, file: l.file, size: l.size})
+    }
+    if (links.length) log(`${links.length} real release(s) from the server added to the run.`)
+  } catch (e) { log("No real links from the server:", String(e)) }
   $("runall").disabled = true
   const results = []
   log(`=== Automatic run: ${cases.length} cases, ${secs} s each ===`)
@@ -244,8 +285,8 @@ async function runAll() {
       if (c.audio !== null && c.audio !== undefined) $("audio").value = String(c.audio)
       $("from").value = String(c.from || 0)
       const tracks = st.rows.map(([k, w, cs, m, dec, p]) => ({kind: k, what: w, codec: cs, mse: m, decodes: dec, plan: p}))
-      const r = await play(secs)
-      results.push({name: c.name, ok: !r.error && !r.mediaError && r.played > 1 && r.frames > 0, format: st.format, duration: +st.duration.toFixed(1), tracks, ...r, ms: Math.round(performance.now() - t0)})
+      const r = await play(c.real ? realSecs : secs)
+      results.push({name: c.name, file: c.file, size: c.size, ok: !r.error && !r.mediaError && r.played > 1 && r.frames > 0, format: st.format, duration: +st.duration.toFixed(1), tracks, ...r, ms: Math.round(performance.now() - t0)})
     } catch (e) {
       const m = String(e && e.message || e)
       log("failed:", m)
@@ -280,6 +321,10 @@ window.lab = {probe, play, stop, runAll, get state() { return state }}
 state = {caps: await caps(), capRows: [...$("caps").querySelectorAll("tr")].slice(1).map((tr) => [...tr.children].map((td) => td.textContent))}
 $("url").disabled = true
 const params = new URLSearchParams(location.search)
-if (params.get("src")) { const i = [...$("preset").options].findIndex((o) => o.value === params.get("src")); if (i >= 0) $("preset").value = params.get("src") }
+if (params.get("src")) {
+  const i = [...$("preset").options].findIndex((o) => o.value === params.get("src"))
+  if (i >= 0) $("preset").value = params.get("src")
+  else { $("preset").value = ""; $("url").disabled = false; $("url").value = params.get("src") }
+}
 if (params.get("runall")) { await runAll() }
 else if (params.get("autoplay")) { await probe(); if (params.get("audio")) $("audio").value = params.get("audio"); if (params.get("from")) $("from").value = params.get("from"); await play() }

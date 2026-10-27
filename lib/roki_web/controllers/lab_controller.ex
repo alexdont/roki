@@ -15,7 +15,11 @@ defmodule RokiWeb.LabController do
 
   @doc "A test file made with ffmpeg, served with byte ranges as a debrid host would."
   def sample(conn, %{"name" => name}) do
-    with :ok <- owner(conn), file when is_binary(file) <- @samples[name] || {:error, :not_found} do
+    # The three made ones by their short names; any other `.mkv` the operator put in the lab's
+    # directory (pieces of real releases) by its file name.
+    file = @samples[name] || (Regex.match?(~r/^[a-z0-9._-]+$/i, name) and "#{name}.mkv")
+
+    with :ok <- owner(conn), true <- is_binary(file) and File.exists?(Path.join(@sample_dir, file)) || {:error, :not_found} do
       RokiWeb.RangeFile.send(conn, Path.join(@sample_dir, file), "video/x-matroska")
     else
       {:error, :forbidden} -> send_resp(conn, 403, "owner only")
@@ -75,6 +79,18 @@ defmodule RokiWeb.LabController do
       id = "#{System.os_time(:second)}-#{:crypto.strong_rand_bytes(3) |> Base.encode16(case: :lower)}"
       Roki.Kept.put("lab-report", id, Map.take(params, ~w(at ua platform width height managedMediaSource caps results)))
       json(conn, %{id: id})
+    else
+      _ -> send_resp(conn, 403, "owner only")
+    end
+  end
+
+  @doc "Real releases to run (fresh debrid links put in `/tmp/lab/links.json` by the operator)."
+  def links(conn, _params) do
+    with :ok <- owner(conn) do
+      case File.read(Path.join(@sample_dir, "links.json")) do
+        {:ok, json} -> conn |> put_resp_content_type("application/json") |> send_resp(200, json)
+        _ -> json(conn, [])
+      end
     else
       _ -> send_resp(conn, 403, "owner only")
     end
