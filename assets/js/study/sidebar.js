@@ -1888,7 +1888,7 @@ export const StudySidebar = {
   // Put a track's lines into a layer: from what was downloaded before, or by loading it.
   fill(target, track) {
     if (!track) return
-    const text = this.cache.get(track.url)
+    const text = track.read ? null : this.cache.get(track.url)
     if (text) this.finish(target, text, track)
     else this.loadTrack(target, track)
   },
@@ -2045,7 +2045,9 @@ export const StudySidebar = {
     let still = 0
     const main = target === this.p
 
-    for (let tries = 0; tries < 75 && target.loading === track.url; tries++) {
+    // A track read out of the release on this device grows for as long as it plays (and after a
+    // seek), so it is never given up on; a file on the server is, once it stops growing.
+    for (let tries = 0; (tries < 75 || track.read) && target.loading === track.url; tries++) {
       try {
         // A track read out of the release on this device has no address: it is asked for its
         // text so far, the same way a file still being written is.
@@ -2065,7 +2067,7 @@ export const StudySidebar = {
             still = 0
             this.cache.set(track.url, text)
             this.finish(target, text, track)
-          } else if (++still >= 3) return
+          } else if (++still >= 3 && !track.read) return
         } else if (res.status === 404) {
           if (main && !target.cues.length) {
             this.empty.hidden = false
