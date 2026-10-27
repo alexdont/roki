@@ -317,7 +317,7 @@ defmodule RokiWeb.CategoryLive do
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 class="min-w-[6rem] flex-1 text-2xl font-bold tracking-tight sm:text-3xl">{@title}</h1>
 
-        <div class="relative ml-auto flex items-center gap-2">
+        <div class="relative flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
           <.picker
             :if={@kind == :anime}
             id="season-picker"
@@ -358,7 +358,7 @@ defmodule RokiWeb.CategoryLive do
             <.week_panel kind={@kind} season={@season || @now} corner={@corner} loading?={@loading?} now={@now} />
           </.picker>
 
-          <div class="join" role="group" aria-label="Grid size">
+          <div class="join ml-auto" role="group" aria-label="Grid size">
             <button
               :for={{size, label} <- [{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}]}
               phx-click="size"
@@ -452,7 +452,7 @@ defmodule RokiWeb.CategoryLive do
   # A big button that says what is chosen and opens a panel under it.
   defp picker(assigns) do
     ~H"""
-    <div id={@id} class="min-w-0">
+    <div id={@id} class="min-w-0 flex-1 basis-[7.5rem] sm:flex-none sm:basis-auto">
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}-panel", display: "block")}
