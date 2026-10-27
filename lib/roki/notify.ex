@@ -11,7 +11,6 @@ defmodule Roki.Notify do
   @kinds [
     {"release", "New episodes and releases", "A new episode of a show or anime you saved or are following, a saved film reaching theaters or digital.", true},
     {"season", "New seasons", "A show you saved or follow gets a new season with a date.", true},
-    {"ready", "Ready to play", "A new episode has a cached source and plays straight away.", true},
     {"digest", "Your week ahead", "One summary on Sundays of what comes out in the coming week.", true},
     {"comments", "Comments", "Likes on your comments, and being mentioned in one.", true},
     {"connection", "Connection problems", "A Real-Debrid, TorBox, MyAnimeList or TMDB login that stopped working or is about to.", true},
