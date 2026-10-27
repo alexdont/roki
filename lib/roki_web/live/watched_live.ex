@@ -249,7 +249,7 @@ defmodule RokiWeb.WatchedLive do
               <span class="hidden truncate font-semibold lg:inline">{@user.username}</span>
             </.link>
             <h1 class="text-xl font-bold sm:text-2xl lg:order-2 lg:text-3xl">Watched</h1>
-            <span :if={is_list(@history)} class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60 lg:order-3 lg:bg-transparent lg:px-0 lg:text-sm">{length(@history)}</span>
+            <span :if={is_list(@history)} class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60 lg:order-3 lg:bg-transparent lg:px-0 lg:text-sm">{length(@items)}</span>
 
             <%!-- Select mode, for the owner: one button, on and off. --%>
             <button
