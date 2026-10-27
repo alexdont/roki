@@ -60,6 +60,7 @@ defmodule RokiWeb.WatchLive do
           skip: [],
           heavy_ok: false,
           fallback?: false,
+          decode_prompt: nil,
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           caps: caps_param(socket),
           episodes: nil,
@@ -114,7 +115,7 @@ defmodule RokiWeb.WatchLive do
     parent = self()
 
     socket
-    |> assign(token: token, failed: nil, failed_reason: nil, player: nil, checks: [])
+    |> assign(token: token, failed: nil, failed_reason: nil, player: nil, checks: [], decode_prompt: nil)
     |> start_async(
       :resolve,
       Roki.Study.wrap(fn ->
@@ -284,6 +285,16 @@ defmodule RokiWeb.WatchLive do
   end
 
   # The languages offered as OpenSubtitles choices: theirs first, then the usual few.
+  # Study mode's subtitles: the language being studied is the main track, the translation (the
+  # account's language unless another was chosen) shows under it. Nil outside study mode.
+  defp study_subtitles(uuid, %{} = study) do
+    learn = Watch.short_code(study["subs"])
+    tr = Watch.short_code(Roki.Study.translate(uuid, study))
+    %{learn: learn, translate: if(tr in ["", learn], do: "", else: tr)}
+  end
+
+  defp study_subtitles(_uuid, _study), do: nil
+
   defp os_langs(prefer),
     do:
       Enum.uniq(
@@ -340,7 +351,8 @@ defmodule RokiWeb.WatchLive do
       key: play_id,
       media: "#{res.ctx.type}:#{res.ctx.tmdb_id}",
       os: Watch.os_state(uuid),
-      os_langs: os_langs(prefer)
+      os_langs: os_langs(prefer),
+      study: study_subtitles(uuid, socket.assigns.study)
     }
 
     if res.key, do: SourceCache.mark_good(uuid, res.key, source.hash)
@@ -356,7 +368,13 @@ defmodule RokiWeb.WatchLive do
     # What the release did not carry: their language, and for anime the original Japanese
     # (Jimaku), each fetched on its own so a slow provider holds up nothing.
     socket =
-      for lang <- Watch.external_langs(uuid, res.ctx, player.subtitles ++ saved),
+      for lang <-
+            Watch.external_langs(
+              uuid,
+              res.ctx,
+              player.subtitles ++ saved,
+              List.wrap(data.study && data.study.translate)
+            ),
           reduce: socket do
         acc ->
           start_async(
@@ -454,6 +472,13 @@ defmodule RokiWeb.WatchLive do
   defp with_neighbours(socket), do: socket
 
   # The address names the release that is playing, so a reload — or a copy of it — plays the same.
+  # This browser is not asked for HEVC/AV1/VP9 as they are again (it remembers).
+  defp no_direct(socket) do
+    socket
+    |> assign(caps: Map.merge(socket.assigns.caps, %{hevc: false, av1: false, vp9: false, uhd: false}), fallback?: true)
+    |> push_event("roki:nodirect", %{})
+  end
+
   defp name_the_release(%{assigns: %{hash: nil}} = socket, hash),
     do: push_patch(socket, to: watch_path(socket.assigns, hash), replace: true)
 
@@ -513,30 +538,48 @@ defmodule RokiWeb.WatchLive do
   def handle_event("seek_back", _params, socket), do: {:noreply, socket}
 
   # The page could not show the video it was given (no picture, or the media engine refused it).
-  # When the release was one this browser was trusted to decode itself, ask for it again the
-  # heavy way (the server re-encodes it to H.264) and tell the browser not to ask for that again.
+  # Nothing is converted or replaced behind the viewer's back: they are asked. The two answers —
+  # convert this release for the browser (the server re-encodes it to H.264, minutes of work), or
+  # look for another file the browser plays as it is — are `convert_it` and `find_other`.
   def handle_event("player_failed", params, %{assigns: %{player: %{}, current: {source, _}}} = socket) do
     caps = socket.assigns.caps
 
     Logger.warning("player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} #{inspect(params["ua"])}")
 
-    if not socket.assigns.fallback? and not Roki.Direct.wanted?(source, %{}) and Enum.any?([:hevc, :av1, :vp9], &(caps[&1] == true)) do
+    if not socket.assigns.fallback? and not Roki.Direct.wanted?(source, %{}) and
+         Enum.any?([:hevc, :av1, :vp9], &(caps[&1] == true)) do
       {:noreply,
-       socket
-       |> assign(
-         caps: Map.merge(caps, %{hevc: false, av1: false, vp9: false, uhd: false}),
-         fallback?: true,
-         heavy_ok: socket.assigns.heavy_allowed?,
-         status: "This browser can't show this video as it is — converting it for you…"
-       )
-       |> push_event("roki:nodirect", %{})
-       |> resolve()}
+       assign(socket,
+         player: nil,
+         decode_prompt: %{name: source.name, hash: source.hash, can_convert?: socket.assigns.heavy_allowed?}
+       )}
     else
       {:noreply, socket}
     end
   end
 
   def handle_event("player_failed", _params, socket), do: {:noreply, socket}
+
+  # "Convert it": the same release, re-encoded here to something every browser plays.
+  def handle_event("convert_it", _params, %{assigns: %{decode_prompt: %{can_convert?: true}}} = socket) do
+    {:noreply,
+     socket
+     |> no_direct()
+     |> assign(heavy_ok: true, status: "Converting it so this browser can play it — this takes a few minutes…")
+     |> resolve()}
+  end
+
+  # "Find another file": this release is set aside and a different one is looked for — one this
+  # browser plays as it is, in the audio and subtitles asked for.
+  def handle_event("find_other", _params, %{assigns: %{decode_prompt: %{hash: hash}}} = socket) do
+    {:noreply,
+     socket
+     |> no_direct()
+     |> assign(hash: nil, skip: Enum.uniq([hash | socket.assigns.skip]), status: "Looking for a file this browser can play…")
+     |> resolve()}
+  end
+
+  def handle_event(event, _params, socket) when event in ["convert_it", "find_other"], do: {:noreply, socket}
 
   # The OpenSubtitles choices for one language, listed on request from the subtitles menu.
   def handle_event("os_search", %{"lang" => lang}, %{assigns: %{ctx: ctx, uuid: uuid}} = socket)
@@ -794,6 +837,30 @@ defmodule RokiWeb.WatchLive do
           Couldn't load this title just now. Try again in a minute.
         </p>
 
+        <div :if={@decode_prompt} class="space-y-3 rounded-box border border-warning/40 bg-warning/10 p-5" role="alert">
+          <p class="font-semibold">This browser can't show this video as it is.</p>
+          <p class="text-sm text-base-content/70">
+            {@decode_prompt.name} is encoded in a way this browser can't decode. You choose what happens
+            next — nothing is converted unless you say so.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button :if={@decode_prompt.can_convert?} type="button" phx-click="convert_it" class="btn btn-primary">
+              Convert it for this browser
+              <span class="text-xs font-normal opacity-80">(takes a few minutes)</span>
+            </button>
+            <button type="button" phx-click="find_other" class="btn">
+              Look for a different file
+            </button>
+          </div>
+          <p :if={!@decode_prompt.can_convert?} class="text-xs text-base-content/60">
+            Converting is not turned on for this account, so a different file is the way on. It will
+            still be in the audio and subtitles you asked for.
+          </p>
+          <p class="text-xs text-base-content/60">
+            Either way this browser will stop being sent videos like this one as they are.
+          </p>
+        </div>
+
         <div :if={@failed} class="space-y-3">
           <p class="alert alert-warning text-sm">{@failed}</p>
           <.heavy_offer :if={@failed_reason == :no_light and @heavy_allowed?} />
@@ -811,7 +878,7 @@ defmodule RokiWeb.WatchLive do
         </div>
 
         <div
-          :if={@linked? and @player == nil and @failed == nil and @title_error == nil}
+          :if={@linked? and @player == nil and @failed == nil and @title_error == nil and @decode_prompt == nil}
           class="space-y-3 rounded-box bg-base-200 p-6 text-sm"
           aria-busy="true"
         >

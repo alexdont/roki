@@ -274,7 +274,7 @@ defmodule RokiWeb.TitleLive do
     %{uuid: uuid, type: type, id: id} = socket.assigns
 
     if uuid && socket.assigns.linked? do
-      Roki.Study.put(uuid, type, id, lang, subs)
+      Roki.Study.put(uuid, type, id, lang, subs, params["tr"])
 
       # The episode asked for in the dialog; failing that, the one after the last finished.
       %{season: season, episode: episode} = study_episode(params["ep"], socket.assigns.study)
@@ -932,13 +932,14 @@ defmodule RokiWeb.TitleLive do
   defp study_choice(uuid, title, sections) do
     langs =
       case Roki.Study.get(uuid, title.type, title.id) do
-        %{"lang" => lang, "subs" => subs} ->
-          %{lang: lang, subs: subs}
+        %{"lang" => lang, "subs" => subs} = prefs ->
+          %{lang: lang, subs: subs, tr: Roki.Study.translate(uuid, prefs)}
 
         nil ->
           Roki.Laev.run(uuid, fn ->
             %{lang: Laev.Config.lang(), subs: Laev.Config.subs_lang() || "off"}
           end)
+          |> Map.put(:tr, Roki.Study.account_language(uuid))
       end
 
     # A series starts at the episode after the last one finished, whatever the player last
@@ -1731,7 +1732,8 @@ defmodule RokiWeb.TitleLive do
     assigns =
       assign(assigns,
         audio: Roki.Languages.choices(assigns.study.lang),
-        subs: Roki.Languages.choices(assigns.study.subs)
+        subs: Roki.Languages.choices(assigns.study.subs),
+        tr: Roki.Languages.choices(assigns.study.tr)
       )
 
     ~H"""
@@ -1778,6 +1780,17 @@ defmodule RokiWeb.TitleLive do
             <option value="off" selected={@study.subs == "off"}>Off — no subtitles</option>
             <.language_options choices={@subs} current={@study.subs} />
           </select>
+        </label>
+
+        <label class="block space-y-1">
+          <span class="text-sm font-medium">Translation subtitles</span>
+          <select name="tr" class="select select-bordered w-full">
+            <option value="off" selected={@study.tr == "off"}>Off — only the subtitles above</option>
+            <.language_options choices={@tr} current={@study.tr} />
+          </select>
+          <span class="block text-xs text-base-content/60">
+            Shown under the subtitles you study. Starts as your account's language.
+          </span>
         </label>
 
         <label :if={@title.type == "tv" and @study[:start]} class="block space-y-1">

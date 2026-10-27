@@ -43,4 +43,23 @@ defmodule Roki.StudyTest do
     Roki.Study.bind(%{})
     refute Roki.Study.active?()
   end
+
+  test "the translation subtitles are remembered, and default to the account's own language" do
+    :ok = Roki.Study.put(@uuid, "tv", 7, "fr", "fr", "DE")
+    assert %{"tr" => "de"} = prefs = Roki.Study.get(@uuid, "tv", 7)
+    assert Roki.Study.translate(@uuid, prefs) == "de"
+
+    :ok = Roki.Study.put(@uuid, "tv", 8, "fr", "fr", "off")
+    assert Roki.Study.translate(@uuid, Roki.Study.get(@uuid, "tv", 8)) == "off"
+
+    # Nothing chosen: the account's language, even while a study session has its own bound.
+    :ok = Roki.Study.put(@uuid, "tv", 9, "fr", "fr")
+    prefs = Roki.Study.get(@uuid, "tv", 9)
+    refute Map.has_key?(prefs, "tr")
+    Roki.Study.bind(Roki.Study.overrides(prefs))
+    account = Roki.Study.account_language(@uuid)
+    assert Roki.Study.translate(@uuid, prefs) == account
+    assert account != "fr"
+    Roki.Study.bind(%{})
+  end
 end

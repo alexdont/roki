@@ -20,12 +20,48 @@ defmodule Roki.Study do
     end
   end
 
-  @doc "Remember the choice. `subs` is a language code or \"off\"."
-  def put(uuid, type, id, lang, subs) do
+  @doc """
+  Remember the choice. `subs` is the language of the subtitles being studied, `translate` the one
+  shown under them (language codes, or \"off\").
+  """
+  def put(uuid, type, id, lang, subs, translate \\ nil) do
     path = path(uuid, type, id)
     File.mkdir_p!(Path.dirname(path))
-    File.write!(path, Jason.encode!(%{"lang" => clean(lang, "en"), "subs" => clean(subs, "off")}))
+
+    prefs = %{"lang" => clean(lang, "en"), "subs" => clean(subs, "off")}
+    prefs = if translate, do: Map.put(prefs, "tr", clean(translate, "off")), else: prefs
+    File.write!(path, Jason.encode!(prefs))
     :ok
+  end
+
+  @doc """
+  The language the translation subtitles are in: the one remembered for the title, else the
+  account's own subtitle language (its audio language when that is off) — whatever study session
+  is bound to this process.
+  """
+  def translate(uuid, prefs) do
+    case prefs && prefs["tr"] do
+      tr when is_binary(tr) -> tr
+      _ -> account_language(uuid)
+    end
+  end
+
+  @doc "The account's own main language, read outside any study session."
+  def account_language(uuid) do
+    # `with_overrides/2` only adds to what is bound; the study session's own are put aside.
+    bound = Laev.Scope.overrides()
+    Laev.Scope.clear_overrides()
+
+    try do
+      Roki.Laev.run(uuid, fn ->
+        case Laev.Config.subs_lang() do
+          s when is_binary(s) and s not in ["", "off"] -> s
+          _ -> Laev.Config.lang() || "en"
+        end
+      end)
+    after
+      if bound == %{}, do: :ok, else: Laev.Scope.put_overrides(bound)
+    end
   end
 
   @doc "What goes into the laev scope for a remembered choice (`%{}` for none)."

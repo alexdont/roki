@@ -1622,7 +1622,7 @@ export const StudySidebar = {
     // Tracks arriving later (a provider's) do not undo what was picked by hand.
     if (!this.userChose) this.restoreOffVideo()
     queueMicrotask(() => this.tryWant())
-    this.apply(this.userChose ? this.selection() : this.restore(p.prefer))
+    this.apply(this.userChose ? this.selection() : this.restore(p.prefer, p.study))
 
     if (!this.tracks.length && !this.p.cues.length) {
       this.empty.hidden = false
@@ -1766,7 +1766,18 @@ export const StudySidebar = {
 
   // What to start with: what was chosen last time (by name, else by language), or the first time
   // the user's language, with English under it when that is another language.
-  restore(prefer) {
+  restore(prefer, study) {
+    // Study mode asked for its languages: the one being learned is the main track, the account's
+    // language (or the one chosen) under it, whatever was toggled last time on this show.
+    if (study && study.learn) {
+      const main = this.tracks.find((t) => shortLang(t.lang) === study.learn)
+      const under = study.translate && study.translate !== study.learn
+        ? this.tracks.find((t) => shortLang(t.lang) === study.translate) : null
+      if (main) return under ? [main.url, under.url] : [main.url]
+      // The studied language has not arrived yet (a provider's file comes later): only the
+      // translation is held back, so a late arrival does not shuffle what is on screen.
+      if (this.tracks.length) return []
+    }
     let saved = null
     try { saved = JSON.parse(store.get("layers:" + this.media)) } catch {}
     if (Array.isArray(saved)) {

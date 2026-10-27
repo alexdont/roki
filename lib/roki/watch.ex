@@ -1609,13 +1609,13 @@ defmodule Roki.Watch do
   The languages worth fetching from a provider for what is playing, beyond what the release
   carries: the user's own, and — for anime, when a Jimaku key is set — the original Japanese.
   """
-  def external_langs(uuid, ctx, tracks) do
+  def external_langs(uuid, ctx, tracks, also \\ []) do
     Roki.Laev.run(uuid, fn ->
       have = MapSet.new(tracks, &short_code(&1.lang))
       prefer = short_code(Laev.Config.subs_lang())
       jimaku? = ctx.anime and Laev.Jimaku.configured?()
 
-      ([prefer] ++ if(jimaku?, do: ["ja"], else: []))
+      ([prefer] ++ Enum.map(also, &short_code/1) ++ if(jimaku?, do: ["ja"], else: []))
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.uniq()
       |> Enum.reject(&MapSet.member?(have, &1))
