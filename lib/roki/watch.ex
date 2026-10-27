@@ -400,7 +400,14 @@ defmodule Roki.Watch do
         end
       end)
 
-    with {:ok, _} <- result, do: watched_by_rating(uuid, title)
+    with {:ok, rating} <- result do
+      # Before the film is marked watched (rating it marks it): one piece of news, the rating.
+      if is_number(rating) and title.type in ["movie", "tv"],
+        do: Task.start(fn -> Roki.Social.friend_activity(uuid, :rated, title.type, title.id, title.title, rating) end)
+
+      watched_by_rating(uuid, title)
+    end
+
     result
   end
 

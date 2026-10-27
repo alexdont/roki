@@ -158,12 +158,22 @@ defmodule Roki.Activity do
         )
 
         Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
+
+        # A film finished is something friends who asked to hear about it are told (a series'
+        # episodes are not: ten in a row would be ten notices).
+        if kind == "finished" and what.type == "movie",
+          do: Roki.Social.friend_activity(uuid, :finished, what.type, what.tmdb_id, what.title)
       end
     end)
 
     :ok
   rescue
     _ -> :ok
+  end
+
+  @doc "Is this account one whose doings are not shown to anyone (the test account)?"
+  def silent?(uuid) when is_binary(uuid) do
+    Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [Ecto.UUID.dump!(uuid), @silent]).num_rows > 0
   end
 
   # ── from the terminal app ──────────────────────────────────────────

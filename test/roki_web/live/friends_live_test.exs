@@ -206,6 +206,41 @@ defmodule RokiWeb.FriendsLiveTest do
     assert Roki.CommentHandler.mentioned("a @friendbob, @friendbob. and @friendbob") == [bob.uuid]
   end
 
+  test "friend activity: told only to friends who asked, once per title, and never for the test account", %{ann: ann, bob: bob} do
+    carol = register("friendcarol2")
+    # What friends did, apart from the friend requests that made them friends.
+    news = fn user -> Enum.reject(told(user), &(&1.text =~ ~r/accepted|friend request/)) end
+
+    for friend <- [bob, carol] do
+      {:ok, _} = Social.request(ann.uuid, friend.uuid)
+      {:ok, _} = Social.accept(friend.uuid, ann.uuid)
+    end
+
+    # Starts off: nobody is told what their friends do until they ask.
+    Social.friend_activity(ann.uuid, :finished, "movie", 603, "The Matrix")
+    assert news.(bob) == []
+
+    Roki.Notify.set(bob.uuid, "friend_activity", true)
+    Social.friend_activity(ann.uuid, :finished, "movie", 604, "Reloaded")
+
+    assert [%{text: "friendann finished Reloaded", link: "/title/movie/604", icon: "hero-film"}] = news.(bob)
+    assert news.(carol) == []
+
+    # Rating the same film right after finishing it is the same news.
+    Social.friend_activity(ann.uuid, :rated, "movie", 604, "Reloaded", 9.0)
+    assert length(news.(bob)) == 1
+
+    # Another film, rated: the score is in it.
+    Social.friend_activity(ann.uuid, :rated, "movie", 605, "Revolutions", 6.5)
+    assert "friendann rated Revolutions ★ 6.5" in Enum.map(told(bob), & &1.text)
+
+    # The friend's own doings are not told back to them, and strangers hear nothing.
+    stranger = register("friendstranger")
+    Roki.Notify.set(stranger.uuid, "friend_activity", true)
+    Social.friend_activity(ann.uuid, :finished, "movie", 700, "Another")
+    assert told(stranger) == []
+  end
+
   test "a reply on a title names the title and links to it; the moderation list names it too", %{ann: ann, bob: bob} do
     Social.remember_title("movie", 603, "The Matrix")
     thread = Social.title_uuid("movie", 603)

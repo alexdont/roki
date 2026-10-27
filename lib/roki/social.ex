@@ -100,6 +100,50 @@ defmodule Roki.Social do
     _ -> :ok
   end
 
+  @doc """
+  Tell the friends of `actor` who asked to hear what their friends do (the "What friends do"
+  switch, off unless chosen) that they finished a film (`:finished`) or rated a title (`:rated`,
+  with the score). A friend is told about one title at most once in ten minutes — rating a film
+  right after finishing it is one piece of news, not two. Nothing for the test account.
+  """
+  def friend_activity(actor, kind, type, id, title, score \\ nil)
+
+  def friend_activity(actor, kind, type, id, title, score)
+      when kind in [:finished, :rated] and type in ["movie", "tv"] and is_integer(id) and is_binary(title) do
+    if friends_on?() and not Roki.Activity.silent?(actor) do
+      who = name(actor)
+
+      for friend <- friends(actor),
+          Roki.Notify.wants?(friend.uuid, "friend_activity"),
+          first_news?(actor, friend.uuid, type, id) do
+        {text, icon} =
+          case kind do
+            :rated -> {"#{who} rated #{title} ★ #{Roki.Profile.score_text(score)}", "hero-star"}
+            :finished -> {"#{who} finished #{title}", "hero-film"}
+          end
+
+        notify("friend_activity", actor, friend.uuid, text, icon, "/title/#{type}/#{id}")
+      end
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  def friend_activity(_actor, _kind, _type, _id, _title, _score), do: :ok
+
+  defp first_news?(actor, friend, type, id) do
+    key = {:friend_note, actor, friend, type, id}
+
+    if Roki.TTLCache.cached?(key) do
+      false
+    else
+      Roki.TTLCache.fetch(key, 600, fn -> {:ok, true} end)
+      true
+    end
+  end
+
   @doc "Tell `target` what came out (`Roki.Releases.notice/2`): not from anyone, so no actor."
   def notify_release(target, %{text: text, icon: icon, link: link}),
     do: notify_system(target, "release", text, icon, link)
