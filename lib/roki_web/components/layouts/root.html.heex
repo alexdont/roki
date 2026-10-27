@@ -25,7 +25,9 @@
     <link rel="icon" type="image/png" sizes="192x192" href={~p"/images/icon-192.png"} />
     <link rel="shortcut icon" href="/favicon.ico" />
     <.live_title default="Roki" suffix=" · Roki" phx-no-format>{assigns[:page_title]}</.live_title>
-    <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <%!-- Each build's files under a new address (`vsn=` the file's time), so a browser never keeps
+          yesterday's script or styles: without it these are cached by guesswork. --%>
+    <link phx-track-static rel="stylesheet" href={RokiWeb.Assets.versioned("/assets/css/app.css")} />
     <%!-- The typefaces the moods' names are set in (Roki.Mood.fonts/0); a browser only fetches the
           ones a page draws. --%>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -38,7 +40,7 @@
     <script src={~p"/assets/vendor/phoenix_kit_modules.js"}>
     </script>
 
-    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    <script defer phx-track-static type="text/javascript" src={RokiWeb.Assets.versioned("/assets/js/app.js")}>
     </script>
     <script>
       (() => {

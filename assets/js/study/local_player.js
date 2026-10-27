@@ -112,6 +112,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
   // One read of the file from `from`: a conversion into a fresh MediaSource.
   async function start(from) {
     if (state.run) await state.run.stop()
+    scanner.seek()
     const audio = audioIndex >= 0 ? audios[audioIndex] : null
     let audioOpts = {discard: true}, audioCodec = null
     if (audio && audio.how === "copy") { audioOpts = {}; audioCodec = audio.codecString }
@@ -254,6 +255,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
       try { input.dispose && input.dispose() } catch (e) {}
     },
   }
+  ctl.__scanner = scanner // for the trace
   if (opts.onReady) opts.onReady(ctl)
   return ctl
 }

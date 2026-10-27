@@ -57,7 +57,13 @@ export class SubtitleScanner {
     this.onTracks = null
     this.onCue = null
     this.seenTracks = false
+    // Set by the player when it is about to read from a new place: the next window beginning
+    // at a Cluster is where we go on from. Otherwise such a window is a look-ahead (the reader
+    // peeks at the last cluster for the duration) and is read on the side, our place kept.
+    this.expectJump = false
     this.stats = {windows: 0, dropped: 0, gaps: 0, clusters: 0, blocks: 0, subBlocks: 0}
+    // Debugging: `localStorage.rokiScannerTrace = "1"` keeps the first windows and elements seen.
+    this.trace = (() => { try { return localStorage.getItem("rokiScannerTrace") === "1" ? [] : null } catch (e) { return null } })()
 
   }
 
@@ -71,11 +77,13 @@ export class SubtitleScanner {
   feed(offset, bytes) {
     const end = offset + bytes.length
     this.stats.windows++
+    if (this.trace && this.trace.length < 400) this.trace.push(`w ${offset}+${bytes.length} next=${this.next}${this.carry ? " carry=" + this.carry.length + "@" + this.carryAt : ""}`)
     if (end <= this.next) { this.stats.dropped++; return }
     if (offset <= this.next) {
       const fresh = offset === this.next ? bytes : bytes.subarray(this.next - offset)
       const at = this.next
       let data = fresh
+      this.expectJump = false
       if (this.carry && this.carryAt + this.carry.length === at) {
         data = new Uint8Array(this.carry.length + fresh.length)
         data.set(this.carry, 0)
@@ -87,15 +95,33 @@ export class SubtitleScanner {
       return this.walk(at, data)
     }
     // Further on than where we are. The reader looks ahead at headers and at the index at the
-    // end of the file while it works through the clusters in order: such a window is simply
-    // not for us (what we are in the middle of is kept). Only a window that begins at a Cluster
-    // is a place to resume from — the reader seeked, and so do we.
+    // end of the file while it works through the clusters in order: such a window is not where
+    // we are. One that begins at a Cluster is read — as the new place when the player said it
+    // was about to seek, else on the side (a peek at the last cluster), our place kept.
     this.stats.gaps++
     if (!this.startsWithCluster(bytes)) return
+    if (this.expectJump) {
+      this.expectJump = false
+      this.carry = null
+      this.pendingBlock = null
+      this.entry = null
+      this.walk(offset, bytes)
+    } else {
+      this.walkDetached(offset, bytes)
+    }
+  }
+
+  seek() {
+    this.expectJump = true
+  }
+
+  // Read a window that is not where we are (a look-ahead), without moving our place.
+  walkDetached(offset, bytes) {
+    const saved = {next: this.next, carry: this.carry, carryAt: this.carryAt, clusterTime: this.clusterTime, pendingBlock: this.pendingBlock, entry: this.entry, skipTo: this.skipTo}
     this.carry = null
     this.pendingBlock = null
     this.entry = null
-    this.walk(offset, bytes)
+    try { this.walk(offset, bytes) } finally { Object.assign(this, saved) }
   }
 
   startsWithCluster(bytes) {
@@ -115,6 +141,7 @@ export class SubtitleScanner {
       if (!sz) return this.keep(base, data, pos)
       const id = idv[0], size = sz[0], headLen = idv[1] + sz[1]
       const bodyAt = pos + headLen
+      if (this.trace && this.trace.length < 400 && (this.stats.clusters > 0 || id === ID.Cluster || id === ID.Attachments)) this.trace.push(`e ${id.toString(16)} size=${size} at=${base + pos} n=${n}`)
 
       if (id === ID.EBML) { pos = bodyAt + size; continue }
       if (MASTER.has(id)) {
@@ -170,7 +197,7 @@ export class SubtitleScanner {
     if (!e || e.type !== 0x11) return
     if (!/^S_TEXT\/(UTF8|ASS|SSA|WEBVTT)$|^S_(ASS|SSA)$/.test(e.codec)) return
     if (!this.tracks.has(e.number)) {
-      this.tracks.set(e.number, {number: e.number, codec: e.codec, lang: e.bcp || e.lang || "eng", name: e.name, header: e.header, cues: [], last: -1})
+      this.tracks.set(e.number, {number: e.number, codec: e.codec, lang: e.bcp || e.lang || "eng", name: e.name, header: e.header, cues: [], seen: new Set()})
     }
   }
 
@@ -226,9 +253,15 @@ export class SubtitleScanner {
     const t = cue.track
     const text = plainText(t.codec, cue.text)
     if (!text) return
-    if (cue.start <= t.last) return // read again after a seek: already there
-    t.cues.push({start: cue.start, end: Math.max(cue.end, cue.start + 0.5), text})
-    t.last = cue.start
+    // Cues come in file order, but a look-ahead or a seek brings some from elsewhere: each is
+    // kept once, in time order.
+    const key = cue.start.toFixed(3) + "|" + text
+    if (t.seen.has(key)) return
+    t.seen.add(key)
+    const c = {start: cue.start, end: Math.max(cue.end, cue.start + 0.5), text}
+    const last = t.cues[t.cues.length - 1]
+    if (!last || last.start <= c.start) t.cues.push(c)
+    else { let i = t.cues.length - 1; while (i > 0 && t.cues[i - 1].start > c.start) i--; t.cues.splice(i, 0, c) }
     if (this.onCue) this.onCue(t, cue)
   }
 }
