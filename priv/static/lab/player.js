@@ -46,8 +46,8 @@ function sourceUrl() {
 
 let state = null
 
-async function probe() {
-  const url = sourceUrl()
+async function probe(given) {
+  const url = given || sourceUrl()
   if (!url) return log("No source.")
   $("start").disabled = true
   log(`Probing ${url}`)
@@ -85,18 +85,23 @@ async function probe() {
   sel.innerHTML = audios.map((a, i) => `<option value="${i}">${a.track.languageCode}${a.track.name ? " · " + a.track.name : ""} · ${a.track.codec || "?"} — ${a.plan}</option>`).join("") || `<option value="">no audio</option>`
   const first = audios.findIndex((a) => !/cannot|server/.test(a.plan))
   if (first >= 0) sel.value = String(first)
-  state = {...state, input, duration, video, audios}
+  state = {...state, input, format: format.name, duration, video, audios, rows}
   $("start").disabled = !video
   if (!video) log("No video track this browser can take.")
+  return state
 }
 
 // ── play ──────────────────────────────────────────────────────────────────
-async function play() {
+// Plays what was probed; with `seconds`, stops after that much playback and resolves to the
+// numbers (for the automatic run), else runs to the end.
+async function play(seconds) {
   const {input, video, audios} = state
   const audio = audios[Number($("audio").value)] || null
   const from = Math.max(0, Number($("from").value) || 0)
   const v = $("video")
   stop(false)
+  if (!video) return {error: "no playable video track"}
+  const logStart = $("log").textContent.length
 
   const videoCodec = await video.getCodecParameterString()
   let audioOpts = {discard: true}, audioCodec = null
@@ -152,7 +157,7 @@ async function play() {
     trim: from > 0 ? {start: from} : undefined,
   })
   for (const d of conversion.discardedTracks) if (!(d.track === video) && !(audio && d.track === audio.track)) continue; else log("discarded:", d.track.type, d.reason)
-  if (!conversion.isValid) { log("Conversion not valid:", conversion.discardedTracks.map((d) => `${d.track.type}: ${d.reason}`)); return }
+  if (!conversion.isValid) { const why = conversion.discardedTracks.map((d) => `${d.track.type}: ${d.reason}`).join("; "); log("Conversion not valid:", why); return {error: "conversion not valid: " + why} }
   log(`Starting${from ? ` from ${from} s` : ""}: video copied, audio ${audio ? audio.plan : "none"}`)
 
   let processed = 0
@@ -170,15 +175,37 @@ async function play() {
 
   state.run = {conversion, ticker, ms}
   $("stop").disabled = false
-  v.play().catch(() => {})
-  try {
-    await conversion.execute()
-    finished = true
-    pump()
-    log(`Done: ${(bytes / 1048576).toFixed(1)} MB prepared in ${((performance.now() - t0) / 1000).toFixed(1)} s`)
-  } catch (e) {
-    log("Conversion failed:", String(e && e.message || e))
+  // Not awaited: play() only settles once there is something to play, which the conversion
+  // below is about to provide.
+  let playErr = null
+  v.play().catch((e) => { playErr = String(e && e.message || e); log("play() refused:", playErr) })
+
+  const numbers = (extra) => {
+    const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {totalVideoFrames: 0, droppedVideoFrames: 0}
+    return {
+      audio: audio ? `${audio.track.codec} ${audio.track.languageCode} — ${audio.plan}` : "none",
+      type, played: +v.currentTime.toFixed(1), buffered: v.buffered.length ? +v.buffered.end(v.buffered.length - 1).toFixed(1) : 0,
+      prepared: +processed.toFixed(1), speed: +(processed / ((performance.now() - t0) / 1000)).toFixed(1), mb: +(bytes / 1048576).toFixed(1),
+      size: `${v.videoWidth}×${v.videoHeight}`, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames,
+      mediaError: v.error ? v.error.message || String(v.error.code) : null, playRefused: playErr,
+      log: $("log").textContent.slice(logStart).split("\n").filter(Boolean).slice(-8), ...extra,
+    }
   }
+
+  const execution = conversion.execute().then(() => { finished = true; pump(); log(`Done: ${(bytes / 1048576).toFixed(1)} MB prepared in ${((performance.now() - t0) / 1000).toFixed(1)} s`); return null })
+    .catch((e) => { const m = String(e && e.message || e); if (!/cancel/i.test(m)) log("Conversion failed:", m); return m })
+
+  if (seconds) {
+    // The budget is playback time, not preparation (a small file is prepared in a blink): let
+    // it play that long, then take the numbers.
+    let convErr = null
+    execution.then((e) => { convErr = e })
+    await new Promise((res) => setTimeout(res, seconds * 1000))
+    const out = numbers({conversionError: convErr})
+    stop(false)
+    return out
+  }
+  return numbers({conversionError: await execution})
 }
 
 function stop(clearVideo = true) {
@@ -191,14 +218,68 @@ function stop(clearVideo = true) {
   $("stop").disabled = true
 }
 
+// ── the automatic run: every sample, then the pasted link, then the report ───────────────
+async function runAll() {
+  const secs = Math.max(4, Number(new URLSearchParams(location.search).get("secs")) || 12)
+  const cases = [
+    {name: "H.264 + AAC (copy)", url: "/lab/sample/h264", audio: 0},
+    {name: "H.264 + FLAC (copy or re-encode)", url: "/lab/sample/h264", audio: 1},
+    {name: "H.264 + E-AC-3 5.1", url: "/lab/sample/eac3", audio: 0},
+    {name: "VP9 + Opus", url: "/lab/sample/vp9", audio: 0},
+    {name: "H.264 + AAC, start at 30 s", url: "/lab/sample/h264", audio: 0, from: 30},
+  ]
+  const typed = $("url").value.trim()
+  if (typed) {
+    cases.push({name: "Your link, direct (CORS?)", url: typed, audio: null, real: true})
+    cases.push({name: "Your link, relayed", url: `/lab/bytes?u=${encodeURIComponent(typed)}`, audio: null, real: true})
+  }
+  $("runall").disabled = true
+  const results = []
+  log(`=== Automatic run: ${cases.length} cases, ${secs} s each ===`)
+  for (const c of cases) {
+    log(`--- ${c.name}`)
+    const t0 = performance.now()
+    try {
+      const st = await probe(c.url)
+      if (c.audio !== null && c.audio !== undefined) $("audio").value = String(c.audio)
+      $("from").value = String(c.from || 0)
+      const tracks = st.rows.map(([k, w, cs, m, dec, p]) => ({kind: k, what: w, codec: cs, mse: m, decodes: dec, plan: p}))
+      const r = await play(secs)
+      results.push({name: c.name, ok: !r.error && !r.mediaError && r.played > 1 && r.frames > 0, format: st.format, duration: +st.duration.toFixed(1), tracks, ...r, ms: Math.round(performance.now() - t0)})
+    } catch (e) {
+      const m = String(e && e.message || e)
+      log("failed:", m)
+      results.push({name: c.name, ok: false, error: m, ms: Math.round(performance.now() - t0)})
+    }
+  }
+  stop()
+  const report = {
+    at: new Date().toISOString(), ua: navigator.userAgent, platform: navigator.platform, width: innerWidth, height: innerHeight,
+    managedMediaSource: !!window.ManagedMediaSource, caps: state.capRows, results,
+  }
+  const ok = results.filter((r) => r.ok).length
+  log(`=== ${ok}/${results.length} played. Sending the report…`)
+  try {
+    const res = await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)})
+    const body = await res.json().catch(() => ({}))
+    log(res.ok ? `Report sent (#${body.id}). Nothing else to do — thanks.` : `Report not accepted: ${res.status}`)
+  } catch (e) { log("Report could not be sent:", String(e)) }
+  $("summary").innerHTML = `<tr><th>case</th><th>result</th><th>audio</th><th>played</th><th>prepared</th><th>× realtime</th><th>frames (dropped)</th><th>note</th></tr>` +
+    results.map((r) => `<tr><td>${r.name}</td><td class="${r.ok ? "ok" : "no"}">${r.ok ? "played" : "failed"}</td><td class="muted">${r.audio || ""}</td><td>${r.played ?? ""}</td><td>${r.prepared ?? ""}</td><td>${r.speed ?? ""}</td><td>${r.frames ?? ""} (${r.dropped ?? ""})</td><td class="muted">${r.error || r.mediaError || r.conversionError || r.playRefused || ""}</td></tr>`).join("")
+  $("runall").disabled = false
+  return report
+}
+
 // ── wiring ────────────────────────────────────────────────────────────────
 $("preset").addEventListener("change", () => { $("url").disabled = !!$("preset").value })
 $("probe").addEventListener("click", () => probe().catch((e) => log("Probe failed:", String(e && e.message || e))))
 $("start").addEventListener("click", () => play().catch((e) => log("Play failed:", String(e && e.message || e))))
 $("stop").addEventListener("click", () => stop())
-window.lab = {probe, play, stop, get state() { return state }}
-state = {caps: await caps()}
+$("runall").addEventListener("click", () => runAll().catch((e) => log("Run failed:", String(e && e.message || e))))
+window.lab = {probe, play, stop, runAll, get state() { return state }}
+state = {caps: await caps(), capRows: [...$("caps").querySelectorAll("tr")].slice(1).map((tr) => [...tr.children].map((td) => td.textContent))}
 $("url").disabled = true
 const params = new URLSearchParams(location.search)
 if (params.get("src")) { const i = [...$("preset").options].findIndex((o) => o.value === params.get("src")); if (i >= 0) $("preset").value = params.get("src") }
-if (params.get("autoplay")) { await probe(); if (params.get("audio")) $("audio").value = params.get("audio"); if (params.get("from")) $("from").value = params.get("from"); await play() }
+if (params.get("runall")) { await runAll() }
+else if (params.get("autoplay")) { await probe(); if (params.get("audio")) $("audio").value = params.get("audio"); if (params.get("from")) $("from").value = params.get("from"); await play() }

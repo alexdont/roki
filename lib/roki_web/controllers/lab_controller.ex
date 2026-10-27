@@ -69,6 +69,32 @@ defmodule RokiWeb.LabController do
 
   def bytes(conn, _params), do: send_resp(conn, 400, "u= missing")
 
+  @doc "The automatic run's report from a device, kept (`roki_kept`, kind `lab-report`) to be read here."
+  def report(conn, params) do
+    with :ok <- owner(conn) do
+      id = "#{System.os_time(:second)}-#{:crypto.strong_rand_bytes(3) |> Base.encode16(case: :lower)}"
+      Roki.Kept.put("lab-report", id, Map.take(params, ~w(at ua platform width height managedMediaSource caps results)))
+      json(conn, %{id: id})
+    else
+      _ -> send_resp(conn, 403, "owner only")
+    end
+  end
+
+  @doc "The last reports, newest first."
+  def reports(conn, params) do
+    with :ok <- owner(conn) do
+      n = min(String.to_integer(params["n"] || "5"), 50)
+
+      rows =
+        Roki.Repo.query!("select key, data, fetched_at from roki_kept where kind = 'lab-report' order by fetched_at desc limit $1", [n]).rows
+        |> Enum.map(fn [key, data, at] -> %{id: key, at: at, report: if(is_binary(data), do: Jason.decode!(data), else: data)} end)
+
+      json(conn, rows)
+    else
+      _ -> send_resp(conn, 403, "owner only")
+    end
+  end
+
   # The upstream answer's status and the headers a player needs, then chunks.
   defp open(conn, resp) do
     conn

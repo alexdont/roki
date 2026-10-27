@@ -35,6 +35,8 @@ defmodule RokiWeb.Router do
     # The player lab: the browser does the whole job itself (owner only).
     get "/lab/sample/:name", LabController, :sample
     get "/lab/bytes", LabController, :bytes
+    post "/lab/report", LabController, :report
+    get "/lab/reports", LabController, :reports
     # PhoenixKit's own account page (profile picture, name, email, password) is the account
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.
