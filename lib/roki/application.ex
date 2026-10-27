@@ -35,6 +35,8 @@ defmodule Roki.Application do
       Roki.Refresher,
       # Tells people when something they saved comes out (new episodes, saved films).
       Roki.Releases,
+      # Tells people when a login of theirs stops working or is about to.
+      Roki.Health,
       {Oban, Application.get_env(:roki, Oban)},
       # Start a worker by calling: Roki.Worker.start_link(arg)
       # {Roki.Worker, arg},

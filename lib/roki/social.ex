@@ -101,10 +101,17 @@ defmodule Roki.Social do
   end
 
   @doc "Tell `target` what came out (`Roki.Releases.notice/2`): not from anyone, so no actor."
-  def notify_release(target, %{text: text, icon: icon, link: link}) do
-    PhoenixKit.Activity.log("roki", "roki.release",
+  def notify_release(target, %{text: text, icon: icon, link: link}),
+    do: notify_system(target, "release", text, icon, link)
+
+  @doc """
+  A notification from the site itself, not from a person (no actor): news, a problem, a summary.
+  `kind` names it in the activity log (`roki.<kind>`). `:ok`, or `:error` if it could not be logged.
+  """
+  def notify_system(target, kind, text, icon, link) do
+    PhoenixKit.Activity.log("roki", "roki." <> kind,
       target_uuid: target,
-      resource_type: "title",
+      resource_type: "site",
       metadata: %{"notification_text" => text, "notification_icon" => icon, "notification_link" => link}
     )
 
