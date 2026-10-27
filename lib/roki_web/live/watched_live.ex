@@ -234,15 +234,17 @@ defmodule RokiWeb.WatchedLive do
       </p>
 
       <div :if={@visible?} class={["space-y-6", @select? && "pb-28"]}>
-        <%!-- The title row stays at the top of the screen while the list scrolls, so Select is
-              always within reach. --%>
-        <div class="sticky top-0 z-30 -mx-4 flex items-center gap-3 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <.link navigate={"/#{@username}"} class="flex min-w-0 items-center gap-2 text-base-content/70 hover:text-base-content">
+        <%!-- On a phone the title row stays at the top while the list scrolls, so Select is always
+              within reach. On a wide screen the title, search, filters, view and Select are one
+              toolbar that stays there (the wrappers vanish with `contents`). --%>
+        <div class="contents lg:sticky lg:top-0 lg:z-30 lg:-mx-8 lg:flex lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 lg:border-b lg:border-base-300/60 lg:bg-base-100/90 lg:px-8 lg:py-3 lg:backdrop-blur">
+        <div class="sticky top-0 z-30 -mx-4 flex items-center gap-3 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
+          <.link navigate={"/#{@username}"} class="flex min-w-0 items-center gap-2 text-base-content/70 hover:text-base-content lg:order-1 lg:shrink-0">
             <.user_avatar user={@user} size="md" />
             <span class="hidden truncate font-semibold sm:inline">{@user.username}</span>
           </.link>
-          <h1 class="text-2xl font-bold sm:text-3xl">Watched</h1>
-          <span :if={is_list(@history)} class="text-sm text-base-content/60">{length(@history)}</span>
+          <h1 class="text-2xl font-bold sm:text-3xl lg:order-2">Watched</h1>
+          <span :if={is_list(@history)} class="text-sm text-base-content/60 lg:order-3">{length(@history)}</span>
 
           <%!-- Select mode, for the owner: one button, on and off. --%>
           <button
@@ -250,24 +252,22 @@ defmodule RokiWeb.WatchedLive do
             type="button"
             phx-click="select_mode"
             aria-pressed={to_string(@select?)}
-            class={["btn btn-sm ml-auto gap-1.5", @select? && "btn-primary"]}
+            class={["btn btn-sm ml-auto gap-1.5 lg:order-7 lg:btn-md", @select? && "btn-primary"]}
           >
             <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
             {if @select?, do: "Done", else: "Select"}
           </button>
         </div>
 
-        <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">{@notice}</p>
-
         <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
-        <div class="flex items-center gap-2">
-          <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md">
+        <div class="flex items-center gap-2 lg:contents">
+          <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md lg:order-4 lg:w-96 lg:flex-none">
             <label class="input input-bordered flex w-full items-center gap-2">
               <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/50" />
               <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="min-w-0 grow" />
             </label>
           </form>
-          <div class="join shrink-0" role="group" aria-label="View">
+          <div class="join shrink-0 lg:order-6" role="group" aria-label="View">
             <.link patch={address(assigns, view: :grid)} class={["btn btn-square join-item", @view == :grid && "btn-active"]} aria-label="Grid view" title="Grid">
               <.icon name="hero-squares-2x2" class="h-5 w-5" />
             </.link>
@@ -278,7 +278,7 @@ defmodule RokiWeb.WatchedLive do
         </div>
 
         <%!-- The filters: one line on a phone (short labels, snug buttons), roomier on a wide screen. --%>
-        <div class="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
+        <div class="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2 lg:order-8 lg:basis-full lg:flex-nowrap">
           <div class="join shrink-0">
             <.link
               :for={{s, short, long} <- [{:latest, "Latest", "Latest"}, {:top, "Rating", "By rating"}]}
@@ -305,6 +305,9 @@ defmodule RokiWeb.WatchedLive do
             ★ 10<span class="hidden sm:inline"> only</span>
           </.link>
         </div>
+        </div>
+
+        <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">{@notice}</p>
 
         <ul :if={@history == nil} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
           <li :for={_ <- 1..8} class="space-y-1">

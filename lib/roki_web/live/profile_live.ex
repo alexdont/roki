@@ -484,10 +484,9 @@ defmodule RokiWeb.ProfileLive do
                 </div>
                 <div class="hidden truncate text-xs sm:block">{i.title}</div>
               </li>
-              <li
-                :for={_ <- 1..places_left(@favorites, kind)//1}
-                class="sortable-ignore"
-              >
+              <%!-- Not "sortable-ignore": that filter makes SortableJS cancel the touch, and the
+                    tap never becomes a click on a phone. Only .sortable-item is draggable anyway. --%>
+              <li :for={_ <- 1..places_left(@favorites, kind)//1}>
                 <button
                   type="button"
                   phx-click="pick_open"
