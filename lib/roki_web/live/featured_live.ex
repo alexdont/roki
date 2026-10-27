@@ -30,7 +30,7 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:upcoming, %{})
       |> assign(:uuid, uuid(socket))
       |> assign(:activity, if(uuid(socket), do: nil, else: []))
-      |> assign(activity_kind: nil, activity_who: :all, activity_shown: 8)
+      |> assign(activity_kind: nil, activity_who: :all, activity_open: nil)
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
@@ -59,15 +59,21 @@ defmodule RokiWeb.FeaturedLive do
   @impl true
   def handle_event("activity_kind", %{"kind" => kind}, socket) do
     kind = if kind in Roki.Activity.kinds(), do: kind
-    {:noreply, socket |> assign(activity_kind: kind, activity_shown: 8) |> load_activity()}
+    {:noreply, socket |> assign(activity_kind: kind, activity_open: nil) |> load_activity()}
   end
 
   def handle_event("activity_who", %{"who" => who}, socket) do
     who = Enum.find([:all, :friends, :mine], :all, &(Atom.to_string(&1) == who))
-    {:noreply, socket |> assign(activity_who: who, activity_shown: 8) |> load_activity()}
+    {:noreply, socket |> assign(activity_who: who, activity_open: nil) |> load_activity()}
   end
 
-  def handle_event("activity_more", _params, socket), do: {:noreply, update(socket, :activity_shown, &(&1 + 8))}
+  # A group of titles opens as a list of them.
+  def handle_event("activity_open", %{"i" => i}, socket) do
+    run = with {n, ""} <- Integer.parse(i), list when is_list(list) <- socket.assigns.activity, do: Enum.at(list, n)
+    {:noreply, assign(socket, :activity_open, if(is_map(run) and run.batch?, do: run))}
+  end
+
+  def handle_event("activity_close", _params, socket), do: {:noreply, assign(socket, :activity_open, nil)}
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
@@ -152,38 +158,111 @@ defmodule RokiWeb.FeaturedLive do
     do: {:noreply, failed(socket, kind, reason)}
 
   attr :run, :map, required: true
+  attr :i, :integer, required: true
 
-  # One entry of the feed: who, what they did, to what, and the small print — a rating, the day
-  # something was really watched, how far in — with how long ago.
-  defp activity_row(assigns) do
+  # One card of the feed's row: who, what they did, to what, and the small print — a rating, the
+  # day something was really watched, how far in — with how long ago. A group is a button that
+  # opens the list of what is in it; a single title is a link to its page.
+  defp activity_card(assigns) do
     assigns = assign(assigns, :d, Roki.Activity.describe(assigns.run))
 
     ~H"""
-    <div class="flex items-center gap-3 p-3">
-      <%!-- A batch shows its first few posters, overlapping; each opens its title. --%>
-      <div :if={@run.batch?} class="flex shrink-0 -space-x-5">
-        <.link :for={i <- Enum.take(@run.items, 3)} navigate={~p"/title/#{i.type}/#{i.tmdb_id}"} class="block">
-          <.activity_poster poster={i.poster} class="h-14 w-10 ring-2 ring-base-100" />
-        </.link>
-      </div>
+    <button
+      :if={@run.batch?}
+      type="button"
+      phx-click="activity_open"
+      phx-value-i={@i}
+      class="group flex w-64 shrink-0 snap-start items-center gap-3 rounded-box border border-base-300 bg-base-100 p-2.5 text-left transition hover:bg-base-200 sm:w-72"
+    >
+      <.activity_body run={@run} d={@d} />
+    </button>
 
-      <.link :if={!@run.batch?} navigate={~p"/title/#{@run.type}/#{@run.tmdb_id}"} class="block shrink-0">
-        <.activity_poster poster={@run.poster} class="h-14 w-10" />
-      </.link>
+    <.link
+      :if={!@run.batch?}
+      navigate={~p"/title/#{@run.type}/#{@run.tmdb_id}"}
+      class="group flex w-64 shrink-0 snap-start items-center gap-3 rounded-box border border-base-300 bg-base-100 p-2.5 transition hover:bg-base-200 sm:w-72"
+    >
+      <.activity_body run={@run} d={@d} />
+    </.link>
+    """
+  end
 
-      <div class="min-w-0 flex-1 text-sm leading-snug">
-        <p class="line-clamp-2">
-          <span class="font-semibold">{@run.username}</span>
-          <span class="text-base-content/70">{@d.verb}</span>
-          <.link :if={@d.subject} navigate={~p"/title/#{@run.type}/#{@run.tmdb_id}"} class="font-semibold hover:underline">{@d.subject}</.link>
-          <span :if={@d.after} class="text-base-content/70">{@d.after}</span>
-        </p>
-        <p class="mt-0.5 flex items-center gap-1.5 text-xs text-base-content/60">
-          <.icon name={@d.icon} class={["h-4 w-4 shrink-0", tone_text(@d.tone)]} />
-          <span :if={@d.detail} class="min-w-0 truncate">{@d.detail}</span>
-          <span :if={@d.detail} aria-hidden="true">·</span>
-          <span class="shrink-0">{ago(@run.at)}</span>
-        </p>
+  attr :run, :map, required: true
+  attr :d, :map, required: true
+
+  defp activity_body(assigns) do
+    ~H"""
+    <div :if={@run.batch?} class="flex shrink-0 -space-x-6">
+      <.activity_poster
+        :for={i <- @run.items |> Enum.take(3) |> Enum.reverse()}
+        poster={i.poster}
+        class="h-16 w-11 ring-2 ring-base-100 group-hover:ring-base-200"
+      />
+    </div>
+    <.activity_poster :if={!@run.batch?} poster={@run.poster} class="h-16 w-11 shrink-0" />
+
+    <div class="min-w-0 flex-1 text-sm leading-snug">
+      <p class="line-clamp-2">
+        <span class="font-semibold">{@run.username}</span>
+        <span class="text-base-content/70">{@d.verb}</span>
+        <span :if={@d.subject} class="font-semibold">{@d.subject}</span>
+        <span :if={@d.after} class="text-base-content/70">{@d.after}</span>
+      </p>
+      <p class="mt-0.5 flex items-center gap-1.5 text-xs text-base-content/60">
+        <.icon name={@d.icon} class={["h-4 w-4 shrink-0", tone_text(@d.tone)]} />
+        <span :if={@run.batch?} class="min-w-0 truncate text-primary">See which</span>
+        <span :if={!@run.batch? and @d.detail} class="min-w-0 truncate">{@d.detail}</span>
+        <span aria-hidden="true">·</span>
+        <span class="shrink-0">{ago(@run.at)}</span>
+      </p>
+    </div>
+    """
+  end
+
+  attr :run, :map, required: true
+
+  # What is in a group: every title, each opening its page, with the day it was really watched
+  # when it was put on an earlier one.
+  defp activity_group(assigns) do
+    assigns = assign(assigns, :d, Roki.Activity.describe(assigns.run))
+
+    ~H"""
+    <div
+      class="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      phx-window-keydown="activity_close"
+      phx-key="escape"
+    >
+      <div
+        class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-box bg-base-100 shadow-xl sm:rounded-box"
+        phx-click-away="activity_close"
+        role="dialog"
+        aria-label="Titles in this group"
+      >
+        <div class="flex items-start justify-between gap-3 border-b border-base-300 p-4">
+          <div class="min-w-0">
+            <p class="font-semibold">
+              {@run.username} {@d.verb}<span :if={@d.after}> {@d.after}</span>
+            </p>
+            <p class="text-xs text-base-content/60">{ago(@run.at)}</p>
+          </div>
+          <button type="button" phx-click="activity_close" class="btn btn-ghost btn-sm btn-circle" aria-label="Close">
+            <.icon name="hero-x-mark" class="h-5 w-5" />
+          </button>
+        </div>
+        <ul class="divide-y divide-base-300 overflow-y-auto">
+          <li :for={i <- @run.items}>
+            <.link navigate={~p"/title/#{i.type}/#{i.tmdb_id}"} class="flex items-center gap-3 p-3 transition hover:bg-base-200">
+              <.activity_poster poster={i.poster} class="h-16 w-11 shrink-0" />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium">{i.title}</span>
+                <span class="block text-xs text-base-content/60">
+                  {if i.kind == "backdated" and i.watched_on, do: "Watched " <> Calendar.strftime(i.watched_on, "%b %-d, %Y"), else: ago(i.at)}
+                </span>
+              </span>
+              <.icon name="hero-chevron-right-micro" class="h-4 w-4 opacity-40" />
+            </.link>
+          </li>
+        </ul>
       </div>
     </div>
     """
@@ -262,12 +341,12 @@ defmodule RokiWeb.FeaturedLive do
 
       <h1 :if={!@visitor?} class="text-2xl font-bold tracking-tight sm:text-3xl">Featured</h1>
 
-      <%!-- What people did lately: finished, started, saved, rated, put on an earlier day. Narrowed
-            by kind and by whose. Room is kept while it loads. --%>
-      <section :if={@uuid} class="space-y-3" aria-label="Activity">
-        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <%!-- What people did lately, as one row to scroll along (or ignore): finished, started, saved,
+            rated, put on an earlier day. Narrowed by kind and by whose. A group opens as a list. --%>
+      <section :if={@uuid} class="space-y-2" aria-label="Activity">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
           <h2 class="text-xl font-semibold">Activity</h2>
-          <div class="inline-flex rounded-full bg-base-200 p-0.5" role="group" aria-label="Whose activity">
+          <div class="ml-auto inline-flex rounded-full bg-base-200 p-0.5 sm:order-last sm:ml-0" role="group" aria-label="Whose activity">
             <button
               :for={{who, label} <- [all: "Everyone", friends: "Friends", mine: "Me"]}
               type="button"
@@ -279,50 +358,36 @@ defmodule RokiWeb.FeaturedLive do
               {label}
             </button>
           </div>
+          <div class="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:flex-1 sm:px-0 [scrollbar-width:none]" role="group" aria-label="Kind of activity">
+            <button
+              :for={{kind, label} <- [{nil, "All"}, {"finished", "Finished"}, {"started", "Started"}, {"saved", "Saved"}, {"rated", "Rated"}, {"backdated", "Backdated"}]}
+              type="button"
+              phx-click="activity_kind"
+              phx-value-kind={kind || ""}
+              aria-pressed={to_string(@activity_kind == kind)}
+              class={["btn btn-xs shrink-0 rounded-full border-0", @activity_kind == kind && "btn-primary", @activity_kind != kind && "bg-base-200"]}
+            >
+              {label}
+            </button>
+          </div>
         </div>
 
-        <div class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Kind of activity">
-          <button
-            type="button"
-            phx-click="activity_kind"
-            phx-value-kind=""
-            aria-pressed={to_string(@activity_kind == nil)}
-            class={["btn btn-sm shrink-0 rounded-full border-0", @activity_kind == nil && "btn-primary", @activity_kind != nil && "bg-base-200"]}
-          >
-            All
-          </button>
-          <button
-            :for={{kind, label} <- [{"finished", "Finished"}, {"started", "Started"}, {"saved", "Saved"}, {"rated", "Rated"}, {"backdated", "Backdated"}]}
-            type="button"
-            phx-click="activity_kind"
-            phx-value-kind={kind}
-            aria-pressed={to_string(@activity_kind == kind)}
-            class={["btn btn-sm shrink-0 rounded-full border-0", @activity_kind == kind && "btn-primary", @activity_kind != kind && "bg-base-200"]}
-          >
-            {label}
-          </button>
-        </div>
+        <div :if={@activity == nil} class="skeleton h-[5.25rem] w-full rounded-box"></div>
 
-        <div :if={@activity == nil} class="skeleton h-40 w-full rounded-box"></div>
-
-        <p :if={@activity == []} class="rounded-box border border-dashed border-base-300 px-4 py-8 text-center text-sm text-base-content/60">
+        <p :if={@activity == []} class="rounded-box border border-dashed border-base-300 px-4 py-5 text-center text-sm text-base-content/60">
           {if @activity_who == :friends, do: "Nothing from your friends yet.", else: "Nothing here yet."}
         </p>
 
         <ul
           :if={@activity not in [nil, []]}
-          class="grid grid-cols-[minmax(0,1fr)] gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 md:grid-cols-2"
+          class="-mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:scroll-px-0 sm:px-0"
         >
-          <li :for={run <- Enum.take(@activity, @activity_shown)} class="min-w-0 bg-base-100">
-            <.activity_row run={run} />
+          <li :for={{run, i} <- @activity |> Enum.take(30) |> Enum.with_index()} class="contents">
+            <.activity_card run={run} i={i} />
           </li>
         </ul>
 
-        <div :if={is_list(@activity) and length(@activity) > @activity_shown} class="flex justify-center">
-          <button type="button" phx-click="activity_more" class="btn btn-ghost btn-sm rounded-full">
-            Show more
-          </button>
-        </div>
+        <.activity_group :if={@activity_open} run={@activity_open} />
       </section>
 
       <div
