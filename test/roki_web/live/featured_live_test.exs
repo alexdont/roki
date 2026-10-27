@@ -19,7 +19,7 @@ defmodule RokiWeb.FeaturedLiveTest do
     assert html =~ ~s(href="/title/movie/4242")
   end
 
-  test "each shelf is short and leads to its own page; there is no load more", %{conn: conn} do
+  test "the popular grid is short and leads to each kind's own page; there is no load more", %{conn: conn} do
     for kind <- Roki.Featured.kinds() do
       items =
         for i <- 1..20, do: %{id: i, type: "movie", title: "Film #{i}", poster: nil, year: "2020"}
@@ -32,10 +32,11 @@ defmodule RokiWeb.FeaturedLiveTest do
     html = render_async(view, 3000)
 
     for kind <- ~w(movies shows anime), do: assert(html =~ ~s(href="/#{kind}"))
-    assert html =~ "See more"
+    assert html =~ "Popular right now"
     refute html =~ "Load more"
-    assert html =~ "Film 16"
-    refute html =~ "Film 17"
+    # Twelve of each kind, the three lists interleaved; the same titles seeded thrice fold to one.
+    assert html =~ "Film 12"
+    refute html =~ "Film 13"
   end
 
   describe "activity row" do

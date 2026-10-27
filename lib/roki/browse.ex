@@ -50,30 +50,51 @@ defmodule Roki.Browse do
     {sort, season, week, genre} = view(kind, sort, season, week, genre)
     key = {:browse, kind, sort, season, week, genre, n}
 
-    answer =
-      case TTLCache.peek(key) do
-        {:ok, _} = hit ->
-          hit
-
-        :miss ->
-          # Kept beside the titles as well: it survives a restart, and a page older than an hour
-          # is still shown at once while it is read again behind the visit.
-          case kept(key) do
-            {:ok, answer, true} ->
-              TTLCache.put(key, @ttl_s, {:ok, answer})
-              {:ok, answer}
-
-            {:ok, answer, false} ->
-              refresh_later(key, kind, sort, n, uuid, season, week, genre)
-              {:ok, answer}
-
-            :none ->
-              TTLCache.fetch(key, @ttl_s, fn -> load(key, kind, sort, n, uuid, season, week, genre) end)
-          end
-      end
+    answer = cached_page(key, fn -> fetch(kind, sort, n, uuid, season, week, genre) end)
 
     with {:ok, {items, more?}} <- answer do
       {:ok, items, more?}
+    end
+  end
+
+  @doc """
+  A page of titles under `key`, from memory, else from what is kept beside the titles (it
+  survives a restart; a page older than an hour is still shown at once and read again behind the
+  visit, one read at a time), else `loader.()` (`{:ok, items, more?}`), kept both ways:
+  `{:ok, {items, more?}}` or the loader's error. The lists and the moods share this.
+  """
+  def cached_page(key, loader) when is_function(loader, 0) do
+    case TTLCache.peek(key) do
+      {:ok, _} = hit ->
+        hit
+
+      :miss ->
+        case kept(key) do
+          {:ok, answer, true} ->
+            TTLCache.put(key, @ttl_s, {:ok, answer})
+            {:ok, answer}
+
+          {:ok, answer, false} ->
+            refresh_later(key, loader)
+            {:ok, answer}
+
+          :none ->
+            TTLCache.fetch(key, @ttl_s, fn -> load(key, loader) end)
+        end
+    end
+  end
+
+  @doc "A page held under `key` (memory or kept), with no request: `{:ok, items, more?}` or `:miss`."
+  def peek_page(key) do
+    case TTLCache.peek(key) do
+      {:ok, {items, more?}} ->
+        {:ok, items, more?}
+
+      :miss ->
+        case kept(key) do
+          {:ok, {items, more?}, _fresh?} -> {:ok, items, more?}
+          :none -> :miss
+        end
     end
   end
 
@@ -86,16 +107,7 @@ defmodule Roki.Browse do
     {sort, season, week, genre} = view(kind, sort, season, week, genre)
     key = {:browse, kind, sort, season, week, genre, n}
 
-    case TTLCache.peek(key) do
-      {:ok, {items, more?}} ->
-        {:ok, items, more?}
-
-      :miss ->
-        case kept(key) do
-          {:ok, {items, more?}, _fresh?} -> {:ok, items, more?}
-          :none -> :miss
-        end
-    end
+    peek_page(key)
   end
 
   # What a request means once it is made sane: an order the kind has, a season only for anime, a
@@ -113,8 +125,8 @@ defmodule Roki.Browse do
     {sort, season, week, genre}
   end
 
-  defp load(key, kind, sort, n, uuid, season, week, genre) do
-    with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week, genre) do
+  defp load(key, loader) do
+    with {:ok, items, more?} <- loader.() do
       Roki.Titles.remember_later(items)
       keep(key, items, more?)
       {:ok, {items, more?}}
@@ -146,11 +158,11 @@ defmodule Roki.Browse do
   defp kept_key(key), do: key |> Tuple.to_list() |> tl() |> Enum.map_join("|", &to_string/1)
 
   # The stale page is shown now; a task reads it again so the next visit has the new one.
-  defp refresh_later(key, kind, sort, n, uuid, season, week, genre) do
+  defp refresh_later(key, loader) do
     Task.start(fn ->
       # One read at a time per page, and not again for half a minute.
       TTLCache.fetch({:refreshing, key}, 30, fn ->
-        with {:ok, answer} <- load(key, kind, sort, n, uuid, season, week, genre) do
+        with {:ok, answer} <- load(key, loader) do
           TTLCache.put(key, @ttl_s, {:ok, answer})
           {:ok, true}
         end
@@ -278,6 +290,16 @@ defmodule Roki.Browse do
     end)
   end
 
+  @doc """
+  TMDB's discover for `type` (`"movie"` / `"tv"`) with these parameters, in whoever's scope this
+  runs: `{:ok, items, more?}`. For callers that build their own question (the moods).
+  """
+  def discover(type, params) when type in ["movie", "tv"] do
+    with {:ok, body} <- get("/discover/" <> type, params) do
+      {:ok, Enum.map(body["results"] || [], &normalize(&1, type)), (params[:page] || 1) < (body["total_pages"] || 1)}
+    end
+  end
+
   @doc false
   def path(:movies), do: "/discover/movie"
   def path(_kind), do: "/discover/tv"
@@ -325,15 +347,15 @@ defmodule Roki.Browse do
   defp min_votes(:anime, :oldest), do: 100
   defp min_votes(:anime, :top), do: 300
 
-  # Shows leaves out what MyAnimeList lists, as on the Featured page.
-  defp filter(:shows, items) do
+  @doc "Shows leaves out what MyAnimeList lists, as on the Featured page."
+  def filter(:shows, items) do
     case Laev.AnimeMap.ensure() do
       {:ok, _} -> Featured.without_anime(items, &Laev.AnimeMap.anime?("tv", &1))
       _ -> items
     end
   end
 
-  defp filter(_kind, items), do: items
+  def filter(_kind, items), do: items
 
   defp normalize(r, type) do
     date = r["release_date"] || r["first_air_date"]
@@ -345,6 +367,7 @@ defmodule Roki.Browse do
       year: Laev.Tmdb.year(date),
       overview: r["overview"],
       poster: r["poster_path"] && "https://image.tmdb.org/t/p/w500#{r["poster_path"]}",
+      backdrop: r["backdrop_path"] && "https://image.tmdb.org/t/p/w1280#{r["backdrop_path"]}",
       vote: r["vote_average"],
       popularity: r["popularity"]
     }

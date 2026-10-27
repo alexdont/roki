@@ -69,6 +69,7 @@ defmodule RokiWeb.Router do
 
       live "/", RootLive, :index
       live "/home", FeaturedLive, :index
+      live "/mood/:slug", MoodLive, :show
       live "/movies", CategoryLive, :movies
       live "/shows", CategoryLive, :shows
       live "/anime", CategoryLive, :anime

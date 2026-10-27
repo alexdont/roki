@@ -32,6 +32,8 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:activity, if(uuid(socket), do: nil, else: []))
       |> assign(activity_kind: nil, activity_who: :all, activity_open: nil)
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
+      # The mood picker: what is held already is drawn in the first render, the rest arrives.
+      |> assign(:moods, Roki.Mood.hero_peek())
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
   end
@@ -87,6 +89,7 @@ defmodule RokiWeb.FeaturedLive do
 
     if uuid, do: Phoenix.PubSub.subscribe(Roki.PubSub, Roki.Activity.topic())
     socket = load_activity(socket)
+    socket = start_async(socket, :moods, fn -> Roki.Mood.hero(uuid) end)
 
     # How far through each list a signed-in user is — static data, so it never waits on TMDB.
     if uuid,
@@ -146,6 +149,11 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async(:activity, {:ok, runs}, socket),
     do: {:noreply, assign(socket, :activity, runs)}
+
+  def handle_async(:moods, {:ok, %{} = moods}, socket),
+    do: {:noreply, assign(socket, :moods, Map.merge(socket.assigns.moods, moods))}
+
+  def handle_async(:moods, _other, socket), do: {:noreply, socket}
 
   # (A filter change keeps the old list on screen until the new one is in.)
 
@@ -339,7 +347,7 @@ defmodule RokiWeb.FeaturedLive do
         </div>
       </section>
 
-      <h1 :if={!@visitor?} class="text-2xl font-bold tracking-tight sm:text-3xl">Featured</h1>
+      <.mood_picker moods={@moods} />
 
       <%!-- What people did lately, as one row to scroll along (or ignore): finished, started, saved,
             rated, put on an earlier day. Narrowed by kind and by whose. A group opens as a list. --%>
@@ -405,15 +413,9 @@ defmodule RokiWeb.FeaturedLive do
       </p>
 
       <div class="space-y-10">
-        <.shelf
-          :for={kind <- [:movies, :shows, :anime]}
-          kind={kind}
-          title={@titles[kind]}
-          shelf={@shelves[kind]}
-          seen={@seen}
-          upcoming={@upcoming}
-          cached_titles={@cached_titles}
-        />
+        <%!-- Everything that is popular right now, films, shows and anime in one grid; each tab in
+              the header has the whole of its own list. --%>
+        <.popular_now shelves={@shelves} seen={@seen} upcoming={@upcoming} cached_titles={@cached_titles} />
 
         <%!-- Last, and only once the shelves above have settled, so it can never push
               anything down. Curated franchises and TMDB collections, start to finish. --%>
@@ -433,38 +435,143 @@ defmodule RokiWeb.FeaturedLive do
     """
   end
 
-  attr :kind, :atom, required: true
-  attr :title, :string, required: true
-  attr :shelf, :map, required: true
+  attr :moods, :map, required: true
+
+  # "What are you feeling like today?": one mood at a time, turning on a timer, each on the
+  # backdrop of what is popular in it with a strip of those posters; the row of moods under it
+  # — hover one to see it, click it to open it. The turning is the `MoodCarousel` hook's.
+  defp mood_picker(assigns) do
+    assigns = assign(assigns, :all, Roki.Mood.all())
+
+    ~H"""
+    <section id="mood-picker" phx-hook="MoodCarousel" data-every="6000" class="space-y-3" aria-label="What are you feeling like today?">
+      <div class="relative h-[26rem] overflow-hidden rounded-3xl bg-base-300 shadow-xl sm:h-[28rem]">
+        <%!-- One slide per mood; the hook shows one. --%>
+        <div
+          :for={{m, i} <- Enum.with_index(@all)}
+          data-mood={m.slug}
+          class={["absolute inset-0 transition-opacity duration-700", i != 0 && "pointer-events-none opacity-0"]}
+          aria-hidden={to_string(i != 0)}
+        >
+          <% items = Map.get(@moods, m.slug, []) %>
+          <% lead = List.first(items) %>
+          <img
+            :if={lead && lead[:backdrop]}
+            src={Roki.Images.local(lead.backdrop)}
+            alt=""
+            loading={if i == 0, do: "eager", else: "lazy"}
+            class="absolute inset-0 h-full w-full object-cover"
+          />
+          <div
+            class="absolute inset-0"
+            style={"background: linear-gradient(90deg, hsl(#{m.hue} 70% 12% / 0.96) 0%, hsl(#{m.hue} 70% 12% / 0.80) 45%, hsl(#{m.hue} 70% 12% / 0.25) 100%), linear-gradient(0deg, hsl(#{m.hue} 70% 10% / 0.9) 0%, transparent 45%)"}
+          >
+          </div>
+
+          <div class="relative flex h-full flex-col justify-between p-5 text-white sm:p-8">
+            <div class="max-w-xl space-y-3">
+              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">What are you feeling like today?</p>
+              <h1 class="text-4xl font-black leading-[0.95] tracking-tight drop-shadow sm:text-6xl">
+                <span class="mr-2">{m.icon}</span>{m.label}
+              </h1>
+              <p class="text-base text-white/80 sm:text-lg">{m.tagline}</p>
+              <.link
+                navigate={~p"/mood/#{m.slug}"}
+                class="btn h-11 rounded-full border-0 bg-white px-5 text-base-content shadow-lg hover:bg-white/90"
+              >
+                Show me <.icon name="hero-arrow-right" class="h-4 w-4" />
+              </.link>
+            </div>
+
+            <%!-- What is popular in it right now; each poster is its title. --%>
+            <div :if={items != []} class="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-8 sm:px-8">
+              <.link
+                :for={t <- Enum.take(items, 10)}
+                navigate={~p"/title/#{t.type}/#{t.id}"}
+                class="w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-white/10 shadow-lg ring-1 ring-white/20 transition hover:-translate-y-1 hover:ring-white/60 sm:w-24"
+                title={t.title}
+              >
+                <img :if={t.poster} src={Roki.Images.local(t.poster)} alt={t.title} loading="lazy" class="aspect-[2/3] h-auto w-full object-cover" />
+                <div :if={!t.poster} class="aspect-[2/3] w-full"></div>
+              </.link>
+            </div>
+            <div :if={items == []} class="flex gap-2">
+              <div :for={_ <- 1..6} class="aspect-[2/3] w-[4.5rem] animate-pulse rounded-lg bg-white/15 sm:w-24"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <%!-- The moods, in a row: the shown one is lit, with a thin line that fills as its turn runs. --%>
+      <div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0" role="tablist" aria-label="Moods">
+        <.link
+          :for={{m, i} <- Enum.with_index(@all)}
+          navigate={~p"/mood/#{m.slug}"}
+          data-mood-chip={m.slug}
+          role="tab"
+          aria-selected={to_string(i == 0)}
+          class="group relative shrink-0 overflow-hidden rounded-full border border-base-300 bg-base-100 px-3.5 py-2 text-sm font-semibold transition hover:border-base-content/30 aria-selected:border-transparent aria-selected:text-white aria-selected:shadow-md"
+          style={"--mood: hsl(#{m.hue} 75% 45%)"}
+        >
+          <span class="absolute inset-0 bg-[var(--mood)] opacity-0 transition-opacity duration-300 group-aria-selected:opacity-100" aria-hidden="true"></span>
+          <span class="relative"><span class="mr-1.5">{m.icon}</span>{m.label}</span>
+          <span data-mood-bar class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 bg-white/80" aria-hidden="true"></span>
+        </.link>
+      </div>
+    </section>
+    """
+  end
+
+  attr :shelves, :map, required: true
   attr :seen, :any, required: true
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
 
-  defp shelf(assigns) do
+  # The three popular lists as one: film, show, anime, film, show, anime… (popularity is not
+  # comparable across them, so by rank), each poster saying what it is.
+  defp popular_now(assigns) do
+    items =
+      [:movies, :shows, :anime]
+      |> Enum.map(fn kind -> {kind, Enum.take(assigns.shelves[kind].items, 12)} end)
+      |> interleave()
+      |> Enum.uniq_by(fn {_k, i} -> {i.type, i.id} end)
+      |> Enum.take(24)
+      |> Enum.map(fn {kind, i} -> Map.put(i, :kind_label, %{movies: "Film", shows: "Show", anime: "Anime"}[kind]) end)
+
+    assigns = assign(assigns, :items, items)
+
     ~H"""
-    <section :if={@shelf.items != []} class="space-y-3">
-      <div class="flex items-baseline justify-between gap-3">
-        <h2 class="text-xl font-semibold">{@title}</h2>
-        <.link
-          navigate={"/#{@kind}"}
-          class="btn btn-sm btn-primary btn-outline gap-1.5 rounded-full px-4"
-        >
-          See more <.icon name="hero-arrow-right" class="h-4 w-4" />
-        </.link>
+    <section :if={@items != []} class="space-y-3" aria-label="Popular right now">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div>
+          <h2 class="text-xl font-semibold">Popular right now</h2>
+          <p class="text-sm text-base-content/60">Films, shows and anime, all together.</p>
+        </div>
+        <div class="flex gap-1.5">
+          <.link :for={{kind, label} <- [movies: "Movies", shows: "Shows", anime: "Anime"]} navigate={"/#{kind}"} class="btn btn-sm rounded-full">
+            {label} <.icon name="hero-arrow-right-micro" class="h-4 w-4" />
+          </.link>
+        </div>
       </div>
-      <%!-- Two rows: the rest of the list is on its own page, so this one stays short. --%>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- Enum.take(@shelf.items, 16)} class="space-y-1">
-          <.poster
-            item={i}
-            seen={MapSet.member?(@seen, {i.type, i.id})}
-            cached_titles={@cached_titles}
-            upcoming={@upcoming}
-            compact
-          />
+        <li :for={i <- @items} class="space-y-1">
+          <.poster item={i} seen={MapSet.member?(@seen, {i.type, i.id})} cached_titles={@cached_titles} upcoming={@upcoming} compact />
+          <p class="truncate text-[0.65rem] font-semibold uppercase tracking-wider text-base-content/45">{i.kind_label}</p>
         </li>
       </ul>
     </section>
     """
+  end
+
+  # [{kind, [items]}] → [{kind, item}], one of each in turn.
+  defp interleave(lists) do
+    lists = Enum.reject(lists, fn {_k, l} -> l == [] end)
+
+    if lists == [] do
+      []
+    else
+      heads = for {k, [h | _]} <- lists, do: {k, h}
+      heads ++ interleave(for {k, [_ | t]} <- lists, do: {k, t})
+    end
   end
 end

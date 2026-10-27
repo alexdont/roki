@@ -28,6 +28,7 @@ import {StudySidebar} from "./study/sidebar"
 import {setupPeek} from "./peek"
 import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
 import {InfiniteScroll} from "./infinite_scroll"
+import {MoodCarousel} from "./mood_carousel"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 // Which player this device uses. Remembered here, not on the server: a phone wants its own
@@ -95,7 +96,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, KeepPlace, InfiniteScroll},
+  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
