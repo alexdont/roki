@@ -234,77 +234,102 @@ defmodule RokiWeb.WatchedLive do
       </p>
 
       <div :if={@visible?} class={["space-y-6", @select? && "pb-28"]}>
-        <%!-- On a phone the title row stays at the top while the list scrolls, so Select is always
-              within reach. On a wide screen the title, search, filters, view and Select are one
-              toolbar that stays there (the wrappers vanish with `contents`). --%>
+        <%!-- The header. On a phone: a slim title bar that stays at the top (Select always in
+              reach), then the search with the view switch, then the kind tabs with the sort in
+              a small menu. On a wide screen the same pieces become one toolbar (the wrappers
+              vanish with `contents` and `order-*` lays the pieces out). --%>
         <div class="contents lg:sticky lg:top-0 lg:z-30 lg:-mx-8 lg:flex lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 lg:border-b lg:border-base-300/60 lg:bg-base-100/90 lg:px-8 lg:py-3 lg:backdrop-blur">
-        <div class="sticky top-0 z-30 -mx-4 flex items-center gap-3 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
-          <.link navigate={"/#{@username}"} class="flex min-w-0 items-center gap-2 text-base-content/70 hover:text-base-content lg:order-1 lg:shrink-0">
-            <.user_avatar user={@user} size="md" />
-            <span class="hidden truncate font-semibold sm:inline">{@user.username}</span>
-          </.link>
-          <h1 class="text-2xl font-bold sm:text-3xl lg:order-2">Watched</h1>
-          <span :if={is_list(@history)} class="text-sm text-base-content/60 lg:order-3">{length(@history)}</span>
-
-          <%!-- Select mode, for the owner: one button, on and off. --%>
-          <button
-            :if={@owner?}
-            type="button"
-            phx-click="select_mode"
-            aria-pressed={to_string(@select?)}
-            class={["btn btn-sm ml-auto gap-1.5 lg:order-7 lg:btn-md", @select? && "btn-primary"]}
-          >
-            <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
-            {if @select?, do: "Done", else: "Select"}
-          </button>
-        </div>
-
-        <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
-        <div class="flex items-center gap-2 lg:contents">
-          <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md lg:order-4 lg:w-96 lg:flex-none">
-            <label class="input input-bordered flex w-full items-center gap-2">
-              <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/50" />
-              <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="min-w-0 grow" />
-            </label>
-          </form>
-          <div class="join shrink-0 lg:order-6" role="group" aria-label="View">
-            <.link patch={address(assigns, view: :grid)} class={["btn btn-square join-item", @view == :grid && "btn-active"]} aria-label="Grid view" title="Grid">
-              <.icon name="hero-squares-2x2" class="h-5 w-5" />
+          <div class="sticky top-0 z-30 -mx-4 flex items-center gap-2.5 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
+            <.link navigate={"/#{@username}"} class="flex min-w-0 shrink-0 items-center gap-2 text-base-content/70 hover:text-base-content lg:order-1">
+              <span class="lg:hidden"><.user_avatar user={@user} size="sm" /></span>
+              <span class="hidden lg:block"><.user_avatar user={@user} size="md" /></span>
+              <span class="hidden truncate font-semibold lg:inline">{@user.username}</span>
             </.link>
-            <.link patch={address(assigns, view: :rows)} class={["btn btn-square join-item", @view == :rows && "btn-active"]} aria-label="List view" title="List">
-              <.icon name="hero-bars-3" class="h-5 w-5" />
-            </.link>
-          </div>
-        </div>
+            <h1 class="text-xl font-bold sm:text-2xl lg:order-2 lg:text-3xl">Watched</h1>
+            <span :if={is_list(@history)} class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60 lg:order-3 lg:bg-transparent lg:px-0 lg:text-sm">{length(@history)}</span>
 
-        <%!-- The filters: one line on a phone (short labels, snug buttons), roomier on a wide screen. --%>
-        <div class="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2 lg:order-8 lg:basis-full lg:flex-nowrap">
-          <div class="join shrink-0">
-            <.link
-              :for={{s, short, long} <- [{:latest, "Latest", "Latest"}, {:top, "Rating", "By rating"}]}
-              patch={address(assigns, sort: s)}
-              class={["btn btn-sm join-item whitespace-nowrap px-[1.3vw] text-[length:clamp(0.65rem,3.1vw,0.875rem)] sm:px-3 sm:text-sm", @sort == s && "btn-primary"]}
+            <%!-- Select mode, for the owner: one button, on and off. --%>
+            <button
+              :if={@owner?}
+              type="button"
+              phx-click="select_mode"
+              aria-pressed={to_string(@select?)}
+              class={["btn btn-sm ml-auto gap-1.5 rounded-full lg:order-7 lg:btn-md", @select? && "btn-primary"]}
             >
-              <span class="sm:hidden">{short}</span><span class="hidden sm:inline">{long}</span>
-            </.link>
+              <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
+              {if @select?, do: "Done", else: "Select"}
+            </button>
           </div>
-          <div class="join shrink-0">
-            <.link
-              :for={{k, label} <- Profile.kinds()}
-              patch={address(assigns, kind: k)}
-              class={["btn btn-sm join-item whitespace-nowrap px-[1.3vw] text-[length:clamp(0.65rem,3.1vw,0.875rem)] sm:px-3 sm:text-sm", @kind == k && "btn-primary"]}
-            >
-              {label}
-            </.link>
+
+          <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
+          <div class="flex items-center gap-2 pt-2 lg:contents lg:pt-0">
+            <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md lg:order-4 lg:w-96 lg:flex-none">
+              <label class="flex h-10 w-full items-center gap-2 rounded-full bg-base-200 px-3.5 focus-within:ring-2 focus-within:ring-primary/60 lg:h-12 lg:border lg:border-base-300 lg:bg-base-100">
+                <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/50" />
+                <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="min-w-0 grow bg-transparent text-sm outline-none placeholder:text-base-content/45" />
+              </label>
+            </form>
+            <div class="inline-flex shrink-0 overflow-hidden rounded-full bg-base-200 p-0.5 lg:order-6 lg:h-12 lg:items-center" role="group" aria-label="View">
+              <.link patch={address(assigns, view: :grid)} class={["flex h-9 w-9 items-center justify-center rounded-full transition lg:h-10 lg:w-10", @view == :grid && "bg-base-100 shadow-sm"]} aria-label="Grid view" title="Grid">
+                <.icon name="hero-squares-2x2" class="h-5 w-5" />
+              </.link>
+              <.link patch={address(assigns, view: :rows)} class={["flex h-9 w-9 items-center justify-center rounded-full transition lg:h-10 lg:w-10", @view == :rows && "bg-base-100 shadow-sm"]} aria-label="List view" title="List">
+                <.icon name="hero-bars-3" class="h-5 w-5" />
+              </.link>
+            </div>
           </div>
-          <.link
-            :if={@owner? or @profile.show_ratings}
-            patch={address(assigns, sort: :top, tens: not @tens?)}
-            class={["btn btn-sm shrink-0 whitespace-nowrap px-[1.3vw] text-[length:clamp(0.65rem,3.1vw,0.875rem)] sm:px-3 sm:text-sm", @tens? && "btn-primary"]}
-          >
-            ★ 10<span class="hidden sm:inline"> only</span>
-          </.link>
-        </div>
+
+          <%!-- The kinds as tabs, and the sort: a menu on a phone, plain buttons on a wide screen. --%>
+          <div class="flex items-center gap-3 pb-3 lg:order-8 lg:basis-full lg:gap-4 lg:pb-0">
+            <div class="grid min-w-0 flex-1 grid-cols-4 rounded-full bg-base-200 p-0.5 lg:flex lg:flex-none lg:bg-transparent lg:p-0 lg:gap-1.5">
+              <.link
+                :for={{k, label} <- Profile.kinds()}
+                patch={address(assigns, kind: k)}
+                class={[
+                  "flex h-8 items-center justify-center whitespace-nowrap rounded-full px-2 text-sm font-medium transition lg:h-9 lg:px-4",
+                  @kind == k && "bg-base-100 text-primary shadow-sm lg:bg-primary lg:text-primary-content",
+                  @kind != k && "text-base-content/70 hover:text-base-content lg:bg-base-200"
+                ]}
+              >
+                {label}
+              </.link>
+            </div>
+
+            <div class="dropdown dropdown-end shrink-0 lg:hidden">
+              <div tabindex="0" role="button" class="btn btn-sm h-9 gap-1 rounded-full border-0 bg-base-200 px-3 font-medium" aria-label="Sort">
+                <.icon name="hero-bars-arrow-down" class="h-4 w-4" />
+                {cond do
+                  @tens? -> "★ 10"
+                  @sort == :top -> "Rating"
+                  true -> "Latest"
+                end}
+              </div>
+              <ul tabindex="0" class="menu dropdown-content z-40 mt-2 w-44 rounded-box border border-base-300 bg-base-100 p-1.5 shadow-xl">
+                <li><.link patch={address(assigns, sort: :latest)} onclick="document.activeElement.blur()" class={[@sort == :latest && not @tens? && "menu-active"]}>Latest</.link></li>
+                <li><.link patch={address(assigns, sort: :top)} onclick="document.activeElement.blur()" class={[@sort == :top && not @tens? && "menu-active"]}>By rating</.link></li>
+                <li :if={@owner? or @profile.show_ratings}>
+                  <.link patch={address(assigns, sort: :top, tens: true)} onclick="document.activeElement.blur()" class={[@tens? && "menu-active"]}>★ 10 only</.link>
+                </li>
+              </ul>
+            </div>
+
+            <div class="hidden items-center gap-1.5 lg:flex">
+              <.link
+                :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]}
+                patch={address(assigns, sort: s)}
+                class={["btn btn-sm h-9 rounded-full border-0 text-sm font-medium", @sort == s && not @tens? && "btn-primary", not (@sort == s and not @tens?) && "bg-base-200"]}
+              >
+                {label}
+              </.link>
+              <.link
+                :if={@owner? or @profile.show_ratings}
+                patch={address(assigns, sort: :top, tens: not @tens?)}
+                class={["btn btn-sm h-9 rounded-full border-0 whitespace-nowrap text-sm font-medium", @tens? && "btn-primary", not @tens? && "bg-base-200"]}
+              >
+                ★ 10 only
+              </.link>
+            </div>
+          </div>
         </div>
 
         <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">{@notice}</p>
