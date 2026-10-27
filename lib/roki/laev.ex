@@ -47,6 +47,9 @@ defmodule Roki.Laev do
   # The site's own settings, as the application started with them.
   @site_env [:tmdb_key, :mal_client_id, :mal_client_secret]
 
+  # The ones of those that laev would otherwise put in a person's synced keys (`hiding_site_keys/1`).
+  @hidden_keys [:mal_client_id, :mal_client_secret]
+
   @doc "Remember the site's own laev settings; `scrub_env/0` puts them back. Called once at start."
   def snapshot_env do
     :persistent_term.put(
@@ -66,8 +69,9 @@ defmodule Roki.Laev do
   """
   def scrub_env do
     site = :persistent_term.get({__MODULE__, :site_env}, %{})
+    hiding? = Application.get_env(:roki, :hiding_site_keys) == true
 
-    for key <- Map.values(Laev.Config.keys()) do
+    for key <- Map.values(Laev.Config.keys()), not (hiding? and key in @hidden_keys) do
       want = Map.get(site, key)
 
       cond do
@@ -78,6 +82,33 @@ defmodule Roki.Laev do
     end
 
     :ok
+  end
+
+  @doc """
+  Run `fun` with the site's own MyAnimeList app hidden from laev's application settings.
+
+  When an account's keys are synced, laev builds the encrypted copy from the *application's*
+  settings, and the site keeps its own MyAnimeList app id and secret there for everyone. Left in,
+  they land in every account's stored key copy, readable by anyone holding that laev key, and a
+  terminal app that syncs them overwrites its own working MyAnimeList app with one whose redirect
+  is this site's. Nothing the site does needs them there (accounts get them as scope settings,
+  see `app_keys/0`), so every sync that can carry keys runs in here. One at a time, and
+  `scrub_env/0` leaves them out until it is done.
+  """
+  def hiding_site_keys(fun) do
+    :global.trans({{__MODULE__, :hiding_site_keys}, self()}, fn ->
+      saved = for key <- @hidden_keys, value = Application.get_env(:laev, key), do: {key, value}
+      Application.put_env(:roki, :hiding_site_keys, true)
+      for {key, _} <- saved, do: Application.delete_env(:laev, key)
+
+      try do
+        fun.()
+      after
+        Application.put_env(:roki, :hiding_site_keys, false)
+        for {key, value} <- saved, do: Application.put_env(:laev, key, value)
+        scrub_env()
+      end
+    end)
   end
 
   @doc "Run inside the site's own scope — no user, only the server-wide TMDB key."
@@ -261,18 +292,20 @@ defmodule Roki.Laev do
     url = opts |> Keyword.get(:url) |> blank_to_nil() || sync_url()
     Roki.Stats.forget(uuid)
 
-    run(uuid, fn ->
-      if carry?, do: Settings.put("LAEV_SYNC_KEYS", "on")
+    hiding_site_keys(fn ->
+      run(uuid, fn ->
+        if carry?, do: Settings.put("LAEV_SYNC_KEYS", "on")
 
-      case Sync.connect(String.trim(key), url) do
-        {:ok, summary} ->
-          {:ok, summary}
+        case Sync.connect(String.trim(key), url) do
+          {:ok, summary} ->
+            {:ok, summary}
 
-        {:error, reason} ->
-          # Don't leave the carry-keys switch on for a connection that failed.
-          if carry?, do: Settings.put("LAEV_SYNC_KEYS", "off")
-          {:error, reason}
-      end
+          {:error, reason} ->
+            # Don't leave the carry-keys switch on for a connection that failed.
+            if carry?, do: Settings.put("LAEV_SYNC_KEYS", "off")
+            {:error, reason}
+        end
+      end)
     end)
   end
 
@@ -285,7 +318,7 @@ defmodule Roki.Laev do
   def setup(uuid, keys) do
     Roki.Stats.forget(uuid)
 
-    case run(uuid, fn -> Laev.Setup.first_run(keys) end) do
+    case hiding_site_keys(fn -> run(uuid, fn -> Laev.Setup.first_run(keys) end) end) do
       {:ok, _} ->
         :ok
 
@@ -336,7 +369,7 @@ defmodule Roki.Laev do
   """
   def sync(uuid) do
     before = run(uuid, &finished_marks/0)
-    result = run(uuid, &Sync.sync/0)
+    result = hiding_site_keys(fn -> run(uuid, &Sync.sync/0) end)
     now = run(uuid, &finished_marks/0)
     Roki.Stats.forget(uuid)
     Roki.Profile.forget_history(uuid)
@@ -427,9 +460,11 @@ defmodule Roki.Laev do
   def set_carry_keys(uuid, on?) do
     Roki.Stats.forget(uuid)
 
-    run(uuid, fn ->
-      Settings.put("LAEV_SYNC_KEYS", if(on?, do: "on", else: "off"))
-      Sync.sync()
+    hiding_site_keys(fn ->
+      run(uuid, fn ->
+        Settings.put("LAEV_SYNC_KEYS", if(on?, do: "on", else: "off"))
+        Sync.sync()
+      end)
     end)
   end
 
