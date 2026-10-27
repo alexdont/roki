@@ -44,6 +44,15 @@ defmodule Roki.TTLCache do
     end
   end
 
+  @doc "The live `{:ok, value}` held for `key`, or `:miss`. Never computes."
+  def peek(key), do: lookup(key)
+
+  @doc "Hold `value` (an `{:ok, _}`) for `key`, `ttl_s` seconds."
+  def put(key, ttl_s, {:ok, _} = value) do
+    :ets.insert(@table, {key, now() + ttl_s, value})
+    :ok
+  end
+
   @doc "Is a live answer held for `key`? (Never computes.)"
   def cached?(key), do: match?({:ok, _}, lookup(key))
 

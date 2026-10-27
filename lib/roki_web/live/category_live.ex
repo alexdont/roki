@@ -90,14 +90,28 @@ defmodule RokiWeb.CategoryLive do
 
     socket = assign(socket, sort: sort, season: season, week: week, genre: genre, size: size)
 
-    {:noreply,
-     if(connected?(socket) and changed?,
-       do:
-         socket
-         |> assign(items: [], page: 0, more?: false, loading?: true, error: nil)
-         |> fetch_first(),
-       else: socket
-     )}
+    socket =
+      if changed?,
+        do: socket |> assign(items: [], page: 0, more?: false, loading?: true, error: nil) |> show_held(),
+        else: socket
+
+    {:noreply, if(connected?(socket) and changed?, do: fetch_first(socket), else: socket)}
+  end
+
+  # What is already held of this list (the cache, no request) is drawn at once — in the first
+  # render, before the connection is even up — and what this person has watched of it is filled
+  # in when it is worked out. Coming back with the back button it is every page that was loaded.
+  defp show_held(%{assigns: a} = socket) do
+    upto = with %{pages: pages} <- a.place, do: pages, else: (_ -> 1)
+    held = for n <- 1..upto, do: Browse.peek(a.kind, a.sort, n, a.season, a.week, a.genre)
+
+    if Enum.all?(held, &match?({:ok, _, _}, &1)) do
+      {:ok, _, more?} = List.last(held)
+      items = Enum.flat_map(held, fn {:ok, items, _} -> items end)
+      assign(socket, items: items, page: upto, more?: more?, loading?: false)
+    else
+      socket
+    end
   end
 
   # The first load. Coming back with the back button it is every page that was loaded, at once,
@@ -276,13 +290,16 @@ defmodule RokiWeb.CategoryLive do
       do: {:noreply, socket}
 
   def handle_async({:page, _view, _n}, {:ok, {:ok, n, items, more?, seen, corner}}, socket) do
-    known = MapSet.new(socket.assigns.items, & &1.id)
-    fresh = Enum.reject(items, &MapSet.member?(known, &1.id))
+    # What was drawn from the cache is replaced by the same titles with this person's marks on them.
+    by_key = Map.new(items, &{{&1.type, &1.id}, &1})
+    shown = Enum.map(socket.assigns.items, &Map.get(by_key, {&1.type, &1.id}, &1))
+    known = MapSet.new(socket.assigns.items, &{&1.type, &1.id})
+    fresh = Enum.reject(items, &MapSet.member?(known, {&1.type, &1.id}))
     uuid = socket.assigns.uuid
 
     socket =
       assign(socket,
-        items: socket.assigns.items ++ fresh,
+        items: shown ++ fresh,
         page: n,
         more?: more?,
         loading?: false,

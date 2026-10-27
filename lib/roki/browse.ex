@@ -47,24 +47,115 @@ defmodule Roki.Browse do
   """
   def page(kind, sort, n, uuid, season \\ nil, week \\ nil, genre \\ nil)
       when kind in @kinds and is_integer(n) and n >= 1 do
+    {sort, season, week, genre} = view(kind, sort, season, week, genre)
+    key = {:browse, kind, sort, season, week, genre, n}
+
+    answer =
+      case TTLCache.peek(key) do
+        {:ok, _} = hit ->
+          hit
+
+        :miss ->
+          # Kept beside the titles as well: it survives a restart, and a page older than an hour
+          # is still shown at once while it is read again behind the visit.
+          case kept(key) do
+            {:ok, answer, true} ->
+              TTLCache.put(key, @ttl_s, {:ok, answer})
+              {:ok, answer}
+
+            {:ok, answer, false} ->
+              refresh_later(key, kind, sort, n, uuid, season, week, genre)
+              {:ok, answer}
+
+            :none ->
+              TTLCache.fetch(key, @ttl_s, fn -> load(key, kind, sort, n, uuid, season, week, genre) end)
+          end
+      end
+
+    with {:ok, {items, more?}} <- answer do
+      {:ok, items, more?}
+    end
+  end
+
+  @doc """
+  The page as it is already held, with no request at all: `{:ok, items, more?}` or `:miss`. For
+  drawing a list straight away while the rest (what this person has watched) is worked out.
+  """
+  def peek(kind, sort, n, season \\ nil, week \\ nil, genre \\ nil)
+      when kind in @kinds and is_integer(n) and n >= 1 do
+    {sort, season, week, genre} = view(kind, sort, season, week, genre)
+    key = {:browse, kind, sort, season, week, genre, n}
+
+    case TTLCache.peek(key) do
+      {:ok, {items, more?}} ->
+        {:ok, items, more?}
+
+      :miss ->
+        case kept(key) do
+          {:ok, {items, more?}, _fresh?} -> {:ok, items, more?}
+          :none -> :miss
+        end
+    end
+  end
+
+  # What a request means once it is made sane: an order the kind has, a season only for anime, a
+  # week only for the ranking, and a genre the kind offers. Anime Corner's ranking is a fixed
+  # list with no genres.
+  defp view(kind, sort, season, week, genre) do
     sort = if sort in Keyword.keys(sorts(kind, nil)), do: sort, else: :popular
     season = if kind == :anime, do: season
     week = if sort == :corner, do: week
 
-    # A genre narrows what TMDB is asked for. Anime Corner's ranking is a fixed list with no genres.
     genre =
       if sort != :corner and genre in Enum.map(Roki.Genres.browse_options(kind), &elem(&1, 0)),
         do: genre
 
-    with {:ok, {items, more?}} <-
-           TTLCache.fetch({:browse, kind, sort, season, week, genre, n}, @ttl_s, fn ->
-             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week, genre) do
-               Roki.Titles.remember_later(items)
-               {:ok, {items, more?}}
-             end
-           end) do
-      {:ok, items, more?}
+    {sort, season, week, genre}
+  end
+
+  defp load(key, kind, sort, n, uuid, season, week, genre) do
+    with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week, genre) do
+      Roki.Titles.remember_later(items)
+      keep(key, items, more?)
+      {:ok, {items, more?}}
     end
+  end
+
+  # An hour is fresh; a week is the longest a stale page is still shown (while it is read again).
+  @kept_max_s 7 * 24 * 3600
+
+  defp kept(key) do
+    case Roki.Kept.get("browse", kept_key(key)) do
+      {:ok, %{items: items, more: more}, _} = _hit when is_list(items) ->
+        age = Roki.Kept.age("browse", kept_key(key))
+        if age != nil and age < @kept_max_s, do: {:ok, {items, more}, age < @ttl_s}, else: :none
+
+      _ ->
+        :none
+    end
+  rescue
+    _ -> :none
+  end
+
+  defp keep(key, items, more?) do
+    Roki.Kept.put("browse", kept_key(key), %{items: items, more: more?})
+  rescue
+    _ -> :ok
+  end
+
+  defp kept_key(key), do: key |> Tuple.to_list() |> tl() |> Enum.map_join("|", &to_string/1)
+
+  # The stale page is shown now; a task reads it again so the next visit has the new one.
+  defp refresh_later(key, kind, sort, n, uuid, season, week, genre) do
+    Task.start(fn ->
+      # One read at a time per page, and not again for half a minute.
+      TTLCache.fetch({:refreshing, key}, 30, fn ->
+        with {:ok, answer} <- load(key, kind, sort, n, uuid, season, week, genre) do
+          TTLCache.put(key, @ttl_s, {:ok, answer})
+          {:ok, true}
+        end
+      end)
+    end)
   end
 
   @doc "The season named by `?season=summer&year=2026`, or nil."

@@ -116,4 +116,21 @@ defmodule RokiWeb.CategoryLiveTest do
     {:ok, _view, bogus} = live(conn, "/shows?genre=thriller")
     assert bogus =~ "All genres"
   end
+
+  test "a list that is already held is in the first render, before anything is asked of TMDB", %{conn: conn} do
+    key = {:browse, :movies, :top, nil, nil, nil, 1}
+    items = [%{id: 77_001, type: "movie", title: "Held Film", poster: nil, year: "2001"}]
+    Roki.TTLCache.put(key, 60, {:ok, {items, false}})
+    on_exit(fn -> Roki.TTLCache.delete(key) end)
+
+    assert {:ok, :held, [%{title: "Held Film"}], false} =
+             (case Roki.Browse.peek(:movies, :top, 1) do
+                {:ok, got, more?} -> {:ok, :held, got, more?}
+                other -> other
+              end)
+
+    {:ok, _view, html} = live(conn, "/movies?sort=top")
+    assert html =~ "Held Film"
+    assert html =~ ~s(href="/title/movie/77001")
+  end
 end

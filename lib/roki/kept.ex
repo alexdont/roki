@@ -54,6 +54,14 @@ defmodule Roki.Kept do
     end
   end
 
+  @doc "How many seconds ago an answer was read, or nil when none is kept."
+  def age(kind, key) do
+    case Repo.query!("select fetched_at from roki_kept where kind = $1 and key = $2", [kind, key]) do
+      %{rows: [[fetched_at]]} -> NaiveDateTime.diff(NaiveDateTime.utc_now(), fetched_at)
+      _ -> nil
+    end
+  end
+
   @doc "Keep an answer."
   def put(kind, key, data, final? \\ false) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
