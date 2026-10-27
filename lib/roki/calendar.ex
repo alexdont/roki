@@ -83,6 +83,30 @@ defmodule Roki.Calendar do
     end
   end
 
+  @doc """
+  The events of any list of titles, not only the Saved list: `entries` are maps with `"type"`,
+  `"tmdb_id"` and `"title"`, as laev's saved entries are. `{:ok, events}` (dated, sorted) or
+  `{:error, reason}` when the lookup budget for `client` is spent. Shares `load/2`'s cache, so a
+  show someone saved and someone else follows is read once.
+  """
+  def events_for(client, uuid, entries) do
+    entries = Enum.filter(entries, &(&1["type"] in ["movie", "tv"] and is_integer(&1["tmdb_id"])))
+
+    with :ok <- budget(client, entries) do
+      all =
+        Roki.Laev.public(uuid, fn ->
+          entries
+          |> Laev.Scope.async_stream(&entry_events/1, max_concurrency: 4, timeout: 25_000, on_timeout: :kill_task)
+          |> Enum.flat_map(fn
+            {:ok, events} -> events
+            _ -> []
+          end)
+        end)
+
+      {:ok, all |> Enum.reject(&is_nil(&1.date)) |> Enum.sort_by(&{Date.to_gregorian_days(&1.date), &1.title})}
+    end
+  end
+
   # Only titles that would reach a source count against the budget.
   defp budget(client, entries) do
     missing =
