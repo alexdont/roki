@@ -316,6 +316,7 @@ defmodule Roki.Profile do
       |> Enum.uniq_by(fn {type, id, _, _, _, _, _, _, _} -> {type, id} end)
 
     Repo.transaction(fn ->
+      before = Repo.query!("select type, id from roki_watched where user_uuid = $1", [bin]).rows |> MapSet.new(fn [t, i] -> {t, i} end)
       Repo.query!("delete from roki_watched where user_uuid = $1", [bin])
 
       rows
@@ -336,8 +337,31 @@ defmodule Roki.Profile do
         )
       end)
 
+      date_new_marks(bin, rows, before)
       apply_dates(bin)
     end)
+
+    :ok
+  end
+
+  # Laev keeps no date for a title marked watched without playing it, so such a title would sink
+  # to the bottom of the history under "No date" — exactly where a film marked a minute ago must
+  # not be. A title that shows up undated *now*, on a list that already had titles, was marked
+  # since the last look, so it is dated now (and kept, like any date the owner sets). The first
+  # copy of an account is left alone: its undated titles are old, not new.
+  defp date_new_marks(bin, rows, before) do
+    if MapSet.size(before) > 0, do: date_marks(bin, rows, before), else: :ok
+  end
+
+  defp date_marks(bin, rows, before) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    for {type, id, _, _, _, _, _, _, false} <- rows, not MapSet.member?(before, {type, id}) do
+      Repo.query!(
+        "insert into roki_watch_dates (user_uuid, type, id, watched_at) values ($1, $2, $3, $4) on conflict (user_uuid, type, id) do nothing",
+        [bin, type, id, now]
+      )
+    end
 
     :ok
   end
