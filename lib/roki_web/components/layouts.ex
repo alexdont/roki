@@ -110,8 +110,8 @@ defmodule RokiWeb.Layouts do
 
         <div class="flex-1"></div>
 
-        <%!-- The right side is one quiet row: search, home, new episodes, the bell, and you. On a
-              phone the home star and the new-episodes link move into the account menu. --%>
+        <%!-- The right side is one quiet row: search, new episodes, the bell, then home (the star) and
+              you, last. On a phone new episodes moves into the account menu. --%>
         <div class="flex items-center gap-0.5 sm:gap-1">
           <button
             type="button"
@@ -127,14 +127,6 @@ defmodule RokiWeb.Layouts do
           >
             <.icon name="hero-magnifying-glass" class="h-5 w-5" />
           </button>
-          <.top_icon
-            :if={@username}
-            href={~p"/#{@username}/home"}
-            icon="hero-star"
-            label="Home"
-            class="max-md:hidden"
-            active={active?(@current_path, ~p"/#{@username}/home")}
-          />
           <.top_icon
             :if={@username}
             href={~p"/#{@username}/calendar"}
@@ -160,25 +152,98 @@ defmodule RokiWeb.Layouts do
             )}
           </div>
 
-          <button
+          <.top_icon
             :if={@username}
-            type="button"
-            id="account-button"
-            phx-click={
-              JS.hide(to: "#mobile-nav")
-              |> JS.hide(to: "#search-pop")
-              |> JS.toggle(to: "#account-pop", display: "block")
-            }
-            class="ml-1 flex items-center rounded-full ring-2 ring-transparent transition hover:ring-base-300"
-            aria-label="Your account"
-            aria-controls="account-pop"
-          >
-            <PhoenixKitWeb.Components.Core.UserInfo.user_avatar
-              user={@user}
-              size="sm"
-              class="!rounded-full"
-            />
-          </button>
+            href={~p"/#{@username}/home"}
+            icon="hero-star"
+            label="Home"
+            active={active?(@current_path, ~p"/#{@username}/home")}
+          />
+
+          <div :if={@username} class="sm:relative">
+            <button
+              type="button"
+              id="account-button"
+              phx-click={
+                JS.hide(to: "#mobile-nav")
+                |> JS.hide(to: "#search-pop")
+                |> JS.toggle(to: "#account-pop", display: "block")
+              }
+              class="ml-1 flex items-center rounded-full ring-2 ring-transparent transition hover:ring-base-300"
+              aria-label="Your account"
+              aria-controls="account-pop"
+            >
+              <PhoenixKitWeb.Components.Core.UserInfo.user_avatar
+                user={@user}
+                size="sm"
+                class="!rounded-full"
+              />
+            </button>
+              <%!-- The account menu: who you are first (it is the way to your profile and shelves), then
+                    the few things you do now and then. Theme and player live in Settings. --%>
+              <div
+                :if={@username}
+                id="account-pop"
+                class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-0 sm:mt-2"
+                phx-click-away={JS.hide(to: "#account-pop")}
+                phx-window-keydown={JS.hide(to: "#account-pop")}
+                phx-key="escape"
+              >
+                <.link
+                  navigate={~p"/#{@username}"}
+                  phx-click={JS.hide(to: "#account-pop")}
+                  class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-base-200"
+                >
+                  <PhoenixKitWeb.Components.Core.UserInfo.user_avatar
+                    user={@user}
+                    size="lg"
+                    class="!rounded-full"
+                  />
+                  <span class="min-w-0">
+                    <span class="block truncate font-semibold">{@username}</span>
+                    <span class="block text-xs text-base-content/60">Profile, shelves and stats</span>
+                  </span>
+                </.link>
+
+                <div class="my-2 border-t border-base-300/70"></div>
+
+                <.menu_row
+                  href={~p"/#{@username}/calendar"}
+                  icon="hero-calendar-days"
+                  class="md:hidden"
+                  active={active?(@current_path, ~p"/#{@username}/calendar")}
+                >
+                  New episodes
+                </.menu_row>
+                <.menu_row
+                  href={~p"/#{@username}/friends"}
+                  icon="hero-user-group"
+                  active={active?(@current_path, ~p"/#{@username}/friends")}
+                >
+                  Friends
+                </.menu_row>
+                <.menu_row
+                  href={~p"/#{@username}/settings"}
+                  icon="hero-cog-6-tooth"
+                  active={active?(@current_path, ~p"/#{@username}/settings")}
+                >
+                  Settings
+                </.menu_row>
+                <.menu_row :if={@admin?} href={PhoenixKit.Utils.Routes.path("/admin")} icon="hero-shield-check">
+                  Admin
+                </.menu_row>
+
+                <div class="my-2 border-t border-base-300/70"></div>
+
+                <.link
+                  href={PhoenixKit.Utils.Routes.path("/users/log-out")}
+                  method="delete"
+                  class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-error transition hover:bg-error/10"
+                >
+                  <.icon name="hero-arrow-right-on-rectangle" class="h-5 w-5" /> Log out
+                </.link>
+              </div>
+          </div>
 
           <%!-- A visitor gets the two ways in, nothing else. --%>
           <div :if={!@username} class="flex items-center gap-1.5 pl-1">
@@ -209,80 +274,6 @@ defmodule RokiWeb.Layouts do
             <.icon name="hero-bars-3" class="h-6 w-6" />
           </button>
         </div>
-      </div>
-
-      <%!-- The account menu: who you are first (it is the way to your profile and shelves), then
-            the few things you do now and then. Theme and player live in Settings. --%>
-      <div
-        :if={@username}
-        id="account-pop"
-        class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-6 lg:right-8"
-        phx-click-away={JS.hide(to: "#account-pop")}
-        phx-window-keydown={JS.hide(to: "#account-pop")}
-        phx-key="escape"
-      >
-        <.link
-          navigate={~p"/#{@username}"}
-          phx-click={JS.hide(to: "#account-pop")}
-          class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-base-200"
-        >
-          <PhoenixKitWeb.Components.Core.UserInfo.user_avatar
-            user={@user}
-            size="lg"
-            class="!rounded-full"
-          />
-          <span class="min-w-0">
-            <span class="block truncate font-semibold">{@username}</span>
-            <span class="block text-xs text-base-content/60">Profile, shelves and stats</span>
-          </span>
-        </.link>
-
-        <div class="my-2 border-t border-base-300/70"></div>
-
-        <.menu_row
-          :if={@username}
-          href={~p"/#{@username}/home"}
-          icon="hero-star"
-          class="md:hidden"
-          active={active?(@current_path, ~p"/#{@username}/home")}
-        >
-          Home
-        </.menu_row>
-        <.menu_row
-          href={~p"/#{@username}/calendar"}
-          icon="hero-calendar-days"
-          class="md:hidden"
-          active={active?(@current_path, ~p"/#{@username}/calendar")}
-        >
-          New episodes
-        </.menu_row>
-        <.menu_row
-          href={~p"/#{@username}/friends"}
-          icon="hero-user-group"
-          active={active?(@current_path, ~p"/#{@username}/friends")}
-        >
-          Friends
-        </.menu_row>
-        <.menu_row
-          href={~p"/#{@username}/settings"}
-          icon="hero-cog-6-tooth"
-          active={active?(@current_path, ~p"/#{@username}/settings")}
-        >
-          Settings
-        </.menu_row>
-        <.menu_row :if={@admin?} href={PhoenixKit.Utils.Routes.path("/admin")} icon="hero-shield-check">
-          Admin
-        </.menu_row>
-
-        <div class="my-2 border-t border-base-300/70"></div>
-
-        <.link
-          href={PhoenixKit.Utils.Routes.path("/users/log-out")}
-          method="delete"
-          class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-error transition hover:bg-error/10"
-        >
-          <.icon name="hero-arrow-right-on-rectangle" class="h-5 w-5" /> Log out
-        </.link>
       </div>
 
       <%!-- Search opens under the icon, big enough to type in; Enter goes to the results, Escape or
