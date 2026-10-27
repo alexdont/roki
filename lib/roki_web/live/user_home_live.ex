@@ -708,7 +708,7 @@ defmodule RokiWeb.UserHomeLive do
         class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
       >
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} cached_titles={@cached_titles} compact />
+          <.poster item={i} cached_titles={@cached_titles} compact title?={false} />
           <%!-- No badge: everything here is saved. Taking a title off in its hover card clicks this
                 to drop the tile (assets/js/peek.js), so the list closes up without a refresh. --%>
           <button
@@ -766,7 +766,7 @@ defmodule RokiWeb.UserHomeLive do
           <h3 class="text-sm font-medium text-base-content/60">{month_label(hd(group))}</h3>
           <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
             <li :for={i <- group} class="space-y-1">
-              <.poster item={i} cached_titles={@cached_titles} compact />
+              <.poster item={i} cached_titles={@cached_titles} compact title?={false} />
               <div :if={i.dated?} class="text-xs text-base-content/50">{day_label(i)}</div>
             </li>
           </ul>
@@ -819,7 +819,7 @@ defmodule RokiWeb.UserHomeLive do
         class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
       >
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} cached_titles={@cached_titles} compact />
+          <.poster item={i} cached_titles={@cached_titles} compact title?={false} />
         </li>
       </ul>
     </section>
