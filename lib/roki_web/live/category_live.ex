@@ -41,6 +41,7 @@ defmodule RokiWeb.CategoryLive do
        sort: :popular,
        season: nil,
        week: nil,
+       genre: nil,
        corner: nil,
        season_count: 12,
        season_error: nil,
@@ -74,11 +75,20 @@ defmodule RokiWeb.CategoryLive do
     # The Anime Corner ranking of one week (`?week=3`, `?week=final`); the latest without.
     week = if sort == :corner, do: Roki.AnimeCorner.week(params["week"])
 
+    # A genre this kind has; none for Anime Corner's ranking, which is a fixed list.
+    genre =
+      with slug when is_binary(slug) <- Roki.Genres.parse(params["genre"]),
+           true <- sort != :corner and Enum.any?(Roki.Genres.options(socket.assigns.kind), &(elem(&1, 0) == slug)) do
+        slug
+      else
+        _ -> nil
+      end
+
     changed? =
       sort != socket.assigns.sort or season != socket.assigns.season or
-        week != socket.assigns.week or socket.assigns.page == 0
+        week != socket.assigns.week or genre != socket.assigns.genre or socket.assigns.page == 0
 
-    socket = assign(socket, sort: sort, season: season, week: week, size: size)
+    socket = assign(socket, sort: sort, season: season, week: week, genre: genre, size: size)
 
     {:noreply,
      if(connected?(socket) and changed?,
@@ -99,14 +109,14 @@ defmodule RokiWeb.CategoryLive do
   defp fetch_first(socket), do: fetch(socket, 1)
 
   defp fetch(socket, n, upto \\ nil) do
-    %{kind: kind, sort: sort, season: season, week: week, uuid: uuid} = socket.assigns
+    %{kind: kind, sort: sort, season: season, week: week, genre: genre, uuid: uuid} = socket.assigns
     last = upto || n
 
-    start_async(socket, {:page, {sort, season, week}, last}, fn ->
+    start_async(socket, {:page, {sort, season, week, genre}, last}, fn ->
       results =
         if last > n,
-          do: RokiWeb.Place.pages(last, &Browse.page(kind, sort, &1, uuid, season, week)),
-          else: [Browse.page(kind, sort, n, uuid, season, week)]
+          do: RokiWeb.Place.pages(last, &Browse.page(kind, sort, &1, uuid, season, week, genre)),
+          else: [Browse.page(kind, sort, n, uuid, season, week, genre)]
 
       case Enum.find(results, &(not match?({:ok, _, _}, &1))) do
         nil ->
@@ -145,6 +155,10 @@ defmodule RokiWeb.CategoryLive do
   # Order and size live in the address, so a view can be linked to and the back button works.
   def handle_event("sort", %{"sort" => sort}, socket),
     do: {:noreply, push_patch(socket, to: view_path(socket, sort: Browse.sort(sort)))}
+
+  # A genre from the menu, or none ("All genres"); the address carries it.
+  def handle_event("genre", %{"genre" => genre}, socket),
+    do: {:noreply, push_patch(socket, to: view_path(socket, genre: Roki.Genres.parse(genre)))}
 
   # Anime seasons: further back in the list, or one typed by name ("summer 2015", "2015 fall").
   def handle_event("more_seasons", _params, socket),
@@ -225,8 +239,8 @@ defmodule RokiWeb.CategoryLive do
   end
 
   defp view_path(socket, overrides) do
-    %{kind: kind, sort: sort, season: season, week: week} = socket.assigns
-    address(kind, Keyword.merge([sort: sort, season: season, week: week], overrides))
+    %{kind: kind, sort: sort, season: season, week: week, genre: genre} = socket.assigns
+    address(kind, Keyword.merge([sort: sort, season: season, week: week, genre: genre], overrides))
   end
 
   # The address of a view: order, season and (for the Anime Corner ranking) week.
@@ -240,6 +254,7 @@ defmodule RokiWeb.CategoryLive do
         {:season, {year, season}} -> [season: season, year: year]
         {:week, w} when w == nil or not corner? -> []
         {:week, w} -> [week: Roki.AnimeCorner.week_param(w)]
+        {:genre, g} when g == nil or corner? -> []
         other -> [other]
       end)
 
@@ -255,9 +270,9 @@ defmodule RokiWeb.CategoryLive do
   def handle_async(
         {:page, view, _n},
         _result,
-        %{assigns: %{sort: sort, season: season, week: week}} = socket
+        %{assigns: %{sort: sort, season: season, week: week, genre: genre}} = socket
       )
-      when view != {sort, season, week},
+      when view != {sort, season, week, genre},
       do: {:noreply, socket}
 
   def handle_async({:page, _view, _n}, {:ok, {:ok, n, items, more?, seen, corner}}, socket) do
@@ -344,6 +359,37 @@ defmodule RokiWeb.CategoryLive do
               >
                 {label}
                 <.icon :if={@sort == key} name="hero-check-micro" class="h-5 w-5" />
+              </button>
+            </div>
+          </.picker>
+
+          <.picker
+            :if={@sort != :corner}
+            id="genre-picker"
+            label="Genre"
+            value={if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
+          >
+            <div class="grid grid-cols-2 gap-0.5 p-1">
+              <button
+                phx-click={JS.push("genre", value: %{genre: ""}) |> JS.hide(to: "#genre-picker-panel")}
+                class={[
+                  "col-span-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base font-medium hover:bg-base-200",
+                  @genre == nil && "bg-base-200 text-primary"
+                ]}
+              >
+                All genres
+                <.icon :if={@genre == nil} name="hero-check-micro" class="h-5 w-5" />
+              </button>
+              <button
+                :for={{slug, label} <- Roki.Genres.options(@kind)}
+                phx-click={JS.push("genre", value: %{genre: slug}) |> JS.hide(to: "#genre-picker-panel")}
+                class={[
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base hover:bg-base-200",
+                  @genre == slug && "bg-base-200 font-medium text-primary"
+                ]}
+              >
+                {label}
+                <.icon :if={@genre == slug} name="hero-check-micro" class="h-5 w-5" />
               </button>
             </div>
           </.picker>

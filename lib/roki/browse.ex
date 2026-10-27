@@ -39,15 +39,17 @@ defmodule Roki.Browse do
   in it —, most popular first. It replaces the order, except the Anime Corner ranking, which
   then is that season's (of `week`, or the latest posted); without a season, this season's.
   """
-  def page(kind, sort, n, uuid, season \\ nil, week \\ nil)
+  def page(kind, sort, n, uuid, season \\ nil, week \\ nil, genre \\ nil)
       when kind in @kinds and is_integer(n) and n >= 1 do
     sort = if sort in Keyword.keys(sorts(kind, nil)), do: sort, else: :popular
     season = if kind == :anime, do: season
     week = if sort == :corner, do: week
+    # A genre narrows what TMDB is asked for. Anime Corner's ranking is a fixed list with no genres.
+    genre = if sort != :corner and genre in Enum.map(Roki.Genres.options(kind), &elem(&1, 0)), do: genre
 
     with {:ok, {items, more?}} <-
-           TTLCache.fetch({:browse, kind, sort, season, week, n}, @ttl_s, fn ->
-             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week) do
+           TTLCache.fetch({:browse, kind, sort, season, week, genre, n}, @ttl_s, fn ->
+             with {:ok, items, more?} <- fetch(kind, sort, n, uuid, season, week, genre) do
                Roki.Titles.remember_later(items)
                {:ok, {items, more?}}
              end
@@ -71,20 +73,20 @@ defmodule Roki.Browse do
   def years(today \\ Date.utc_today()), do: (today.year + 1)..1960//-1
 
   # The ranking is one page; the titles are TMDB's, matched by Roki.AnimeCorner.
-  defp fetch(:anime, :corner, 1, uuid, season, week) do
+  defp fetch(:anime, :corner, 1, uuid, season, week, _genre) do
     with {:ok, %{items: items}} <- Roki.AnimeCorner.items(uuid, season || Laev.Season.current(), week),
          do: {:ok, big(items), false}
   end
 
-  defp fetch(:anime, :corner, _n, _uuid, _season, _week), do: {:ok, [], false}
+  defp fetch(:anime, :corner, _n, _uuid, _season, _week, _genre), do: {:ok, [], false}
 
   # A season is what premiered in it (laev's list) and what had episodes in it: the new seasons
   # of older shows, which a premiere window leaves out (Reincarnated as a Sword's second season
   # started in 2022's), and the long-runners. Both lists are by popularity, a page of each.
-  defp fetch(:anime, _sort, n, uuid, {_year, _season} = season, _week) do
+  defp fetch(:anime, _sort, n, uuid, {_year, _season} = season, _week, genre) do
     Roki.Laev.public(uuid, fn ->
-      with {:ok, premiered, more1?} <- Laev.Tmdb.discover_anime_season(season, n),
-           {:ok, airing, more2?} <- airing(season, n) do
+      with {:ok, premiered, more1?} <- premiered(season, n, genre),
+           {:ok, airing, more2?} <- airing(season, n, genre) do
         items =
           (airing ++ premiered)
           |> Enum.uniq_by(& &1.id)
@@ -95,14 +97,38 @@ defmodule Roki.Browse do
     end)
   end
 
-  defp fetch(kind, sort, n, uuid, _season, _week), do: fetch(kind, sort, n, uuid)
+  defp fetch(kind, sort, n, uuid, _season, _week, genre), do: fetch(kind, sort, n, uuid, genre)
 
-  defp airing(season, n) do
+  # What premiered in the season: laev's own list, or — with a genre, which laev's cannot take —
+  # the same question put to TMDB directly.
+  defp premiered(season, n, nil), do: Laev.Tmdb.discover_anime_season(season, n)
+
+  defp premiered(season, n, genre) do
     {from, to} = Laev.Season.window(season)
 
     with {:ok, body} <-
            get("/discover/tv",
-             with_genres: 16,
+             with_genres: anime_genres(genre),
+             with_original_language: "ja",
+             sort_by: "popularity.desc",
+             "first_air_date.gte": from,
+             "first_air_date.lte": to,
+             page: n
+           ) do
+      {:ok, Enum.map(body["results"] || [], &normalize(&1, "tv")), n < (body["total_pages"] || 1)}
+    end
+  end
+
+  # Anime is Animation, and the genre on top of it.
+  defp anime_genres(nil), do: 16
+  defp anime_genres(genre), do: "16," <> Roki.Genres.with_genres(genre, :anime)
+
+  defp airing(season, n, genre) do
+    {from, to} = Laev.Season.window(season)
+
+    with {:ok, body} <-
+           get("/discover/tv",
+             with_genres: anime_genres(genre),
              with_original_language: "ja",
              sort_by: "popularity.desc",
              "air_date.gte": from,
@@ -114,13 +140,14 @@ defmodule Roki.Browse do
   end
 
   # Popular is the Featured page's own list, so the two never disagree.
-  defp fetch(kind, :popular, n, uuid) do
+  defp fetch(kind, :popular, n, uuid, nil) do
     with {:ok, items, more?} <- Featured.page(kind, n, uuid), do: {:ok, big(items), more?}
   end
 
-  defp fetch(kind, sort, n, uuid) do
+  # Trending cannot be filtered by genre, so a genre's "Popular" is TMDB's most popular of it.
+  defp fetch(kind, sort, n, uuid, genre) do
     Roki.Laev.public(uuid, fn ->
-      with {:ok, body} <- get(path(kind), params(kind, sort, n)) do
+      with {:ok, body} <- get(path(kind), params(kind, sort, n, Date.utc_today(), genre)) do
         type = if kind == :movies, do: "movie", else: "tv"
         items = Enum.map(body["results"] || [], &normalize(&1, type))
         {:ok, filter(kind, items), n < (body["total_pages"] || 1)}
@@ -133,20 +160,24 @@ defmodule Roki.Browse do
   def path(_kind), do: "/discover/tv"
 
   @doc false
-  def params(kind, sort, n, today \\ Date.utc_today()) do
+  def params(kind, sort, n, today \\ Date.utc_today(), genre \\ nil) do
     date = if kind == :movies, do: :primary_release_date, else: :first_air_date
     today = Date.to_iso8601(today)
 
     base =
       [page: n, "#{date}.lte": today] ++
         if(kind == :movies, do: [include_adult: false], else: []) ++
-        if(kind == :anime, do: [with_genres: 16, with_original_language: "ja"], else: [])
+        if(kind == :anime, do: [with_genres: anime_genres(genre), with_original_language: "ja"], else: []) ++
+        if(kind != :anime and genre != nil, do: [with_genres: Roki.Genres.with_genres(genre, kind)], else: [])
 
     base ++ order(kind, sort, date)
   end
 
   # How many ratings a title needs before its order counts: enough that the oldest and the
   # top rated are what people know, few enough that the newest are not all missing.
+  # The default order is popularity: what "Popular" means once a genre takes it off the trending list.
+  defp order(_kind, :popular, _date), do: [sort_by: "popularity.desc", "vote_count.gte": 20]
+
   defp order(kind, :newest, date),
     do: [sort_by: "#{date}.desc", "vote_count.gte": min_votes(kind, :newest)]
 
