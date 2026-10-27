@@ -15,11 +15,7 @@ defmodule Roki.Watch.SourceCache do
   # playable if the file picked in it really is the episode — earlier lists could hold the wrong one.)
   @version 2
 
-  def hours(web) do
-    # A study session finds releases for its own languages: neither read from nor saved in the
-    # list kept for the account's settings.
-    if Roki.Study.active?(), do: 0, else: configured_hours(web)
-  end
+  def hours(web), do: configured_hours(web)
 
   defp configured_hours(web) do
     case web["sources_cache"] do
@@ -109,8 +105,19 @@ defmodule Roki.Watch.SourceCache do
 
   defp dir(uuid), do: Path.join(Roki.Laev.dir(uuid), "roki-sources")
 
+  # A study session finds releases for its own languages, so it keeps its own list per language
+  # pair (never read as the account's, and not counted by `keys/2`, which only parses plain names).
   defp path(uuid, {type, id, season, episode}),
-    do: Path.join(dir(uuid), "#{type}-#{id}-#{season || 0}-#{episode || 0}.etf")
+    do: Path.join(dir(uuid), "#{type}-#{id}-#{season || 0}-#{episode || 0}#{study_suffix()}.etf")
+
+  defp study_suffix do
+    case Roki.Study.current() do
+      %{lang: lang, subs_lang: subs} -> "-study-#{slug(lang)}-#{slug(subs)}"
+      _ -> ""
+    end
+  end
+
+  defp slug(value), do: value |> to_string() |> String.replace(~r/[^a-z0-9]/i, "") |> String.slice(0, 12)
 
   defp write(uuid, key, entry) do
     File.mkdir_p!(dir(uuid))

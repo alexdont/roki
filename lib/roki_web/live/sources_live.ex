@@ -280,7 +280,7 @@ defmodule RokiWeb.SourcesLive do
       do: {:noreply, assign(socket, playable: playable, rest: rest, phase: :ready, busy?: false)}
 
   def handle_async(:prestart, {:ok, {source, {:ok, _player}}}, socket),
-    do: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash))}
+    do: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
 
   def handle_async(:prestart, {:ok, {_source, {:error, reason}}}, socket) do
     {:noreply, assign(socket, starting: nil, current: nil, start_error: Resolver.failure(reason))}
@@ -399,7 +399,7 @@ defmodule RokiWeb.SourcesLive do
 
         if socket.assigns.mode == :external or params["via"] == "external",
           do: {:noreply, hand_over(assign(socket, :auto, :done), pair)},
-          else: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash))}
+          else: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
     end
   end
 

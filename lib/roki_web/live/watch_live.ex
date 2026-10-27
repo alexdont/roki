@@ -9,6 +9,7 @@ defmodule RokiWeb.WatchLive do
   then updated to name it. Position and progress go back through laev as everywhere else.
   """
   use RokiWeb, :live_view
+  require Logger
 
   import RokiWeb.StudyComponents
   import RokiWeb.WatchComponents, only: [now_playing: 3, checks_list: 1, heavy_offer: 1]
@@ -58,6 +59,7 @@ defmodule RokiWeb.WatchLive do
           failed_reason: nil,
           skip: [],
           heavy_ok: false,
+          fallback?: false,
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           caps: caps_param(socket),
           episodes: nil,
@@ -510,6 +512,32 @@ defmodule RokiWeb.WatchLive do
 
   def handle_event("seek_back", _params, socket), do: {:noreply, socket}
 
+  # The page could not show the video it was given (no picture, or the media engine refused it).
+  # When the release was one this browser was trusted to decode itself, ask for it again the
+  # heavy way (the server re-encodes it to H.264) and tell the browser not to ask for that again.
+  def handle_event("player_failed", params, %{assigns: %{player: %{}, current: {source, _}}} = socket) do
+    caps = socket.assigns.caps
+
+    Logger.warning("player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} #{inspect(params["ua"])}")
+
+    if not socket.assigns.fallback? and not Roki.Direct.wanted?(source, %{}) and Enum.any?([:hevc, :av1, :vp9], &(caps[&1] == true)) do
+      {:noreply,
+       socket
+       |> assign(
+         caps: Map.merge(caps, %{hevc: false, av1: false, vp9: false, uhd: false}),
+         fallback?: true,
+         heavy_ok: socket.assigns.heavy_allowed?,
+         status: "This browser can't show this video as it is — converting it for you…"
+       )
+       |> push_event("roki:nodirect", %{})
+       |> resolve()}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("player_failed", _params, socket), do: {:noreply, socket}
+
   # The OpenSubtitles choices for one language, listed on request from the subtitles menu.
   def handle_event("os_search", %{"lang" => lang}, %{assigns: %{ctx: ctx, uuid: uuid}} = socket)
       when is_binary(lang) and byte_size(lang) in 2..3 and ctx != nil do
@@ -716,6 +744,10 @@ defmodule RokiWeb.WatchLive do
   defp watch_path(%{type: "tv", id: id, season: s, episode: e} = a, hash),
     do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[h: hash] ++ study_q(a)}"
 
+  # Where "back" goes: the title (a series' episode list), not the list of releases.
+  defp back_path(%{type: "movie", id: id}), do: ~p"/title/movie/#{id}"
+  defp back_path(%{type: "tv", id: id}), do: ~p"/title/tv/#{id}/episodes"
+
   defp sources_path(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 
   defp sources_path(%{type: "tv", id: id, season: s, episode: e}),
@@ -733,12 +765,12 @@ defmodule RokiWeb.WatchLive do
       <div class="space-y-4">
         <div class="flex flex-wrap items-center gap-3">
           <div class="min-w-0 flex-1">
-            <.link
-              navigate={sources_path(assigns)}
-              class="text-sm text-base-content/60 hover:text-primary"
-            >
-              ← Sources
-            </.link>
+            <div class="flex items-center gap-4 text-sm text-base-content/60">
+              <.link navigate={back_path(assigns)} class="hover:text-primary">
+                ← {if @title, do: @title.title, else: "Back"}
+              </.link>
+              <.link navigate={sources_path(assigns)} class="hover:text-primary">Sources</.link>
+            </div>
             <h1 class="truncate text-xl font-bold tracking-tight sm:text-2xl">
               {if @title, do: @title.title, else: "Loading…"}<span class="text-base-content/50">{now_playing(
                 @title || %{type: @type},

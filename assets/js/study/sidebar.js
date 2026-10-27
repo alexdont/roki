@@ -215,6 +215,7 @@ export const StudySidebar = {
     clearTimeout(this.leaveTimer)
     clearInterval(this.watchTimer)
     clearInterval(this.wakeTimer)
+    clearInterval(this.pictureTimer)
     if (this.onMove) {
       document.removeEventListener("mousemove", this.onMove)
       document.removeEventListener("contextmenu", this.onAway)
@@ -1396,6 +1397,8 @@ export const StudySidebar = {
     this.shift = this.base
     this.calibrated = !this.base
     clearInterval(this.seekTimer)
+    clearInterval(this.pictureTimer)
+    this.failedSent = false
     if (this.hls) { this.hls.destroy(); this.hls = null }
     this.clearMain()
     this.extras = []
@@ -1418,6 +1421,16 @@ export const StudySidebar = {
       }))
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.refreshAudio())
       hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => this.refreshAudio())
+      // A stream the browser cannot decode must not be a silent black screen: one try at
+      // recovering, then the server is told and plays it another way.
+      let recovered = false
+      let netTries = 0
+      hls.on(Hls.Events.ERROR, (_e, d) => {
+        if (!d || !d.fatal) return
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR && netTries++ < 3) return hls.startLoad()
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !recovered) { recovered = true; return hls.recoverMediaError() }
+        this.playerFailed(`hls ${d.type}: ${d.details}`)
+      })
       hls.loadSource(p.url)
       hls.attachMedia(v)
     } else {
@@ -1427,6 +1440,33 @@ export const StudySidebar = {
 
     if (p.resume > 0) this.seekWhenReachable(p.resume)
     v.play().catch(() => {}) // may be refused without a gesture; the controls are right there
+    this.watchPicture()
+  },
+
+  // Sound with no picture is what a video the browser cannot decode looks like: the clock runs,
+  // no frame ever arrives. Three seconds of that is reported once.
+  watchPicture() {
+    const v = this.video
+    let silent = 0
+    let last = -1
+    this.pictureTimer = setInterval(() => {
+      if (document.hidden || v.paused || v.seeking || v.readyState < 2) { silent = 0; return }
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null
+      const frames = q ? q.totalVideoFrames : v.videoWidth ? 1 : 0
+      const running = v.currentTime !== last && v.currentTime > 1
+      last = v.currentTime
+      if (v.error) return this.playerFailed(`media error ${v.error.code}`)
+      if (running && frames === 0) { if (++silent >= 3) this.playerFailed("no picture") } else silent = 0
+      if (frames > 0) clearInterval(this.pictureTimer)
+    }, 1000)
+  },
+
+  playerFailed(why) {
+    if (this.failedSent) return
+    this.failedSent = true
+    clearInterval(this.pictureTimer)
+    console.warn("player failed:", why)
+    this.pushEvent("player_failed", {why, ua: navigator.userAgent.slice(0, 160)})
   },
 
   // The remux is written while you watch, so a position far in may not exist yet. Wait for

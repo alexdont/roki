@@ -52,6 +52,8 @@ const storedGrid = () => {
 // re-encoding it. Asked of the media engine, not guessed from the browser's name: Chrome says
 // yes to HEVC only on a machine with a hardware decoder.
 function deviceCaps() {
+  // A video this device was once found unable to show (`player_failed`) is not asked for again.
+  try { if (localStorage.getItem("roki:nodirect") === "1") return {hevc: false, av1: false, vp9: false, uhd: false} } catch {}
   try {
     const MS = window.ManagedMediaSource || window.MediaSource
     const ok = (t) => !!(MS && MS.isTypeSupported && MS.isTypeSupported(t))
@@ -113,6 +115,7 @@ window.addEventListener("phx:roki:grid", e => {
   try { localStorage.setItem("roki:grid", e.detail.size) } catch {}
 })
 
+window.addEventListener("phx:roki:nodirect", () => { try { localStorage.setItem("roki:nodirect", "1") } catch {} })
 window.addEventListener("phx:roki:player", e => {
   try { localStorage.setItem("roki:player", e.detail.mode) } catch {}
   document.documentElement.dataset.player = e.detail.mode
