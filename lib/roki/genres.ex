@@ -47,6 +47,27 @@ defmodule Roki.Genres do
     for {slug, label, movie, tv} <- @genres, (if type == "movie", do: movie, else: tv) != [], do: {slug, label}
   end
 
+  # TMDB has no Horror genre for shows, but it keeps a "horror" keyword they are tagged with
+  # (534 of them, American Horror Story and Supernatural among them). Discover can filter by it,
+  # so browsing offers Horror on Shows and Anime; the pages that filter titles already read
+  # (watched history, search) go by genre ids and do not.
+  @keywords %{"horror" => 315_058}
+
+  @doc """
+  The genres browsing offers for a kind (`options/1`, and Horror for shows and anime through its
+  keyword), as `{slug, label}`.
+  """
+  def browse_options(kind) do
+    type = type_of(kind)
+
+    for {slug, label, movie, tv} <- @genres,
+        (if type == "movie", do: movie, else: tv) != [] or (type == "tv" and Map.has_key?(@keywords, slug)),
+        do: {slug, label}
+  end
+
+  @doc "The TMDB keyword that stands in for a genre on shows (`with_keywords`), or nil."
+  def keyword(slug, kind), do: if(type_of(kind) == "tv" and ids(slug, kind) == [], do: @keywords[slug])
+
   @doc "A genre named in an address, else nil (never made into an atom from input)."
   def parse(value), do: Enum.find_value(@genres, fn {slug, _, _, _} -> slug == value && slug end)
 

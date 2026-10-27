@@ -14,7 +14,13 @@ defmodule Roki.Browse do
   alias Roki.{Featured, TTLCache}
 
   @kinds [:movies, :shows, :anime]
-  @sorts [popular: "Popular", newest: "Newest", oldest: "Oldest", top: "Top rated", corner: "Anime Corner ranking"]
+  @sorts [
+    popular: "Popular",
+    newest: "Newest",
+    oldest: "Oldest",
+    top: "Top rated",
+    corner: "Anime Corner ranking"
+  ]
   @ttl_s 60 * 60
   @base "https://api.themoviedb.org/3"
 
@@ -44,8 +50,11 @@ defmodule Roki.Browse do
     sort = if sort in Keyword.keys(sorts(kind, nil)), do: sort, else: :popular
     season = if kind == :anime, do: season
     week = if sort == :corner, do: week
+
     # A genre narrows what TMDB is asked for. Anime Corner's ranking is a fixed list with no genres.
-    genre = if sort != :corner and genre in Enum.map(Roki.Genres.options(kind), &elem(&1, 0)), do: genre
+    genre =
+      if sort != :corner and genre in Enum.map(Roki.Genres.browse_options(kind), &elem(&1, 0)),
+        do: genre
 
     with {:ok, {items, more?}} <-
            TTLCache.fetch({:browse, kind, sort, season, week, genre, n}, @ttl_s, fn ->
@@ -74,7 +83,8 @@ defmodule Roki.Browse do
 
   # The ranking is one page; the titles are TMDB's, matched by Roki.AnimeCorner.
   defp fetch(:anime, :corner, 1, uuid, season, week, _genre) do
-    with {:ok, %{items: items}} <- Roki.AnimeCorner.items(uuid, season || Laev.Season.current(), week),
+    with {:ok, %{items: items}} <-
+           Roki.AnimeCorner.items(uuid, season || Laev.Season.current(), week),
          do: {:ok, big(items), false}
   end
 
@@ -107,13 +117,16 @@ defmodule Roki.Browse do
     {from, to} = Laev.Season.window(season)
 
     with {:ok, body} <-
-           get("/discover/tv",
-             with_genres: anime_genres(genre),
-             with_original_language: "ja",
-             sort_by: "popularity.desc",
-             "first_air_date.gte": from,
-             "first_air_date.lte": to,
-             page: n
+           get(
+             "/discover/tv",
+             [
+               with_genres: anime_genres(genre),
+               with_original_language: "ja",
+               sort_by: "popularity.desc",
+               "first_air_date.gte": from,
+               "first_air_date.lte": to,
+               page: n
+             ] ++ keyword_params(genre, :anime)
            ) do
       {:ok, Enum.map(body["results"] || [], &normalize(&1, "tv")), n < (body["total_pages"] || 1)}
     end
@@ -121,19 +134,38 @@ defmodule Roki.Browse do
 
   # Anime is Animation, and the genre on top of it.
   defp anime_genres(nil), do: 16
-  defp anime_genres(genre), do: "16," <> Roki.Genres.with_genres(genre, :anime)
+
+  defp anime_genres(genre) do
+    case Roki.Genres.with_genres(genre, :anime) do
+      "" -> 16
+      ids -> "16," <> ids
+    end
+  end
+
+  # A genre shows has only as a keyword (Horror): the extra discover parameter for it.
+  defp keyword_params(nil, _kind), do: []
+
+  defp keyword_params(genre, kind) do
+    case Roki.Genres.keyword(genre, kind) do
+      nil -> []
+      id -> [with_keywords: id]
+    end
+  end
 
   defp airing(season, n, genre) do
     {from, to} = Laev.Season.window(season)
 
     with {:ok, body} <-
-           get("/discover/tv",
-             with_genres: anime_genres(genre),
-             with_original_language: "ja",
-             sort_by: "popularity.desc",
-             "air_date.gte": from,
-             "air_date.lte": to,
-             page: n
+           get(
+             "/discover/tv",
+             [
+               with_genres: anime_genres(genre),
+               with_original_language: "ja",
+               sort_by: "popularity.desc",
+               "air_date.gte": from,
+               "air_date.lte": to,
+               page: n
+             ] ++ keyword_params(genre, :anime)
            ) do
       {:ok, Enum.map(body["results"] || [], &normalize(&1, "tv")), n < (body["total_pages"] || 1)}
     end
@@ -167,8 +199,14 @@ defmodule Roki.Browse do
     base =
       [page: n, "#{date}.lte": today] ++
         if(kind == :movies, do: [include_adult: false], else: []) ++
-        if(kind == :anime, do: [with_genres: anime_genres(genre), with_original_language: "ja"], else: []) ++
-        if(kind != :anime and genre != nil, do: [with_genres: Roki.Genres.with_genres(genre, kind)], else: [])
+        if(kind == :anime,
+          do: [with_genres: anime_genres(genre), with_original_language: "ja"],
+          else: []
+        ) ++
+        if(kind != :anime and genre != nil and Roki.Genres.ids(genre, kind) != [],
+          do: [with_genres: Roki.Genres.with_genres(genre, kind)],
+          else: []
+        ) ++ keyword_params(genre, kind)
 
     base ++ order(kind, sort, date)
   end

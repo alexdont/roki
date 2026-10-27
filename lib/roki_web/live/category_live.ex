@@ -78,7 +78,7 @@ defmodule RokiWeb.CategoryLive do
     # A genre this kind has; none for Anime Corner's ranking, which is a fixed list.
     genre =
       with slug when is_binary(slug) <- Roki.Genres.parse(params["genre"]),
-           true <- sort != :corner and Enum.any?(Roki.Genres.options(socket.assigns.kind), &(elem(&1, 0) == slug)) do
+           true <- sort != :corner and Enum.any?(Roki.Genres.browse_options(socket.assigns.kind), &(elem(&1, 0) == slug)) do
         slug
       else
         _ -> nil
@@ -381,7 +381,7 @@ defmodule RokiWeb.CategoryLive do
                 <.icon :if={@genre == nil} name="hero-check-micro" class="h-5 w-5" />
               </button>
               <button
-                :for={{slug, label} <- Roki.Genres.options(@kind)}
+                :for={{slug, label} <- Roki.Genres.browse_options(@kind)}
                 phx-click={JS.push("genre", value: %{genre: slug}) |> JS.hide(to: "#genre-picker-panel")}
                 class={[
                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base hover:bg-base-200",

@@ -77,6 +77,13 @@ defmodule RokiWeb.CategoryLiveTest do
     today = ~D[2026-10-22]
 
     assert Browse.params(:movies, :top, 1, today, "horror")[:with_genres] == "27"
+
+    # Shows and anime have no Horror genre: the keyword stands in for it, with no empty genre list.
+    shows = Browse.params(:shows, :popular, 1, today, "horror")
+    assert shows[:with_keywords] == 315_058
+    refute Keyword.has_key?(shows, :with_genres)
+    anime = Browse.params(:anime, :popular, 1, today, "horror")
+    assert anime[:with_keywords] == 315_058 and anime[:with_genres] == 16
     assert Browse.params(:shows, :newest, 1, today, "scifi")[:with_genres] == "10765"
     # Anime is Animation first, then the genre.
     assert Browse.params(:anime, :newest, 1, today, "action")[:with_genres] == "16,10759"
@@ -97,13 +104,16 @@ defmodule RokiWeb.CategoryLiveTest do
 
     {:ok, _view, shows} = live(conn, "/shows")
     assert shows =~ "Sci-Fi"
-    refute shows =~ "&quot;genre&quot;:&quot;horror&quot;"
+    # TMDB has no Horror genre for shows, so it is offered through its "horror" keyword; Thriller
+    # has neither.
+    assert shows =~ "&quot;genre&quot;:&quot;horror&quot;"
+    refute shows =~ "&quot;genre&quot;:&quot;thriller&quot;"
 
     {:ok, _view, picked} = live(conn, "/movies?genre=horror")
     assert picked =~ ">Horror<"
 
     # A genre this kind does not have is ignored, not trusted.
-    {:ok, _view, bogus} = live(conn, "/shows?genre=horror")
+    {:ok, _view, bogus} = live(conn, "/shows?genre=thriller")
     assert bogus =~ "All genres"
   end
 end
