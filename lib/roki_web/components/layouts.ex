@@ -215,6 +215,14 @@ defmodule RokiWeb.Layouts do
                 >
                   New episodes
                 </.menu_row>
+                <%!-- Where Play opens things, right here: it is changed often enough to live in the menu. --%>
+                <div class="px-3 pb-1 pt-1.5">
+                  <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">Watch in</p>
+                  <.player_switch class="w-full" />
+                </div>
+
+                <div class="my-2 border-t border-base-300/70"></div>
+
                 <.menu_row
                   href={~p"/#{@username}/friends"}
                   icon="hero-user-group"
@@ -417,6 +425,53 @@ defmodule RokiWeb.Layouts do
         aria-label="Watch in an external player"
       >
         <.icon name="hero-arrow-top-right-on-square" class="size-5" />
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  The same choice with words: a two-part switch, *Browser* or *VLC / app*, lit from
+  `data-player` on the page like `player_toggle/1`, sending `set_mode` the same way. For the
+  places the choice is made most — the account menu and beside Play on a title.
+  """
+  attr :class, :any, default: nil
+  attr :size, :string, default: "md", doc: "md, or sm for a tight row"
+
+  def player_switch(assigns) do
+    ~H"""
+    <div
+      class={["inline-grid grid-cols-2 rounded-full bg-base-200 p-0.5", @class]}
+      role="group"
+      aria-label="Where to watch"
+    >
+      <button
+        type="button"
+        phx-click="set_mode"
+        phx-value-mode="browser"
+        class={[
+          "flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition",
+          @size == "sm" && "px-2.5 py-1 text-xs",
+          @size != "sm" && "px-3 py-1.5 text-sm",
+          "text-base-content/60 hover:text-base-content [[data-player=browser]_&]:bg-base-100 [[data-player=browser]_&]:text-base-content [[data-player=browser]_&]:shadow-sm"
+        ]}
+        title="Play here, in the browser"
+      >
+        <.icon name="hero-window" class="h-4 w-4" /> Browser
+      </button>
+      <button
+        type="button"
+        phx-click="set_mode"
+        phx-value-mode="external"
+        class={[
+          "flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-semibold transition",
+          @size == "sm" && "px-2.5 py-1 text-xs",
+          @size != "sm" && "px-3 py-1.5 text-sm",
+          "text-base-content/60 hover:text-base-content [[data-player=external]_&]:bg-base-100 [[data-player=external]_&]:text-base-content [[data-player=external]_&]:shadow-sm"
+        ]}
+        title="Hand the release to VLC or another app"
+      >
+        <.icon name="hero-arrow-top-right-on-square" class="h-4 w-4" /> VLC / app
       </button>
     </div>
     """

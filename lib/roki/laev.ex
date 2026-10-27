@@ -181,9 +181,40 @@ defmodule Roki.Laev do
   def annotate(uuid, items) do
     if uuid && connected?(uuid) do
       ratings = Roki.Profile.ratings(uuid)
-      run(uuid, fn -> partial(items, ratings) end)
+      items = run(uuid, fn -> partial(items, ratings) end)
+      with_episode_counts(uuid, items)
     else
       items
+    end
+  end
+
+  # A series in progress reads "12/24" — episodes watched of the episodes out — rather than
+  # "3 seasons watched". The total is the title's (kept beside it after the first look; a title
+  # never opened costs one TMDB read, remembered). Where it cannot be had the words stay.
+  defp with_episode_counts(uuid, items) do
+    started = for %{type: "tv", id: id, ep_done: done} <- items, is_integer(id) and is_integer(done), uniq: true, do: id
+
+    if started == [] do
+      items
+    else
+      today = Date.utc_today()
+
+      totals =
+        started
+        |> Task.async_stream(&{&1, total_episodes(uuid, &1, today)}, max_concurrency: 4, timeout: 20_000, on_timeout: :kill_task)
+        |> Enum.reduce(%{}, fn
+          {:ok, {id, total}}, acc when is_integer(total) and total > 0 -> Map.put(acc, id, total)
+          _, acc -> acc
+        end)
+
+      Enum.map(items, fn
+        %{type: "tv", id: id, ep_done: done} = item when is_map_key(totals, id) ->
+          total = totals[id]
+          Map.merge(item, %{partial: "#{min(done, total)}/#{total}", ep_total: total})
+
+        item ->
+          item
+      end)
     end
   end
 
@@ -221,7 +252,7 @@ defmodule Roki.Laev do
 
       case partial_text(item, anime, shows) do
         nil -> item
-        text -> Map.put(item, :partial, text)
+        text -> Map.merge(item, %{partial: text, ep_done: episodes_done(item, anime, shows)})
       end
     end)
   rescue
@@ -257,6 +288,21 @@ defmodule Roki.Laev do
   end
 
   defp partial_text(_item, _anime, _shows), do: nil
+
+  # Episodes of a series marked watched, however they were marked: by MyAnimeList entry (an
+  # entry's count), per episode on TMDB's side, or both.
+  defp episodes_done(%{type: "tv", id: id}, anime, shows) when is_integer(id) do
+    by_tmdb = shows |> Map.get({"tv", id}, %{}) |> Map.values() |> Enum.sum()
+
+    case Laev.AnimeMap.mal_ids("tv", id) do
+      [] -> by_tmdb
+      mals -> (mals |> Enum.map(&Map.get(anime, &1, 0)) |> Enum.sum()) + unmapped_marks(id)
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp episodes_done(_item, _anime, _shows), do: nil
 
   # Episodes marked in seasons of an anime that the cross-id list has no MyAnimeList entry for.
   defp unmapped_marks(id) do

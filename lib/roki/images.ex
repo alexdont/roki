@@ -76,13 +76,23 @@ defmodule Roki.Images do
     :exit, _ -> {:error, :timeout}
   end
 
-  # Every picture held, into memory: a few thousand small rows.
+  # Every picture held, into memory: a few thousand small rows. `held_at` 0: long ago.
   defp load do
     %{rows: rows} = Roki.Repo.query!("select key, file_uuid from roki_pictures")
-    for [key, uuid] <- rows, do: :ets.insert(@table, {key, Ecto.UUID.load!(uuid)})
+    for [key, uuid] <- rows, do: :ets.insert(@table, {key, Ecto.UUID.load!(uuid), 0})
     :ok
   rescue
     _ -> :ok
+  end
+
+  # The library makes a picture's smaller sizes a little after the picture is stored, and asked
+  # for a size it has not made yet (with nothing smaller to stand in) it answers a grey
+  # placeholder — a 200, which a browser then shows as the poster until the page is reloaded.
+  # So for its first while a picture is served as the original, which is there from the start.
+  @settle_s 120
+
+  defp variant_now(url, held_at) do
+    if System.os_time(:second) - held_at < @settle_s, do: "original", else: variant_for(url)
   end
 
   @doc "The sizes TMDB serves."
@@ -100,7 +110,7 @@ defmodule Roki.Images do
 
       key ->
         case :ets.lookup(@table, key) do
-          [{_, uuid}] -> Roki.Media.url(uuid, variant_for(url))
+          [{_, uuid, held_at}] -> Roki.Media.url(uuid, variant_now(url, held_at))
           [] -> "/img/" <> short(url)
         end
     end
@@ -201,8 +211,8 @@ defmodule Roki.Images do
 
       {key, source_url} ->
         case :ets.lookup(@table, key) do
-          [{_, uuid}] -> {:ok, Roki.Media.url(uuid, variant_for(source_url))}
-          [] -> with {:ok, uuid} <- fetch_once(key, master(source_url)), do: {:ok, Roki.Media.url(uuid, variant_for(source_url))}
+          [{_, uuid, held_at}] -> {:ok, Roki.Media.url(uuid, variant_now(source_url, held_at))}
+          [] -> with {:ok, uuid} <- fetch_once(key, master(source_url)), do: {:ok, Roki.Media.url(uuid, "original")}
         end
     end
   end
@@ -248,7 +258,7 @@ defmodule Roki.Images do
       [key, bin, now]
     )
 
-    :ets.insert(@table, {key, uuid})
+    :ets.insert(@table, {key, uuid, System.os_time(:second)})
     :ok
   end
 

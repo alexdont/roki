@@ -851,6 +851,8 @@ defmodule RokiWeb.TitleLive do
                 >
                   ⚡ cached
                 </span>
+                <%!-- Where Play opens it, right beside it. --%>
+                <Layouts.player_switch :if={@linked?} class="ml-auto" />
               </div>
 
               <%!-- Away from Play: a slip here should not save or hold a title. --%>
@@ -1523,7 +1525,7 @@ defmodule RokiWeb.TitleLive do
 
     ~H"""
     <section class={[
-      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(5rem+max(0.75rem,env(safe-area-inset-bottom)))] sm:hidden",
+      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(7rem+max(0.75rem,env(safe-area-inset-bottom)))] sm:hidden",
       @locked? && "-mb-9"
     ]}>
       <div class="relative flex shrink-0 items-start gap-2">
@@ -1600,7 +1602,11 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
-      <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 rounded-t-3xl border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur [&_.btn]:rounded-2xl">
+      <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 rounded-t-3xl border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur [&_.btn]:rounded-2xl">
+        <div :if={@linked?} class="flex items-center justify-between gap-3">
+          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Watch in</span>
+          <Layouts.player_switch size="sm" />
+        </div>
         <.play_button
           split?
           title={@title}
