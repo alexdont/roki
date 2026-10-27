@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Local player test</title>
+<script defer src="/assets/js/app.js"></script>
+<style>body{background:#111;color:#eee;font:14px system-ui;margin:16px} video{width:640px;background:#000}</style></head>
+<body><h1>Local player (the site's own module)</h1><video id="v" controls muted playsinline></video><pre id="log"></pre>
+<script>window.addEventListener("load", () => { document.getElementById("log").textContent = "ready: " + typeof window.rokiLocalPlayer })</script>
+</body></html>

@@ -13,6 +13,8 @@
 // buffer is kept a minute ahead of the playhead — a write waits for room, which holds the read
 // and so the download — and what is half a minute behind is let go.
 
+import {SubtitleScanner, toVtt} from "./ebml_subs.js"
+
 // Loaded from the site's own files at run time, not bundled: the address is a variable so the
 // bundler leaves the import alone.
 const load = (url) => import(url)
@@ -49,23 +51,6 @@ async function encoderFor(MB) {
 
 const AHEAD = 60, BEHIND = 30
 
-// Text out of a Matroska subtitle block: SRT text as it is; an ASS line is its last field with
-// the style tags stripped and the line breaks restored.
-function subtitleText(codecId, data) {
-  let text = new TextDecoder().decode(data)
-  if (/ASS|SSA/i.test(String(codecId))) {
-    const parts = text.split(",")
-    text = parts.length > 8 ? parts.slice(8).join(",") : text
-    text = text.replace(/\{[^}]*\}/g, "").replace(/\\N|\\n/g, "\n").replace(/\\h/g, " ")
-  }
-  return text.replace(/<[^>]+>/g, "").trim()
-}
-
-const vttTime = (s) => {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = (s % 60).toFixed(3).padStart(6, "0")
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${sec}`
-}
-
 /**
  * Start playing `url` in `video`. Returns a controller: `seek(t)`, `audioTracks`, `setAudio(i)`,
  * `subtitleTracks` (each with `read()` giving its WebVTT so far), `stop()`.
@@ -77,7 +62,17 @@ export async function startLocalPlayer(video, url, opts = {}) {
   const log = opts.onLog || (() => {})
   const fail = (why) => { log("local player failed: " + why); if (opts.onFail) opts.onFail(why) }
 
-  const input = new MB.Input({source: new MB.UrlSource(url, {maxCacheSize: 96 * 1024 * 1024}), formats: MB.ALL_FORMATS})
+  const scanner = new SubtitleScanner()
+  const source = new MB.UrlSource(url, {maxCacheSize: 96 * 1024 * 1024})
+  // Every window the reader fetches is shown to the scanner (it only follows the structure and
+  // keeps the subtitle blocks; nothing is read twice).
+  const originalRead = source._read.bind(source)
+  source._read = (start, end, minPos, maxPos) => {
+    const r = originalRead(start, end, minPos, maxPos)
+    const see = (res) => { try { if (res && res.bytes && Number.isFinite(res.offset)) scanner.feed(res.offset, res.bytes) } catch (e) { console.warn("subtitle scanner", e) }; return res }
+    return r && typeof r.then === "function" ? r.then(see) : see(r)
+  }
+  const input = new MB.Input({source, formats: MB.ALL_FORMATS})
   const duration = await input.computeDuration()
   const tracks = await input.getTracks()
   const videoTrack = await pickVideo(tracks)
@@ -102,11 +97,14 @@ export async function startLocalPlayer(video, url, opts = {}) {
     audioIndex = audios.indexOf(pref || playable[0])
   }
 
-  // Subtitles carried in the release: read behind the playhead, as WebVTT that grows.
-  const subtitleTracks = tracks.filter((t) => t.type === "subtitle" && /TEXT|UTF8|ASS|SSA|SRT|WEBVTT/i.test(String(t.internalCodecId || t.codec)))
-    .map((t, k) => ({track: t, k, lang: t.languageCode, name: t.name || "", cues: [], done: false, reader: null,
-      label: `${t.languageCode}${t.name ? " · " + t.name : ""}`, url: `local:sub:${k}`,
-      read() { return "WEBVTT\n\n" + this.cues.map((c, i) => `${i + 1}\n${vttTime(c.start)} --> ${vttTime(c.end)}\n${c.text}\n`).join("\n") }}))
+  // Subtitles carried in the release: the scanner's tracks (known once the file's header has
+  // gone past it, which the reader does first), each a WebVTT that grows as the file is read.
+  const subtitleTracks = () =>
+    scanner.subtitleTracks.map((t) => ({
+      lang: t.lang, name: t.name, codec: t.codec, cues: t.cues,
+      label: `${t.lang}${t.name ? " · " + t.name : ""}`, url: `local:sub:${t.number}`,
+      read: () => toVtt(t),
+    }))
 
   const MS = window.ManagedMediaSource || window.MediaSource
   const state = {run: null, stopped: false, seeking: false, expect: null}
@@ -194,37 +192,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
     state.run = run
     log(`local: ${type} from ${from.toFixed(0)} s, audio ${audio ? `${audio.codec} ${audio.lang} (${audio.how})` : "none"}`)
     conversion.execute().then(() => { finished = true; pump() }).catch((e) => { const m = String(e && e.message || e); if (!/cancel/i.test(m) && !closed) fail("read failed: " + m) })
-    readSubtitles(run)
     return run
-  }
-
-  // Subtitles out of the release, a little behind what has been read for the picture (the same
-  // bytes, still in the reader's cache), into each track's cue list.
-  function readSubtitles(run) {
-    for (const s of subtitleTracks) {
-      if (s.reader) continue
-      s.reader = (async () => {
-        try {
-          const sink = new MB.EncodedPacketSink(s.track)
-          let packet = await sink.getPacket(Math.max(0, run.from - 5), {metadataOnly: false}).catch(() => null)
-          if (!packet) packet = await sink.getFirstPacket()
-          let last = -1
-          while (packet && !state.stopped) {
-            // Stay behind the picture: a packet further on than what was read waits.
-            while (!state.stopped && packet.timestamp > run.processed() + 2 && state.run === run) await new Promise((r) => setTimeout(r, 500))
-            if (state.stopped) return
-            if (state.run !== run) { s.reader = null; return }
-            if (packet.timestamp > last) {
-              const text = subtitleText(s.track.internalCodecId, packet.data)
-              if (text) s.cues.push({start: packet.timestamp, end: packet.timestamp + (packet.duration || 2), text})
-              last = packet.timestamp
-            }
-            packet = await sink.getNextPacket(packet)
-          }
-          s.done = true
-        } catch (e) { log("subtitles: " + (e && e.message || e)); s.done = true }
-      })()
-    }
   }
 
   // A seek outside what is buffered: read again from there. The seek a restart makes itself
@@ -272,9 +240,10 @@ export async function startLocalPlayer(video, url, opts = {}) {
       audioIndex = i
       await restartAt(video.currentTime)
     },
-    subtitleTracks,
+    get subtitleTracks() { return subtitleTracks() },
+    onSubtitleTracks(fn) { scanner.onTracks = () => fn(subtitleTracks()); if (scanner.subtitleTracks.length) fn(subtitleTracks()) },
     seek(t) { video.currentTime = Math.max(0, t) },
-    stats() { const r = state.run; return r ? {from: r.from, bytes: r.bytes(), processed: r.processed(), type: r.type} : null },
+    stats() { const r = state.run; return r ? {from: r.from, bytes: r.bytes(), processed: r.processed(), type: r.type, subtitles: scanner.stats} : null },
     async stop() {
       state.stopped = true
       video.removeEventListener("seeking", onSeeking)

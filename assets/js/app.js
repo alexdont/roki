@@ -29,6 +29,11 @@ import {setupPeek} from "./peek"
 import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
 import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
+import {startLocalPlayer} from "./study/local_player.js"
+import {SubtitleScanner} from "./study/ebml_subs.js"
+// For the player lab and the console.
+window.rokiLocalPlayer = startLocalPlayer
+window.rokiSubtitleScanner = SubtitleScanner
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 // Which player this device uses. Remembered here, not on the server: a phone wants its own

@@ -1420,8 +1420,11 @@ export const StudySidebar = {
           audioLang: p.audio_lang,
           onLog: (line) => console.info(line),
           onFail: (why) => { if (this.playerUrl === p.url) this.pushEvent("player_failed", {why, local: true, ua: navigator.userAgent.slice(0, 160)}) },
-          onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio(); this.addLocalSubtitles(ctl) },
+          onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio() },
         })
+        // The release's own subtitle tracks arrive as the file is read; each time, into the list.
+        if (this.local && this.playerUrl === p.url) { const ctl = this.local; ctl.onSubtitleTracks(() => { if (this.local === ctl) this.addLocalSubtitles(ctl) }) }
+        else if (this.local) { this.local.stop(); this.local = null }
       } catch (e) {
         if (this.playerUrl === p.url) this.pushEvent("player_failed", {why: String(e && e.message || e), local: true, ua: navigator.userAgent.slice(0, 160)})
       }
