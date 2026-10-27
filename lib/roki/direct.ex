@@ -68,7 +68,7 @@ defmodule Roki.Direct do
   it decodes one of those codecs at 4K.
   """
   def caps(params) when is_map(params) do
-    for key <- [:hevc, :av1, :vp9, :uhd], into: %{} do
+    for key <- [:hevc, :av1, :vp9, :uhd, :local], into: %{} do
       {key, Map.get(params, Atom.to_string(key)) == true}
     end
   end

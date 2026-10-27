@@ -33,6 +33,7 @@ defmodule RokiWeb.Router do
     get "/hevc-test/file/:how", PageController, :hevc_test_file
     get "/images/hevc-test", PageController, :hevc_test
     # The player lab: the browser does the whole job itself (owner only).
+    get "/relay", RelayController, :bytes
     get "/lab/sample/:name", LabController, :sample
     get "/lab/bytes", LabController, :bytes
     post "/lab/report", LabController, :report

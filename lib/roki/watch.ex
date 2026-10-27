@@ -1181,6 +1181,54 @@ defmodule Roki.Watch do
   of the film, for the player to count from.
   """
   def start(uuid, ctx, source, stream, caps \\ %{}, opts \\ []) do
+    if local_player?(uuid, caps, opts) do
+      local_start(uuid, ctx, source, stream, opts)
+    else
+      server_start(uuid, ctx, source, stream, caps, opts)
+    end
+  end
+
+  # The viewer's device does the work (`assets/js/study/local_player.js`): the page said it can
+  # (`caps.local`), the account's setting says so, and nothing has asked for the server instead.
+  defp local_player?(uuid, caps, opts) do
+    Map.get(caps || %{}, :local) == true and Keyword.get(opts, :server) != true and
+      Roki.Laev.web_settings(uuid)["browser_work"] == "device"
+  end
+
+  # Nothing to convert, nothing to wait for: the address the browser reads the release at (its
+  # own, or the relay's for a host that forbids cross-origin reads), where to resume, and the
+  # account's own language for the audio track. Any conversion left running for this person is
+  # ended, as always.
+  defp local_start(uuid, ctx, source, stream, opts) do
+    with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},
+         :ok <- small_enough(uuid, source),
+         true <- is_binary(stream[:url]) || {:error, :no_url},
+         :ok <- release_previous(uuid) do
+      Roki.Keys.record(uuid, :play)
+
+      Roki.Laev.run(uuid, fn ->
+        from = Keyword.get(opts, :from) || Laev.Position.saved_position(ctx) || 0
+        save_resume(ctx, source)
+
+        {:ok,
+         %{
+           local: true,
+           url: RokiWeb.Relay.url_for(stream.url),
+           relay?: not RokiWeb.Relay.direct?(stream.url),
+           hls?: false,
+           resume_at: from,
+           start: 0,
+           remux_id: nil,
+           filename: stream[:filename],
+           filesize: stream[:filesize],
+           audio_lang: Laev.Config.lang(),
+           subtitles: []
+         }}
+      end)
+    end
+  end
+
+  defp server_start(uuid, ctx, source, stream, caps, opts) do
     # A 4K re-encode on software never keeps up with playing, and takes every core trying.
     # A video the browser decodes itself (`caps`) is only copied, and takes no encoder slot.
     with true <- Roki.Keys.allow_play?(uuid) || {:error, :over_limit},

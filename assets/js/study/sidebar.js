@@ -13,6 +13,7 @@
 // No framework: the video is a plain <video>, the rest is plain DOM.
 import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
+import {startLocalPlayer} from "./local_player.js"
 
 // After you scroll the list it stops following the video, then picks the current line back up
 // on its own once you've been idle this long.
@@ -209,6 +210,7 @@ export const StudySidebar = {
   },
 
   destroyed() {
+    if (this.local) { const l = this.local; this.local = null; l.stop() }
     if (this.panelWatch) this.panelWatch.disconnect()
     cancelAnimationFrame(this.raf)
     clearTimeout(this.dwellTimer)
@@ -313,6 +315,7 @@ export const StudySidebar = {
   // Go to a time in the film. Before where the conversion began, the server is asked for one
   // from there (the page then gets a new source to play): `false`, and the seek comes with it.
   seekAbs(t) {
+    if (this.local) { this.local.seek(t); return true }
     if (this.base > 0 && t < this.base - 0.5) {
       this.pushEvent("seek_back", {position: Math.max(0, Math.floor(t))})
       return false
@@ -1400,10 +1403,30 @@ export const StudySidebar = {
     clearInterval(this.pictureTimer)
     this.failedSent = false
     if (this.hls) { this.hls.destroy(); this.hls = null }
+    if (this.local) { const l = this.local; this.local = null; l.stop() }
     this.clearMain()
     this.extras = []
     this.cache.clear()
     this.resetAudio()
+
+    if (p.local) {
+      // This device does the work: the release read from its host, taken apart and played here.
+      this.base = 0
+      this.shift = 0
+      this.calibrated = true
+      try {
+        this.local = await startLocalPlayer(v, p.url, {
+          resume: p.resume,
+          audioLang: p.audio_lang,
+          onLog: (line) => console.info(line),
+          onFail: (why) => { if (this.playerUrl === p.url) this.pushEvent("player_failed", {why, local: true, ua: navigator.userAgent.slice(0, 160)}) },
+          onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio(); this.addLocalSubtitles(ctl) },
+        })
+      } catch (e) {
+        if (this.playerUrl === p.url) this.pushEvent("player_failed", {why: String(e && e.message || e), local: true, ua: navigator.userAgent.slice(0, 160)})
+      }
+      return
+    }
 
     if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
       const Hls = await loadHls()
@@ -1507,6 +1530,9 @@ export const StudySidebar = {
       const raw = String(t.name || t.label || "").replace(/_/g, " ").trim()
       return nice || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "") || t.lang || t.language || ""
     }
+    if (this.local) {
+      return this.local.audioTracks.filter((t) => t.playable).map((t) => ({i: t.i, name: names(t) || t.codec || `Track ${t.i + 1}`, lang: t.lang, active: t.active}))
+    }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length) {
       return this.hls.audioTracks.map((t, i) => ({i, name: names(t) || `Track ${i + 1}`, lang: t.lang, active: i === this.hls.audioTrack}))
     }
@@ -1526,6 +1552,12 @@ export const StudySidebar = {
   },
 
   setAudio(i) {
+    if (this.local) {
+      const t = this.audioList().find((x) => x.i === i)
+      if (t) store.set("audio", t.name)
+      this.local.setAudio(i).then(() => this.refreshAudio())
+      return
+    }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length) {
       this.hls.audioTrack = i
     } else if (this.video.audioTracks) {
@@ -1609,7 +1641,11 @@ export const StudySidebar = {
   // translations. Click a track to turn it on or off; ↑ on one that is on makes it the first. What
   // you chose is remembered by language and name, so the next episode starts the same way.
   setTracks(p) {
-    this.tracks = p.tracks || []
+    this.lastPrefer = p.prefer
+    this.lastStudy = p.study
+    // The release's own tracks, read on this device, stay in the list when the page's list changes.
+    const local = this.tracks.filter((t) => t.read)
+    this.tracks = [...local, ...(p.tracks || [])]
     this.mediaKey = p.key || ""
     // The subtitle choice belongs to the show or film (every episode of it), not to the browser:
     // Japanese with English under it for an anime must not follow you to a French show.
@@ -1628,6 +1664,20 @@ export const StudySidebar = {
       this.empty.hidden = false
       this.empty.textContent = "No subtitles came with this release."
     }
+  },
+
+  // The subtitle tracks the local player reads out of the release itself: offered like the ones
+  // the server would have written, in the same list, picked the same way.
+  addLocalSubtitles(ctl) {
+    const mine = ctl.subtitleTracks.map((s) => ({label: s.label, lang: s.lang, url: s.url, read: () => s.read()}))
+    if (!mine.length) return
+    const known = new Set(this.tracks.map((t) => t.url))
+    const add = mine.filter((t) => !known.has(t.url))
+    if (!add.length) return
+    this.tracks = [...add, ...this.tracks]
+    this.tracksKey = null
+    if (!this.userChose) this.restoreOffVideo()
+    this.apply(this.userChose ? this.selection() : this.restore(this.lastPrefer, this.lastStudy))
   },
 
   // A track that was just fetched (from OpenSubtitles) is turned on as soon as the page has it.
@@ -1994,7 +2044,9 @@ export const StudySidebar = {
 
     for (let tries = 0; tries < 75 && target.loading === track.url; tries++) {
       try {
-        const res = await fetch(track.url, {credentials: "same-origin", cache: "no-store"})
+        // A track read out of the release on this device has no address: it is asked for its
+        // text so far, the same way a file still being written is.
+        const res = track.read ? {ok: true, text: async () => track.read()} : await fetch(track.url, {credentials: "same-origin", cache: "no-store"})
 
         if (res.ok) {
           const text = await res.text()

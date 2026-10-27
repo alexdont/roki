@@ -344,6 +344,9 @@ defmodule RokiWeb.WatchLive do
     data = %{
       url: player.url,
       hls: player.hls?,
+      local: player[:local] == true,
+      audio_lang: player[:audio_lang],
+      filesize: player[:filesize],
       resume: player.resume_at,
       start: player[:start] || 0,
       tracks: player.subtitles ++ saved,
@@ -541,6 +544,15 @@ defmodule RokiWeb.WatchLive do
   # Nothing is converted or replaced behind the viewer's back: they are asked. The two answers —
   # convert this release for the browser (the server re-encodes it to H.264, minutes of work), or
   # look for another file the browser plays as it is — are `convert_it` and `find_other`.
+  def handle_event("player_failed", %{"local" => true} = params, %{assigns: %{player: %{local: true}, current: {source, _}}} = socket) do
+    Logger.warning("local player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} — the server takes over")
+
+    {:noreply,
+     socket
+     |> assign(caps: Map.put(socket.assigns.caps, :local, false), status: "This device could not play it as it is — the server is preparing it…")
+     |> resolve()}
+  end
+
   def handle_event("player_failed", params, %{assigns: %{player: %{}, current: {source, _}}} = socket) do
     caps = socket.assigns.caps
 

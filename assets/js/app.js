@@ -65,6 +65,8 @@ function deviceCaps() {
       // 4K: HEVC Main 10 at level 5.1, or AV1 at level 5.0. A device that decodes the codec at
       // 1080p but not at this level keeps the browser at 1080p.
       uhd: ok('video/mp4; codecs="hvc1.2.4.L153.B0"') || ok('video/mp4; codecs="av01.0.12M.08"'),
+      // Whether this page can take a release apart and play it itself (assets/js/study/local_player.js).
+      local: !!(MS && typeof WritableStream !== "undefined" && typeof AudioDecoder !== "undefined"),
     }
   } catch { return {} }
 }

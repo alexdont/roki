@@ -567,6 +567,13 @@ defmodule Roki.Laev do
       allowed: ~w(off 6 12 24),
       labels: %{"off" => "Off", "6" => "6 hours", "12" => "12 hours", "24" => "24 hours"}
     },
+    # Where the browser player's work happens: on the viewer's device (the release read straight
+    # from its host, taken apart and decoded there) or on the server (ffmpeg, as before).
+    "browser_work" => %{
+      default: "device",
+      allowed: ~w(device server),
+      labels: %{"device" => "This device (nothing on the server)", "server" => "The server (converts the release)"}
+    },
     # The app Play opens when the device uses an external player.
     "external_app" => %{
       default: "vlc",

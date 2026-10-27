@@ -33,6 +33,8 @@ defmodule RokiWeb.SettingsLive do
   @web_hints %{
     "sources_cache" =>
       "Releases already found and checked are kept this long, so Play starts at once instead of searching again. Retry on a title looks for new ones.",
+    "browser_work" =>
+      "For the browser player. On this device, the release is read straight from its host and taken apart, decoded and played right here — 4K HEVC, Dolby and DTS sound included — and the server does nothing (for Real-Debrid it passes the bytes along, nothing more). On the server, the release is converted there first, as before. If a release will not play on the device, the server takes over for it by itself.",
     "external_app" =>
       "What Play opens when this device uses an external player. It starts by itself; if your device asks, allow it. The download option gives you an .m3u file to open yourself.",
     "browser_max_resolution" =>
@@ -43,6 +45,7 @@ defmodule RokiWeb.SettingsLive do
   @web_labels %{
     "browser_max_resolution" => "Resolution ceiling — browser player",
     "browser_max_size" => "Size limit — browser player",
+    "browser_work" => "Browser player works on",
     "external_app" => "External player app",
     "sources_cache" => "Keep found sources"
   }
@@ -752,7 +755,7 @@ defmodule RokiWeb.SettingsLive do
   end
 
   defp external_app_spec(specs),
-    do: Enum.filter(specs, &(elem(&1, 0) in ["external_app", "sources_cache"]))
+    do: Enum.filter(specs, &(elem(&1, 0) in ["browser_work", "external_app", "sources_cache"])) |> Enum.sort_by(&Enum.find_index(["browser_work", "external_app", "sources_cache"], fn k -> k == elem(&1, 0) end))
 
   attr :value, :string, required: true
   attr :saved, :any, default: nil
