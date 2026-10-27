@@ -4,6 +4,7 @@
 // re-encodes it here (WebCodecs) when it can decode but not carry it — and writes fragmented
 // MP4 into a MediaSource buffer that the <video> plays. No server work at all.
 import * as MB from "/vendor/mediabunny.min.mjs"
+import {makeDolbyDecoder} from "/lab/dolby.js"
 
 const $ = (id) => document.getElementById(id)
 const log = (...a) => { const el = $("log"); el.textContent += a.map((x) => typeof x === "string" ? x : JSON.stringify(x)).join(" ") + "\n"; el.scrollTop = el.scrollHeight }
@@ -70,8 +71,14 @@ async function probe(given) {
     } else if (t.type === "audio") {
       const mse = codecString ? supportsType(mime("audio", codecString)) : false
       const inMp4 = ["aac", "opus", "mp3"].includes(t.codec) || (t.codec === "flac" && !state.caps.aacEnc && !state.caps.opusEnc)
+      const dolby = ["ac3", "eac3", "dts"].includes(t.codec)
+      const enc = state.caps.aacEnc ? "AAC" : state.caps.opusEnc ? "Opus" : null
       // FLAC is re-encoded rather than copied: Chrome refuses a copied 24-bit FLAC sample entry.
-      const plan = mse && inMp4 ? "copy" : canDecode ? (state.caps.aacEnc ? "decode → AAC" : state.caps.opusEnc ? "decode → Opus" : "cannot encode") : "needs server (no decoder here)"
+      // Dolby and DTS are decoded by the WASM decoder (the browser has none) and re-encoded.
+      const plan = mse && inMp4 ? "copy"
+        : dolby && state.dolby ? (enc ? `decode (WASM) → ${enc}` : "cannot encode")
+        : canDecode ? (enc ? `decode → ${enc}` : "cannot encode")
+        : "needs server (no decoder here)"
       audios.push({track: t, plan, codecString})
       rows.push(["audio", `${t.codec || t.internalCodecId} ${t.numberOfChannels}ch ${t.sampleRate} Hz · ${t.languageCode}${t.name ? " · " + t.name : ""}`, codecString, mse, canDecode, plan])
     } else {
@@ -213,6 +220,7 @@ async function play(seconds) {
     const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {totalVideoFrames: 0, droppedVideoFrames: 0}
     return {
       audio: audio ? `${audio.track.codec} ${audio.track.languageCode} — ${audio.plan}` : "none",
+      dolby: state.dolby && state.dolby.last && state.dolby.last.frames ? state.dolby.last.stats : null,
       type, played: +v.currentTime.toFixed(1), buffered: v.buffered.length ? +v.buffered.end(v.buffered.length - 1).toFixed(1) : 0,
       prepared: +processed.toFixed(1), speed: +(processed / Math.max(0.1, (performance.now() - t0 - waitMs) / 1000)).toFixed(1), pullMBps: +(bytes / 1048576 / Math.max(0.1, (performance.now() - t0 - waitMs) / 1000)).toFixed(1), mb: +(bytes / 1048576).toFixed(1),
       size: `${v.videoWidth}×${v.videoHeight}`, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames,
@@ -283,6 +291,7 @@ async function runAll() {
     try {
       const st = await probe(c.url)
       if (c.audio !== null && c.audio !== undefined) $("audio").value = String(c.audio)
+      if (state.dolby) state.dolby.last = null
       $("from").value = String(c.from || 0)
       const tracks = st.rows.map(([k, w, cs, m, dec, p]) => ({kind: k, what: w, codec: cs, mse: m, decodes: dec, plan: p}))
       const r = await play(c.real ? realSecs : secs)
@@ -318,7 +327,21 @@ $("start").addEventListener("click", () => play().catch((e) => log("Play failed:
 $("stop").addEventListener("click", () => stop())
 $("runall").addEventListener("click", () => runAll().catch((e) => log("Run failed:", String(e && e.message || e))))
 window.lab = {probe, play, stop, runAll, get state() { return state }}
-state = {caps: await caps(), capRows: [...$("caps").querySelectorAll("tr")].slice(1).map((tr) => [...tr.children].map((td) => td.textContent))}
+state = {caps: await caps()}
+// The Dolby / DTS decoder (WASM): loaded once, offered to Mediabunny for ac3, eac3 and dts.
+try {
+  const Dolby = makeDolbyDecoder(MB)
+  const t0 = performance.now()
+  await Dolby.ready()
+  MB.registerDecoder(Dolby)
+  state.dolby = Dolby
+  $("caps").querySelector("tbody").insertAdjacentHTML("beforeend", `<tr><td>Dolby AC-3 / E-AC-3 / DTS (WASM decoder)</td><td class="muted">–</td><td class="ok">yes (${Math.round(performance.now() - t0)} ms to load)</td><td class="muted">–</td></tr>`)
+  log("Dolby / DTS decoder loaded (WebAssembly).")
+} catch (e) {
+  $("caps").querySelector("tbody").insertAdjacentHTML("beforeend", `<tr><td>Dolby AC-3 / E-AC-3 / DTS (WASM decoder)</td><td class="muted">–</td><td class="no">no</td><td class="muted">–</td></tr>`)
+  log("Dolby decoder not available:", String(e && e.message || e))
+}
+state.capRows = [...$("caps").querySelectorAll("tr")].slice(1).map((tr) => [...tr.children].map((td) => td.textContent))
 $("url").disabled = true
 const params = new URLSearchParams(location.search)
 if (params.get("src")) {
