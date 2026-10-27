@@ -285,8 +285,17 @@ defmodule Roki.Profile do
     {:ok, length(parsed)}
   end
 
-  @doc "Forget when the finished titles were last copied, so the next look copies them again."
-  def forget_history(uuid), do: TTLCache.delete({:watched_sync, uuid})
+  @doc """
+  Forget when the finished titles were last copied, and copy them again at once, behind the
+  caller. Every change to what is watched ends here, so a title marked watched is on the list —
+  dated that moment, see `date_new_marks/3` — before anyone opens a page, not when someone
+  next does.
+  """
+  def forget_history(uuid) do
+    TTLCache.delete({:watched_sync, uuid})
+    Task.start(fn -> sync_watched(uuid) end)
+    :ok
+  end
 
   # laev's finished titles into the table, their cards into the title store; once per five
   # minutes, one at a time.
