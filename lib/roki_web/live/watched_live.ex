@@ -262,7 +262,7 @@ defmodule RokiWeb.WatchedLive do
           </div>
 
           <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
-          <div class="flex items-center gap-2 pt-2 lg:contents lg:pt-0">
+          <div class="flex items-center gap-2 pb-3 pt-3 lg:contents lg:py-0">
             <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md lg:order-4 lg:w-96 lg:flex-none">
               <label class="flex h-10 w-full items-center gap-2 rounded-full bg-base-200 px-3.5 focus-within:ring-2 focus-within:ring-primary/60 lg:h-12 lg:border lg:border-base-300 lg:bg-base-100">
                 <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/50" />
@@ -280,7 +280,7 @@ defmodule RokiWeb.WatchedLive do
           </div>
 
           <%!-- The kinds as tabs, and the sort: a menu on a phone, plain buttons on a wide screen. --%>
-          <div class="flex items-center gap-3 pb-3 lg:order-8 lg:basis-full lg:gap-4 lg:pb-0">
+          <div class="flex items-center gap-3 pb-4 lg:order-8 lg:basis-full lg:gap-4 lg:pb-0">
             <div class="grid min-w-0 flex-1 grid-cols-4 rounded-full bg-base-200 p-0.5 lg:flex lg:flex-none lg:bg-transparent lg:p-0 lg:gap-1.5">
               <.link
                 :for={{k, label} <- Profile.kinds()}
