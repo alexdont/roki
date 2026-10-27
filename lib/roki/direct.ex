@@ -160,7 +160,7 @@ defmodule Roki.Direct do
   # directory: laev's holds TS segments, this one an MP4. (v2: HEVC with its parameter sets.)
   defp id_for(stream) do
     :sha256
-    |> :crypto.hash("direct:v4:#{stream[:filename]}-#{stream[:filesize]}")
+    |> :crypto.hash("direct:v5:#{stream[:filename]}-#{stream[:filesize]}")
     |> Base.encode16(case: :lower)
     |> binary_part(0, 16)
   end
@@ -659,7 +659,8 @@ defmodule Roki.Direct do
   # they are — without it the MP4 muxer counts each file from its own first packet, and audio
   # that begins a second after the keyframe comes out a second early. The TS stage would add
   # its usual 1.4 s to everything; `-muxdelay 0` stops it.
-  defp command(url, dir, streams, audios, subs, part) do
+  @doc false
+  def command(url, dir, streams, audios, subs, part) do
     video = codec_in(streams, "video")
     multi? = length(audios) > 1
     out = fn base, ext -> Path.join(dir, part_name(base, ext, part)) end
@@ -686,11 +687,19 @@ defmodule Roki.Direct do
     # writes the whole track as one fragment at the end, and nothing of it plays until then.
     audio_mp4 = ~w(-frag_duration 2000000) ++ mp4
 
+    # `-ac` takes the same stream specifier, but `-ac:1` means output stream 1 *of any kind*: with the
+    # video mapped first, `-ac:0` landed on the video and the audio stayed 5.1, which AAC then
+    # writes with an in-band channel layout that browsers cannot decode (a black screen).
+    ac_spec = fn
+      "" -> ""
+      ":" <> n -> ":a:" <> n
+    end
+
     # What makes each audio stream AAC (the Nth output audio stream, or all of them).
     to_aac = fn {a, _n}, spec ->
       if a.codec == "aac",
         do: ["-c:a#{spec}", "copy"],
-        else: ["-c:a#{spec}", "aac", "-b:a#{spec}", "192k", "-ac#{spec}", "2"]
+        else: ["-c:a#{spec}", "aac", "-b:a#{spec}", "192k", "-ac#{ac_spec.(spec)}", "2"]
     end
 
     if video in ["hevc", "h265"] do

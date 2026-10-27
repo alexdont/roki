@@ -52,6 +52,7 @@ defmodule RokiWeb.TitleLive do
         similar: [],
         similar_seen: MapSet.new(),
         study: nil,
+        study_eps: nil,
         page_title: "Watch",
         title: nil,
         title_error: nil,
@@ -269,22 +270,33 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, push_navigate(socket, to: ~p"/title/tv/#{id}/episodes")}
 
   # Study mode: remember the languages for this title and open it in the browser player with them.
-  def handle_event("study_go", %{"lang" => lang, "subs" => subs}, socket) do
-    %{uuid: uuid, type: type, id: id, play: play} = socket.assigns
+  def handle_event("study_go", %{"lang" => lang, "subs" => subs} = params, socket) do
+    %{uuid: uuid, type: type, id: id} = socket.assigns
 
     if uuid && socket.assigns.linked? do
       Roki.Study.put(uuid, type, id, lang, subs)
 
+      # The episode asked for in the dialog; failing that, the one after the last finished.
+      %{season: season, episode: episode} = study_episode(params["ep"], socket.assigns.study)
+
       path =
         if type == "movie",
           do: ~p"/watch/movie/#{id}?#{[study: 1]}",
-          else: ~p"/watch/tv/#{id}/#{play.season}/#{play.episode}?#{[study: 1]}"
+          else: ~p"/watch/tv/#{id}/#{season}/#{episode}?#{[study: 1]}"
 
       {:noreply, push_navigate(socket, to: path)}
     else
       {:noreply, socket}
     end
   end
+
+  # The Study dialog opened: the episodes to choose from are read now, not with every page.
+  def handle_event("study_open", _params, %{assigns: %{type: "tv", study_eps: nil, uuid: uuid, title: %{} = title, sections: sections}} = socket)
+      when is_binary(uuid) do
+    {:noreply, start_async(socket, :study_eps, fn -> Roki.Watch.study_episodes(uuid, title, sections) end)}
+  end
+
+  def handle_event("study_open", _params, socket), do: {:noreply, socket}
 
   def handle_event("select_season", %{"season" => key}, socket),
     do:
@@ -441,7 +453,7 @@ defmodule RokiWeb.TitleLive do
          {:ok, Roki.Laev.annotate(uuid, cards), Roki.Laev.seen_keys(uuid, cards)}
        end
      end)
-     |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title) end)
+     |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title, sections) end)
      |> select()}
   end
 
@@ -454,6 +466,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :study, choice)}
 
   def handle_async(:study, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:study_eps, {:ok, groups}, socket) when is_list(groups),
+    do: {:noreply, assign(socket, :study_eps, groups)}
+
+  def handle_async(:study_eps, _other, socket), do: {:noreply, socket}
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, :title_error, reason || true)}
@@ -597,7 +614,7 @@ defmodule RokiWeb.TitleLive do
           <.title_comments :if={@title.type in ["movie", "tv"]} id="title-comments" title={@title} user={assigns[:phoenix_kit_current_user]} />
         </.hero>
 
-        <.study_sheet :if={@linked? and @study} title={@title} study={@study} />
+        <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
 
         <.access_notice uuid={@uuid} linked?={@linked?} />
 
@@ -796,7 +813,7 @@ defmodule RokiWeb.TitleLive do
             <button
               :if={@linked? and @study}
               type="button"
-              phx-click={JS.show(to: "#study-sheet", display: "flex")}
+              phx-click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
               class="btn btn-outline hidden h-12 gap-2 lg:inline-flex sm:h-14"
               title="Watch this in languages you choose, leaving your settings alone"
             >
@@ -912,15 +929,34 @@ defmodule RokiWeb.TitleLive do
 
   # The languages the Study dialog starts on: the ones remembered for this title, else the
   # account's own settings.
-  defp study_choice(uuid, title) do
-    case Roki.Study.get(uuid, title.type, title.id) do
-      %{"lang" => lang, "subs" => subs} ->
-        %{lang: lang, subs: subs}
+  defp study_choice(uuid, title, sections) do
+    langs =
+      case Roki.Study.get(uuid, title.type, title.id) do
+        %{"lang" => lang, "subs" => subs} ->
+          %{lang: lang, subs: subs}
 
-      nil ->
-        Roki.Laev.run(uuid, fn ->
-          %{lang: Laev.Config.lang(), subs: Laev.Config.subs_lang() || "off"}
-        end)
+        nil ->
+          Roki.Laev.run(uuid, fn ->
+            %{lang: Laev.Config.lang(), subs: Laev.Config.subs_lang() || "off"}
+          end)
+      end
+
+    # A series starts at the episode after the last one finished, whatever the player last
+    # remembered; the dialog can pick another.
+    if title.type == "tv",
+      do: Map.put(langs, :start, Roki.Watch.study_start(uuid, title, sections)),
+      else: langs
+  end
+
+  # "2:5" from the dialog as `%{season: 2, episode: 5}`; the default start when it is not one.
+  defp study_episode(value, study) do
+    with true <- is_binary(value),
+         [s, e] <- String.split(value, ":"),
+         {s, ""} <- Integer.parse(s),
+         {e, ""} <- Integer.parse(e) do
+      %{season: s, episode: e}
+    else
+      _ -> (study && study[:start]) || %{season: 1, episode: 1}
     end
   end
 
@@ -1687,6 +1723,7 @@ defmodule RokiWeb.TitleLive do
 
   attr :title, :map, required: true
   attr :study, :map, required: true
+  attr :eps, :any, default: nil
 
   # Study mode, from a desktop: which languages to watch this title in, without touching the
   # account's settings. What was chosen last time is already filled in.
@@ -1740,6 +1777,26 @@ defmodule RokiWeb.TitleLive do
           <select name="subs" class="select select-bordered w-full">
             <option value="off" selected={@study.subs == "off"}>Off — no subtitles</option>
             <.language_options choices={@subs} current={@study.subs} />
+          </select>
+        </label>
+
+        <label :if={@title.type == "tv" and @study[:start]} class="block space-y-1">
+          <span class="text-sm font-medium">Episode</span>
+          <select name="ep" class="select select-bordered w-full">
+            <%!-- Until the list is read, the one it starts on is the only choice. --%>
+            <option :if={@eps == nil} value={"#{@study.start.season}:#{@study.start.episode}"} selected>
+              {@study.start.label} — next to watch
+            </option>
+            <optgroup :for={{label, eps} <- @eps || []} label={label}>
+              <option
+                :for={e <- eps}
+                value={"#{e.season}:#{e.number}"}
+                disabled={!e.aired?}
+                selected={e.season == @study.start.season and e.number == @study.start.episode}
+              >
+                {if e.watched?, do: "✓ ", else: ""}{e.label}{if e.name, do: " · " <> e.name, else: ""}{if e.season == @study.start.season and e.number == @study.start.episode, do: "  (next)", else: ""}
+              </option>
+            </optgroup>
           </select>
         </label>
 

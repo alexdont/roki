@@ -2104,6 +2104,50 @@ defmodule Roki.Watch do
     end
   end
 
+  @doc """
+  Where Study starts a series: the first aired episode after the last one finished (the next
+  season's first when a season is done), whatever was last played — an episode only started or a
+  stale resume record does not move it. With nothing watched, the first episode.
+  `%{season, episode, label}`, `episode` being TMDB's.
+  """
+  def study_start(uuid, title, sections) do
+    counts = section_counts(uuid, title, sections)
+
+    next =
+      if Enum.any?(counts, fn {_key, n} -> n > 0 end),
+        do: next_unseen(uuid, title, sections, counts)
+
+    case next do
+      {sec, tmdb_ep} -> %{season: sec.season, episode: tmdb_ep, label: "#{sec.short}.E#{tmdb_ep - sec.from}"}
+      nil -> Map.take(play_info(sections, nil), [:season, :episode, :label])
+    end
+  end
+
+  @doc """
+  Every episode of a series for the Study dialog, by section: `[{"Season 1", [%{season, number,
+  label, name, aired?, watched?}]}]`. `number` is TMDB's, what the player takes.
+  """
+  def study_episodes(uuid, title, sections) do
+    for sec <- sections, sec.season > 0, {:ok, all} <- [episodes(title.id, sec.season, uuid)] do
+      eps =
+        for e <- all, e.number > sec.from and (sec.count == nil or e.number <= sec.from + sec.count), do: e
+
+      watched = watched_episodes(uuid, title, sec.season, eps)
+
+      {sec[:label] || sec.short,
+       for e <- eps do
+         %{
+           season: sec.season,
+           number: e.number,
+           label: "#{sec.short}.E#{e.number - sec.from}",
+           name: e[:name],
+           aired?: e.aired?,
+           watched?: MapSet.member?(watched, e.number)
+         }
+       end}
+    end
+  end
+
   defp episode_done?(uuid, title, season, episode),
     do: MapSet.member?(watched_episodes(uuid, title, season, [%{number: episode}]), episode)
 

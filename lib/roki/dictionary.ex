@@ -211,23 +211,33 @@ defmodule Roki.Dictionary do
 
   # An inflected form gets what the word it comes from means — the part someone reading a
   # subtitle wants — ahead of the grammar.
-  defp with_lemma(%{lemma: lemma, forms: [_ | _]} = entry, lang, _word, 0)
-       when is_binary(lemma) do
+  # Two steps are followed at most: "éparpillées" is the feminine plural of "éparpillé", which is
+  # the past participle of "éparpiller", which is the word with a meaning.
+  defp with_lemma(%{lemma: lemma, forms: [_ | _]} = entry, lang, _word, depth)
+       when is_binary(lemma) and depth < 2 do
     gloss =
-      case TTLCache.fetch({:dict_lemma, lang, lemma}, @ttl_s, fn ->
-             lemma_gloss(lang, lemma, entry.pos)
+      case TTLCache.fetch({:dict_lemma, lang, lemma, depth}, @ttl_s, fn ->
+             lemma_gloss(lang, lemma, entry.pos, depth + 1)
            end) do
         {:ok, text} when is_binary(text) -> text
         _ -> nil
       end
 
-    %{entry | plain: if(gloss, do: ["#{lemma}: #{gloss}"], else: []) ++ entry.plain}
+    # A gloss that already names the word it comes from ("éparpiller: to scatter") is used as it is.
+    line =
+      cond do
+        gloss == nil -> []
+        Regex.match?(~r/^[^\s:]+: /u, gloss) -> [gloss]
+        true -> ["#{lemma}: #{gloss}"]
+      end
+
+    %{entry | plain: line ++ entry.plain}
   end
 
   defp with_lemma(entry, _lang, _word, _depth), do: entry
 
-  defp lemma_gloss(lang, lemma, pos) do
-    with {:ok, entries} <- wiktionary(lang, lemma, 1) do
+  defp lemma_gloss(lang, lemma, pos, depth) do
+    with {:ok, entries} <- wiktionary(lang, lemma, depth) do
       glossed = Enum.reject(entries, &(&1.meanings == []))
       pick = Enum.find(glossed, &(&1.pos == pos)) || List.first(glossed)
 
@@ -236,7 +246,11 @@ defmodule Roki.Dictionary do
          pick.meanings
          |> Enum.map(&String.slice(&1, 0, 70))
          |> Enum.uniq()
-         |> Enum.take(2)
+         |> then(fn
+           # The first line already traced the word to its source: that is the answer.
+           [first | _] = all -> if Regex.match?(~r/^[^\s:]+: /u, first), do: [first], else: Enum.take(all, 2)
+           [] -> []
+         end)
          |> Enum.join("; ")}
     end
   end

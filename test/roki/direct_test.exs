@@ -84,4 +84,25 @@ defmodule Roki.DirectTest do
     assert tidy =~ "#EXT-X-STREAM-INF:BANDWIDTH=10280966"
     assert tidy =~ "s_0.m3u8"
   end
+
+  describe "the audio of a converted file" do
+    @streams [
+      %{index: 0, kind: "video", codec: "hevc", lang: ""},
+      %{index: 1, kind: "audio", codec: "eac3", lang: "fre"}
+    ]
+    @audios [%{index: 1, codec: "eac3", lang: "fre", file: "audio0", name: "French"}]
+
+    # `-ac:0` is output stream 0 of any kind, the video, so the audio stayed 5.1 and a browser could
+    # not decode the AAC written for it.
+    test "is mixed down to stereo on the audio stream itself, not on stream 0" do
+      cmd = Roki.Direct.command("http://x/f.mkv", "/tmp/d", @streams, @audios, [], 0)
+      assert cmd =~ "'-ac:a:0' '2'"
+      refute cmd =~ "'-ac:0'"
+    end
+
+    test "is mixed down the same way in a part begun later" do
+      cmd = Roki.Direct.command("http://x/f.mkv", "/tmp/d", @streams, @audios, [], 75)
+      assert cmd =~ "'-ac:a:0' '2'"
+    end
+  end
 end
