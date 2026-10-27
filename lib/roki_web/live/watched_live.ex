@@ -2,7 +2,7 @@ defmodule RokiWeb.WatchedLive do
   @moduledoc """
   `/:username/watched` — everything a user finished, as a grid of posters or as rows (title,
   kind, year, their rating, when), newest first or by their own ratings (`?sort=top`,
-  `?kind=anime`, `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
+  `?kind=anime`, `?months=0` for one list without month headings, `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
   everyone, like the profile; everything is read from this server (`Roki.Profile`).
 
   The owner has a button that turns on *select mode* (and off again): tick any number of
@@ -47,6 +47,7 @@ defmodule RokiWeb.WatchedLive do
           q: "",
           view: :grid,
           rating: nil,
+          months?: true,
           shown: @page,
           page: @page,
           select?: false,
@@ -68,6 +69,7 @@ defmodule RokiWeb.WatchedLive do
        kind: Profile.kind(params["kind"]),
        view: if(params["view"] == "rows", do: :rows, else: :grid),
        q: params["q"] |> to_string() |> String.trim() |> String.slice(0, 80),
+       months?: params["months"] != "0",
        rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10")),
        shown: @page
      )}
@@ -170,13 +172,14 @@ defmodule RokiWeb.WatchedLive do
 
   # The address of a view: the assigns, with `overrides` (a new search, a new view …) laid on.
   defp address(a, overrides) do
-    v = %{sort: a.sort, kind: a.kind, rating: a.rating, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
+    v = %{sort: a.sort, kind: a.kind, rating: a.rating, months: a.months?, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
 
     query =
-      Enum.flat_map([:sort, :kind, :rating, :q, :view], fn
+      Enum.flat_map([:sort, :kind, :rating, :months, :q, :view], fn
         :sort -> if v.sort == :top, do: [sort: "top"], else: []
         :kind -> if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
         :rating -> if v.rating, do: [rating: v.rating], else: []
+        :months -> if v.months, do: [], else: [months: "0"]
         :q -> if v.q != "", do: [q: v.q], else: []
         :view -> if v.view == :rows, do: [view: "rows"], else: []
       end)
@@ -202,8 +205,8 @@ defmodule RokiWeb.WatchedLive do
 
   defp group_label(_), do: "No date"
 
-  defp groups(items, :latest), do: Enum.chunk_by(items, &group_label/1) |> Enum.map(&{group_label(hd(&1)), &1})
-  defp groups(items, _sort), do: [{nil, items}]
+  defp groups(items, :latest, true), do: Enum.chunk_by(items, &group_label/1) |> Enum.map(&{group_label(hd(&1)), &1})
+  defp groups(items, _sort, _months), do: [{nil, items}]
 
   defp kind_label(%{anime: true}), do: "Anime"
   defp kind_label(%{type: "movie"}), do: "Movie"
@@ -218,7 +221,7 @@ defmodule RokiWeb.WatchedLive do
     assigns =
       assign(assigns,
         items: items,
-        groups: groups(shown, assigns.sort),
+        groups: groups(shown, assigns.sort, assigns.months?),
         today: Date.utc_today() |> Date.to_iso8601()
       )
 
@@ -306,6 +309,7 @@ defmodule RokiWeb.WatchedLive do
                 <div class="grid grid-cols-2 gap-1.5">
                   <.link :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]} patch={address(assigns, sort: s)} onclick="document.activeElement.blur()" class={["btn btn-sm rounded-full border-0", @sort == s && "btn-primary", @sort != s && "bg-base-200"]}>{label}</.link>
                 </div>
+                <.months_toggle a={assigns} class="mt-3" />
                 <.rating_picker :if={@owner? or @profile.show_ratings} a={assigns} />
               </div>
             </div>
@@ -319,6 +323,7 @@ defmodule RokiWeb.WatchedLive do
               >
                 {label}
               </.link>
+              <.months_toggle a={assigns} pill />
               <div :if={@owner? or @profile.show_ratings} class="dropdown">
                 <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @rating && "btn-primary", !@rating && "bg-base-200"]}>
                   {if @rating, do: "★ #{@rating}", else: "★ Rating"}
@@ -458,6 +463,37 @@ defmodule RokiWeb.WatchedLive do
   attr :selected, :boolean, default: false
 
   # The round tick in a selectable poster's corner.
+  # Month headings on or off. They only apply to the newest-first order, so the switch is
+  # shown but idle (and says why) when the list is sorted by rating.
+  attr :a, :map, required: true
+  attr :class, :string, default: ""
+  attr :pill, :boolean, default: false
+
+  defp months_toggle(assigns) do
+    ~H"""
+    <.link
+      patch={address(@a, months: not @a.months?)}
+      onclick={if @pill, do: "document.activeElement.blur()", else: nil}
+      role="switch"
+      aria-checked={to_string(@a.months?)}
+      class={[
+        @pill && "btn btn-sm h-9 gap-1.5 rounded-full border-0 text-sm font-medium",
+        @pill && @a.months? && "btn-primary",
+        @pill && !@a.months? && "bg-base-200",
+        !@pill && "flex items-center justify-between rounded-xl bg-base-200 px-3 py-2 text-sm font-medium",
+        @a.sort != :latest && "opacity-50",
+        @class
+      ]}
+      title={if @a.sort != :latest, do: "Month headings show when sorted by latest"}
+    >
+      <span class="flex items-center gap-1.5">
+        <.icon name="hero-calendar-days" class="h-4 w-4" /> By month
+      </span>
+      <input :if={!@pill} type="checkbox" class="toggle toggle-primary toggle-sm pointer-events-none" checked={@a.months?} tabindex="-1" aria-hidden="true" />
+    </.link>
+    """
+  end
+
   # "Rated": any, or one whole rating, 10 down to 1. A tap on the one already chosen lets it go.
   attr :a, :map, required: true
   attr :heading, :boolean, default: true
