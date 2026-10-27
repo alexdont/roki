@@ -27,7 +27,7 @@ import {hooks as colocatedHooks} from "phoenix-colocated/roki"
 import topbar from "../vendor/topbar"
 import {StudySidebar} from "./study/sidebar"
 import {setupPeek} from "./peek"
-import {FillGrid, placeParam} from "./fill_grid"
+import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
 import {InfiniteScroll} from "./infinite_scroll"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
@@ -77,7 +77,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, InfiniteScroll, MenuExtras},
+  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MenuExtras},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.

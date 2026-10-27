@@ -46,6 +46,44 @@ export function placeParam() {
   return place && Number.isFinite(place.pages) && Number.isFinite(place.y) ? place : null
 }
 
+// The same, for a list that is not one grid (the watched page: months, each its own grid). It
+// only remembers and restores the place; the server loads as many pages as were open
+// (`data-page`) and says where to scroll (`data-restore-y`).
+export const KeepPlace = {
+  mounted() {
+    this.onScroll = () => {
+      if (this.restoring) return
+      clearTimeout(this.saveTimer)
+      this.saveTimer = setTimeout(
+        () => writePlace({y: window.scrollY, pages: Number(this.el.dataset.page) || 1}),
+        150,
+      )
+    }
+    window.addEventListener("scroll", this.onScroll, {passive: true})
+    this.restore()
+  },
+
+  updated() {
+    this.restore()
+  },
+
+  destroyed() {
+    window.removeEventListener("scroll", this.onScroll)
+    clearTimeout(this.saveTimer)
+  },
+
+  restore() {
+    const y = this.el.dataset.restoreY
+    if (y === undefined || y === "" || !Number.isFinite(Number(y))) return
+    this.restoring = true
+    requestAnimationFrame(() => {
+      window.scrollTo(0, Number(y))
+      this.restoring = false
+      this.pushEvent("placed", {})
+    })
+  },
+}
+
 export const FillGrid = {
   mounted() {
     this.onResize = () => {

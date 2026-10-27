@@ -51,6 +51,8 @@ defmodule RokiWeb.WatchedLive do
           months?: true,
           shown: @page,
           page: @page,
+          place: if(connected?(socket), do: RokiWeb.Place.from_params(socket, 60)),
+          place_y: nil,
           select?: false,
           selected: MapSet.new(),
           dating?: false,
@@ -72,10 +74,17 @@ defmodule RokiWeb.WatchedLive do
        q: params["q"] |> to_string() |> String.trim() |> String.slice(0, 80),
        months?: params["months"] != "0",
        status: status_param(params["status"]),
-       rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10")),
-       shown: @page
-     )}
+       rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10"))
+     )
+     |> take_place()}
   end
+
+  # Back from a title: as many of the list's pages as were open, and the place to scroll to. Any
+  # other change of the address starts at the top of the first page.
+  defp take_place(%{assigns: %{place: %{pages: pages, y: y}}} = socket),
+    do: assign(socket, place: nil, place_y: y, shown: pages * socket.assigns.page)
+
+  defp take_place(socket), do: assign(socket, shown: socket.assigns.page, place_y: nil)
 
   defp load(socket) do
     uuid = socket.assigns.uuid
@@ -121,6 +130,9 @@ defmodule RokiWeb.WatchedLive do
 
   @impl true
   def handle_event("more", _params, socket), do: {:noreply, update(socket, :shown, &(&1 + @page))}
+
+  # The list has been scrolled to where the reader was; the place is not needed again.
+  def handle_event("placed", _params, socket), do: {:noreply, assign(socket, :place_y, nil)}
 
   # Typing in the search box: the address carries it, so a search can be shared too.
   def handle_event("search", %{"q" => q}, socket) do
@@ -391,6 +403,7 @@ defmodule RokiWeb.WatchedLive do
           {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{if @rating, do: " rated #{@rating}", else: ""}."}
         </p>
 
+        <div :if={is_list(@history)} id="watched-list" phx-hook="KeepPlace" data-page={div(@shown + @page - 1, @page)} data-restore-y={@place_y} class="space-y-6">
         <div :for={{label, group} <- @groups} class="space-y-3">
           <h2 :if={label} class="text-sm font-semibold uppercase tracking-wide text-base-content/60">{label}</h2>
 
@@ -436,6 +449,7 @@ defmodule RokiWeb.WatchedLive do
               <.row item={i} select?={@select?} selected={MapSet.member?(@selected, i.key)} show_score={@owner? or @profile.show_ratings} />
             </li>
           </ul>
+        </div>
         </div>
 
         <%!-- The end of the list: the next sixty are shown as it comes into view. --%>

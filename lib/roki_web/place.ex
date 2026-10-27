@@ -7,8 +7,11 @@ defmodule RokiWeb.Place do
 
   @max_pages 10
 
-  @doc "`%{pages: n, y: px}` from the join params, or nil."
-  def from_params(socket) do
+  @doc """
+  `%{pages: n, y: px}` from the join params, or nil. `max` is how many pages may be asked for at
+  once: a page of posters is expensive (a request each), a page of the reader's own list is not.
+  """
+  def from_params(socket, max \\ @max_pages) do
     params =
       if Phoenix.LiveView.connected?(socket),
         do: Phoenix.LiveView.get_connect_params(socket),
@@ -16,7 +19,7 @@ defmodule RokiWeb.Place do
 
     case params && params["place"] do
       %{"pages" => pages, "y" => y} when is_number(pages) and is_number(y) and y >= 0 ->
-        %{pages: pages |> round() |> max(1) |> min(@max_pages), y: round(y)}
+        %{pages: pages |> round() |> max(1) |> min(max), y: round(y)}
 
       _ ->
         nil
