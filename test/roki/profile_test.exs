@@ -39,6 +39,11 @@ defmodule Roki.ProfileTest do
     assert Enum.map(Profile.arrange(items, ratings, :anime, :latest), & &1.id) == [3]
     assert Enum.map(Profile.arrange(items, ratings, :movie, :top, true), & &1.id) == []
     assert Enum.map(Profile.arrange(items, ratings, :all, :top, true), & &1.id) == [2, 3]
+    assert Enum.map(Profile.arrange(items, ratings, :all, :latest, 8), & &1.id) == [1]
+    assert Enum.map(Profile.arrange(items, ratings, :all, :latest, 9), & &1.id) == []
+    assert Profile.rating_param("7") == 7
+    assert Profile.rating_param("11") == nil
+    assert Profile.rating_param(nil) == nil
     assert Profile.score_text(8.5) == "8.5"
   end
 

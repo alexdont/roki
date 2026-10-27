@@ -446,14 +446,16 @@ defmodule Roki.Profile do
   @doc """
   The history as the page shows it: of one `kind` (`:all`, `:movie`, `:tv`, `:anime`), in
   `order` (`:latest` — newest first — or `:top` — the owner's own rating first, the unrated last),
-  and only the tens when `tens?`. Each item gets its `score` (nil when unrated) and, in the
+  and only those rated `rating` when it is a whole number 1 to 10 (a 9 takes 9 to 9.9; `true` is a 10, as the old tens filter was). Each item gets its `score` (nil when unrated) and, in the
   rating order, the score as its badge.
   """
-  def arrange(items, ratings, kind, order, tens? \\ false) do
+  def arrange(items, ratings, kind, order, rating \\ nil) do
+    rating = rating_filter(rating)
+
     items
     |> Enum.filter(&of_kind?(&1, kind))
     |> Enum.map(&Map.put(&1, :score, score_of(ratings, &1)))
-    |> Enum.filter(&(not tens? or &1.score == 10.0))
+    |> Enum.filter(&(rating == nil or (&1.score != nil and trunc(&1.score) == rating)))
     |> then(fn list ->
       case order do
         :top ->
@@ -465,6 +467,18 @@ defmodule Roki.Profile do
           list
       end
     end)
+  end
+
+  defp rating_filter(true), do: 10
+  defp rating_filter(n) when is_integer(n) and n in 1..10, do: n
+  defp rating_filter(_), do: nil
+
+  @doc "A rating filter from an address: `\"7\"` is 7, anything outside 1 to 10 is none."
+  def rating_param(value) do
+    case Integer.parse(to_string(value)) do
+      {n, ""} when n in 1..10 -> n
+      _ -> nil
+    end
   end
 
   defp of_kind?(_item, :all), do: true

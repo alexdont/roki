@@ -62,7 +62,7 @@ defmodule RokiWeb.ProfileLiveTest do
 
     {:ok, _view, html} = live(conn, "/ownerone/watched")
     assert html =~ "By rating"
-    assert html =~ "★ 10"
+    assert html =~ "Rated 10"
   end
 
   test "the shelves are the owner's to fill, ten a shelf, from what they watched", %{conn: conn} do

@@ -2,7 +2,7 @@ defmodule RokiWeb.WatchedLive do
   @moduledoc """
   `/:username/watched` — everything a user finished, as a grid of posters or as rows (title,
   kind, year, their rating, when), newest first or by their own ratings (`?sort=top`,
-  `?kind=anime`, `?tens=1` for the ten-out-of-tens, `?q=` to search, `?view=rows`). Open to
+  `?kind=anime`, `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
   everyone, like the profile; everything is read from this server (`Roki.Profile`).
 
   The owner has a button that turns on *select mode* (and off again): tick any number of
@@ -46,7 +46,7 @@ defmodule RokiWeb.WatchedLive do
           kind: :all,
           q: "",
           view: :grid,
-          tens?: false,
+          rating: nil,
           shown: @page,
           page: @page,
           select?: false,
@@ -68,7 +68,7 @@ defmodule RokiWeb.WatchedLive do
        kind: Profile.kind(params["kind"]),
        view: if(params["view"] == "rows", do: :rows, else: :grid),
        q: params["q"] |> to_string() |> String.trim() |> String.slice(0, 80),
-       tens?: params["tens"] == "1",
+       rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10")),
        shown: @page
      )}
   end
@@ -82,7 +82,7 @@ defmodule RokiWeb.WatchedLive do
   end
 
   defp arranged(%{assigns: a}) when is_list(a.history) do
-    list = Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.tens?)
+    list = Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.rating)
 
     if a.q == "" do
       list
@@ -170,13 +170,13 @@ defmodule RokiWeb.WatchedLive do
 
   # The address of a view: the assigns, with `overrides` (a new search, a new view …) laid on.
   defp address(a, overrides) do
-    v = %{sort: a.sort, kind: a.kind, tens: a.tens?, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
+    v = %{sort: a.sort, kind: a.kind, rating: a.rating, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
 
     query =
-      Enum.flat_map([:sort, :kind, :tens, :q, :view], fn
+      Enum.flat_map([:sort, :kind, :rating, :q, :view], fn
         :sort -> if v.sort == :top, do: [sort: "top"], else: []
         :kind -> if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
-        :tens -> if v.tens, do: [tens: "1"], else: []
+        :rating -> if v.rating, do: [rating: v.rating], else: []
         :q -> if v.q != "", do: [q: v.q], else: []
         :view -> if v.view == :rows, do: [view: "rows"], else: []
       end)
@@ -295,39 +295,39 @@ defmodule RokiWeb.WatchedLive do
               </.link>
             </div>
 
+            <%!-- Phone: sort and rating in one menu. --%>
             <div class="dropdown dropdown-end shrink-0 lg:hidden">
-              <div tabindex="0" role="button" class="btn btn-sm h-9 gap-1 rounded-full border-0 bg-base-200 px-3 font-medium" aria-label="Sort">
-                <.icon name="hero-bars-arrow-down" class="h-4 w-4" />
-                {cond do
-                  @tens? -> "★ 10"
-                  @sort == :top -> "Rating"
-                  true -> "Latest"
-                end}
+              <div tabindex="0" role="button" class="btn btn-sm h-9 gap-1 rounded-full border-0 bg-base-200 px-3 font-medium" aria-label="Sort and filter">
+                <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
+                {if @sort == :top, do: "Rating", else: "Latest"}{if @rating, do: " · ★ #{@rating}"}
               </div>
-              <ul tabindex="0" class="menu dropdown-content z-40 mt-2 w-44 rounded-box border border-base-300 bg-base-100 p-1.5 shadow-xl">
-                <li><.link patch={address(assigns, sort: :latest)} onclick="document.activeElement.blur()" class={[@sort == :latest && not @tens? && "menu-active"]}>Latest</.link></li>
-                <li><.link patch={address(assigns, sort: :top)} onclick="document.activeElement.blur()" class={[@sort == :top && not @tens? && "menu-active"]}>By rating</.link></li>
-                <li :if={@owner? or @profile.show_ratings}>
-                  <.link patch={address(assigns, sort: :top, tens: true)} onclick="document.activeElement.blur()" class={[@tens? && "menu-active"]}>★ 10 only</.link>
-                </li>
-              </ul>
+              <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+                <p class="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">Sort</p>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <.link :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]} patch={address(assigns, sort: s)} onclick="document.activeElement.blur()" class={["btn btn-sm rounded-full border-0", @sort == s && "btn-primary", @sort != s && "bg-base-200"]}>{label}</.link>
+                </div>
+                <.rating_picker :if={@owner? or @profile.show_ratings} a={assigns} />
+              </div>
             </div>
 
+            <%!-- Wide screen: sort as pills, rating as a menu. --%>
             <div class="hidden items-center gap-1.5 lg:flex">
               <.link
                 :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]}
                 patch={address(assigns, sort: s)}
-                class={["btn btn-sm h-9 rounded-full border-0 text-sm font-medium", @sort == s && not @tens? && "btn-primary", not (@sort == s and not @tens?) && "bg-base-200"]}
+                class={["btn btn-sm h-9 rounded-full border-0 text-sm font-medium", @sort == s && "btn-primary", @sort != s && "bg-base-200"]}
               >
                 {label}
               </.link>
-              <.link
-                :if={@owner? or @profile.show_ratings}
-                patch={address(assigns, sort: :top, tens: not @tens?)}
-                class={["btn btn-sm h-9 rounded-full border-0 whitespace-nowrap text-sm font-medium", @tens? && "btn-primary", not @tens? && "bg-base-200"]}
-              >
-                ★ 10 only
-              </.link>
+              <div :if={@owner? or @profile.show_ratings} class="dropdown">
+                <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @rating && "btn-primary", !@rating && "bg-base-200"]}>
+                  {if @rating, do: "★ #{@rating}", else: "★ Rating"}
+                  <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
+                </div>
+                <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+                  <.rating_picker a={assigns} heading={false} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -345,7 +345,7 @@ defmodule RokiWeb.WatchedLive do
           {if @owner?, do: "Nothing finished yet. What you watch to the end shows up here.", else: "Nothing here yet."}
         </p>
         <p :if={@history != nil and @history != [] and @items == []} class="text-sm text-base-content/50">
-          {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{if @tens?, do: " rated 10", else: ""}."}
+          {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{if @rating, do: " rated #{@rating}", else: ""}."}
         </p>
 
         <div :for={{label, group} <- @groups} class="space-y-3">
@@ -458,6 +458,37 @@ defmodule RokiWeb.WatchedLive do
   attr :selected, :boolean, default: false
 
   # The round tick in a selectable poster's corner.
+  # "Rated": any, or one whole rating, 10 down to 1. A tap on the one already chosen lets it go.
+  attr :a, :map, required: true
+  attr :heading, :boolean, default: true
+
+  defp rating_picker(assigns) do
+    ~H"""
+    <div>
+      <p :if={@heading} class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">Rated</p>
+      <div class="grid grid-cols-5 gap-1.5">
+        <.link
+          :for={n <- 10..1//-1}
+          patch={address(@a, rating: if(@a.rating == n, do: nil, else: n))}
+          onclick="document.activeElement.blur()"
+          aria-label={"Rated #{n}"}
+          class={["btn btn-sm rounded-full border-0 px-0 tabular-nums", @a.rating == n && "btn-primary", @a.rating != n && "bg-base-200"]}
+        >
+          {n}
+        </.link>
+      </div>
+      <.link
+        :if={@a.rating}
+        patch={address(@a, rating: nil)}
+        onclick="document.activeElement.blur()"
+        class="mt-2 block rounded-full py-1.5 text-center text-sm text-base-content/60 hover:bg-base-200"
+      >
+        Any rating
+      </.link>
+    </div>
+    """
+  end
+
   defp tick(assigns) do
     ~H"""
     <span class={[
