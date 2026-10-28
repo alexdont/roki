@@ -15,14 +15,12 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b5" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b6" // shown by `?diag=1`, so a phone can say which bundle it runs
 
+// The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
   const q = new URLSearchParams(location.search)
-  try {
-    if (q.get("diag") === "1") { sessionStorage.setItem("roki-diag", q.toString()); return q }
-    return new URLSearchParams(sessionStorage.getItem("roki-diag") || "")
-  } catch (e) { return q }
+  try { return new URLSearchParams(sessionStorage.getItem("roki-diag") || (q.get("diag") === "1" ? q.toString() : "")) } catch (e) { return q }
 }
 
 // After you scroll the list it stops following the video, then picks the current line back up

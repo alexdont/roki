@@ -33,6 +33,11 @@ import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
 // For the player lab and the console.
 window.rokiLocalPlayer = startLocalPlayer
+
+// `?diag=1` on a page's address: kept for the tab the moment the page loads, before LiveView
+// rewrites the address (the watch page patches in its source hash during the join, and bounces
+// through the sources page when it has none). The player's hook reads it from here.
+try { const q = new URLSearchParams(location.search); if (q.get("diag") === "1") sessionStorage.setItem("roki-diag", q.toString()) } catch (e) {}
 window.rokiSubtitleScanner = SubtitleScanner
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
