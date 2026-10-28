@@ -23,7 +23,23 @@ defmodule RokiWeb.Live.HistoryLive do
   alias PhoenixLiveCalendar.Heatmap
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
+    case RokiWeb.UserGuard.check(socket, params["username"] || whoami(socket)) do
+      {:redirect, to} -> {:ok, push_navigate(socket, to: to)}
+      {:ok, _uuid} -> mounted(socket)
+    end
+  end
+
+  # The address carries the name now (`/:username/history`); the reader's own address sent
+  # people here without one.
+  defp whoami(socket) do
+    case socket.assigns[:phoenix_kit_current_scope] do
+      nil -> nil
+      scope -> scope |> PhoenixKit.Users.Auth.Scope.user() |> Map.get(:username)
+    end
+  end
+
+  defp mounted(socket) do
     user = socket.assigns.phoenix_kit_current_scope.user
     today = Date.utc_today()
     month = Date.beginning_of_month(today)
@@ -52,7 +68,7 @@ defmodule RokiWeb.Live.HistoryLive do
         page_title: "History",
         # The manga layout's navigation row marks where you are; a live page has no conn
         # to read the path from.
-        current_path: "/manga/history",
+        current_path: "/#{user.username}/history",
         user: user,
         offset_seconds: offset_seconds,
         all_activity: all_activity,
@@ -282,26 +298,33 @@ defmodule RokiWeb.Live.HistoryLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-6xl mx-auto px-4 py-8">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Reading History</h2>
-        <div class="flex items-center gap-3">
-          <form :if={@manga_list != []} phx-change="filter_manga">
-            <select name="manga" class="select select-sm select-bordered max-w-[200px] truncate">
-              <option value="">All manga</option>
-              <option
-                :for={m <- @manga_list}
-                value={"#{m.source}/#{m.slug}"}
-                selected={@manga_filter == "#{m.source}/#{m.slug}"}
-              >
-                {m.title}
-              </option>
-            </select>
-          </form>
+    <Layouts.app
+      socket={@socket}
+      flash={@flash}
+      phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
+      current_path={@current_path}
+      flush
+    >
+      <div class="max-w-6xl mx-auto px-4 py-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Reading History</h2>
+          <div class="flex items-center gap-3">
+            <form :if={@manga_list != []} phx-change="filter_manga">
+              <select name="manga" class="select select-sm select-bordered max-w-[200px] truncate">
+                <option value="">All manga</option>
+                <option
+                  :for={m <- @manga_list}
+                  value={"#{m.source}/#{m.slug}"}
+                  selected={@manga_filter == "#{m.source}/#{m.slug}"}
+                >
+                  {m.title}
+                </option>
+              </select>
+            </form>
+          </div>
         </div>
-      </div>
 
-      <%!-- Calendar heatmap via phoenix_live_calendar. The library owns the
+        <%!-- Calendar heatmap via phoenix_live_calendar. The library owns the
            cell chrome (heatmap fill, selected/today rings, out-of-month
            dimming); our :day_cell slot adds thumbnails, badges and the
            rich hover tooltip.
@@ -319,394 +342,399 @@ defmodule RokiWeb.Live.HistoryLive do
            what the base-300 tooltip sits against. Flattened here so the
            panel stays the only card. Tailwind v4 important SUFFIX (`!`
            after the utility); class order alone wouldn't win. --%>
-      <div class="bg-base-200 rounded-xl p-4 mb-6">
-        <.live_component
-          module={PhoenixLiveCalendar.CalendarComponent}
-          id="reading-history"
-          class="bg-transparent! border-0! shadow-none! rounded-none!"
-          view={:month}
-          views={[:month]}
-          week_start={1}
-          show_legend={false}
-          cell_height="40px"
-          cell_overflow={:visible}
-          day_markers={@markers}
-          selected_date={@selected_date}
-          today={@today}
-          on_date_select={fn d -> send(self(), {:date_selected, d}) end}
-          on_date_range_change={fn r -> send(self(), {:range_changed, r}) end}
-        >
-          <%!-- Month nav in the dead view's shape: centered label between
+        <div class="bg-base-200 rounded-xl p-4 mb-6">
+          <.live_component
+            module={PhoenixLiveCalendar.CalendarComponent}
+            id="reading-history"
+            class="bg-transparent! border-0! shadow-none! rounded-none!"
+            view={:month}
+            views={[:month]}
+            week_start={1}
+            show_legend={false}
+            cell_height="40px"
+            cell_overflow={:visible}
+            day_markers={@markers}
+            selected_date={@selected_date}
+            today={@today}
+            on_date_select={fn d -> send(self(), {:date_selected, d}) end}
+            on_date_range_change={fn r -> send(self(), {:range_changed, r}) end}
+          >
+            <%!-- Month nav in the dead view's shape: centered label between
                two ghost arrows, with "next" held as invisible (not
                removed) on the current month so the title stays centered.
                The commands arrive pre-targeted at the component — slot
                content renders in this LiveView's scope, so a plain
                phx-click here would never reach it. --%>
-          <:header :let={h}>
-            <div class="flex items-center justify-between gap-3 px-1 py-2 mb-2">
-              <button
-                type="button"
-                phx-click={h.on_prev}
-                class="btn btn-ghost btn-sm btn-square"
-                aria-label="Previous month"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+            <:header :let={h}>
+              <div class="flex items-center justify-between gap-3 px-1 py-2 mb-2">
+                <button
+                  type="button"
+                  phx-click={h.on_prev}
+                  class="btn btn-ghost btn-sm btn-square"
+                  aria-label="Previous month"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-              <span class="font-semibold text-base">{h.title}</span>
-              <button
-                type="button"
-                phx-click={h.on_next}
-                disabled={h.today_visible}
-                class={["btn btn-ghost btn-sm btn-square", h.today_visible && "invisible"]}
-                aria-label="Next month"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 19l-7-7 7-7"
+                    />
+                  </svg>
+                </button>
+                <span class="font-semibold text-base">{h.title}</span>
+                <button
+                  type="button"
+                  phx-click={h.on_next}
+                  disabled={h.today_visible}
+                  class={["btn btn-ghost btn-sm btn-square", h.today_visible && "invisible"]}
+                  aria-label="Next month"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
-            </div>
-          </:header>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </:header>
 
-          <:day_cell :let={%{date: date}}>
-            <%!-- Padding days from the neighbouring months carry real
+            <:day_cell :let={%{date: date}}>
+              <%!-- Padding days from the neighbouring months carry real
                  activity (@activity is all-time, @month_events covers the
                  padded range), so the slot has to gate on in-month itself
                  — otherwise a greyed-out cell sprouts covers and a hover
                  tooltip the dead view never showed. --%>
-            <% in_month = date.year == @month.year and date.month == @month.month %>
-            <% day_events = if in_month, do: Map.get(@month_events, date, %{}), else: %{} %>
-            <%!-- Collapsed to one row per series — @activity holds a row
+              <% in_month = date.year == @month.year and date.month == @month.month %>
+              <% day_events = if in_month, do: Map.get(@month_events, date, %{}), else: %{} %>
+              <%!-- Collapsed to one row per series — @activity holds a row
                  per reading session, so a series read three times in a
                  day would otherwise draw three covers and three
                  identical tooltip lines. --%>
-            <% entries =
-              if in_month,
-                do: MangaHTML.collapse_day_entries(Map.get(@activity, date, [])),
-                else: [] %>
-            <% covers = MangaHTML.calendar_day_covers(entries, day_events, @manga_meta) %>
-            <%!-- One row at 40px, like the dead view: day number left,
+              <% entries =
+                if in_month,
+                  do: MangaHTML.collapse_day_entries(Map.get(@activity, date, [])),
+                  else: [] %>
+              <% covers = MangaHTML.calendar_day_covers(entries, day_events, @manga_meta) %>
+              <%!-- One row at 40px, like the dead view: day number left,
                  cover thumbnails right. The daily total lives in the
                  tooltip — there's no room for it beside the covers.
                  No `relative` here on purpose: the tooltip below anchors
                  to `.cal-day-cell` (which the library positions), so it
                  centres on the true cell instead of this padded box. --%>
-            <div class="group h-full">
-              <%!-- cell_overflow :visible (needed so the tooltip can
+              <div class="group h-full">
+                <%!-- cell_overflow :visible (needed so the tooltip can
                    escape) also dropped the clip the dead view had on the
                    cell itself, letting up to 3 covers spill into the next
                    day on narrow screens. Clip them HERE instead: the
                    tooltip is a sibling of this wrapper, so it still
                    escapes while the covers stay inside their day. --%>
-              <div class="h-full px-1 flex items-center justify-between gap-0.5 overflow-hidden">
-                <span class={[
-                  "text-xs flex-shrink-0",
-                  if(in_month, do: "text-base-content/70", else: "text-base-content/30")
-                ]}>{date.day}</span>
-                <%!-- Covers and their milestone badges scale down on
+                <div class="h-full px-1 flex items-center justify-between gap-0.5 overflow-hidden">
+                  <span class={[
+                    "text-xs flex-shrink-0",
+                    if(in_month, do: "text-base-content/70", else: "text-base-content/30")
+                  ]}>{date.day}</span>
+                  <%!-- Covers and their milestone badges scale down on
                      phone-width cells (~45px) and take the dead view's
                      sizes from `sm:` up, so three of them fit the row
                      instead of being clipped away. --%>
-                <div
-                  :if={covers != []}
-                  class="flex gap-px sm:gap-0.5 items-center justify-end min-w-0"
-                >
-                  <div :for={c <- covers} class="relative flex-shrink min-w-0">
-                    <img
-                      :if={c.src}
-                      src={c.src}
-                      alt={c.title}
-                      loading="lazy"
-                      class="h-5 max-w-[13px] sm:h-7 sm:max-w-[20px] aspect-[2/3] object-cover rounded-[2px] sm:rounded-[3px] ring-1 ring-base-100/40"
-                    />
-                    <div
-                      :if={!c.src}
-                      class="h-5 max-w-[13px] sm:h-7 sm:max-w-[20px] aspect-[2/3] rounded-[2px] sm:rounded-[3px] bg-base-content/20"
-                    >
-                    </div>
-                    <span
-                      :if={c.event == "completed"}
-                      class="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-success text-success-content text-[6px] sm:text-[7px] flex items-center justify-center shadow"
-                    >✓</span>
-                    <span
-                      :if={c.event == "caught_up"}
-                      class="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-warning text-warning-content text-[6px] sm:text-[7px] flex items-center justify-center shadow"
-                    >⚡</span>
-                    <span
-                      :if={c.event == "started"}
-                      class="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-info text-info-content text-[6px] sm:text-[7px] flex items-center justify-center shadow"
-                    >▶</span>
-                  </div>
-                </div>
-              </div>
-
-              <%!-- rich hover tooltip: one row per series read that day --%>
-              <div
-                :if={entries != [] or day_events != %{}}
-                class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none"
-              >
-                <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
-                  <div class="font-semibold mb-1">{Calendar.strftime(date, "%b %-d, %Y")}</div>
-                  <% row_event = fn entry -> Map.get(day_events, {entry.source, entry.slug}) end %>
                   <div
-                    :for={entry <- entries}
-                    class={[
-                      "flex justify-between gap-4",
-                      case row_event.(entry) do
-                        "completed" -> "text-success font-medium"
-                        "caught_up" -> "text-warning font-medium"
-                        "started" -> "text-info font-medium"
-                        _ -> "text-base-content/70"
-                      end
-                    ]}
+                    :if={covers != []}
+                    class="flex gap-px sm:gap-0.5 items-center justify-end min-w-0"
                   >
-                    <span class="flex items-center gap-1 min-w-0">
+                    <div :for={c <- covers} class="relative flex-shrink min-w-0">
+                      <img
+                        :if={c.src}
+                        src={c.src}
+                        alt={c.title}
+                        loading="lazy"
+                        class="h-5 max-w-[13px] sm:h-7 sm:max-w-[20px] aspect-[2/3] object-cover rounded-[2px] sm:rounded-[3px] ring-1 ring-base-100/40"
+                      />
+                      <div
+                        :if={!c.src}
+                        class="h-5 max-w-[13px] sm:h-7 sm:max-w-[20px] aspect-[2/3] rounded-[2px] sm:rounded-[3px] bg-base-content/20"
+                      >
+                      </div>
                       <span
-                        :if={row_event.(entry) == "completed"}
-                        class="flex-shrink-0"
-                        title="Completed"
+                        :if={c.event == "completed"}
+                        class="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-success text-success-content text-[6px] sm:text-[7px] flex items-center justify-center shadow"
                       >✓</span>
                       <span
-                        :if={row_event.(entry) == "caught_up"}
-                        class="flex-shrink-0"
-                        title="Caught up"
+                        :if={c.event == "caught_up"}
+                        class="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-warning text-warning-content text-[6px] sm:text-[7px] flex items-center justify-center shadow"
                       >⚡</span>
-                      <span :if={row_event.(entry) == "started"} class="flex-shrink-0" title="Started">▶</span>
-                      <span class="truncate max-w-[150px]">{entry.title}</span>
-                    </span>
-                    <span class={[
-                      "tabular-nums",
-                      if(row_event.(entry), do: "opacity-70", else: "text-base-content/50")
-                    ]}>
-                      <span :if={entry.chapters_read > 0}>{entry.chapters_read} ch · </span>{MangaHTML.format_reading_time(
-                        entry.seconds
-                      )}
-                    </span>
+                      <span
+                        :if={c.event == "started"}
+                        class="absolute -top-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-info text-info-content text-[6px] sm:text-[7px] flex items-center justify-center shadow"
+                      >▶</span>
+                    </div>
                   </div>
-                  <% event_only =
-                    Enum.reject(day_events, fn {key, _} ->
-                      Enum.any?(entries, fn e -> {e.source, e.slug} == key end)
-                    end) %>
-                  <div
-                    :for={{key, ev} <- event_only}
-                    class={[
-                      "flex items-center gap-1 font-medium",
-                      case ev do
-                        "completed" -> "text-success"
-                        "caught_up" -> "text-warning"
-                        _ -> "text-info"
-                      end
-                    ]}
-                  >
-                    <span>{case ev do
-                      "completed" -> "✓"
-                      "caught_up" -> "⚡"
-                      _ -> "▶"
-                    end}</span>
-                    <span class="truncate max-w-[150px]">{get_in(@manga_meta, [key, :title]) ||
-                      elem(key, 1)}</span>
-                  </div>
-                  <div
-                    :if={length(entries) > 1}
-                    class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold"
-                  >
-                    <span>Total</span>
-                    <span class="tabular-nums">{MangaHTML.format_reading_time(
-                      Enum.sum(Enum.map(entries, & &1.seconds))
-                    )}</span>
-                  </div>
-                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                </div>
+
+                <%!-- rich hover tooltip: one row per series read that day --%>
+                <div
+                  :if={entries != [] or day_events != %{}}
+                  class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none"
+                >
+                  <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
+                    <div class="font-semibold mb-1">{Calendar.strftime(date, "%b %-d, %Y")}</div>
+                    <% row_event = fn entry -> Map.get(day_events, {entry.source, entry.slug}) end %>
+                    <div
+                      :for={entry <- entries}
+                      class={[
+                        "flex justify-between gap-4",
+                        case row_event.(entry) do
+                          "completed" -> "text-success font-medium"
+                          "caught_up" -> "text-warning font-medium"
+                          "started" -> "text-info font-medium"
+                          _ -> "text-base-content/70"
+                        end
+                      ]}
+                    >
+                      <span class="flex items-center gap-1 min-w-0">
+                        <span
+                          :if={row_event.(entry) == "completed"}
+                          class="flex-shrink-0"
+                          title="Completed"
+                        >✓</span>
+                        <span
+                          :if={row_event.(entry) == "caught_up"}
+                          class="flex-shrink-0"
+                          title="Caught up"
+                        >⚡</span>
+                        <span
+                          :if={row_event.(entry) == "started"}
+                          class="flex-shrink-0"
+                          title="Started"
+                        >▶</span>
+                        <span class="truncate max-w-[150px]">{entry.title}</span>
+                      </span>
+                      <span class={[
+                        "tabular-nums",
+                        if(row_event.(entry), do: "opacity-70", else: "text-base-content/50")
+                      ]}>
+                        <span :if={entry.chapters_read > 0}>{entry.chapters_read} ch · </span>{MangaHTML.format_reading_time(
+                          entry.seconds
+                        )}
+                      </span>
+                    </div>
+                    <% event_only =
+                      Enum.reject(day_events, fn {key, _} ->
+                        Enum.any?(entries, fn e -> {e.source, e.slug} == key end)
+                      end) %>
+                    <div
+                      :for={{key, ev} <- event_only}
+                      class={[
+                        "flex items-center gap-1 font-medium",
+                        case ev do
+                          "completed" -> "text-success"
+                          "caught_up" -> "text-warning"
+                          _ -> "text-info"
+                        end
+                      ]}
+                    >
+                      <span>{case ev do
+                        "completed" -> "✓"
+                        "caught_up" -> "⚡"
+                        _ -> "▶"
+                      end}</span>
+                      <span class="truncate max-w-[150px]">{get_in(@manga_meta, [key, :title]) ||
+                        elem(key, 1)}</span>
+                    </div>
+                    <div
+                      :if={length(entries) > 1}
+                      class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold"
+                    >
+                      <span>Total</span>
+                      <span class="tabular-nums">{MangaHTML.format_reading_time(
+                        Enum.sum(Enum.map(entries, & &1.seconds))
+                      )}</span>
+                    </div>
+                    <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </:day_cell>
-        </.live_component>
+            </:day_cell>
+          </.live_component>
 
-        <%!-- Heatmap legend, ported from the dead view. Sits outside the
+          <%!-- Heatmap legend, ported from the dead view. Sits outside the
              calendar component (the library's own show_legend is for
              event layers, not intensity). --%>
-        <div class="flex items-center justify-end gap-1 mt-3 text-[10px] text-base-content/50">
-          <span>Less</span>
-          <div class="w-[11px] h-[11px] rounded-sm bg-base-300"></div>
-          <div class="w-[11px] h-[11px] rounded-sm bg-success/30"></div>
-          <div class="w-[11px] h-[11px] rounded-sm bg-success/50"></div>
-          <div class="w-[11px] h-[11px] rounded-sm bg-success/70"></div>
-          <div class="w-[11px] h-[11px] rounded-sm bg-success"></div>
-          <span>More</span>
-        </div>
-      </div>
-
-      <h3 class="text-base font-semibold mb-3">
-        {MangaHTML.selected_date_label(@selected_date)}
-        <span
-          :if={Date.compare(@selected_date, DateTime.to_date(@user_now)) == :eq}
-          class="text-sm font-normal text-base-content/50"
-        >
-          {Calendar.strftime(@user_now, "%-I:%M %p")}
-        </span>
-      </h3>
-
-      {time_of_day_card(assigns)}
-
-      <%!-- Library milestones for the day: marked complete / caught up. --%>
-      <div :if={@library_events != []} class="flex flex-col gap-2 mb-4">
-        <div
-          :for={ev <- @library_events}
-          class="flex items-center gap-3 bg-base-200 rounded-xl px-4 py-2.5"
-        >
-          <span class={[
-            "flex-shrink-0 text-lg",
-            case ev.event do
-              "completed" -> "text-success"
-              "started" -> "text-info"
-              _ -> "text-warning"
-            end
-          ]}>
-            {case ev.event do
-              "completed" -> "✓"
-              "started" -> "▶"
-              _ -> "⚡"
-            end}
-          </span>
-          <div class="flex-1 min-w-0 text-sm">
-            <span class="font-semibold">{case ev.event do
-              "completed" -> "Completed"
-              "started" -> "Started"
-              _ -> "Caught up"
-            end}</span>
-            <span class="text-base-content/70 truncate">{ev.title || "#{ev.source}/#{ev.slug}"}</span>
-          </div>
-          <span class="text-xs text-base-content/40 flex-shrink-0">
-            <span :if={ev.chapter}>ch {display_chapter(ev.chapter)} · </span>{MangaHTML.stint_local_time(
-              ev.happened_at,
-              @stint_tz
-            )}
-          </span>
-          <div class="dropdown dropdown-end flex-shrink-0">
-            <div
-              tabindex="0"
-              role="button"
-              class="btn btn-ghost btn-xs btn-square"
-              aria-label="Event options"
-            >
-              <.kebab />
-            </div>
-            <ul
-              tabindex="0"
-              class="dropdown-content menu bg-base-100 rounded-box z-40 w-48 p-2 shadow-lg"
-            >
-              <li>
-                <button
-                  type="button"
-                  class="text-error"
-                  phx-click="remove_event"
-                  phx-value-id={ev.id}
-                  data-confirm={"Remove this #{event_label(ev.event)} event for #{ev.title || ev.slug}?"}
-                >
-                  Remove this event
-                </button>
-              </li>
-            </ul>
+          <div class="flex items-center justify-end gap-1 mt-3 text-[10px] text-base-content/50">
+            <span>Less</span>
+            <div class="w-[11px] h-[11px] rounded-sm bg-base-300"></div>
+            <div class="w-[11px] h-[11px] rounded-sm bg-success/30"></div>
+            <div class="w-[11px] h-[11px] rounded-sm bg-success/50"></div>
+            <div class="w-[11px] h-[11px] rounded-sm bg-success/70"></div>
+            <div class="w-[11px] h-[11px] rounded-sm bg-success"></div>
+            <span>More</span>
           </div>
         </div>
-      </div>
 
-      <%= if @history != [] do %>
-        <div class="flex flex-col gap-3">
-          <div
-            :for={manga <- @history}
-            class="flex items-center gap-4 bg-base-200 rounded-xl p-3"
+        <h3 class="text-base font-semibold mb-3">
+          {MangaHTML.selected_date_label(@selected_date)}
+          <span
+            :if={Date.compare(@selected_date, DateTime.to_date(@user_now)) == :eq}
+            class="text-sm font-normal text-base-content/50"
           >
-            <a
-              href={
-                if manga.last_chapter,
-                  do: ~p"/manga/#{manga.source}/#{manga.slug}/#{manga.last_chapter}",
-                  else: ~p"/manga/#{manga.source}/#{manga.slug}"
-              }
-              class="flex items-center gap-4 flex-1 min-w-0 hover:opacity-80 transition-opacity"
-            >
-              <img
-                :if={
-                  src =
-                    MangaHTML.history_cover_src(manga.source, manga.slug, @manga_meta, "small") ||
-                      (manga.cover_url && ~p"/manga/proxy/image?#{%{url: manga.cover_url}}")
-                }
-                src={src}
-                alt={manga.title}
-                class="w-14 h-20 rounded-lg object-cover flex-shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <p class="font-semibold truncate">{manga.title}</p>
-                <p :if={manga.last_chapter} class="text-sm text-base-content/60">
-                  Chapter {manga.last_chapter}<span :if={manga.last_page}>, Page {manga.last_page}</span>
-                </p>
-                <p
-                  :if={line = MangaHTML.history_stat_line(manga, @chapter_reads, @stints)}
-                  class="text-xs text-base-content/40 mt-1"
-                >
-                  {line}
-                </p>
-              </div>
-            </a>
+            {Calendar.strftime(@user_now, "%-I:%M %p")}
+          </span>
+        </h3>
+
+        {time_of_day_card(assigns)}
+
+        <%!-- Library milestones for the day: marked complete / caught up. --%>
+        <div :if={@library_events != []} class="flex flex-col gap-2 mb-4">
+          <div
+            :for={ev <- @library_events}
+            class="flex items-center gap-3 bg-base-200 rounded-xl px-4 py-2.5"
+          >
+            <span class={[
+              "flex-shrink-0 text-lg",
+              case ev.event do
+                "completed" -> "text-success"
+                "started" -> "text-info"
+                _ -> "text-warning"
+              end
+            ]}>
+              {case ev.event do
+                "completed" -> "✓"
+                "started" -> "▶"
+                _ -> "⚡"
+              end}
+            </span>
+            <div class="flex-1 min-w-0 text-sm">
+              <span class="font-semibold">{case ev.event do
+                "completed" -> "Completed"
+                "started" -> "Started"
+                _ -> "Caught up"
+              end}</span>
+              <span class="text-base-content/70 truncate">{ev.title || "#{ev.source}/#{ev.slug}"}</span>
+            </div>
+            <span class="text-xs text-base-content/40 flex-shrink-0">
+              <span :if={ev.chapter}>ch {display_chapter(ev.chapter)} · </span>{MangaHTML.stint_local_time(
+                ev.happened_at,
+                @stint_tz
+              )}
+            </span>
             <div class="dropdown dropdown-end flex-shrink-0">
               <div
                 tabindex="0"
                 role="button"
-                class="btn btn-ghost btn-sm btn-square"
-                aria-label="Activity options"
+                class="btn btn-ghost btn-xs btn-square"
+                aria-label="Event options"
               >
                 <.kebab />
               </div>
               <ul
                 tabindex="0"
-                class="dropdown-content menu bg-base-100 rounded-box z-40 w-56 p-2 shadow-lg"
+                class="dropdown-content menu bg-base-100 rounded-box z-40 w-48 p-2 shadow-lg"
               >
                 <li>
                   <button
                     type="button"
                     class="text-error"
-                    phx-click="remove_activity"
-                    phx-value-source={manga.source}
-                    phx-value-slug={manga.slug}
-                    data-confirm={"Remove all reading activity for #{manga.title} on this day?"}
+                    phx-click="remove_event"
+                    phx-value-id={ev.id}
+                    data-confirm={"Remove this #{event_label(ev.event)} event for #{ev.title || ev.slug}?"}
                   >
-                    Remove activity for this day
+                    Remove this event
                   </button>
                 </li>
               </ul>
             </div>
           </div>
         </div>
-      <% else %>
-        <div class="text-center py-8">
-          <p class="text-base-content/50 text-sm">No reading activity on this day.</p>
-        </div>
-      <% end %>
-    </div>
+
+        <%= if @history != [] do %>
+          <div class="flex flex-col gap-3">
+            <div
+              :for={manga <- @history}
+              class="flex items-center gap-4 bg-base-200 rounded-xl p-3"
+            >
+              <a
+                href={
+                  if manga.last_chapter,
+                    do: ~p"/manga/#{manga.source}/#{manga.slug}/#{manga.last_chapter}",
+                    else: ~p"/manga/#{manga.source}/#{manga.slug}"
+                }
+                class="flex items-center gap-4 flex-1 min-w-0 hover:opacity-80 transition-opacity"
+              >
+                <img
+                  :if={
+                    src =
+                      MangaHTML.history_cover_src(manga.source, manga.slug, @manga_meta, "small") ||
+                        (manga.cover_url && ~p"/manga/proxy/image?#{%{url: manga.cover_url}}")
+                  }
+                  src={src}
+                  alt={manga.title}
+                  class="w-14 h-20 rounded-lg object-cover flex-shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <p class="font-semibold truncate">{manga.title}</p>
+                  <p :if={manga.last_chapter} class="text-sm text-base-content/60">
+                    Chapter {manga.last_chapter}<span :if={manga.last_page}>, Page {manga.last_page}</span>
+                  </p>
+                  <p
+                    :if={line = MangaHTML.history_stat_line(manga, @chapter_reads, @stints)}
+                    class="text-xs text-base-content/40 mt-1"
+                  >
+                    {line}
+                  </p>
+                </div>
+              </a>
+              <div class="dropdown dropdown-end flex-shrink-0">
+                <div
+                  tabindex="0"
+                  role="button"
+                  class="btn btn-ghost btn-sm btn-square"
+                  aria-label="Activity options"
+                >
+                  <.kebab />
+                </div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu bg-base-100 rounded-box z-40 w-56 p-2 shadow-lg"
+                >
+                  <li>
+                    <button
+                      type="button"
+                      class="text-error"
+                      phx-click="remove_activity"
+                      phx-value-source={manga.source}
+                      phx-value-slug={manga.slug}
+                      data-confirm={"Remove all reading activity for #{manga.title} on this day?"}
+                    >
+                      Remove activity for this day
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        <% else %>
+          <div class="text-center py-8">
+            <p class="text-base-content/50 text-sm">No reading activity on this day.</p>
+          </div>
+        <% end %>
+      </div>
+    </Layouts.app>
     """
   end
 

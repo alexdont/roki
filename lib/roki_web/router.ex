@@ -54,10 +54,12 @@ defmodule RokiWeb.Router do
     # pages render instantly and fill these in as sources answer.
     get "/search/extension", MangaController, :search_extension
     get "/explore/extension", MangaController, :explore_extension
-    get "/comments", MangaController, :annotations
-    get "/tierlist", MangaController, :tierlist
+    # The pages themselves are at /:username/… now; these keep the reader's own links working.
+    get "/comments", MangaController, :moved
+    get "/tierlist", MangaController, :moved
+    get "/grid", MangaController, :moved
+    # The boards save themselves back here, from the page wherever it is drawn.
     put "/tierlist", MangaController, :update_tierlist
-    get "/grid", MangaController, :grid
     put "/grid", MangaController, :update_grid
     # Parallel test route for the redesigned details page (v2).
     get "/manga2/:source/:slug", MangaController, :index2
@@ -188,7 +190,7 @@ defmodule RokiWeb.Router do
       # Reading history, built on phoenix_live_calendar. Replaced the
       # dead-view MangaController.history/2, which stays reachable at
       # /manga/legacy/history as a fallback.
-      live "/history", RokiWeb.Live.HistoryLive, :index
+      get "/history", RokiWeb.MangaController, :moved
 
       # Last on purpose: each of these begins with a wildcard segment, so a literal route
       # declared after them would never be reached. In the app this came from, the series
@@ -293,6 +295,12 @@ defmodule RokiWeb.Router do
       live "/:username/settings", SettingsLive, :index
       live "/:username/watched", WatchedLive, :index
       live "/:username/friends", FriendsLive, :index
+      # Reading, tiers, boards and what was said — the account's own pages, out of the reader's
+      # menu and into the account menu. Each is owner-only.
+      live "/:username/history", Live.HistoryLive, :index
+      get "/:username/comments", MangaController, :annotations
+      get "/:username/tierlist", MangaController, :tierlist
+      get "/:username/grid", MangaController, :grid
       # The public profile. Last: a name is anything, so every fixed address goes before it.
       live "/:username", ProfileLive, :show
     end

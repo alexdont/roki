@@ -8,6 +8,30 @@ defmodule RokiWeb.MangaController do
        [html: {RokiWeb.Layouts, :manga}]
        when action not in [:show, :search_extension, :explore_extension]
 
+  # Tierlist, Grid and Comments moved out of the reader and under /:username, where they are
+  # the account's own pages: one person's, in this site's plain frame rather than the reader's.
+  plug :profile_page when action in [:annotations, :tierlist, :grid]
+
+  defp profile_page(%{params: %{"username" => username}} = conn, _opts) do
+    # The site's routes run the plain browser pipeline, which does not look up who is signed in
+    # — the reader's own scope does that with :require_auth. Ask here instead.
+    conn = PhoenixKitWeb.Users.Auth.fetch_phoenix_kit_current_user(conn, [])
+    user = conn.assigns[:phoenix_kit_current_user]
+
+    cond do
+      is_nil(user) ->
+        conn |> redirect(to: "/phoenix_kit/users/log-in") |> halt()
+
+      String.downcase(to_string(user.username)) != String.downcase(username) ->
+        conn |> redirect(to: "/home") |> halt()
+
+      true ->
+        put_layout(conn, html: {RokiWeb.Layouts, :page})
+    end
+  end
+
+  defp profile_page(conn, _opts), do: conn
+
   alias Roki.Manga.Library
   alias Roki.Manga.Sources
   alias Guise
@@ -634,6 +658,17 @@ defmodule RokiWeb.MangaController do
 
   def update_smart_scroll_config(conn, _params) do
     conn |> put_status(422) |> json(%{error: "Invalid config"})
+  end
+
+  @doc """
+  The reader's old addresses for the pages that moved under `/:username` — Comments, Tierlist,
+  Grid and History. They are the account's own pages now, reached from the account menu, and
+  the reader's menus still point here.
+  """
+  def moved(conn, _params) do
+    username = conn.assigns[:phoenix_kit_current_user].username
+    page = conn.request_path |> String.split("/") |> List.last()
+    redirect(conn, to: "/#{username}/#{page}")
   end
 
   @doc """

@@ -244,6 +244,37 @@ defmodule RokiWeb.Layouts do
               <div class="my-2 border-t border-base-300/70"></div>
 
               <.menu_row
+                href={~p"/#{@username}/history"}
+                icon="hero-clock"
+                active={active?(@current_path, ~p"/#{@username}/history")}
+              >
+                History
+              </.menu_row>
+              <.menu_row
+                href={~p"/#{@username}/tierlist"}
+                icon="hero-bars-3-bottom-left"
+                active={active?(@current_path, ~p"/#{@username}/tierlist")}
+              >
+                Tierlist
+              </.menu_row>
+              <.menu_row
+                href={~p"/#{@username}/grid"}
+                icon="hero-squares-2x2"
+                active={active?(@current_path, ~p"/#{@username}/grid")}
+              >
+                Grid
+              </.menu_row>
+              <.menu_row
+                href={~p"/#{@username}/comments"}
+                icon="hero-chat-bubble-left-right"
+                active={active?(@current_path, ~p"/#{@username}/comments")}
+              >
+                Comments
+              </.menu_row>
+
+              <div class="my-2 border-t border-base-300/70"></div>
+
+              <.menu_row
                 href={~p"/#{@username}/friends"}
                 icon="hero-user-group"
                 active={active?(@current_path, ~p"/#{@username}/friends")}
@@ -374,6 +405,26 @@ defmodule RokiWeb.Layouts do
   end
 
   @doc """
+  The site's frame for a controller page that is not part of the reader: this header and
+  nothing else. The pages that moved out of the reader's menu and under `/:username` use it,
+  since they carry their own width and padding.
+  """
+  def page(assigns) do
+    ~H"""
+    <.app
+      flash={@flash}
+      phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
+      socket={assigns[:socket]}
+      conn={assigns[:conn]}
+      current_path={(assigns[:conn] && assigns.conn.request_path) || "/"}
+      flush
+    >
+      {@inner_content}
+    </.app>
+    """
+  end
+
+  @doc """
   The layout the manga reader's own pages render inside: this site's header, then the page.
 
   Those pages came from an app where they were the whole site, so they carry their own bar and
@@ -381,24 +432,20 @@ defmodule RokiWeb.Layouts do
   twenty-odd templates, they are wrapped in `app/1`, so the header keeps exactly one definition
   and a change to it reaches every page here.
 
-  Used by the controller pages and by the live session behind `/manga/settings` and
-  `/manga/history`, which is why it takes its path from `@conn` only when there is one — a
-  LiveView has a socket instead.
+  It takes its path from `@conn` only when there is one: a LiveView has a socket instead, and
+  says where it is with a `current_path` assign.
 
   The chapter reader itself is deliberately NOT wrapped: it is a full-screen canvas.
   """
   # The manga pages' own navigation. The header above carries what spans the whole site
   # (Movies, Shows, Anime, Manga, search, notifications, the account menu), so this row
   # carries only what exists for manga and nothing else — which is why these pages no
-  # longer need a menu of their own. Settings and Stats are missing on purpose: they are
-  # this site's pages now, at /:username/settings and /:username/stats.
+  # longer need a menu of their own. Settings, Stats, History, Comments, Tierlist and Grid are
+  # missing on purpose: they are this site's own pages now, under /:username, and they are in
+  # the account menu above.
   @manga_nav [
     {"Explore", "/manga/explore"},
-    {"Categories", "/manga/categories"},
-    {"History", "/manga/history"},
-    {"Comments", "/manga/comments"},
-    {"Tierlist", "/manga/tierlist"},
-    {"Grid", "/manga/grid"}
+    {"Categories", "/manga/categories"}
   ]
 
   def manga(assigns) do
