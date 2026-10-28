@@ -1181,11 +1181,13 @@ defmodule Roki.Watch do
   of the film, for the player to count from.
   """
   def start(uuid, ctx, source, stream, caps \\ %{}, opts \\ []) do
-    if local_player?(uuid, caps, opts) do
-      local_start(uuid, ctx, source, stream, opts)
-    else
-      server_start(uuid, ctx, source, stream, caps, opts)
-    end
+    Roki.Laev.with_audio(uuid, ctx, fn ->
+      if local_player?(uuid, caps, opts) do
+        local_start(uuid, ctx, source, stream, opts)
+      else
+        server_start(uuid, ctx, source, stream, caps, opts)
+      end
+    end)
   end
 
   @doc """
@@ -1252,7 +1254,7 @@ defmodule Roki.Watch do
   """
   def restart(uuid, ctx, source, stream, caps, from) when is_number(from) do
     :ok = release_previous(uuid)
-    do_start(uuid, ctx, source, stream, caps, from: max(0, from))
+    Roki.Laev.with_audio(uuid, ctx, fn -> do_start(uuid, ctx, source, stream, caps, from: max(0, from)) end)
   end
 
   @doc """

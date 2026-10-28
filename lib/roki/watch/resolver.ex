@@ -33,6 +33,10 @@ defmodule Roki.Watch.Resolver do
         heavy_ok? \\ false,
         caps \\ %{}
       ) do
+    Roki.Laev.with_audio(uuid, title, fn -> do_run(parent, token, uuid, title, season, episode, force?, mode, quick?, heavy_ok?, caps) end)
+  end
+
+  defp do_run(parent, token, uuid, title, season, episode, force?, mode, quick?, heavy_ok?, caps) do
     key = key(title.type, title.id, season, episode)
     web = Roki.Laev.web_settings(uuid)
     hours = SourceCache.hours(web)
@@ -86,7 +90,7 @@ defmodule Roki.Watch.Resolver do
   @doc "Check the next page of unchecked releases: `{:ok, token, playable, rest}`."
   def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false, caps \\ %{}) do
     {page, rest} = Watch.probe_page(rest)
-    {playable, late} = probe_page(parent, token, uuid, ctx, page, false, light?, caps)
+    {playable, late} = Roki.Laev.with_audio(uuid, ctx, fn -> probe_page(parent, token, uuid, ctx, page, false, light?, caps) end)
     rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
     if hours > 0, do: SourceCache.put(uuid, key, all, rest, light?)

@@ -12,7 +12,7 @@
 const ID = {
   EBML: 0x1a45dfa3, Segment: 0x18538067, Info: 0x1549a966, TimestampScale: 0x2ad7b1,
   Tracks: 0x1654ae6b, TrackEntry: 0xae, TrackNumber: 0xd7, TrackType: 0x83, CodecID: 0x86,
-  Language: 0x22b59c, LanguageBCP47: 0x22b59d, Name: 0x536e, CodecPrivate: 0x63a2, FlagDefault: 0x88,
+  Language: 0x22b59c, LanguageBCP47: 0x22b59d, Name: 0x536e, CodecPrivate: 0x63a2, FlagDefault: 0x88, FlagForced: 0x55aa, FlagHearingImpaired: 0x55ab,
   Cluster: 0x1f43b675, Timestamp: 0xe7, SimpleBlock: 0xa3, BlockGroup: 0xa0, Block: 0xa1, BlockDuration: 0x9b,
   SeekHead: 0x114d9b74, Cues: 0x1c53bb6b, Void: 0xec, Tags: 0x1254c367, Attachments: 0x1941a469, Chapters: 0x1043a770,
 }
@@ -147,7 +147,7 @@ export class SubtitleScanner {
       if (MASTER.has(id)) {
         if (id === ID.Cluster) { this.clusterTime = 0; this.stats.clusters++; if (!this.seenTracks && this.tracks.size) this.announce() }
         if (id === ID.Tracks) this.inTracks = true
-        if (id === ID.TrackEntry) { this.entry = {number: 0, type: 0, codec: "", lang: "", bcp: "", name: "", header: ""} }
+        if (id === ID.TrackEntry) { this.entry = {number: 0, type: 0, codec: "", lang: "", bcp: "", name: "", header: "", forced: false, sdh: false} }
         // Enter the master: its children follow directly (unknown size too).
         pos = bodyAt
         // Where these end, as file offsets (windows begin anywhere in the file).
@@ -197,7 +197,7 @@ export class SubtitleScanner {
     if (!e || e.type !== 0x11) return
     if (!/^S_TEXT\/(UTF8|ASS|SSA|WEBVTT)$|^S_(ASS|SSA)$/.test(e.codec)) return
     if (!this.tracks.has(e.number)) {
-      this.tracks.set(e.number, {number: e.number, codec: e.codec, lang: e.bcp || e.lang || "eng", name: e.name, header: e.header, cues: [], seen: new Set()})
+      this.tracks.set(e.number, {number: e.number, codec: e.codec, lang: e.bcp || e.lang || "eng", name: e.name, forced: e.forced, sdh: e.sdh, header: e.header, cues: [], seen: new Set()})
     }
   }
 
@@ -216,6 +216,8 @@ export class SubtitleScanner {
       case ID.Language: if (e) e.lang = utf8.decode(data.subarray(at, at + size)).replace(/\0+$/, ""); break
       case ID.LanguageBCP47: if (e) e.bcp = utf8.decode(data.subarray(at, at + size)).replace(/\0+$/, ""); break
       case ID.Name: if (e) e.name = utf8.decode(data.subarray(at, at + size)).replace(/\0+$/, ""); break
+      case ID.FlagForced: if (e) e.forced = uint(data, at, size) === 1; break
+      case ID.FlagHearingImpaired: if (e) e.sdh = uint(data, at, size) === 1; break
       case ID.CodecPrivate: if (e) e.header = utf8.decode(data.subarray(at, at + size)); break
       case ID.Timestamp: this.clusterTime = uint(data, at, size); break
       case ID.SimpleBlock: this.stats.blocks++; this.block(data, at, size, null); break

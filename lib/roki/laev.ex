@@ -567,6 +567,13 @@ defmodule Roki.Laev do
       allowed: ~w(off 6 12 24),
       labels: %{"off" => "Off", "6" => "6 hours", "12" => "12 hours", "24" => "24 hours"}
     },
+    # Anime: the dub in the account's language, or the Japanese original with subtitles in the
+    # account's language. Applied to the search, the ranking and the player's audio pick.
+    "anime_audio" => %{
+      default: "mine",
+      allowed: ~w(mine original),
+      labels: %{"mine" => "My language (the dub)", "original" => "Japanese (the original), subtitles in my language"}
+    },
     # Where the browser player's work happens: on the viewer's device (the release read straight
     # from its host, taken apart and decoded there) or on the server (ffmpeg, as before).
     "browser_work" => %{
@@ -586,6 +593,25 @@ defmodule Roki.Laev do
       }
     }
   }
+
+  @doc """
+  `fun` with the audio language this title calls for laid over laev's scope: Japanese for an
+  anime when the account's `anime_audio` setting says "original" (the subtitle language is left
+  as it is, so the original comes with subtitles in the account's language). Anything already
+  bound — a study session's languages — wins over this. `title` is any map with `anime?`.
+  """
+  def with_audio(uuid, title, fun) when is_function(fun, 0) do
+    case anime_audio(uuid, title) do
+      %{} = over when map_size(over) > 0 -> Laev.Scope.with_overrides(Map.merge(over, Laev.Scope.overrides()), fun)
+      _ -> fun.()
+    end
+  end
+
+  @doc "The scope overrides `with_audio/3` lays over: `%{lang: \"ja\"}` or nothing."
+  def anime_audio(uuid, %{anime?: true}),
+    do: if(web_settings(uuid)["anime_audio"] == "original", do: %{lang: "ja"}, else: %{})
+
+  def anime_audio(_uuid, _title), do: %{}
 
   @doc "The site-only settings, defaults filled in: `%{\"browser_max_resolution\" => \"1080p\"}`."
   def web_settings(uuid) do

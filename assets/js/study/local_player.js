@@ -101,8 +101,8 @@ export async function startLocalPlayer(video, url, opts = {}) {
   // gone past it, which the reader does first), each a WebVTT that grows as the file is read.
   const subtitleTracks = () =>
     scanner.subtitleTracks.map((t) => ({
-      lang: t.lang, name: t.name, codec: t.codec, cues: t.cues,
-      label: `${t.lang}${t.name ? " · " + t.name : ""}`, url: `local:sub:${t.number}`,
+      lang: t.lang, name: t.name, codec: t.codec, cues: t.cues, forced: t.forced, sdh: t.sdh,
+      label: `${t.lang}${t.name ? " · " + t.name : ""}${t.forced && !/forced/i.test(t.name) ? " (forced)" : ""}`, url: `local:sub:${t.number}`,
       read: () => toVtt(t),
     }))
 

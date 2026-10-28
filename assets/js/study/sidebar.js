@@ -15,7 +15,11 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b11" // shown by `?diag=1`, so a phone can say which bundle it runs
+// Among tracks of one language: a full one first, SDH/CC next, "forced" (signs only) last.
+const subRank = (t) => (t.forced || /\bforced\b/i.test(t.label || "") ? 2 : t.sdh || /\b(sdh|cc|hearing)\b/i.test(t.label || "") ? 1 : 0)
+const bestTrack = (tracks) => tracks.reduce((best, t) => (!best || subRank(t) < subRank(best) ? t : best), null)
+
+const BUILD = "b12" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -1704,7 +1708,7 @@ export const StudySidebar = {
   // The subtitle tracks the local player reads out of the release itself: offered like the ones
   // the server would have written, in the same list, picked the same way.
   addLocalSubtitles(ctl) {
-    const mine = ctl.subtitleTracks.map((s) => ({label: s.label, lang: s.lang, url: s.url, read: () => s.read()}))
+    const mine = ctl.subtitleTracks.map((s) => ({label: s.label, lang: s.lang, url: s.url, forced: s.forced, sdh: s.sdh, read: () => s.read()}))
     if (!mine.length) return
     const known = new Set(this.tracks.map((t) => t.url))
     const add = mine.filter((t) => !known.has(t.url))
@@ -1974,11 +1978,13 @@ export const StudySidebar = {
       }
       if (out.length || saved.length === 0) return out
     }
-    const main = this.tracks.find((t) => prefer && shortLang(t.lang) === prefer) || this.tracks[0]
+    // The full track of a language before its "forced" one (signs and foreign lines only, a
+    // couple of cues an episode) or its SDH/CC one — by the release's own flags, else by name.
+    const main = bestTrack(this.tracks.filter((t) => prefer && shortLang(t.lang) === prefer)) || bestTrack(this.tracks)
     if (!main) return []
     const out = [main.url]
     if (shortLang(main.lang) !== "en") {
-      const en = this.tracks.find((t) => t.url !== main.url && shortLang(t.lang) === "en")
+      const en = bestTrack(this.tracks.filter((t) => t.url !== main.url && shortLang(t.lang) === "en"))
       if (en) out.push(en.url)
     }
     return out
