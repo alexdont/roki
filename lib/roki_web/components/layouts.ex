@@ -42,6 +42,11 @@ defmodule RokiWeb.Layouts do
   attr :current_path, :string, default: "/"
   attr :wide, :boolean, default: false, doc: "full-width content, for the home page"
 
+  attr :flush, :boolean,
+    default: false,
+    doc:
+      "content that brings its own margins — the wrapper adds none, so it can reach the screen edge"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -335,8 +340,15 @@ defmodule RokiWeb.Layouts do
       </nav>
     </header>
 
-    <main class="px-4 py-8 sm:px-6 lg:px-8">
-      <div class={["mx-auto space-y-4", if(@wide, do: "max-w-6xl", else: "max-w-2xl")]}>
+    <main class={unless @flush, do: "px-4 py-8 sm:px-6 lg:px-8"}>
+      <%!-- Flush content is laid out by whoever wrote it. Wrapping it in this app's padding and
+            width as well would indent it twice over — on a phone that is the whole screen
+            margin spent twice, and the page can no longer reach the edge. --%>
+      <div :if={@flush}>{render_slot(@inner_block)}</div>
+      <div
+        :if={!@flush}
+        class={["mx-auto space-y-4", if(@wide, do: "max-w-6xl", else: "max-w-2xl")]}
+      >
         {render_slot(@inner_block)}
       </div>
     </main>
@@ -366,7 +378,7 @@ defmodule RokiWeb.Layouts do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       socket={assigns[:socket]}
       current_path={(assigns[:conn] && @conn.request_path) || "/manga"}
-      wide
+      flush
     >
       {@inner_content}
     </.app>
