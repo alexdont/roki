@@ -15,6 +15,8 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
+const BUILD = "b4" // shown by `?diag=1`, so a phone can say which bundle it runs
+
 // After you scroll the list it stops following the video, then picks the current line back up
 // on its own once you've been idle this long.
 const FOLLOW_RESUME_MS = 5000
@@ -143,8 +145,10 @@ export const StudySidebar = {
     // (`html.study-open`): iOS Safari paints an inline <video> black when the page has an element
     // with mix-blend-mode or backdrop-filter on it, however far from the video. `?keep=grain`,
     // `?keep=header` or `?keep=all` leave them on, to show the effect.
+    // The page's query, read once: the page patches its own address later and the query goes.
+    this.flags = new URLSearchParams(location.search)
     if (this.el.dataset.immersive === "true") {
-      const keep = new URLSearchParams(location.search).get("keep") || ""
+      const keep = this.flags.get("keep") || ""
       document.documentElement.classList.add("study-open")
       if (keep === "grain" || keep === "all") document.documentElement.classList.add("keep-grain")
       if (keep === "header" || keep === "all") document.documentElement.classList.add("keep-header")
@@ -1429,8 +1433,11 @@ export const StudySidebar = {
       // Bisecting a device's black screen from afar (with `?diag=1`): `controls=1` puts the
       // element's own controls on, `plain=1` leaves the MediaSource's duration unset, `noscan=1`
       // leaves the release's subtitles unread.
-      const flags = new URLSearchParams(location.search)
+      const flags = this.flags
       if (flags.get("controls") === "1") v.setAttribute("controls", "")
+      // `bare=1`: the element taken out of the player's markup altogether, straight under <body>.
+      if (flags.get("bare") === "1") { document.body.appendChild(v); v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain" }
+      this.showDiag(p)
       try {
         this.local = await startLocalPlayer(v, p.url, {
           resume: p.resume,
@@ -1707,7 +1714,7 @@ export const StudySidebar = {
   // frames decoded — sent to /lab/report, to read on the server. For chasing a black screen on
   // a device that is not at hand.
   sendDiagnostics(p) {
-    if (!/[?&]diag=1/.test(location.search) || this.diagSent) return
+    if (!this.flags || this.flags.get("diag") !== "1" || this.diagSent) return
     this.diagSent = true
     const v = this.video
     const styleOf = (el) => {
@@ -1728,10 +1735,26 @@ export const StudySidebar = {
         results: [{name: `watch ${location.pathname}`, ok: q.totalVideoFrames > 0, played: +v.currentTime.toFixed(1), buffered: v.buffered.length ? +v.buffered.end(v.buffered.length - 1).toFixed(1) : 0,
           size: `${v.videoWidth}×${v.videoHeight}`, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames, readyState: v.readyState, paused: v.paused, muted: v.muted, type: p && p.url, local: !!this.local,
           mediaError: v.error ? v.error.message || String(v.error.code) : null, stats: this.local ? this.local.stats() : null, attrs: {playsinline: v.hasAttribute("playsinline"), controls: v.hasAttribute("controls"), srcKind: String(v.currentSrc || v.src).slice(0, 20)},
-          immersive: this.el.dataset.immersive, flags: location.search, chain}],
+          immersive: this.el.dataset.immersive, flags: this.flags.toString(), build: BUILD, chain}],
       }
       try { await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}) } catch (e) {}
     }, 15000)
+  },
+
+  // With `?diag=1`, the same numbers on the page itself, once a second, for a device whose
+  // report cannot reach the server.
+  showDiag() {
+    if (!this.flags || this.flags.get("diag") !== "1" || this.diagBadge) return
+    const v = this.video
+    const b = this.diagBadge = document.createElement("div")
+    b.style.cssText = "position:fixed;top:4rem;left:0.5rem;z-index:1000;max-width:90vw;padding:0.3rem 0.5rem;border-radius:0.4rem;background:rgb(0 0 0/0.7);color:#0f0;font:12px/1.3 monospace;pointer-events:none;white-space:pre-wrap"
+    document.body.appendChild(b)
+    const tick = () => {
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}
+      const r = v.getBoundingClientRect()
+      b.textContent = `${BUILD} ${this.flags.toString()}\nframes ${q.totalVideoFrames} t ${v.currentTime.toFixed(1)} rs ${v.readyState} ${v.videoWidth}×${v.videoHeight} ${v.paused ? "paused" : "playing"}${v.error ? " ERR " + v.error.message : ""}\nrect ${Math.round(r.width)}×${Math.round(r.height)} controls ${v.hasAttribute("controls")} html.${document.documentElement.className} parent ${v.parentElement && v.parentElement.className}`
+    }
+    tick(); this.diagTimer = setInterval(tick, 1000)
   },
 
   // A track that was just fetched (from OpenSubtitles) is turned on as soon as the page has it.
