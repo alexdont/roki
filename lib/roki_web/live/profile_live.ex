@@ -1014,7 +1014,7 @@ defmodule RokiWeb.ProfileLive do
         </div>
 
         <div class="flex flex-wrap items-center gap-3 border-t border-base-300 bg-base-100 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-          <p class="min-w-0 flex-1 text-sm">
+          <p id="pick-count" class="min-w-0 flex-1 text-sm">
             <b>{@selected}</b>
             of {Profile.top()} on the shelf <span :if={@error} class="ml-2 text-error">{@error}</span>
           </p>

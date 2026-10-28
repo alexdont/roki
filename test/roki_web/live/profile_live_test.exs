@@ -110,6 +110,10 @@ defmodule RokiWeb.ProfileLiveTest do
     assert has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=movie]")
   end
 
+  # Rendered HTML line-wraps wherever the template happens to wrap, which `mix format` may change
+  # without changing a thing on screen — so text assertions compare on one line.
+  defp squish(html), do: String.replace(html, ~r/\s+/, " ")
+
   test "editing a shelf: crosses, a drag hook, empty places that open the picker", %{conn: _conn} do
     user = register("shelfedit")
     {:ok, bin} = Ecto.UUID.dump(user.uuid)
@@ -142,7 +146,7 @@ defmodule RokiWeb.ProfileLiveTest do
     # Tick both, add: they are on the shelf, in the picker's order, with crosses and grips.
     view |> element("button[phx-click=pick_toggle][phx-value-key='movie:1']") |> render_click()
     view |> element("button[phx-click=pick_toggle][phx-value-key='movie:2']") |> render_click()
-    assert render(view) =~ "2</b> of 10 on the shelf"
+    assert view |> element("#pick-count") |> render() |> squish() =~ "<b>2</b> of 10 on the shelf"
     view |> element("button", "Add 2 to the shelf") |> render_click()
 
     refute render(view) =~ "Choose your favorite movies"
