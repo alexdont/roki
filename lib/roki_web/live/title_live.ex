@@ -782,15 +782,19 @@ defmodule RokiWeb.TitleLive do
     <section class="hidden space-y-6 sm:block">
       <%!-- The banner: the film's own backdrop, washed into the page colour so the words stay readable
             in the light and the dark theme alike; the poster stands on it. --%>
-      <div class="relative isolate overflow-hidden rounded-3xl border border-base-300/70 bg-base-200">
-        <img
-          :if={@title.backdrop}
-          src={Roki.Images.local(@title.backdrop)}
-          alt=""
-          class="absolute inset-0 -z-20 h-full w-full object-cover opacity-60"
-        />
-        <div class="absolute inset-0 -z-10 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55"></div>
-        <div class="absolute inset-x-0 bottom-0 -z-10 h-24 bg-gradient-to-t from-base-100/70 to-transparent"></div>
+      <div class="relative isolate rounded-3xl border border-base-300/70 bg-base-200">
+        <%!-- The backdrop is clipped to the banner's corners; the banner itself is not, so the
+              "…" menu can open below its edge. --%>
+        <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl">
+          <img
+            :if={@title.backdrop}
+            src={Roki.Images.local(@title.backdrop)}
+            alt=""
+            class="h-full w-full object-cover opacity-60"
+          />
+          <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55"></div>
+          <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-base-100/70 to-transparent"></div>
+        </div>
 
         <div class="flex gap-8 p-6 lg:p-8">
           <div class="w-48 shrink-0 lg:w-60">
@@ -908,8 +912,9 @@ defmodule RokiWeb.TitleLive do
   # The icon classes below are built from a name, which Tailwind cannot see, so they are spelled
   # out here: hero-bookmark hero-bookmark-solid hero-pause-circle hero-pause-circle-solid
   # hero-check-circle hero-check-circle-solid
-  # What the terminal app has on a title: saved for later, on hold, watched (and back), and your
-  # rating — as pills with their words, the same colours as the hover card on a poster.
+  # What the terminal app has on a title: saved for later, watched (and back), and your rating —
+  # as pills with their words, the same colours as the hover card on a poster. Hold is in the
+  # "…" menu (it is rare, and was here twice).
   defp action_pills(assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2">
@@ -920,15 +925,6 @@ defmodule RokiWeb.TitleLive do
         on_class="btn-primary"
         label={if @lib.saved?, do: "Saved", else: "Save"}
         title={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
-      />
-      <.pill
-        :if={not @title.anime?}
-        event="toggle_hold"
-        on={@lib.held?}
-        icon="pause-circle"
-        on_class="btn-warning"
-        label={if @lib.held?, do: "On hold", else: "Hold"}
-        title={if @lib.held?, do: "On hold (click to take it off)", else: "Put on hold"}
       />
       <%!-- A film is watched or not; a series is completed or not (episodes below one by one).
             The same button marks and unmarks. --%>
@@ -1409,7 +1405,8 @@ defmodule RokiWeb.TitleLive do
       |> assign(:links, external_links(assigns.title, assigns.mal))
 
     ~H"""
-    <div class="shrink-0">
+    <%!-- `relative`: the menu opens under this button, not at the edge of whatever box holds it. --%>
+    <div class="relative shrink-0">
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}", display: "block")}
