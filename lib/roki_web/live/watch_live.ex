@@ -146,7 +146,12 @@ defmodule RokiWeb.WatchLive do
                ),
              pair = if(hash, do: pair, else: within_cap(res, pair)),
              {:ok, pair} <- choose(res, pair, caps),
-             :ok <- announce(parent, token, "Getting the video ready…"),
+             :ok <-
+               announce(
+                 parent,
+                 token,
+                 if(Watch.local_player?(uuid, caps), do: "Opening the video…", else: "Getting the video ready…")
+               ),
              {:ok, pair, player} <-
                start_or_next(parent, token, uuid, caps, res, pair, hash == nil, skip, 4) do
           {:ok, token, res, pair, player}

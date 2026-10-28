@@ -1188,9 +1188,12 @@ defmodule Roki.Watch do
     end
   end
 
-  # The viewer's device does the work (`assets/js/study/local_player.js`): the page said it can
-  # (`caps.local`), the account's setting says so, and nothing has asked for the server instead.
-  defp local_player?(uuid, caps, opts) do
+  @doc """
+  Whether this device will play the release itself (`assets/js/study/local_player.js`): the page
+  said it can (`caps.local`), the account's setting says so, and nothing has asked for the server
+  instead.
+  """
+  def local_player?(uuid, caps, opts \\ []) do
     Map.get(caps || %{}, :local) == true and Keyword.get(opts, :server) != true and
       Roki.Laev.web_settings(uuid)["browser_work"] == "device"
   end
