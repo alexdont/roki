@@ -108,7 +108,7 @@ export function bindTransport(root, video, stage, study) {
     showVolume()
     try { localStorage.setItem(KEY, String(video.muted ? 0 : video.volume)) } catch {}
   })
-  if (!(study.flags && study.flags.get("novol") === "1")) try {
+  try {
     const saved = parseFloat(localStorage.getItem(KEY))
     if (Number.isFinite(saved)) video.volume = Math.max(0, Math.min(1, saved))
   } catch {}

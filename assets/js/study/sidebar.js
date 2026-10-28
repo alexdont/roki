@@ -15,7 +15,7 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b10" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b11" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -147,31 +147,23 @@ export const StudySidebar = {
   isKuromojiReady() { return !!tokenizer },
 
   mounted() {
-    // While the full-screen player is up, the page's film grain and the frosted header come off
-    // (`html.study-open`): iOS Safari paints an inline <video> black when the page has an element
-    // with mix-blend-mode or backdrop-filter on it, however far from the video. `?keep=grain`,
-    // `?keep=header` or `?keep=all` leave them on, to show the effect.
-    // The page's query, kept for the tab: the page patches its own address later, and when it has
-    // no source yet it goes through the sources page and comes back as a fresh mount, so the
-    // query would be gone by the time the player starts. `?diag=1` sets it, the lab's bisection
-    // page clears it.
+    // `?diag=1` (kept for the tab by app.js, since the page rewrites its own address): the
+    // numbers on the page and a report home, for a device that is not at hand.
     this.flags = readFlags()
-    if (this.el.dataset.immersive === "true") {
-      const keep = this.flags.get("keep") || ""
-      document.documentElement.classList.add("study-open")
-      if (keep === "grain" || keep === "all") document.documentElement.classList.add("keep-grain")
-      if (keep === "header" || keep === "all") document.documentElement.classList.add("keep-header")
-    }
-    this.video = document.getElementById(this.el.dataset.video)
-    // `hook=1`: the page's <video> swapped for a twin made by script before anything binds to it
-    // (same place, same attributes); `noattr=1` leaves the twin's controlslist and class off.
-    if (this.flags.get("hook") === "1") {
-      const old = this.video, v = document.createElement("video")
-      v.id = old.id; v.setAttribute("playsinline", "")
-      if (this.flags.get("noattr") !== "1") { v.setAttribute("controlslist", "nofullscreen"); v.className = old.className }
-      else v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000"
-      old.replaceWith(v); this.video = v
-    }
+    // While the full-screen player is up, the page's film grain and the frosted header come off
+    // (`html.study-open`): the player covers them, and iOS composites inline video more
+    // willingly without blend modes and backdrop filters on the page.
+    if (this.el.dataset.immersive === "true") document.documentElement.classList.add("study-open")
+    // The <video> is made here, by script, in place of the one the page came with — same id,
+    // same attributes, same spot. iOS Safari (18.7, found 2026-10-28) never paints the
+    // parser-made element: the MediaSource plays, the frames decode (a canvas can draw them),
+    // the sound is heard, and the screen stays black until the native full-screen player opens;
+    // an identical element created by script paints at once. The lab's bisection page
+    // (/lab/bisect.html) is how this was found, and how to check it again.
+    const old = document.getElementById(this.el.dataset.video)
+    this.video = document.createElement("video")
+    for (const a of old.attributes) this.video.setAttribute(a.name, a.value)
+    old.replaceWith(this.video)
     this.list = this.el.querySelector("[data-role=list]")
     this.title = this.el.querySelector("[data-role=title]")
     this.count = this.el.querySelector("[data-role=count]")
@@ -242,7 +234,7 @@ export const StudySidebar = {
   },
 
   destroyed() {
-    document.documentElement.classList.remove("study-open", "keep-grain", "keep-header")
+    document.documentElement.classList.remove("study-open")
     if (this.local) { const l = this.local; this.local = null; l.stop() }
     if (this.panelWatch) this.panelWatch.disconnect()
     cancelAnimationFrame(this.raf)
@@ -1449,47 +1441,11 @@ export const StudySidebar = {
       this.base = 0
       this.shift = 0
       this.calibrated = true
-      // Bisecting a device's black screen from afar (with `?diag=1`): `controls=1` puts the
-      // element's own controls on, `plain=1` leaves the MediaSource's duration unset, `noscan=1`
-      // leaves the release's subtitles unread.
-      const flags = this.flags
-      if (flags.get("controls") === "1") v.setAttribute("controls", "")
-      if (flags.get("mute") === "1") v.muted = true // so a frame may start it without a tap
-      if (flags.get("noattr") === "1" && flags.get("hook") !== "1") { v.removeAttribute("controlslist"); v.removeAttribute("class"); v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000" }
-      // `bare=1`: the element taken out of the player's markup altogether, straight under <body>.
-      if (flags.get("bare") === "1") { document.body.appendChild(v); v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain" }
-      // `fresh=1`: a new <video> of the lab page's shape, under <body>, played instead of the
-      // page's own (which the hook leaves idle); `strip=1` also takes the player's markup away
-      // and the page's classes off, so what is left is the document itself.
-      let v = this.video
-      if (flags.get("fresh") === "1") {
-        v = document.createElement("video"); v.id = "fresh-video"; v.setAttribute("playsinline", ""); v.setAttribute("controls", "")
-        // `geo=`: where the fresh element sits — full-bleed fixed (default), fixed but inset
-        // from the edges, in the normal flow, half height, or nine tenths wide.
-        const geo = {
-          inset: "position:fixed;inset:16px;width:calc(100% - 32px);height:calc(100% - 32px);z-index:100;background:#000;object-fit:contain",
-          flow: "position:relative;display:block;width:100%;height:240px;z-index:100;background:#000;object-fit:contain",
-          short: "position:fixed;top:0;left:0;width:100%;height:50%;z-index:100;background:#000;object-fit:contain",
-          narrow: "position:fixed;top:0;left:0;width:90%;height:100%;z-index:100;background:#000;object-fit:contain",
-          h400: "position:fixed;top:0;left:0;width:100%;height:400px;z-index:100;background:#000;object-fit:contain",
-          h480: "position:fixed;top:0;left:0;width:100%;height:480px;z-index:100;background:#000;object-fit:contain",
-          fill: "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:fill",
-          abs: "position:absolute;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain",
-          nobg: "position:fixed;inset:0;width:100%;height:100%;z-index:100;object-fit:contain",
-        }[flags.get("geo")] || "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain"
-        v.style.cssText = geo
-        if (flags.get("geo") === "abs") { const wrap = document.createElement("div"); wrap.style.cssText = "position:relative;width:100vw;height:100dvh"; document.body.prepend(wrap); wrap.appendChild(v) }
-        else if (flags.get("geo") === "flow") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style"); document.body.prepend(v) }
-        else document.body.appendChild(v)
-        if (flags.get("strip") === "1") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style") }
-      }
       this.showDiag(v)
       try {
         this.local = await startLocalPlayer(v, p.url, {
           resume: p.resume,
           audioLang: p.audio_lang,
-          plain: flags.get("plain") === "1",
-          noscan: flags.get("noscan") === "1",
           onLog: (line) => console.info(line),
           onFail: (why) => { if (this.playerUrl === p.url) this.pushEvent("player_failed", {why, local: true, ua: navigator.userAgent.slice(0, 160)}) },
           onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio() },

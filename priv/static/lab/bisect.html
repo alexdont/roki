@@ -10,7 +10,7 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;over
 </style></head>
 <body>
 <div id="ask" hidden style="position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;gap:10px;justify-content:center;align-items:center;padding:12px;background:#222;border-top:1px solid #444"><span id="ask-q"></span><button id="seen" style="background:#2a6;color:#fff;border:0;border-radius:8px">I saw a picture</button><button id="black" style="background:#a33;color:#fff;border:0;border-radius:8px">Black</button></div>
-<header><button id="go">Run every case</button><span id="status">8 cases, 30 s each, then a tap to say what you saw. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
+<header><button id="go">Run every case</button><span id="status">3 cases, 30 s each, then a tap to say what you saw. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
 <iframe id="f" allow="autoplay; fullscreen" title="case"></iframe>
 <table id="t"><thead><tr><th>#</th><th>case</th><th>frames</th><th>t</th><th>rs</th><th>size</th><th>state</th></tr></thead><tbody></tbody></table>
 <div id="note"></div>
@@ -18,15 +18,12 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;over
 // Each case is the site's own watch page (or local.html, the same pipeline on a bare page) in
 // the frame above, with one thing changed; muted, so that one tap here starts them all.
 const W = "/watch/tv/278043/1/13?diag=1"
+// What remains after the 2026-10-28 bisection (iOS never painted the parser-made <video>; the
+// player now makes its own by script): the page as it is, against the bare page.
 const CASES = [
   ["watch page as it is", W, "study-video"],
-  ["page's element swapped for a script-made twin (our player)", W + "&hook=1", "study-video"],
-  ["script-made twin without controlslist/class (our player)", W + "&hook=1&noattr=1", "study-video"],
-  ["page's own element, controlslist/class taken off", W + "&noattr=1", "study-video"],
-  ["page's own element, saved volume not applied", W + "&novol=1", "study-video"],
-  ["page's own element, neither attributes nor volume", W + "&noattr=1&novol=1", "study-video"],
-  ["twin, no attributes, no volume (our player)", W + "&hook=1&noattr=1&novol=1", "study-video"],
-  ["fresh <video> beside the player (control)", W + "&fresh=1", "fresh-video"],
+  ["bare page in the watch page's box (muted)", "/lab/local.html?auto=1&mute=1&link=0&fixed=1", "v"],
+  ["bare page, no controls (muted)", "/lab/local.html?auto=1&mute=1&link=0&controls=0", "v"],
 ]
 // What a decoded frame looks like, read back through a canvas: a mean brightness of 0 on a
 // frame the decoder has produced says the picture is black in the data, not just on the screen.

@@ -146,11 +146,11 @@ body::before {
 }
 
 [data-theme=dark] body::before { opacity: 0.08; }
-/* Off while the full-screen player is up — see `mounted()` in assets/js/study/sidebar.js: iOS
-   Safari paints an inline video black when the page holds an element with mix-blend-mode or
-   backdrop-filter, and the player covers both anyway. */
-html.study-open:not(.keep-grain) body::before { display: none; }
-html.study-open:not(.keep-header) .site-header { display: none; }
+/* Off while the full-screen player is up (`mounted()` in assets/js/study/sidebar.js): the player
+   covers both, and iOS composites inline video more willingly without blend modes and backdrop
+   filters on the page. */
+html.study-open body::before { display: none; }
+html.study-open .site-header { display: none; }
 
 /* The header: frosted, on top, with a hairline under it. */
 .site-header {
