@@ -19,7 +19,7 @@ import {startLocalPlayer} from "./local_player.js"
 const subRank = (t) => (t.forced || /\bforced\b/i.test(t.label || "") ? 2 : t.sdh || /\b(sdh|cc|hearing)\b/i.test(t.label || "") ? 1 : 0)
 const bestTrack = (tracks) => tracks.reduce((best, t) => (!best || subRank(t) < subRank(best) ? t : best), null)
 
-const BUILD = "b12" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b13" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -1682,6 +1682,9 @@ export const StudySidebar = {
   setTracks(p) {
     this.lastPrefer = p.prefer
     this.lastStudy = p.study
+    // What was toggled is remembered for the show *in this audio language*: subtitles turned off
+    // for the dub are no answer for the original.
+    this.layersKey = "layers:" + (p.media || this.media || "") + ":" + String(p.audio_lang || "").slice(0, 2)
     // The release's own tracks, read on this device, stay in the list when the page's list changes.
     const local = this.tracks.filter((t) => t.read)
     this.tracks = [...local, ...(p.tracks || [])]
@@ -1966,14 +1969,14 @@ export const StudySidebar = {
       if (this.tracks.length) return []
     }
     let saved = null
-    try { saved = JSON.parse(store.get("layers:" + this.media)) } catch {}
+    try { saved = JSON.parse(store.get(this.layersKey || "layers:" + this.media)) } catch {}
     if (Array.isArray(saved)) {
       const used = new Set()
       const out = []
       for (const w of saved) {
         const t =
           this.tracks.find((t) => !used.has(t.url) && t.label === w.n) ||
-          this.tracks.find((t) => !used.has(t.url) && w.l && shortLang(t.lang) === w.l)
+          (w.l ? bestTrack(this.tracks.filter((t) => !used.has(t.url) && shortLang(t.lang) === w.l)) : null)
         if (t) { used.add(t.url); out.push(t.url) }
       }
       if (out.length || saved.length === 0) return out
@@ -2167,7 +2170,7 @@ export const StudySidebar = {
   setSelection(urls) {
     this.userChose = true
     const desc = urls.map((u) => this.tracks.find((t) => t.url === u)).filter(Boolean).map((t) => ({l: shortLang(t.lang), n: t.label}))
-    store.set("layers:" + this.media, JSON.stringify(desc))
+    store.set(this.layersKey || "layers:" + this.media, JSON.stringify(desc))
     this.apply(urls)
     this.tick()
   },
