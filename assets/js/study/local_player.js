@@ -122,8 +122,10 @@ export async function startLocalPlayer(video, url, opts = {}) {
 
     const ms = new MS()
     const objectUrl = URL.createObjectURL(ms)
-    video.src = objectUrl
+    // WebKit's ManagedMediaSource attaches only to an element with remote playback off — set
+    // before the source, not after.
     if ("disableRemotePlayback" in video) video.disableRemotePlayback = true
+    video.src = objectUrl
     await new Promise((res) => ms.addEventListener("sourceopen", res, {once: true}))
     let sb
     try { sb = ms.addSourceBuffer(type) } catch (e) { fail(`addSourceBuffer: ${e.message}`); return }
