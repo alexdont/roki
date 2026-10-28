@@ -67,7 +67,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
   // Every window the reader fetches is shown to the scanner (it only follows the structure and
   // keeps the subtitle blocks; nothing is read twice).
   const originalRead = source._read.bind(source)
-  source._read = (start, end, minPos, maxPos) => {
+  if (!opts.noscan) source._read = (start, end, minPos, maxPos) => {
     const r = originalRead(start, end, minPos, maxPos)
     const see = (res) => { try { if (res && res.bytes && Number.isFinite(res.offset)) scanner.feed(res.offset, res.bytes) } catch (e) { console.warn("subtitle scanner", e) }; return res }
     return r && typeof r.then === "function" ? r.then(see) : see(r)
@@ -131,7 +131,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
     try { sb = ms.addSourceBuffer(type) } catch (e) { fail(`addSourceBuffer: ${e.message}`); return }
     sb.mode = "segments"
     sb.timestampOffset = from
-    try { ms.duration = duration } catch (e) {}
+    if (!opts.plain) try { ms.duration = duration } catch (e) {}
 
     const queue = []
     let finished = false, waiting = null, closed = false, bytes = 0

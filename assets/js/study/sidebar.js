@@ -1415,10 +1415,17 @@ export const StudySidebar = {
       this.base = 0
       this.shift = 0
       this.calibrated = true
+      // Bisecting a device's black screen from afar (with `?diag=1`): `controls=1` puts the
+      // element's own controls on, `plain=1` leaves the MediaSource's duration unset, `noscan=1`
+      // leaves the release's subtitles unread.
+      const flags = new URLSearchParams(location.search)
+      if (flags.get("controls") === "1") v.setAttribute("controls", "")
       try {
         this.local = await startLocalPlayer(v, p.url, {
           resume: p.resume,
           audioLang: p.audio_lang,
+          plain: flags.get("plain") === "1",
+          noscan: flags.get("noscan") === "1",
           onLog: (line) => console.info(line),
           onFail: (why) => { if (this.playerUrl === p.url) this.pushEvent("player_failed", {why, local: true, ua: navigator.userAgent.slice(0, 160)}) },
           onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio() },
@@ -1710,7 +1717,7 @@ export const StudySidebar = {
         results: [{name: `watch ${location.pathname}`, ok: q.totalVideoFrames > 0, played: +v.currentTime.toFixed(1), buffered: v.buffered.length ? +v.buffered.end(v.buffered.length - 1).toFixed(1) : 0,
           size: `${v.videoWidth}×${v.videoHeight}`, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames, readyState: v.readyState, paused: v.paused, muted: v.muted, type: p && p.url, local: !!this.local,
           mediaError: v.error ? v.error.message || String(v.error.code) : null, stats: this.local ? this.local.stats() : null, attrs: {playsinline: v.hasAttribute("playsinline"), controls: v.hasAttribute("controls"), srcKind: String(v.currentSrc || v.src).slice(0, 20)},
-          immersive: this.el.dataset.immersive, chain}],
+          immersive: this.el.dataset.immersive, flags: location.search, chain}],
       }
       try { await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}) } catch (e) {}
     }, 15000)
