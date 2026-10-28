@@ -139,6 +139,16 @@ export const StudySidebar = {
   isKuromojiReady() { return !!tokenizer },
 
   mounted() {
+    // While the full-screen player is up, the page's film grain and the frosted header come off
+    // (`html.study-open`): iOS Safari paints an inline <video> black when the page has an element
+    // with mix-blend-mode or backdrop-filter on it, however far from the video. `?keep=grain`,
+    // `?keep=header` or `?keep=all` leave them on, to show the effect.
+    if (this.el.dataset.immersive === "true") {
+      const keep = new URLSearchParams(location.search).get("keep") || ""
+      document.documentElement.classList.add("study-open")
+      if (keep === "grain" || keep === "all") document.documentElement.classList.add("keep-grain")
+      if (keep === "header" || keep === "all") document.documentElement.classList.add("keep-header")
+    }
     this.video = document.getElementById(this.el.dataset.video)
     this.list = this.el.querySelector("[data-role=list]")
     this.title = this.el.querySelector("[data-role=title]")
@@ -210,6 +220,7 @@ export const StudySidebar = {
   },
 
   destroyed() {
+    document.documentElement.classList.remove("study-open", "keep-grain", "keep-header")
     if (this.local) { const l = this.local; this.local = null; l.stop() }
     if (this.panelWatch) this.panelWatch.disconnect()
     cancelAnimationFrame(this.raf)
