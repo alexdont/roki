@@ -1749,6 +1749,7 @@ export const StudySidebar = {
     if (!this.flags || this.flags.get("diag") !== "1" || this.diagBadge) return
     const v = this.video
     const b = this.diagBadge = document.createElement("div")
+    b.id = "diag-badge"
     b.style.cssText = "position:fixed;top:4rem;left:0.5rem;z-index:1000;max-width:90vw;padding:0.3rem 0.5rem;border-radius:0.4rem;background:rgb(0 0 0/0.7);color:#0f0;font:12px/1.3 monospace;pointer-events:none;white-space:pre-wrap"
     document.body.appendChild(b)
     const tick = () => {

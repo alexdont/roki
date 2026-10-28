@@ -56,7 +56,7 @@ async function runCase(i) {
       r.t = +v.currentTime.toFixed(1); r.rs = v.readyState; r.size = `${v.videoWidth}×${v.videoHeight}`; r.paused = v.paused; r.muted = v.muted
       r.err = v.error ? (v.error.message || String(v.error.code)) : null
       r.state = r.err ? "error: " + r.err : (v.paused ? "paused" : "playing")
-      const badge = d.querySelector("div[style*='rgb(0 0 0/0.7)']"); if (badge) r.build = badge.textContent.split(" ")[0]
+      const badge = d.getElementById("diag-badge"); if (badge) r.build = badge.textContent.split(" ")[0]
       if (r.samples.length < 30) r.samples.push([Math.round((Date.now() - t0) / 1000), q.totalVideoFrames || 0, +v.currentTime.toFixed(1)])
     } catch (e) { r.state = "cannot read frame: " + e.message }
     row(i, c, r)
