@@ -15,7 +15,15 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b4" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b5" // shown by `?diag=1`, so a phone can say which bundle it runs
+
+function readFlags() {
+  const q = new URLSearchParams(location.search)
+  try {
+    if (q.get("diag") === "1") { sessionStorage.setItem("roki-diag", q.toString()); return q }
+    return new URLSearchParams(sessionStorage.getItem("roki-diag") || "")
+  } catch (e) { return q }
+}
 
 // After you scroll the list it stops following the video, then picks the current line back up
 // on its own once you've been idle this long.
@@ -145,8 +153,11 @@ export const StudySidebar = {
     // (`html.study-open`): iOS Safari paints an inline <video> black when the page has an element
     // with mix-blend-mode or backdrop-filter on it, however far from the video. `?keep=grain`,
     // `?keep=header` or `?keep=all` leave them on, to show the effect.
-    // The page's query, read once: the page patches its own address later and the query goes.
-    this.flags = new URLSearchParams(location.search)
+    // The page's query, kept for the tab: the page patches its own address later, and when it has
+    // no source yet it goes through the sources page and comes back as a fresh mount, so the
+    // query would be gone by the time the player starts. `?diag=1` sets it, the lab's bisection
+    // page clears it.
+    this.flags = readFlags()
     if (this.el.dataset.immersive === "true") {
       const keep = this.flags.get("keep") || ""
       document.documentElement.classList.add("study-open")
