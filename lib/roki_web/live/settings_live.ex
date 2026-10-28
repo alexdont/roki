@@ -125,9 +125,23 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:laev_key, nil)
           |> assign(:os, %{key?: false, user: nil, login?: false})
           |> assign(:os_msg, nil)
+          |> assign_reading()
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
     end
+  end
+
+  # The reader's own preferences are kept in the user's `custom_fields` (the reader
+  # reads them from there), not in laev's settings, so this part of the page works
+  # whether or not the terminal app is connected.
+  defp assign_reading(socket) do
+    user = PhoenixKit.Users.Auth.Scope.user(socket.assigns.phoenix_kit_current_scope)
+
+    socket
+    |> assign(:reader, user)
+    |> assign(:page_padding, Roki.Manga.Library.page_padding_defaults(user.custom_fields))
+    |> assign(:reader_mal, Roki.Manga.Library.get_tracker_token(user.uuid, "mal"))
+    |> assign(:reader_mal_available, Roki.Manga.Trackers.MAL.oauth_ready?())
   end
 
   defp device_player(socket) do
@@ -594,6 +608,24 @@ defmodule RokiWeb.SettingsLive do
             </div>
           </section>
         </form>
+
+        <%!-- The manga reader's preferences, absorbed from its own settings page so this
+             site has one. Outside the form above: these save themselves with a PUT per
+             control (RokiWeb.MangaController), they are not laev settings. --%>
+        <section id="reading" class="space-y-1 scroll-mt-4">
+          <h2 class="text-xl font-semibold">Reading</h2>
+          <p class="pb-2 text-sm text-base-content/60">
+            The manga reader: how it opens, how pages turn, and what panel snap does. Every
+            change here saves itself and applies to new manga; each manga can still be set
+            on its own in the reader.
+          </p>
+          <RokiWeb.MangaSettings.preferences
+            user={@reader}
+            page_padding={@page_padding}
+            mal_token={@reader_mal}
+            mal_available={@reader_mal_available}
+          />
+        </section>
 
         <section :if={@state == :ready} id="connections" class="space-y-1 scroll-mt-4">
           <h2 class="text-xl font-semibold">Connections</h2>

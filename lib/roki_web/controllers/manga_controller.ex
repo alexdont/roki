@@ -631,6 +631,16 @@ defmodule RokiWeb.MangaController do
     conn |> put_status(422) |> json(%{error: "Invalid config"})
   end
 
+  @doc """
+  `/manga/settings` -> `/:username/settings`, whose Reading section now carries the reader's
+  preferences (`RokiWeb.MangaSettings`). The reader's own settings page is gone; its menus
+  and `RokiWeb.TrackerController`'s return link still point here.
+  """
+  def settings(conn, _params) do
+    username = conn.assigns[:phoenix_kit_current_user].username
+    redirect(conn, to: "/#{username}/settings#reading")
+  end
+
   def update_timezone(conn, %{"offset" => offset}) do
     user = conn.assigns[:phoenix_kit_current_user]
     offset_str = to_string(offset)

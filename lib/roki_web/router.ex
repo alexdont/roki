@@ -181,7 +181,9 @@ defmodule RokiWeb.Router do
     live_session :reader_settings,
       layout: {RokiWeb.Layouts, :manga},
       on_mount: [{PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope}] do
-      live "/settings", RokiWeb.Live.ReaderSettingsLive, :index
+      # The reader's preferences were absorbed into /:username/settings; this keeps the
+      # reader menus' "Settings" and the MyAnimeList tracker's return link working.
+      get "/settings", RokiWeb.MangaController, :settings
 
       # Reading history, built on phoenix_live_calendar. Replaced the
       # dead-view MangaController.history/2, which stays reachable at

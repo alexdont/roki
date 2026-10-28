@@ -48,6 +48,26 @@ defmodule RokiWeb.SettingsLiveTest do
     assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/someone-else/settings")
   end
 
+  test "the reader's preferences are on this page, whether or not laev is connected", %{
+    conn: conn
+  } do
+    {:ok, _view, html} = live(conn, "/settingstest/settings")
+
+    assert html =~ "Connect laev on your shelf"
+    assert html =~ ~s(id="reading")
+    assert html =~ "Default tap zone layout"
+    assert html =~ "Default reading direction"
+    assert html =~ "Panel snap settings"
+    assert html =~ "Default page padding"
+    # The reader's own hook, so every control still saves itself with a PUT.
+    assert html =~ "RokiWeb.MangaSettings.ReaderSettings"
+  end
+
+  test "the reader's old settings address leads here", %{conn: conn} do
+    conn = get(conn, "/manga/settings")
+    assert redirected_to(conn) == "/settingstest/settings#reading"
+  end
+
   test "an account that has not connected laev is pointed at the shelf", %{conn: conn} do
     {:ok, view, html} = live(conn, "/settingstest/settings")
     assert html =~ "Connect laev on your shelf"
