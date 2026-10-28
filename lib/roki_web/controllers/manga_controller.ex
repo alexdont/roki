@@ -880,25 +880,14 @@ defmodule RokiWeb.MangaController do
     )
   end
 
+  @doc """
+  `/manga/stats` -> `/:username/stats`, whose Reading section now carries the reader's
+  reading time (`RokiWeb.MangaStats`). The reader's own stats page is gone; its menus
+  still point here.
+  """
   def stats(conn, _params) do
-    user = conn.assigns[:phoenix_kit_current_user]
-    stats = Library.list_reading_stats(user.uuid)
-
-    {total_seconds, onsite_seconds, offsite_seconds} =
-      Enum.reduce(stats, {0, 0, 0}, fn m, {total, onsite, offsite} ->
-        # On-site = manual override (when set) else raw tracker.
-        # Off-site = explicit user entry; nil/0 means none.
-        on = m.reading_seconds_adjusted || m.reading_seconds || 0
-        off = m.reading_seconds_offsite || 0
-        {total + on + off, onsite + on, offsite + off}
-      end)
-
-    render(conn, :stats,
-      stats: stats,
-      total_seconds: total_seconds,
-      onsite_seconds: onsite_seconds,
-      offsite_seconds: offsite_seconds
-    )
+    username = conn.assigns[:phoenix_kit_current_user].username
+    redirect(conn, to: "/#{username}/stats#reading")
   end
 
   def index(conn, %{"source" => source, "slug" => slug} = params) do

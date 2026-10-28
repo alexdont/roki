@@ -30,6 +30,7 @@ defmodule RokiWeb.StatsLive do
           |> assign(:data, nil)
           |> assign(:range, nil)
           |> assign(:shown, @page)
+          |> assign_reading()
 
         {:ok,
          if(connected?(socket),
@@ -37,6 +38,20 @@ defmodule RokiWeb.StatsLive do
            else: socket
          )}
     end
+  end
+
+  # Reading time comes from the manga tables, not from laev, so this part of the page
+  # is here whether or not the terminal app is connected. One query, so no async.
+  defp assign_reading(socket) do
+    stats = Roki.Manga.Library.list_reading_stats(socket.assigns.uuid)
+    {total, onsite, offsite} = RokiWeb.MangaStats.totals(stats)
+
+    assign(socket,
+      reading: stats,
+      reading_total: total,
+      reading_onsite: onsite,
+      reading_offsite: offsite
+    )
   end
 
   defp load(uuid) do
@@ -134,6 +149,17 @@ defmodule RokiWeb.StatsLive do
               else: "they're"} counted as watched but not timed.
           </p>
         </div>
+
+        <%!-- What this account has read, absorbed from the reader's own stats page so
+             watching and reading are counted in one place. Shown only when there is
+             reading time: most accounts here watch and never read. --%>
+        <RokiWeb.MangaStats.reading
+          :if={@reading != []}
+          stats={@reading}
+          total_seconds={@reading_total}
+          onsite_seconds={@reading_onsite}
+          offsite_seconds={@reading_offsite}
+        />
       </div>
     </Layouts.app>
     """
