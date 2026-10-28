@@ -9,7 +9,8 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;over
 #note{padding:0 12px 12px;color:#aaa}
 </style></head>
 <body>
-<header><button id="go">Run every case</button><span id="status">8 cases, about 35 s each. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
+<div id="ask" hidden style="position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;gap:10px;justify-content:center;align-items:center;padding:12px;background:#222;border-top:1px solid #444"><span id="ask-q"></span><button id="seen" style="background:#2a6;color:#fff;border:0;border-radius:8px">I saw a picture</button><button id="black" style="background:#a33;color:#fff;border:0;border-radius:8px">Black</button></div>
+<header><button id="go">Run every case</button><span id="status">10 cases, 30 s each, then a tap to say what you saw. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
 <iframe id="f" allow="autoplay; fullscreen" title="case"></iframe>
 <table id="t"><thead><tr><th>#</th><th>case</th><th>frames</th><th>t</th><th>rs</th><th>size</th><th>state</th></tr></thead><tbody></tbody></table>
 <div id="note"></div>
@@ -18,14 +19,16 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;over
 // the frame above, with one thing changed; muted, so that one tap here starts them all.
 const W = "/watch/tv/278043/1/13?diag=1"
 const CASES = [
-  ["bare page, no controls (muted)", "/lab/local.html?auto=1&mute=1&link=0&controls=0", "v"],
-  ["bare page in the watch page's box (muted)", "/lab/local.html?auto=1&mute=1&link=0&fixed=1", "v"],
   ["watch page as it is", W, "study-video"],
-  ["watch page, fresh <video>, full-bleed fixed", W + "&fresh=1", "fresh-video"],
-  ["watch page, fresh <video>, fixed, 16 px in from the edges", W + "&fresh=1&geo=inset", "fresh-video"],
-  ["watch page, fresh <video>, in the normal flow, 240 px tall", W + "&fresh=1&geo=flow", "fresh-video"],
-  ["watch page, fresh <video>, fixed, half height", W + "&fresh=1&geo=short", "fresh-video"],
-  ["watch page, fresh <video>, fixed, nine tenths wide", W + "&fresh=1&geo=narrow", "fresh-video"],
+  ["fresh <video>: full-bleed fixed", W + "&fresh=1", "fresh-video"],
+  ["fresh <video>: fixed, 16 px in from the edges", W + "&fresh=1&geo=inset", "fresh-video"],
+  ["fresh <video>: fixed, full width, 400 px tall", W + "&fresh=1&geo=h400", "fresh-video"],
+  ["fresh <video>: fixed, full width, 480 px tall", W + "&fresh=1&geo=h480", "fresh-video"],
+  ["fresh <video>: fixed, half height", W + "&fresh=1&geo=short", "fresh-video"],
+  ["fresh <video>: full-bleed, picture stretched (object-fit: fill)", W + "&fresh=1&geo=fill", "fresh-video"],
+  ["fresh <video>: full-bleed, absolute in a wrapper (not fixed)", W + "&fresh=1&geo=abs", "fresh-video"],
+  ["fresh <video>: full-bleed fixed, no black background", W + "&fresh=1&geo=nobg", "fresh-video"],
+  ["bare page in the watch page's box (muted)", "/lab/local.html?auto=1&mute=1&link=0&fixed=1", "v"],
 ]
 // What a decoded frame looks like, read back through a canvas: a mean brightness of 0 on a
 // frame the decoder has produced says the picture is black in the data, not just on the screen.
@@ -38,7 +41,7 @@ const brightness = (v) => {
     return Math.round(sum / (d.length / 4) / 3)
   } catch (e) { return "n/a: " + e.message.slice(0, 40) }
 }
-const SECS = 35
+const SECS = 30
 const $ = (id) => document.getElementById(id)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const row = (i, c, r) => {
@@ -79,7 +82,22 @@ async function runCase(i) {
     row(i, c, r)
   }
   row(i, c, r)
+  r.seen = await askSeen(i)
+  r.state += r.seen === true ? " · SEEN" : r.seen === false ? " · BLACK" : " · (no answer)"
+  row(i, c, r)
   return {name: c[0], url: c[1], ...r, ok: r.frames > 0}
+}
+// The one thing the numbers cannot carry: whether a picture was on the screen. Asked after each
+// case, with the case still showing; 25 s without an answer counts as none.
+function askSeen(i) {
+  return new Promise((res) => {
+    const box = $("ask"); box.hidden = false
+    $("ask-q").textContent = `Case ${i + 1}: was there a picture?`
+    let done = false
+    const finish = (val) => { if (done) return; done = true; box.hidden = true; clearTimeout(t); res(val) }
+    $("seen").onclick = () => finish(true); $("black").onclick = () => finish(false)
+    const t = setTimeout(() => finish(null), 25000)
+  })
 }
 $("go").onclick = async () => {
   $("go").disabled = true
@@ -93,7 +111,7 @@ $("go").onclick = async () => {
   let sent = "not sent"
   try { const res = await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}); sent = res.ok ? "sent (" + (await res.json()).id + ")" : "refused " + res.status + " — signed in as the owner?" } catch (e) { sent = "failed: " + e.message }
   $("status").textContent = `Done. Report ${sent}.`
-  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, frames: r.frames, t: r.t, state: r.state, build: r.build, parent: r.parent, rect: r.rect, controls: r.controls, bright: r.bright, scale: r.scale, frameWidth: r.frameWidth})))
+  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, seen: r.seen, frames: r.frames, t: r.t, state: r.state, build: r.build, parent: r.parent, rect: r.rect, controls: r.controls, bright: r.bright, scale: r.scale, frameWidth: r.frameWidth})))
 }
 </script>
 </body></html>

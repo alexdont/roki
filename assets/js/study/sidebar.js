@@ -15,7 +15,7 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b8" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b9" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -1461,9 +1461,15 @@ export const StudySidebar = {
           flow: "position:relative;display:block;width:100%;height:240px;z-index:100;background:#000;object-fit:contain",
           short: "position:fixed;top:0;left:0;width:100%;height:50%;z-index:100;background:#000;object-fit:contain",
           narrow: "position:fixed;top:0;left:0;width:90%;height:100%;z-index:100;background:#000;object-fit:contain",
+          h400: "position:fixed;top:0;left:0;width:100%;height:400px;z-index:100;background:#000;object-fit:contain",
+          h480: "position:fixed;top:0;left:0;width:100%;height:480px;z-index:100;background:#000;object-fit:contain",
+          fill: "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:fill",
+          abs: "position:absolute;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain",
+          nobg: "position:fixed;inset:0;width:100%;height:100%;z-index:100;object-fit:contain",
         }[flags.get("geo")] || "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain"
         v.style.cssText = geo
-        if (flags.get("geo") === "flow") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style"); document.body.prepend(v) }
+        if (flags.get("geo") === "abs") { const wrap = document.createElement("div"); wrap.style.cssText = "position:relative;width:100vw;height:100dvh"; document.body.prepend(wrap); wrap.appendChild(v) }
+        else if (flags.get("geo") === "flow") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style"); document.body.prepend(v) }
         else document.body.appendChild(v)
         if (flags.get("strip") === "1") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style") }
       }
