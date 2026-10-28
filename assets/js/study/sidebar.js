@@ -1394,6 +1394,7 @@ export const StudySidebar = {
 
   async startMedia(p) {
     const v = this.video
+    this.sendDiagnostics(p)
     this.ready = !(p.resume > 0)
     // Where the stream begins in the film (a conversion begun where you left off), see `abs()`.
     this.base = p.start > 0 ? p.start : 0
@@ -1681,6 +1682,38 @@ export const StudySidebar = {
     this.tracksKey = null
     if (!this.userChose) this.restoreOffVideo()
     this.apply(this.userChose ? this.selection() : this.restore(this.lastPrefer, this.lastStudy))
+  },
+
+  // `?diag=1` on the watch page: after fifteen seconds of playing, what the video element and
+  // every box around it look like — sizes, styles that stop a phone compositing a video, the
+  // frames decoded — sent to /lab/report, to read on the server. For chasing a black screen on
+  // a device that is not at hand.
+  sendDiagnostics(p) {
+    if (!/[?&]diag=1/.test(location.search) || this.diagSent) return
+    this.diagSent = true
+    const v = this.video
+    const styleOf = (el) => {
+      const cs = getComputedStyle(el)
+      const r = el.getBoundingClientRect()
+      const keep = ["display", "visibility", "opacity", "transform", "filter", "backdropFilter", "mixBlendMode", "overflow", "position", "zIndex", "objectFit", "clipPath", "mask", "contain", "willChange"]
+      const out = {tag: el.tagName.toLowerCase(), id: el.id || undefined, cls: String(el.className || "").slice(0, 80), rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]}
+      for (const k of keep) { const val = cs[k]; if (val && val !== "none" && val !== "normal" && val !== "visible" && val !== "static" && val !== "auto" && val !== "1" && val !== "block") out[k] = String(val).slice(0, 60) }
+      return out
+    }
+    setTimeout(async () => {
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}
+      const chain = []
+      for (let el = v; el && chain.length < 14; el = el.parentElement) chain.push(styleOf(el))
+      const report = {
+        at: new Date().toISOString(), ua: navigator.userAgent, platform: navigator.platform, width: innerWidth, height: innerHeight,
+        managedMediaSource: !!window.ManagedMediaSource, caps: [["watch-page diagnostics"]],
+        results: [{name: `watch ${location.pathname}`, ok: q.totalVideoFrames > 0, played: +v.currentTime.toFixed(1), buffered: v.buffered.length ? +v.buffered.end(v.buffered.length - 1).toFixed(1) : 0,
+          size: `${v.videoWidth}×${v.videoHeight}`, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames, readyState: v.readyState, paused: v.paused, muted: v.muted, type: p && p.url, local: !!this.local,
+          mediaError: v.error ? v.error.message || String(v.error.code) : null, stats: this.local ? this.local.stats() : null, attrs: {playsinline: v.hasAttribute("playsinline"), controls: v.hasAttribute("controls"), srcKind: String(v.currentSrc || v.src).slice(0, 20)},
+          immersive: this.el.dataset.immersive, chain}],
+      }
+      try { await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}) } catch (e) {}
+    }, 15000)
   },
 
   // A track that was just fetched (from OpenSubtitles) is turned on as soon as the page has it.
