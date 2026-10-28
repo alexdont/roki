@@ -1,11 +1,4 @@
 <div class="max-w-6xl mx-auto px-4 py-8">
-  <%!-- Browsing the sources and arranging shelves are manga-only jobs, so they sit here rather
-        than in this site's account menu, which spans everything. --%>
-  <div class="mb-6 flex flex-wrap gap-2">
-    <a href="/manga/explore" class="btn btn-sm btn-ghost">Explore</a>
-    <a href="/manga/categories" class="btn btn-sm btn-ghost">Categories</a>
-  </div>
-
   <%= if @saved_manga != [] || @resume_manga do %>
     <% resume = @resume_manga %>
     <%= if resume do %>
