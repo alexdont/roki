@@ -235,6 +235,7 @@ export const StudySidebar = {
 
   destroyed() {
     document.documentElement.classList.remove("study-open")
+    if (this.video) for (const el of this.video.querySelectorAll("track[data-ours]")) URL.revokeObjectURL(el.src)
     if (this.local) { const l = this.local; this.local = null; l.stop() }
     if (this.panelWatch) this.panelWatch.disconnect()
     cancelAnimationFrame(this.raf)
@@ -889,6 +890,7 @@ export const StudySidebar = {
       store.set("offset:" + (this.mediaKey || ""), String(this.offset))
       this.overlayKey = ""
       this.tick()
+      this.syncNativeTracks()
     }
     for (const b of this.el.querySelectorAll("[data-role=nudge]")) {
       b.addEventListener("click", () => this.setOffset(this.offset + parseFloat(b.dataset.step)))
@@ -1156,6 +1158,7 @@ export const StudySidebar = {
     p.live = []
     this.overlayKey = ""
     if (this.overlay) this.overlay.textContent = ""
+    this.syncNativeTracks()
   },
 
   // What the other tracks say while a line is said: those lines whose middle falls within it (a
@@ -1196,6 +1199,7 @@ export const StudySidebar = {
     p.rows = []
 
     this.title.textContent = p.label || "Subtitles"
+    this.syncNativeTracks()
     this.empty.hidden = p.cues.length > 0
     this.empty.textContent = p.cues.length ? "" : "No subtitle lines found in that file."
     this.count.textContent = p.cues.length ? `0 / ${p.cues.length}` : ""
@@ -1758,6 +1762,55 @@ export const StudySidebar = {
       b.textContent = `${BUILD} ${this.flags.toString()} starts ${st ? st.starts : "?"}\nframes ${q.totalVideoFrames} t ${v.currentTime.toFixed(1)} rs ${v.readyState} ${v.videoWidth}×${v.videoHeight} ${v.paused ? "paused" : "playing"}${v.error ? " ERR " + v.error.message : ""}\nrect ${Math.round(r.width)}×${Math.round(r.height)} controls ${v.hasAttribute("controls")} html.${document.documentElement.className} parent ${v.parentElement && v.parentElement.className}`
     }
     tick(); this.diagTimer = setInterval(tick, 1000)
+  },
+
+  // The tracks that are on, given to the <video> itself as hidden WebVTT <track>s: our overlay
+  // draws the lines in the page, but a native full-screen player (iOS, from a double tap) shows
+  // only the element's own tracks — this is what puts the viewer's languages in its menu. Hidden
+  // in the page so nothing is drawn twice; the first one is turned on when the native player
+  // opens and off again when it closes. Times are the video's own (offset and shift applied).
+  syncNativeTracks() {
+    const v = this.video
+    if (!v) return
+    const delta = this.abs() - v.currentTime
+    const on = [this.p, ...this.extras].filter((t) => t.cues && t.cues.length)
+    const key = on.map((t) => `${t.url}|${t.lang}`).join(";") + `|${this.offset}|${delta.toFixed(2)}`
+    const at = (c) => [c.start + this.offset - delta, Math.max(c.start + 0.2, c.end) + this.offset - delta]
+    const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    if (key === this.nativeKey) {
+      // The same tracks, with more lines (one read out of the release grows as the file is read):
+      // the new lines go into the tracks that are there, so the native player's menu stays put.
+      on.forEach((t, i) => {
+        const n = this.nativeTracks[i]
+        if (!n || !window.VTTCue) return
+        for (const c of t.cues.slice(n.count)) { const [a, b] = at(c); try { n.el.track.addCue(new VTTCue(Math.max(0, a), Math.max(0, b), esc(c.text))) } catch (e) {} }
+        n.count = t.cues.length
+      })
+      return
+    }
+    this.nativeKey = key
+    this.nativeTracks = []
+    for (const el of v.querySelectorAll("track[data-ours]")) { URL.revokeObjectURL(el.src); el.remove() }
+    const stamp = (t) => { t = Math.max(0, t); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = (t % 60).toFixed(3).padStart(6, "0"); return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${sec}` }
+    on.forEach((t, i) => {
+      const vtt = "WEBVTT\n\n" + t.cues.map((c) => { const [a, b] = at(c); return `${stamp(a)} --> ${stamp(b)}\n${esc(c.text)}` }).join("\n\n") + "\n"
+      const el = document.createElement("track")
+      el.kind = "subtitles"; el.label = t.label || t.lang || "Subtitles"; el.srclang = t.lang || ""
+      el.dataset.ours = "1"
+      el.src = URL.createObjectURL(new Blob([vtt], {type: "text/vtt"}))
+      const settle = () => { el.track.mode = this.nativeFull && i === 0 ? "showing" : "hidden" }
+      el.addEventListener("load", settle)
+      v.appendChild(el)
+      settle()
+      this.nativeTracks.push({el, count: t.cues.length})
+    })
+    if (!this.nativeBound) {
+      this.nativeBound = true
+      // iOS: the native full-screen player on the element. The first track on (the one studied)
+      // shows there; back in the page, all of them go quiet again under our overlay.
+      v.addEventListener("webkitbeginfullscreen", () => { this.nativeFull = true; const first = v.querySelector("track[data-ours]"); if (first) first.track.mode = "showing" })
+      v.addEventListener("webkitendfullscreen", () => { this.nativeFull = false; for (const el of v.querySelectorAll("track[data-ours]")) el.track.mode = "hidden" })
+    }
   },
 
   // A track that was just fetched (from OpenSubtitles) is turned on as soon as the page has it.
