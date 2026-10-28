@@ -179,6 +179,7 @@ defmodule RokiWeb.Router do
     pipe_through [:browser, :require_auth]
 
     live_session :reader_settings,
+      layout: {RokiWeb.Layouts, :manga},
       on_mount: [{PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope}] do
       live "/settings", RokiWeb.Live.ReaderSettingsLive, :index
 

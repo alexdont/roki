@@ -7,6 +7,10 @@ defmodule RokiWeb.KotatsuController do
   """
   use RokiWeb, :controller
 
+  # This site's header above the extensions picker and the raw browse pages, same as the rest of
+  # the reader's pages (RokiWeb.Layouts.manga/1).
+  plug :put_layout, html: {RokiWeb.Layouts, :manga}
+
   alias Roki.Manga.MangaSource.Extensions
   alias Roki.Manga.MangaSource.Kotatsu
 

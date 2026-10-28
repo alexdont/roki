@@ -346,6 +346,34 @@ defmodule RokiWeb.Layouts do
   end
 
   @doc """
+  The layout the manga reader's own pages render inside: this site's header, then the page.
+
+  Those pages came from an app where they were the whole site, so they carry their own bar and
+  nothing else — which left no way back to films, the profile or search. Rather than edit the
+  twenty-odd templates, they are wrapped in `app/1`, so the header keeps exactly one definition
+  and a change to it reaches every page here.
+
+  Used by the controller pages and by the live session behind `/manga/settings` and
+  `/manga/history`, which is why it takes its path from `@conn` only when there is one — a
+  LiveView has a socket instead.
+
+  The chapter reader itself is deliberately NOT wrapped: it is a full-screen canvas.
+  """
+  def manga(assigns) do
+    ~H"""
+    <.app
+      flash={@flash}
+      phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
+      socket={assigns[:socket]}
+      current_path={(assigns[:conn] && @conn.request_path) || "/manga"}
+      wide
+    >
+      {@inner_content}
+    </.app>
+    """
+  end
+
+  @doc """
   Shows the flash group with standard titles and content.
 
   ## Examples

@@ -1,6 +1,13 @@
 defmodule RokiWeb.MangaController do
   use RokiWeb, :controller
 
+  # This site's header above the reader's pages, so there is a way back to films, the profile and
+  # search. Not on `show` — the chapter reader is a full-screen canvas — and not on the two async
+  # fragments, which are rows spliced into a page that already has a header.
+  plug :put_layout,
+       [html: {RokiWeb.Layouts, :manga}]
+       when action not in [:show, :search_extension, :explore_extension]
+
   alias Roki.Manga.Library
   alias Roki.Manga.Sources
   alias Guise
