@@ -248,8 +248,11 @@ defmodule Roki.Dictionary do
          |> Enum.uniq()
          |> then(fn
            # The first line already traced the word to its source: that is the answer.
-           [first | _] = all -> if Regex.match?(~r/^[^\s:]+: /u, first), do: [first], else: Enum.take(all, 2)
-           [] -> []
+           [first | _] = all ->
+             if Regex.match?(~r/^[^\s:]+: /u, first), do: [first], else: Enum.take(all, 2)
+
+           [] ->
+             []
          end)
          |> Enum.join("; ")}
     end

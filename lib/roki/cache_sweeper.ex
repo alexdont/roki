@@ -43,7 +43,9 @@ defmodule Roki.CacheSweeper do
       case File.ls(base) do
         {:ok, ids} ->
           ids
-          |> Enum.filter(fn id -> id not in running and now - last_fetch(Path.join(base, id)) > ttl_s end)
+          |> Enum.filter(fn id ->
+            id not in running and now - last_fetch(Path.join(base, id)) > ttl_s
+          end)
           |> Enum.reduce({0, 0}, fn id, {n, bytes} ->
             dir = Path.join(base, id)
             size = dir_size(dir)
@@ -56,8 +58,11 @@ defmodule Roki.CacheSweeper do
       end
 
     case result do
-      {0, _} -> :ok
-      {n, bytes} -> Logger.info("cache sweep: removed #{n} conversions, #{div(bytes, 1_000_000)} MB")
+      {0, _} ->
+        :ok
+
+      {n, bytes} ->
+        Logger.info("cache sweep: removed #{n} conversions, #{div(bytes, 1_000_000)} MB")
     end
 
     result

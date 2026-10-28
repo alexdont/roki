@@ -16,8 +16,11 @@ defmodule RokiWeb.Relay do
   @doc "Whether the browser may read this host directly (it allows cross-origin reads)."
   def direct?(url) do
     case URI.parse(url) do
-      %URI{host: host} when is_binary(host) -> String.ends_with?(host, ".tb-cdn.io") or String.ends_with?(host, "torbox.app")
-      _ -> false
+      %URI{host: host} when is_binary(host) ->
+        String.ends_with?(host, ".tb-cdn.io") or String.ends_with?(host, "torbox.app")
+
+      _ ->
+        false
     end
   end
 

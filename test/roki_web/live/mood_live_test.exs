@@ -5,12 +5,33 @@ defmodule RokiWeb.MoodLiveTest do
 
   setup do
     items = [
-      %{id: 501, type: "movie", title: "Mood Film", poster: nil, year: "2019", popularity: 9.0, vote: 7.1},
-      %{id: 502, type: "tv", title: "Mood Show", poster: nil, year: "2021", popularity: 8.0, vote: 8.1}
+      %{
+        id: 501,
+        type: "movie",
+        title: "Mood Film",
+        poster: nil,
+        year: "2019",
+        popularity: 9.0,
+        vote: 7.1
+      },
+      %{
+        id: 502,
+        type: "tv",
+        title: "Mood Show",
+        poster: nil,
+        year: "2021",
+        popularity: 8.0,
+        vote: 8.1
+      }
     ]
 
     Roki.TTLCache.put({:mood, 2, "scared", :all, :popular, 1}, 60, {:ok, {items, false}})
-    Roki.TTLCache.put({:mood, 2, "scared", :movies, :popular, 1}, 60, {:ok, {Enum.take(items, 1), false}})
+
+    Roki.TTLCache.put(
+      {:mood, 2, "scared", :movies, :popular, 1},
+      60,
+      {:ok, {Enum.take(items, 1), false}}
+    )
 
     on_exit(fn ->
       Roki.TTLCache.delete({:mood, 2, "scared", :all, :popular, 1})
@@ -20,7 +41,9 @@ defmodule RokiWeb.MoodLiveTest do
     :ok
   end
 
-  test "a mood page lists films and shows together, with a held page in the first render", %{conn: conn} do
+  test "a mood page lists films and shows together, with a held page in the first render", %{
+    conn: conn
+  } do
     {:ok, view, html} = live(conn, "/mood/scared")
     assert html =~ "Be scared"
     assert html =~ ~s(href="/title/movie/501")

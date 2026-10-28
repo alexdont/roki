@@ -19,7 +19,9 @@ defmodule RokiWeb.FeaturedLiveTest do
     assert html =~ ~s(href="/title/movie/4242")
   end
 
-  test "the popular grid is short and leads to each kind's own page; there is no load more", %{conn: conn} do
+  test "the popular grid is short and leads to each kind's own page; there is no load more", %{
+    conn: conn
+  } do
     for kind <- Roki.Featured.kinds() do
       items =
         for i <- 1..20, do: %{id: i, type: "movie", title: "Film #{i}", poster: nil, year: "2020"}
@@ -76,7 +78,13 @@ defmodule RokiWeb.FeaturedLiveTest do
 
     test "a single title is a link to its page" do
       {user, conn} = signed_in("actsingle")
-      Roki.Activity.insert_now(user.uuid, %{type: "movie", tmdb_id: 903, title: "Solo Film"}, "saved")
+
+      Roki.Activity.insert_now(
+        user.uuid,
+        %{type: "movie", tmdb_id: 903, title: "Solo Film"},
+        "saved"
+      )
+
       {:ok, view, _} = live(conn, "/home")
       html = render_async(view, 3000)
       assert html =~ ~s(href="/title/movie/903")

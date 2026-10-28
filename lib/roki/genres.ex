@@ -44,7 +44,10 @@ defmodule Roki.Genres do
   @doc "The genres a kind (`:movies`, `:shows`, `:anime`, or `\"movie\"` / `\"tv\"`) has, as `{slug, label}`."
   def options(kind) do
     type = type_of(kind)
-    for {slug, label, movie, tv} <- @genres, (if type == "movie", do: movie, else: tv) != [], do: {slug, label}
+
+    for {slug, label, movie, tv} <- @genres,
+        if(type == "movie", do: movie, else: tv) != [],
+        do: {slug, label}
   end
 
   # TMDB has no Horror genre for shows, but it keeps a "horror" keyword they are tagged with
@@ -61,12 +64,14 @@ defmodule Roki.Genres do
     type = type_of(kind)
 
     for {slug, label, movie, tv} <- @genres,
-        (if type == "movie", do: movie, else: tv) != [] or (type == "tv" and Map.has_key?(@keywords, slug)),
+        if(type == "movie", do: movie, else: tv) != [] or
+          (type == "tv" and Map.has_key?(@keywords, slug)),
         do: {slug, label}
   end
 
   @doc "The TMDB keyword that stands in for a genre on shows (`with_keywords`), or nil."
-  def keyword(slug, kind), do: if(type_of(kind) == "tv" and ids(slug, kind) == [], do: @keywords[slug])
+  def keyword(slug, kind),
+    do: if(type_of(kind) == "tv" and ids(slug, kind) == [], do: @keywords[slug])
 
   @doc "A genre named in an address, else nil (never made into an atom from input)."
   def parse(value), do: Enum.find_value(@genres, fn {slug, _, _, _} -> slug == value && slug end)
@@ -98,7 +103,8 @@ defmodule Roki.Genres do
 
   @doc "`%{{type, id} => [genre ids]}` for the titles whose genres are already kept."
   def known(keys) when is_list(keys) do
-    keys = keys |> Enum.filter(fn {t, i} -> t in ["movie", "tv"] and is_integer(i) end) |> Enum.uniq()
+    keys =
+      keys |> Enum.filter(fn {t, i} -> t in ["movie", "tv"] and is_integer(i) end) |> Enum.uniq()
 
     if keys == [] do
       %{}
@@ -128,7 +134,9 @@ defmodule Roki.Genres do
     todo =
       keys
       |> Enum.uniq()
-      |> Enum.filter(fn {t, i} = k -> t in ["movie", "tv"] and is_integer(i) and not Map.has_key?(have, k) end)
+      |> Enum.filter(fn {t, i} = k ->
+        t in ["movie", "tv"] and is_integer(i) and not Map.has_key?(have, k)
+      end)
       |> Enum.take(limit)
 
     case key_for(uuid) do
@@ -137,7 +145,12 @@ defmodule Roki.Genres do
 
       key ->
         todo
-        |> Task.async_stream(&fetch_one(&1, key), max_concurrency: 6, timeout: 20_000, on_timeout: :kill_task, ordered: false)
+        |> Task.async_stream(&fetch_one(&1, key),
+          max_concurrency: 6,
+          timeout: 20_000,
+          on_timeout: :kill_task,
+          ordered: false
+        )
         |> Enum.count(fn
           {:ok, {:ok, _}} -> true
           _ -> false
@@ -197,9 +210,18 @@ defmodule Roki.Genres do
 
   defp get(path, key) do
     {auth, params} =
-      if String.starts_with?(key, "eyJ"), do: {[auth: {:bearer, key}], []}, else: {[], [api_key: key]}
+      if String.starts_with?(key, "eyJ"),
+        do: {[auth: {:bearer, key}], []},
+        else: {[], [api_key: key]}
 
-    case Req.get(Req.new(base_url: "https://api.themoviedb.org/3", retry: false, receive_timeout: 15_000), [url: path, params: params] ++ auth) do
+    case Req.get(
+           Req.new(
+             base_url: "https://api.themoviedb.org/3",
+             retry: false,
+             receive_timeout: 15_000
+           ),
+           [url: path, params: params] ++ auth
+         ) do
       {:ok, %{status: 200, body: body}} -> {:ok, body}
       {:ok, %{status: 404}} -> {:error, :not_found}
       {:ok, %{status: s}} -> {:error, {:tmdb, s}}

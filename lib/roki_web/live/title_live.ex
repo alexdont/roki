@@ -291,9 +291,22 @@ defmodule RokiWeb.TitleLive do
   end
 
   # The Study dialog opened: the episodes to choose from are read now, not with every page.
-  def handle_event("study_open", _params, %{assigns: %{type: "tv", study_eps: nil, uuid: uuid, title: %{} = title, sections: sections}} = socket)
+  def handle_event(
+        "study_open",
+        _params,
+        %{
+          assigns: %{
+            type: "tv",
+            study_eps: nil,
+            uuid: uuid,
+            title: %{} = title,
+            sections: sections
+          }
+        } = socket
+      )
       when is_binary(uuid) do
-    {:noreply, start_async(socket, :study_eps, fn -> Roki.Watch.study_episodes(uuid, title, sections) end)}
+    {:noreply,
+     start_async(socket, :study_eps, fn -> Roki.Watch.study_episodes(uuid, title, sections) end)}
   end
 
   def handle_event("study_open", _params, socket), do: {:noreply, socket}
@@ -446,7 +459,9 @@ defmodule RokiWeb.TitleLive do
 
     {:noreply,
      socket
-     |> tap(fn _ -> Task.start(fn -> Roki.Social.remember_title(title.type, title.id, title.title) end) end)
+     |> tap(fn _ ->
+       Task.start(fn -> Roki.Social.remember_title(title.type, title.id, title.title) end)
+     end)
      |> start_async(:similar, fn ->
        # What this person has watched, saved and rated of them, worked out alongside.
        with {:ok, cards} <- Roki.Similar.for_title(uuid, title.type, title.id) do
@@ -494,7 +509,9 @@ defmodule RokiWeb.TitleLive do
      |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)}
   end
 
-  def handle_async(:lib_reload, {:ok, %{} = lib}, socket), do: {:noreply, assign(socket, :lib, lib)}
+  def handle_async(:lib_reload, {:ok, %{} = lib}, socket),
+    do: {:noreply, assign(socket, :lib, lib)}
+
   def handle_async(:lib_reload, _other, socket), do: {:noreply, socket}
 
   def handle_async(:rating, {:ok, {:clear, :ok}}, socket),
@@ -553,7 +570,8 @@ defmodule RokiWeb.TitleLive do
       )
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -611,7 +629,12 @@ defmodule RokiWeb.TitleLive do
           lib_busy={@lib_busy}
           cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
         >
-          <.title_comments :if={@title.type in ["movie", "tv"]} id="title-comments" title={@title} user={assigns[:phoenix_kit_current_user]} />
+          <.title_comments
+            :if={@title.type in ["movie", "tv"]}
+            id="title-comments"
+            title={@title}
+            user={assigns[:phoenix_kit_current_user]}
+          />
         </.hero>
 
         <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
@@ -621,7 +644,11 @@ defmodule RokiWeb.TitleLive do
         <%!-- A phone has one column, so its comments come after the details. A wide screen has them
               in the hero, under the Play controls. --%>
         <div :if={@title.type in ["movie", "tv"]} class="sm:hidden">
-          <.title_comments id="title-comments-phone" title={@title} user={assigns[:phoenix_kit_current_user]} />
+          <.title_comments
+            id="title-comments-phone"
+            title={@title}
+            user={assigns[:phoenix_kit_current_user]}
+          />
         </div>
 
         <%!-- A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
@@ -697,7 +724,8 @@ defmodule RokiWeb.TitleLive do
           alt=""
           class="h-full w-full object-cover opacity-60"
         />
-        <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55">
+        </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-4 p-4 sm:flex-nowrap sm:gap-6 sm:p-6">
@@ -718,7 +746,9 @@ defmodule RokiWeb.TitleLive do
           </.link>
           <h1 class="text-2xl font-bold leading-tight tracking-tight sm:text-4xl">{@title.title}</h1>
           <p class="hidden text-sm text-base-content/60 sm:block">{meta(@title)}</p>
-          <p class="text-xs text-base-content/60 sm:hidden">{[@title.year, seasons_text(@title)] |> Enum.filter(& &1) |> Enum.join(" · ")}</p>
+          <p class="text-xs text-base-content/60 sm:hidden">
+            {[@title.year, seasons_text(@title)] |> Enum.filter(& &1) |> Enum.join(" · ")}
+          </p>
         </div>
         <div class="flex shrink-0 items-center gap-2 max-sm:w-full">
           <.link
@@ -775,7 +805,8 @@ defmodule RokiWeb.TitleLive do
   attr :study, :map, default: nil
 
   slot :inner_block,
-    doc: "more for the right-hand column, under the Play controls (the comments, on a wide screen)"
+    doc:
+      "more for the right-hand column, under the Play controls (the comments, on a wide screen)"
 
   defp hero(assigns) do
     ~H"""
@@ -792,8 +823,10 @@ defmodule RokiWeb.TitleLive do
             alt=""
             class="h-full w-full object-cover opacity-60"
           />
-          <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55"></div>
-          <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-base-100/70 to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55">
+          </div>
+          <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-base-100/70 to-transparent">
+          </div>
         </div>
 
         <div class="flex gap-8 p-6 lg:p-8">
@@ -810,7 +843,9 @@ defmodule RokiWeb.TitleLive do
           <div class="flex min-w-0 flex-1 flex-col gap-4">
             <div class="flex items-start gap-3">
               <div class="min-w-0 flex-1 space-y-2">
-                <h1 class="text-3xl font-bold leading-tight tracking-tight lg:text-5xl">{@title.title}</h1>
+                <h1 class="text-3xl font-bold leading-tight tracking-tight lg:text-5xl">
+                  {@title.title}
+                </h1>
                 <.facts_row title={@title} rating={@rating} linked?={@linked?} />
                 <p :if={@title.tagline} class="italic text-base-content/60">{@title.tagline}</p>
               </div>
@@ -860,7 +895,13 @@ defmodule RokiWeb.TitleLive do
               </div>
 
               <%!-- Away from Play: a slip here should not save or hold a title. --%>
-              <.action_pills :if={@linked?} title={@title} lib={@lib} busy={@lib_busy} rating={@rating} />
+              <.action_pills
+                :if={@linked?}
+                title={@title}
+                lib={@lib}
+                busy={@lib_busy}
+                rating={@rating}
+              />
             </div>
           </div>
         </div>
@@ -897,7 +938,10 @@ defmodule RokiWeb.TitleLive do
     ~H"""
     <div class="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
       <span :for={c <- @chips} class="rounded-full bg-base-content/10 px-3 py-1 font-medium">{c}</span>
-      <span :for={g <- Enum.take(@title.genres, 3)} class="rounded-full border border-base-content/20 px-3 py-1 text-base-content/70">
+      <span
+        :for={g <- Enum.take(@title.genres, 3)}
+        class="rounded-full border border-base-content/20 px-3 py-1 text-base-content/70"
+      >
         {g}
       </span>
     </div>
@@ -1640,7 +1684,10 @@ defmodule RokiWeb.TitleLive do
     <button
       phx-click={@event}
       disabled={@busy}
-      class={["btn h-auto min-h-0 w-full flex-1 rounded-2xl px-0 shadow-sm", if(@on, do: @on_class, else: "border-base-300 bg-base-100")]}
+      class={[
+        "btn h-auto min-h-0 w-full flex-1 rounded-2xl px-0 shadow-sm",
+        if(@on, do: @on_class, else: "border-base-300 bg-base-100")
+      ]}
       title={@label}
       aria-label={@label}
     >
@@ -1867,7 +1914,11 @@ defmodule RokiWeb.TitleLive do
           <span class="text-sm font-medium">Episode</span>
           <select name="ep" class="select select-bordered w-full">
             <%!-- Until the list is read, the one it starts on is the only choice. --%>
-            <option :if={@eps == nil} value={"#{@study.start.season}:#{@study.start.episode}"} selected>
+            <option
+              :if={@eps == nil}
+              value={"#{@study.start.season}:#{@study.start.episode}"}
+              selected
+            >
               {@study.start.label} — next to watch
             </option>
             <optgroup :for={{label, eps} <- @eps || []} label={label}>
@@ -1877,7 +1928,14 @@ defmodule RokiWeb.TitleLive do
                 disabled={!e.aired?}
                 selected={e.season == @study.start.season and e.number == @study.start.episode}
               >
-                {if e.watched?, do: "✓ ", else: ""}{e.label}{if e.name, do: " · " <> e.name, else: ""}{if e.season == @study.start.season and e.number == @study.start.episode, do: "  (next)", else: ""}
+                {if e.watched?, do: "✓ ", else: ""}{e.label}{if e.name, do: " · " <> e.name, else: ""}{if e.season ==
+                                                                                                            @study.start.season and
+                                                                                                            e.number ==
+                                                                                                              @study.start.episode,
+                                                                                                          do:
+                                                                                                            "  (next)",
+                                                                                                          else:
+                                                                                                            ""}
               </option>
             </optgroup>
           </select>
@@ -1957,13 +2015,21 @@ defmodule RokiWeb.TitleLive do
             have not linked one yet: it takes a minute, TMDB is free, and you come straight back
             here to rate.
           </p>
-          <a href={~p"/tmdb/link?#{[return: "/title/#{@title.type}/#{@title.id}"]}"} class="btn btn-primary btn-sm">
+          <a
+            href={~p"/tmdb/link?#{[return: "/title/#{@title.type}/#{@title.id}"]}"}
+            class="btn btn-primary btn-sm"
+          >
             Link my TMDB account
           </a>
         </div>
-        <p :if={@rating.state == :no_account and @rating.provider == :mal} class="mt-4 text-sm text-base-content/70">
-          Anime ratings go to MyAnimeList. Connect your account on the
-          <.link navigate={~p"/account/services"} class="link">services page</.link>, then rate here.
+        <p
+          :if={@rating.state == :no_account and @rating.provider == :mal}
+          class="mt-4 text-sm text-base-content/70"
+        >
+          Anime ratings go to MyAnimeList. Connect your account on the <.link
+            navigate={~p"/account/services"}
+            class="link"
+          >services page</.link>, then rate here.
         </p>
 
         <form

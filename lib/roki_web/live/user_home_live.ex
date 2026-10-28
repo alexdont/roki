@@ -282,7 +282,8 @@ defmodule RokiWeb.UserHomeLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -773,9 +774,14 @@ defmodule RokiWeb.UserHomeLive do
             <li :for={i <- group} class="space-y-1">
               <.poster item={i} cached_titles={@cached_titles} compact title?={false} />
               <% score = Roki.Profile.score_for(@ratings, i) %>
-              <div :if={i.dated? or score != nil} class="flex items-center justify-between text-xs text-base-content/50">
+              <div
+                :if={i.dated? or score != nil}
+                class="flex items-center justify-between text-xs text-base-content/50"
+              >
                 <span>{if i.dated?, do: day_label(i)}</span>
-                <span :if={score != nil} class="font-semibold text-warning">★ {Roki.Profile.score_text(score)}</span>
+                <span :if={score != nil} class="font-semibold text-warning">★ {Roki.Profile.score_text(
+                  score
+                )}</span>
               </div>
             </li>
           </ul>

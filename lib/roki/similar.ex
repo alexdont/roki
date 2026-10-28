@@ -15,7 +15,8 @@ defmodule Roki.Similar do
   def for_title(uuid, type, id) when type in ["movie", "tv"] and id |> is_integer() do
     TTLCache.fetch({:similar, 2, type, id}, @ttl_s, fn ->
       Roki.Kept.fetch("similar", "#{type}:#{id}", @kept_s, fn ->
-        with {:ok, cards} = ok <- Roki.Laev.public(uuid, fn -> Laev.Tmdb.recommendations(type, id, 12) end) do
+        with {:ok, cards} = ok <-
+               Roki.Laev.public(uuid, fn -> Laev.Tmdb.recommendations(type, id, 12) end) do
           Roki.Titles.remember_later(cards)
           ok
         end

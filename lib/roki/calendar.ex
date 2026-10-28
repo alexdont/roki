@@ -96,14 +96,21 @@ defmodule Roki.Calendar do
       all =
         Roki.Laev.public(uuid, fn ->
           entries
-          |> Laev.Scope.async_stream(&entry_events/1, max_concurrency: 4, timeout: 25_000, on_timeout: :kill_task)
+          |> Laev.Scope.async_stream(&entry_events/1,
+            max_concurrency: 4,
+            timeout: 25_000,
+            on_timeout: :kill_task
+          )
           |> Enum.flat_map(fn
             {:ok, events} -> events
             _ -> []
           end)
         end)
 
-      {:ok, all |> Enum.reject(&is_nil(&1.date)) |> Enum.sort_by(&{Date.to_gregorian_days(&1.date), &1.title})}
+      {:ok,
+       all
+       |> Enum.reject(&is_nil(&1.date))
+       |> Enum.sort_by(&{Date.to_gregorian_days(&1.date), &1.title})}
     end
   end
 

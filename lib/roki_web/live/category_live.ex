@@ -78,7 +78,9 @@ defmodule RokiWeb.CategoryLive do
     # A genre this kind has; none for Anime Corner's ranking, which is a fixed list.
     genre =
       with slug when is_binary(slug) <- Roki.Genres.parse(params["genre"]),
-           true <- sort != :corner and Enum.any?(Roki.Genres.browse_options(socket.assigns.kind), &(elem(&1, 0) == slug)) do
+           true <-
+             sort != :corner and
+               Enum.any?(Roki.Genres.browse_options(socket.assigns.kind), &(elem(&1, 0) == slug)) do
         slug
       else
         _ -> nil
@@ -92,7 +94,10 @@ defmodule RokiWeb.CategoryLive do
 
     socket =
       if changed?,
-        do: socket |> assign(items: [], page: 0, more?: false, loading?: true, error: nil) |> show_held(),
+        do:
+          socket
+          |> assign(items: [], page: 0, more?: false, loading?: true, error: nil)
+          |> show_held(),
         else: socket
 
     {:noreply, if(connected?(socket) and changed?, do: fetch_first(socket), else: socket)}
@@ -123,7 +128,9 @@ defmodule RokiWeb.CategoryLive do
   defp fetch_first(socket), do: fetch(socket, 1)
 
   defp fetch(socket, n, upto \\ nil) do
-    %{kind: kind, sort: sort, season: season, week: week, genre: genre, uuid: uuid} = socket.assigns
+    %{kind: kind, sort: sort, season: season, week: week, genre: genre, uuid: uuid} =
+      socket.assigns
+
     last = upto || n
 
     start_async(socket, {:page, {sort, season, week, genre}, last}, fn ->
@@ -204,8 +211,14 @@ defmodule RokiWeb.CategoryLive do
   # A season picked for the ranking: that season's latest poll.
   def handle_event("corner_season", %{"season" => name, "year" => year}, socket) do
     case Browse.season(name, year) do
-      nil -> {:noreply, socket}
-      season -> {:noreply, push_patch(socket, to: address(socket.assigns.kind, sort: :corner, season: season, week: nil))}
+      nil ->
+        {:noreply, socket}
+
+      season ->
+        {:noreply,
+         push_patch(socket,
+           to: address(socket.assigns.kind, sort: :corner, season: season, week: nil)
+         )}
     end
   end
 
@@ -254,7 +267,11 @@ defmodule RokiWeb.CategoryLive do
 
   defp view_path(socket, overrides) do
     %{kind: kind, sort: sort, season: season, week: week, genre: genre} = socket.assigns
-    address(kind, Keyword.merge([sort: sort, season: season, week: week, genre: genre], overrides))
+
+    address(
+      kind,
+      Keyword.merge([sort: sort, season: season, week: week, genre: genre], overrides)
+    )
   end
 
   # The address of a view: order, season and (for the Anime Corner ranking) week.
@@ -338,7 +355,8 @@ defmodule RokiWeb.CategoryLive do
       )
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -388,18 +406,21 @@ defmodule RokiWeb.CategoryLive do
           >
             <div class="grid grid-cols-2 gap-0.5 p-1">
               <button
-                phx-click={JS.push("genre", value: %{genre: ""}) |> JS.hide(to: "#genre-picker-panel")}
+                phx-click={
+                  JS.push("genre", value: %{genre: ""}) |> JS.hide(to: "#genre-picker-panel")
+                }
                 class={[
                   "col-span-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base font-medium hover:bg-base-200",
                   @genre == nil && "bg-base-200 text-primary"
                 ]}
               >
-                All genres
-                <.icon :if={@genre == nil} name="hero-check-micro" class="h-5 w-5" />
+                All genres <.icon :if={@genre == nil} name="hero-check-micro" class="h-5 w-5" />
               </button>
               <button
                 :for={{slug, label} <- Roki.Genres.browse_options(@kind)}
-                phx-click={JS.push("genre", value: %{genre: slug}) |> JS.hide(to: "#genre-picker-panel")}
+                phx-click={
+                  JS.push("genre", value: %{genre: slug}) |> JS.hide(to: "#genre-picker-panel")
+                }
                 class={[
                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base hover:bg-base-200",
                   @genre == slug && "bg-base-200 font-medium text-primary"
@@ -418,7 +439,13 @@ defmodule RokiWeb.CategoryLive do
             label="Week"
             value={week_text(@corner, @season || @now)}
           >
-            <.week_panel kind={@kind} season={@season || @now} corner={@corner} loading?={@loading?} now={@now} />
+            <.week_panel
+              kind={@kind}
+              season={@season || @now}
+              corner={@corner}
+              loading?={@loading?}
+              now={@now}
+            />
           </.picker>
 
           <div class="join ml-auto" role="group" aria-label="Grid size">
@@ -446,7 +473,10 @@ defmodule RokiWeb.CategoryLive do
         </span>
         <a href={@corner.url} target="_blank" rel="noopener" class="link">Open the post</a>
       </p>
-      <p :if={@sort == :corner and @corner == nil and not @loading? and @error == nil and @items == []} class="alert text-sm">
+      <p
+        :if={@sort == :corner and @corner == nil and not @loading? and @error == nil and @items == []}
+        class="alert text-sm"
+      >
         Anime Corner has not posted a ranking for {Laev.Season.label(@season || @now)} yet.
       </p>
 
@@ -632,7 +662,9 @@ defmodule RokiWeb.CategoryLive do
       </select>
     </form>
     <div class="p-2">
-      <p :if={@corner == nil and @loading?} class="px-1 py-2 text-sm text-base-content/60">Looking for the polls…</p>
+      <p :if={@corner == nil and @loading?} class="px-1 py-2 text-sm text-base-content/60">
+        Looking for the polls…
+      </p>
       <p :if={@corner == nil and not @loading?} class="px-1 py-2 text-sm text-base-content/60">
         No Anime Corner poll for {Laev.Season.label(@season)}.
       </p>
@@ -650,7 +682,9 @@ defmodule RokiWeb.CategoryLive do
     """
   end
 
-  defp week_text(%{week: week}, season), do: "#{Roki.AnimeCorner.week_label(week)} · #{Laev.Season.label(season)}"
+  defp week_text(%{week: week}, season),
+    do: "#{Roki.AnimeCorner.week_label(week)} · #{Laev.Season.label(season)}"
+
   defp week_text(nil, season), do: Laev.Season.label(season)
 
   defp season_text(nil), do: "All anime"

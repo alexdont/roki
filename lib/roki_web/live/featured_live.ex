@@ -52,7 +52,9 @@ defmodule RokiWeb.FeaturedLive do
             _ -> []
           end
 
-      start_async(socket, :activity, fn -> Roki.Activity.recent(60, Enum.reject(opts, &match?({_, nil}, &1))) end)
+      start_async(socket, :activity, fn ->
+        Roki.Activity.recent(60, Enum.reject(opts, &match?({_, nil}, &1)))
+      end)
     else
       socket
     end
@@ -71,11 +73,16 @@ defmodule RokiWeb.FeaturedLive do
 
   # A group of titles opens as a list of them.
   def handle_event("activity_open", %{"i" => i}, socket) do
-    run = with {n, ""} <- Integer.parse(i), list when is_list(list) <- socket.assigns.activity, do: Enum.at(list, n)
+    run =
+      with {n, ""} <- Integer.parse(i),
+           list when is_list(list) <- socket.assigns.activity,
+           do: Enum.at(list, n)
+
     {:noreply, assign(socket, :activity_open, if(is_map(run) and run.batch?, do: run))}
   end
 
-  def handle_event("activity_close", _params, socket), do: {:noreply, assign(socket, :activity_open, nil)}
+  def handle_event("activity_close", _params, socket),
+    do: {:noreply, assign(socket, :activity_open, nil)}
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
@@ -249,22 +256,32 @@ defmodule RokiWeb.FeaturedLive do
         <div class="flex items-start justify-between gap-3 border-b border-base-300 p-4">
           <div class="min-w-0">
             <p class="font-semibold">
-              {@run.username} {@d.verb}<span :if={@d.after}> {@d.after}</span>
+              {@run.username} {@d.verb}<span :if={@d.after}>{@d.after}</span>
             </p>
             <p class="text-xs text-base-content/60">{ago(@run.at)}</p>
           </div>
-          <button type="button" phx-click="activity_close" class="btn btn-ghost btn-sm btn-circle" aria-label="Close">
+          <button
+            type="button"
+            phx-click="activity_close"
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close"
+          >
             <.icon name="hero-x-mark" class="h-5 w-5" />
           </button>
         </div>
         <ul class="divide-y divide-base-300 overflow-y-auto">
           <li :for={i <- @run.items}>
-            <.link navigate={~p"/title/#{i.type}/#{i.tmdb_id}"} class="flex items-center gap-3 p-3 transition hover:bg-base-200">
+            <.link
+              navigate={~p"/title/#{i.type}/#{i.tmdb_id}"}
+              class="flex items-center gap-3 p-3 transition hover:bg-base-200"
+            >
               <.activity_poster poster={i.poster} class="h-16 w-11 shrink-0" />
               <span class="min-w-0 flex-1">
                 <span class="block truncate font-medium">{i.title}</span>
                 <span class="block text-xs text-base-content/60">
-                  {if i.kind == "backdated" and i.watched_on, do: "Watched " <> Calendar.strftime(i.watched_on, "%b %-d, %Y"), else: ago(i.at)}
+                  {if i.kind == "backdated" and i.watched_on,
+                    do: "Watched " <> Calendar.strftime(i.watched_on, "%b %-d, %Y"),
+                    else: ago(i.at)}
                 </span>
               </span>
               <.icon name="hero-chevron-right-micro" class="h-4 w-4 opacity-40" />
@@ -281,7 +298,13 @@ defmodule RokiWeb.FeaturedLive do
 
   defp activity_poster(assigns) do
     ~H"""
-    <img :if={@poster} src={Roki.Images.local(@poster)} alt="" loading="lazy" class={["rounded-md bg-base-300 object-cover", @class]} />
+    <img
+      :if={@poster}
+      src={Roki.Images.local(@poster)}
+      alt=""
+      loading="lazy"
+      class={["rounded-md bg-base-300 object-cover", @class]}
+    />
     <div :if={!@poster} class={["rounded-md bg-base-300", @class]}></div>
     """
   end
@@ -325,7 +348,8 @@ defmodule RokiWeb.FeaturedLive do
       )
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -354,26 +378,51 @@ defmodule RokiWeb.FeaturedLive do
       <section :if={@uuid} class="space-y-2" aria-label="Activity">
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
           <h2 class="text-xl font-semibold">Activity</h2>
-          <div class="ml-auto inline-flex rounded-full bg-base-200 p-0.5 sm:order-last sm:ml-0" role="group" aria-label="Whose activity">
+          <div
+            class="ml-auto inline-flex rounded-full bg-base-200 p-0.5 sm:order-last sm:ml-0"
+            role="group"
+            aria-label="Whose activity"
+          >
             <button
               :for={{who, label} <- [all: "Everyone", friends: "Friends", mine: "Me"]}
               type="button"
               phx-click="activity_who"
               phx-value-who={who}
               aria-pressed={to_string(@activity_who == who)}
-              class={["rounded-full px-3 py-1 text-sm font-medium transition", @activity_who == who && "bg-base-100 shadow-sm", @activity_who != who && "text-base-content/70 hover:text-base-content"]}
+              class={[
+                "rounded-full px-3 py-1 text-sm font-medium transition",
+                @activity_who == who && "bg-base-100 shadow-sm",
+                @activity_who != who && "text-base-content/70 hover:text-base-content"
+              ]}
             >
               {label}
             </button>
           </div>
-          <div class="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:flex-1 sm:px-0 [scrollbar-width:none]" role="group" aria-label="Kind of activity">
+          <div
+            class="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:flex-1 sm:px-0 [scrollbar-width:none]"
+            role="group"
+            aria-label="Kind of activity"
+          >
             <button
-              :for={{kind, label} <- [{nil, "All"}, {"finished", "Finished"}, {"started", "Started"}, {"saved", "Saved"}, {"rated", "Rated"}, {"backdated", "Backdated"}]}
+              :for={
+                {kind, label} <- [
+                  {nil, "All"},
+                  {"finished", "Finished"},
+                  {"started", "Started"},
+                  {"saved", "Saved"},
+                  {"rated", "Rated"},
+                  {"backdated", "Backdated"}
+                ]
+              }
               type="button"
               phx-click="activity_kind"
               phx-value-kind={kind || ""}
               aria-pressed={to_string(@activity_kind == kind)}
-              class={["btn btn-xs shrink-0 rounded-full border-0", @activity_kind == kind && "btn-primary", @activity_kind != kind && "bg-base-200"]}
+              class={[
+                "btn btn-xs shrink-0 rounded-full border-0",
+                @activity_kind == kind && "btn-primary",
+                @activity_kind != kind && "bg-base-200"
+              ]}
             >
               {label}
             </button>
@@ -382,8 +431,13 @@ defmodule RokiWeb.FeaturedLive do
 
         <div :if={@activity == nil} class="skeleton h-[5.25rem] w-full rounded-box"></div>
 
-        <p :if={@activity == []} class="rounded-box border border-dashed border-base-300 px-4 py-5 text-center text-sm text-base-content/60">
-          {if @activity_who == :friends, do: "Nothing from your friends yet.", else: "Nothing here yet."}
+        <p
+          :if={@activity == []}
+          class="rounded-box border border-dashed border-base-300 px-4 py-5 text-center text-sm text-base-content/60"
+        >
+          {if @activity_who == :friends,
+            do: "Nothing from your friends yet.",
+            else: "Nothing here yet."}
         </p>
 
         <ul
@@ -415,7 +469,12 @@ defmodule RokiWeb.FeaturedLive do
       <div class="space-y-10">
         <%!-- Everything that is popular right now, films, shows and anime in one grid; each tab in
               the header has the whole of its own list. --%>
-        <.popular_now shelves={@shelves} seen={@seen} upcoming={@upcoming} cached_titles={@cached_titles} />
+        <.popular_now
+          shelves={@shelves}
+          seen={@seen}
+          upcoming={@upcoming}
+          cached_titles={@cached_titles}
+        />
 
         <%!-- Last, and only once the shelves above have settled, so it can never push
               anything down. Curated franchises and TMDB collections, start to finish. --%>
@@ -444,13 +503,22 @@ defmodule RokiWeb.FeaturedLive do
     assigns = assign(assigns, :all, Roki.Mood.all())
 
     ~H"""
-    <section id="mood-picker" phx-hook="MoodCarousel" data-every="6000" class="space-y-3" aria-label="What are you feeling like today?">
+    <section
+      id="mood-picker"
+      phx-hook="MoodCarousel"
+      data-every="6000"
+      class="space-y-3"
+      aria-label="What are you feeling like today?"
+    >
       <div class="relative h-[26rem] overflow-hidden rounded-3xl bg-base-300 shadow-xl sm:h-[28rem]">
         <%!-- One slide per mood; the hook shows one. --%>
         <div
           :for={{m, i} <- Enum.with_index(@all)}
           data-mood={m.slug}
-          class={["absolute inset-0 transition-opacity duration-700", i != 0 && "pointer-events-none opacity-0"]}
+          class={[
+            "absolute inset-0 transition-opacity duration-700",
+            i != 0 && "pointer-events-none opacity-0"
+          ]}
           aria-hidden={to_string(i != 0)}
         >
           <% items = Map.get(@moods, m.slug, []) %>
@@ -462,7 +530,8 @@ defmodule RokiWeb.FeaturedLive do
             loading={if i == 0, do: "eager", else: "lazy"}
             class="mood-backdrop absolute inset-0 h-full w-full object-cover"
           />
-          <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true"></div>
+          <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true">
+          </div>
           <div
             class="absolute inset-0"
             style={"background: linear-gradient(90deg, hsl(#{m.hue} 70% 12% / 0.96) 0%, hsl(#{m.hue} 70% 12% / 0.80) 45%, hsl(#{m.hue} 70% 12% / 0.25) 100%), linear-gradient(0deg, hsl(#{m.hue} 70% 10% / 0.9) 0%, transparent 45%)"}
@@ -471,7 +540,9 @@ defmodule RokiWeb.FeaturedLive do
 
           <div class="relative flex h-full flex-col justify-between p-5 text-white sm:p-8">
             <div class="max-w-xl space-y-3">
-              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">What are you feeling like today?</p>
+              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+                What are you feeling like today?
+              </p>
               <h1
                 class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl"
                 style={"font-family: #{m.font}; --mood: hsl(#{m.hue} 90% 62%)"}
@@ -488,26 +559,43 @@ defmodule RokiWeb.FeaturedLive do
             </div>
 
             <%!-- What is popular in it right now; each poster is its title. --%>
-            <div :if={items != []} class="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-8 sm:px-8">
+            <div
+              :if={items != []}
+              class="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-8 sm:px-8"
+            >
               <.link
                 :for={t <- Enum.take(items, 10)}
                 navigate={~p"/title/#{t.type}/#{t.id}"}
                 class="w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-white/10 shadow-lg ring-1 ring-white/20 transition hover:-translate-y-1 hover:ring-white/60 sm:w-24"
                 title={t.title}
               >
-                <img :if={t.poster} src={Roki.Images.local(t.poster)} alt={t.title} loading="lazy" class="aspect-[2/3] h-auto w-full object-cover" />
+                <img
+                  :if={t.poster}
+                  src={Roki.Images.local(t.poster)}
+                  alt={t.title}
+                  loading="lazy"
+                  class="aspect-[2/3] h-auto w-full object-cover"
+                />
                 <div :if={!t.poster} class="aspect-[2/3] w-full"></div>
               </.link>
             </div>
             <div :if={items == []} class="flex gap-2">
-              <div :for={_ <- 1..6} class="aspect-[2/3] w-[4.5rem] animate-pulse rounded-lg bg-white/15 sm:w-24"></div>
+              <div
+                :for={_ <- 1..6}
+                class="aspect-[2/3] w-[4.5rem] animate-pulse rounded-lg bg-white/15 sm:w-24"
+              >
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <%!-- The moods, in a row: the shown one is lit, with a thin line that fills as its turn runs. --%>
-      <div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0" role="tablist" aria-label="Moods">
+      <div
+        class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0"
+        role="tablist"
+        aria-label="Moods"
+      >
         <.link
           :for={{m, i} <- Enum.with_index(@all)}
           navigate={~p"/mood/#{m.slug}"}
@@ -517,9 +605,16 @@ defmodule RokiWeb.FeaturedLive do
           class="group relative shrink-0 overflow-hidden rounded-full border border-base-300 bg-base-100 px-3.5 py-2 text-sm font-semibold transition hover:border-base-content/30 aria-selected:border-transparent aria-selected:text-white aria-selected:shadow-md"
           style={"--mood: hsl(#{m.hue} 75% 45%); --mood-font: #{m.font}"}
         >
-          <span class="absolute inset-0 bg-[var(--mood)] opacity-0 transition-opacity duration-300 group-aria-selected:opacity-100" aria-hidden="true"></span>
+          <span
+            class="absolute inset-0 bg-[var(--mood)] opacity-0 transition-opacity duration-300 group-aria-selected:opacity-100"
+            aria-hidden="true"
+          ></span>
           <span class="relative"><span class="mr-1.5">{m.icon}</span><span class="group-aria-selected:[font-family:var(--mood-font)] group-aria-selected:text-base group-aria-selected:tracking-wide">{m.label}</span></span>
-          <span data-mood-bar class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 bg-white/80" aria-hidden="true"></span>
+          <span
+            data-mood-bar
+            class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 bg-white/80"
+            aria-hidden="true"
+          ></span>
         </.link>
       </div>
     </section>
@@ -540,7 +635,9 @@ defmodule RokiWeb.FeaturedLive do
       |> interleave()
       |> Enum.uniq_by(fn {_k, i} -> {i.type, i.id} end)
       |> Enum.take(24)
-      |> Enum.map(fn {kind, i} -> Map.put(i, :kind_label, %{movies: "Film", shows: "Show", anime: "Anime"}[kind]) end)
+      |> Enum.map(fn {kind, i} ->
+        Map.put(i, :kind_label, %{movies: "Film", shows: "Show", anime: "Anime"}[kind])
+      end)
 
     assigns = assign(assigns, :items, items)
 
@@ -552,15 +649,27 @@ defmodule RokiWeb.FeaturedLive do
           <p class="text-sm text-base-content/60">Films, shows and anime, all together.</p>
         </div>
         <div class="flex gap-1.5">
-          <.link :for={{kind, label} <- [movies: "Movies", shows: "Shows", anime: "Anime"]} navigate={"/#{kind}"} class="btn btn-sm rounded-full">
+          <.link
+            :for={{kind, label} <- [movies: "Movies", shows: "Shows", anime: "Anime"]}
+            navigate={"/#{kind}"}
+            class="btn btn-sm rounded-full"
+          >
             {label} <.icon name="hero-arrow-right-micro" class="h-4 w-4" />
           </.link>
         </div>
       </div>
       <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         <li :for={i <- @items} class="space-y-1">
-          <.poster item={i} seen={MapSet.member?(@seen, {i.type, i.id})} cached_titles={@cached_titles} upcoming={@upcoming} compact />
-          <p class="truncate text-[0.65rem] font-semibold uppercase tracking-wider text-base-content/45">{i.kind_label}</p>
+          <.poster
+            item={i}
+            seen={MapSet.member?(@seen, {i.type, i.id})}
+            cached_titles={@cached_titles}
+            upcoming={@upcoming}
+            compact
+          />
+          <p class="truncate text-[0.65rem] font-semibold uppercase tracking-wider text-base-content/45">
+            {i.kind_label}
+          </p>
         </li>
       </ul>
     </section>

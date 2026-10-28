@@ -21,9 +21,16 @@ defmodule Roki.Titles do
   when it is old enough to read again — or `:none`.
   """
   def get(type, id) when is_binary(type) and is_integer(id) do
-    case Repo.query!("select data, final, fetched_at from roki_titles where type = $1 and id = $2 and data is not null", [type, id]) do
+    case Repo.query!(
+           "select data, final, fetched_at from roki_titles where type = $1 and id = $2 and data is not null",
+           [type, id]
+         ) do
       %{rows: [[data, final, fetched_at]]} ->
-        fresh? = final or (fetched_at != nil and NaiveDateTime.diff(NaiveDateTime.utc_now(), fetched_at) < @fresh_s)
+        fresh? =
+          final or
+            (fetched_at != nil and
+               NaiveDateTime.diff(NaiveDateTime.utc_now(), fetched_at) < @fresh_s)
+
         # A raw query hands JSON back as text.
         data = if is_binary(data), do: Jason.decode!(data), else: data
         {:ok, atomize(data), fresh?}
@@ -46,14 +53,26 @@ defmodule Roki.Titles do
             overview = excluded.overview, data = excluded.data, final = excluded.final,
             fetched_at = excluded.fetched_at, seen_at = excluded.seen_at
       """,
-      [type, id, title[:title], title[:year], title[:poster_path], title[:overview], title, final?(title), now]
+      [
+        type,
+        id,
+        title[:title],
+        title[:year],
+        title[:poster_path],
+        title[:overview],
+        title,
+        final?(title),
+        now
+      ]
     )
 
     :ok
   end
 
   # A film that is out, a show that has ended: TMDB has nothing more to say that matters here.
-  defp final?(%{type: "movie", status: "Released", date: date}) when is_binary(date), do: date < Date.to_iso8601(Date.utc_today())
+  defp final?(%{type: "movie", status: "Released", date: date}) when is_binary(date),
+    do: date < Date.to_iso8601(Date.utc_today())
+
   defp final?(%{type: "tv", status: status}) when status in ["Ended", "Canceled"], do: true
   defp final?(_title), do: false
 
@@ -84,6 +103,7 @@ defmodule Roki.Titles do
         |> Enum.with_index()
         |> Enum.map_reduce([], fn {{type, id, name, year, path, overview}, i}, acc ->
           n = i * 6
+
           {"($#{n + 1}, $#{n + 2}, $#{n + 3}, $#{n + 4}, $#{n + 5}, $#{n + 6}, $#{length(chunk) * 6 + 1})",
            acc ++ [type, id, name, year, path, overview]}
         end)
@@ -131,7 +151,14 @@ defmodule Roki.Titles do
         )
 
       Map.new(rows, fn [type, id, name, year, path, overview] ->
-        {{type, id}, %{title: name, year: year, poster: poster_url(path, "w342"), poster_path: path, overview: overview}}
+        {{type, id},
+         %{
+           title: name,
+           year: year,
+           poster: poster_url(path, "w342"),
+           poster_path: path,
+           overview: overview
+         }}
       end)
     end
   end
@@ -162,7 +189,9 @@ defmodule Roki.Titles do
 
   # The whole title comes back from JSON with string keys; its keys are the ones
   # `Roki.Watch.normalize/2` writes, every one an atom the code already has.
-  defp atomize(%{} = map), do: Map.new(map, fn {k, v} -> {String.to_existing_atom(k), atomize(v)} end)
+  defp atomize(%{} = map),
+    do: Map.new(map, fn {k, v} -> {String.to_existing_atom(k), atomize(v)} end)
+
   defp atomize(list) when is_list(list), do: Enum.map(list, &atomize/1)
   defp atomize(other), do: other
 end

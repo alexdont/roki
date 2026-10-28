@@ -311,7 +311,8 @@ defmodule RokiWeb.SettingsLive do
 
     note =
       if synced?,
-        do: "Unlinked here. Your laev key carries keys between devices, so another device that still has it can bring it back on a sync."
+        do:
+          "Unlinked here. Your laev key carries keys between devices, so another device that still has it can bring it back on a sync."
 
     {:noreply, assign(socket, :tmdb, %{status: %{linked?: false, username: nil}, note: note})}
   end
@@ -404,7 +405,8 @@ defmodule RokiWeb.SettingsLive do
   def handle_async(:tmdb, {:ok, status}, socket),
     do: {:noreply, update(socket, :tmdb, &%{&1 | status: status})}
 
-  def handle_async(:tmdb, _other, socket), do: {:noreply, update(socket, :tmdb, &%{&1 | status: %{linked?: false, username: nil}})}
+  def handle_async(:tmdb, _other, socket),
+    do: {:noreply, update(socket, :tmdb, &%{&1 | status: %{linked?: false, username: nil}})}
 
   def handle_async(:mal, {:ok, status}, socket),
     do: {:noreply, update(socket, :mal, &%{&1 | status: status})}
@@ -507,7 +509,8 @@ defmodule RokiWeb.SettingsLive do
       )
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -758,7 +761,16 @@ defmodule RokiWeb.SettingsLive do
   end
 
   defp external_app_spec(specs),
-    do: Enum.filter(specs, &(elem(&1, 0) in ["anime_audio", "browser_work", "external_app", "sources_cache"])) |> Enum.sort_by(&Enum.find_index(["anime_audio", "browser_work", "external_app", "sources_cache"], fn k -> k == elem(&1, 0) end))
+    do:
+      Enum.filter(
+        specs,
+        &(elem(&1, 0) in ["anime_audio", "browser_work", "external_app", "sources_cache"])
+      )
+      |> Enum.sort_by(
+        &Enum.find_index(["anime_audio", "browser_work", "external_app", "sources_cache"], fn k ->
+          k == elem(&1, 0)
+        end)
+      )
 
   attr :value, :string, required: true
   attr :saved, :any, default: nil
@@ -815,7 +827,9 @@ defmodule RokiWeb.SettingsLive do
 
   # The site's browser cap sits right under laev's ceiling.
   defp web_rows_after("LAEV_MAX_RESOLUTION", specs),
-    do: Enum.filter(specs, &(elem(&1, 0) in ["browser_max_resolution", "browser_max_size"])) |> Enum.sort()
+    do:
+      Enum.filter(specs, &(elem(&1, 0) in ["browser_max_resolution", "browser_max_size"]))
+      |> Enum.sort()
 
   defp web_rows_after(_key, _specs), do: []
 
@@ -1135,7 +1149,11 @@ defmodule RokiWeb.SettingsLive do
                 If the browser showed an error page instead, copy the whole address it ended up on
                 and paste it here.
               </p>
-              <form id="mal-finish" phx-submit="mal_finish" class="mt-2 flex flex-wrap items-center gap-2">
+              <form
+                id="mal-finish"
+                phx-submit="mal_finish"
+                class="mt-2 flex flex-wrap items-center gap-2"
+              >
                 <input
                   type="text"
                   name="pasted"

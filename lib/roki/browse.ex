@@ -296,7 +296,8 @@ defmodule Roki.Browse do
   """
   def discover(type, params) when type in ["movie", "tv"] do
     with {:ok, body} <- get("/discover/" <> type, params) do
-      {:ok, Enum.map(body["results"] || [], &normalize(&1, type)), (params[:page] || 1) < (body["total_pages"] || 1)}
+      {:ok, Enum.map(body["results"] || [], &normalize(&1, type)),
+       (params[:page] || 1) < (body["total_pages"] || 1)}
     end
   end
 

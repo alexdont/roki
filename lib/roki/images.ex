@@ -172,7 +172,11 @@ defmodule Roki.Images do
   defp read_dimensions do
     dims =
       try do
-        for d <- PhoenixKit.Modules.Storage.list_dimensions_for_type("image"), d.enabled, d.name != "original", is_integer(d.width), do: {d.name, d.width}
+        for d <- PhoenixKit.Modules.Storage.list_dimensions_for_type("image"),
+            d.enabled,
+            d.name != "original",
+            is_integer(d.width),
+            do: {d.name, d.width}
       rescue
         _ -> []
       end
@@ -195,7 +199,13 @@ defmodule Roki.Images do
   # TMDB names a picture by a short token and an extension; MyAnimeList by a kind, a shelf and
   # a number (`anime/1234/56789l.jpg`). Nothing else is fetched.
   defp file?(file), do: Regex.match?(~r/^[A-Za-z0-9]{1,64}\.(jpg|jpeg|png|webp)$/, file)
-  defp mal_path?(rest), do: Regex.match?(~r/^(anime|manga|characters)\/\d{1,8}\/\d{1,10}[a-z]?\.(jpg|jpeg|png|webp)$/, rest)
+
+  defp mal_path?(rest),
+    do:
+      Regex.match?(
+        ~r/^(anime|manga|characters)\/\d{1,8}\/\d{1,10}[a-z]?\.(jpg|jpeg|png|webp)$/,
+        rest
+      )
 
   @doc """
   The media address of a picture named by the short form a `/img/` address carries (`"w342/
@@ -211,8 +221,12 @@ defmodule Roki.Images do
 
       {key, source_url} ->
         case :ets.lookup(@table, key) do
-          [{_, uuid, held_at}] -> {:ok, Roki.Media.url(uuid, variant_now(source_url, held_at))}
-          [] -> with {:ok, uuid} <- fetch_once(key, master(source_url)), do: {:ok, Roki.Media.url(uuid, "original")}
+          [{_, uuid, held_at}] ->
+            {:ok, Roki.Media.url(uuid, variant_now(source_url, held_at))}
+
+          [] ->
+            with {:ok, uuid} <- fetch_once(key, master(source_url)),
+                 do: {:ok, Roki.Media.url(uuid, "original")}
         end
     end
   end
@@ -225,7 +239,9 @@ defmodule Roki.Images do
     end
   end
 
-  defp source("mal/" <> rest), do: with(k when is_binary(k) <- key(@mal <> rest), do: {k, @mal <> rest})
+  defp source("mal/" <> rest),
+    do: with(k when is_binary(k) <- key(@mal <> rest), do: {k, @mal <> rest})
+
   defp source(rest), do: with(k when is_binary(k) <- key(@tmdb <> rest), do: {k, @tmdb <> rest})
 
   defp fetch(key, source_url) do

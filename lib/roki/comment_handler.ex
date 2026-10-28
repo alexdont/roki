@@ -28,11 +28,20 @@ defmodule Roki.CommentHandler do
     addressed = Enum.uniq(Enum.reject([owner, parent_author], &(is_nil(&1) or &1 == commenter)))
 
     for target <- addressed do
-      Social.notify_comment(target, commenter, type, resource_uuid, if(target == parent_author, do: :reply, else: :comment))
+      Social.notify_comment(
+        target,
+        commenter,
+        type,
+        resource_uuid,
+        if(target == parent_author, do: :reply, else: :comment)
+      )
     end
 
     # Someone named in it, who was not already told above: theirs to switch off.
-    for target <- mentioned(comment.content), target != commenter, target not in addressed, Roki.Notify.wants?(target, "comments") do
+    for target <- mentioned(comment.content),
+        target != commenter,
+        target not in addressed,
+        Roki.Notify.wants?(target, "comments") do
       Social.notify_comment(target, commenter, type, resource_uuid, :mention)
     end
 
@@ -75,7 +84,10 @@ defmodule Roki.CommentHandler do
 
   @doc "`%{thread uuid => %{title, path}}` for the titles among these threads."
   def titles(uuids) do
-    %{rows: rows} = Repo.query!("select uuid, type, id, name from roki_comment_titles where uuid = any($1)", [Enum.map(uuids, &Ecto.UUID.dump!/1)])
+    %{rows: rows} =
+      Repo.query!("select uuid, type, id, name from roki_comment_titles where uuid = any($1)", [
+        Enum.map(uuids, &Ecto.UUID.dump!/1)
+      ])
 
     Map.new(rows, fn [uuid, type, id, name] ->
       {Ecto.UUID.load!(uuid), %{title: name || "#{type} #{id}", path: "/title/#{type}/#{id}"}}
@@ -88,7 +100,8 @@ defmodule Roki.CommentHandler.Profile do
   @behaviour PhoenixKitComments.ResourceHandler
 
   @impl true
-  def on_comment_created(type, uuid, comment), do: Roki.CommentHandler.created(type, uuid, comment)
+  def on_comment_created(type, uuid, comment),
+    do: Roki.CommentHandler.created(type, uuid, comment)
 
   @impl true
   def on_comment_liked(type, uuid, reaction), do: Roki.CommentHandler.liked(type, uuid, reaction)
@@ -106,7 +119,8 @@ defmodule Roki.CommentHandler.Title do
   @behaviour PhoenixKitComments.ResourceHandler
 
   @impl true
-  def on_comment_created(type, uuid, comment), do: Roki.CommentHandler.created(type, uuid, comment)
+  def on_comment_created(type, uuid, comment),
+    do: Roki.CommentHandler.created(type, uuid, comment)
 
   @impl true
   def on_comment_liked(type, uuid, reaction), do: Roki.CommentHandler.liked(type, uuid, reaction)

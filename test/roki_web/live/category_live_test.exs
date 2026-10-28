@@ -91,10 +91,13 @@ defmodule RokiWeb.CategoryLiveTest do
     assert Browse.params(:movies, :popular, 1, today, "comedy")[:sort_by] == "popularity.desc"
   end
 
-  test "the genre menu is on every kind's page, offers only that kind's genres, and the address carries it", %{conn: conn} do
+  test "the genre menu is on every kind's page, offers only that kind's genres, and the address carries it",
+       %{conn: conn} do
     # Opening these pages caches what the lists answered; the other tests seed their own.
     on_exit(fn ->
-      for kind <- [:movies, :shows], genre <- [nil, "horror"], do: Roki.TTLCache.delete({:browse, kind, :popular, nil, nil, genre, 1})
+      for kind <- [:movies, :shows],
+          genre <- [nil, "horror"],
+          do: Roki.TTLCache.delete({:browse, kind, :popular, nil, nil, genre, 1})
     end)
 
     {:ok, _view, html} = live(conn, "/movies")
@@ -117,7 +120,9 @@ defmodule RokiWeb.CategoryLiveTest do
     assert bogus =~ "All genres"
   end
 
-  test "a list that is already held is in the first render, before anything is asked of TMDB", %{conn: conn} do
+  test "a list that is already held is in the first render, before anything is asked of TMDB", %{
+    conn: conn
+  } do
     key = {:browse, :movies, :top, nil, nil, nil, 1}
     items = [%{id: 77_001, type: "movie", title: "Held Film", poster: nil, year: "2001"}]
     Roki.TTLCache.put(key, 60, {:ok, {items, false}})

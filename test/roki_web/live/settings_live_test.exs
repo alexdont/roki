@@ -54,7 +54,10 @@ defmodule RokiWeb.SettingsLiveTest do
     refute render(view) =~ "Auto-pick"
   end
 
-  test "without a TMDB account the page offers to link one, and says where to come back to", %{conn: conn, user: user} do
+  test "without a TMDB account the page offers to link one, and says where to come back to", %{
+    conn: conn,
+    user: user
+  } do
     connect!(user)
     {:ok, view, _} = live(conn, "/settingstest/settings")
     html = render_async(view, 3000)
@@ -65,13 +68,22 @@ defmodule RokiWeb.SettingsLiveTest do
     refute html =~ "Unlink"
   end
 
-  test "unlinking takes the session and the copied TMDB ratings, and keeps the MyAnimeList ones", %{user: user} do
+  test "unlinking takes the session and the copied TMDB ratings, and keeps the MyAnimeList ones",
+       %{user: user} do
     dir = connect!(user)
-    File.write!(Path.join(dir, "config"), File.read!(Path.join(dir, "config")) <> "TMDB_SESSION_ID=abc123\n")
+
+    File.write!(
+      Path.join(dir, "config"),
+      File.read!(Path.join(dir, "config")) <> "TMDB_SESSION_ID=abc123\n"
+    )
+
     {:ok, bin} = Ecto.UUID.dump(user.uuid)
 
     for {type, id} <- [{"movie", 1}, {"tv", 2}, {"mal", 3}] do
-      Roki.Repo.query!("insert into roki_ratings (user_uuid, type, id, score) values ($1, $2, $3, 8)", [bin, type, id])
+      Roki.Repo.query!(
+        "insert into roki_ratings (user_uuid, type, id, score) values ($1, $2, $3, 8)",
+        [bin, type, id]
+      )
     end
 
     assert {:ok, false} = Roki.Laev.tmdb_logout(user.uuid)
@@ -79,7 +91,8 @@ defmodule RokiWeb.SettingsLiveTest do
     assert Roki.Profile.ratings(user.uuid) |> Map.keys() == [{"mal", 3}]
   end
 
-  test "notification switches: friends' activity starts off, a switch takes effect at once, and it is the person's own", %{conn: conn, user: user} do
+  test "notification switches: friends' activity starts off, a switch takes effect at once, and it is the person's own",
+       %{conn: conn, user: user} do
     # Open to someone who has not connected laev too: it is about the bell, not about laev.
     {:ok, view, html} = live(conn, "/settingstest/settings")
     assert html =~ "Notifications"
@@ -88,7 +101,10 @@ defmodule RokiWeb.SettingsLiveTest do
     refute Roki.Notify.wants?(user.uuid, "friend_activity")
     assert Roki.Notify.wants?(user.uuid, "release")
 
-    view |> element("input[phx-click=notify_toggle][phx-value-key=friend_activity]") |> render_click()
+    view
+    |> element("input[phx-click=notify_toggle][phx-value-key=friend_activity]")
+    |> render_click()
+
     assert Roki.Notify.wants?(user.uuid, "friend_activity")
 
     view |> element("input[phx-click=notify_toggle][phx-value-key=release]") |> render_click()

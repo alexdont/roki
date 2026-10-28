@@ -25,7 +25,9 @@ defmodule Roki.AnimeCorner do
 
   @doc "The post's slug: `fall-2026-anime-rankings-week-3`, `summer-2026-anime-of-the-season-rankings`."
   def slug({year, name}, :final), do: "#{name}-#{year}-anime-of-the-season-rankings"
-  def slug({year, name}, week) when is_integer(week), do: "#{name}-#{year}-anime-rankings-week-#{week}"
+
+  def slug({year, name}, week) when is_integer(week),
+    do: "#{name}-#{year}-anime-rankings-week-#{week}"
 
   @doc "The week named in an address: `\"3\"` → 3, `\"final\"` → :final, else nil (the latest)."
   def week("final"), do: :final
@@ -52,7 +54,9 @@ defmodule Roki.AnimeCorner do
   ranking is out, else `[3, 2, 1]`. Found by asking for each post; remembered for an hour.
   """
   def weeks(season) do
-    case Roki.TTLCache.fetch({:corner_weeks, season}, @weeks_ttl_s, fn -> {:ok, find_weeks(season)} end) do
+    case Roki.TTLCache.fetch({:corner_weeks, season}, @weeks_ttl_s, fn ->
+           {:ok, find_weeks(season)}
+         end) do
       {:ok, weeks} -> weeks
       _ -> []
     end
@@ -128,7 +132,11 @@ defmodule Roki.AnimeCorner do
   end
 
   defp decorate(item, %{rank: rank, votes: votes}) do
-    share = if is_number(votes), do: " · #{:erlang.float_to_binary(votes * 1.0, decimals: 2)}% of the vote", else: ""
+    share =
+      if is_number(votes),
+        do: " · #{:erlang.float_to_binary(votes * 1.0, decimals: 2)}% of the vote",
+        else: ""
+
     Map.merge(item, %{badge: "##{rank}", note: "No. #{rank}#{share}"})
   end
 
@@ -153,8 +161,9 @@ defmodule Roki.AnimeCorner do
     Enum.find_value(keys, fn k -> Enum.find_value(pool, fn {pk, i} -> if pk == k, do: i end) end) ||
       Enum.find_value(keys, fn k ->
         Enum.find_value(pool, fn {pk, i} ->
-          if String.length(pk) >= 8 and String.length(k) >= 8 and (String.contains?(k, pk) or String.starts_with?(pk, k)),
-            do: i
+          if String.length(pk) >= 8 and String.length(k) >= 8 and
+               (String.contains?(k, pk) or String.starts_with?(pk, k)),
+             do: i
         end)
       end) ||
       search(uuid, title)
@@ -190,7 +199,10 @@ defmodule Roki.AnimeCorner do
     |> String.replace(~r/\s*\(\d{4}\)/u, "")
     |> String.replace(~r/\s+(?:the\s+)?final\s+season\b.*$/iu, "")
     |> String.replace(~r/\s+season\s+\d+\b.*$/iu, "")
-    |> String.replace(~r/\s+\d+(?:st|nd|rd|th)(?:-\d+(?:st|nd|rd|th))?\s+(?:season|stage|cour)\b.*$/iu, "")
+    |> String.replace(
+      ~r/\s+\d+(?:st|nd|rd|th)(?:-\d+(?:st|nd|rd|th))?\s+(?:season|stage|cour)\b.*$/iu,
+      ""
+    )
     |> String.replace(~r/\s+(?:part|cour)\s+\d+\b.*$/iu, "")
     |> String.trim()
   end
@@ -309,7 +321,12 @@ defmodule Roki.AnimeCorner do
   end
 
   defp exists?(url) do
-    case Req.head(url, headers: [{"user-agent", @ua}], retry: false, receive_timeout: 15_000, redirect: false) do
+    case Req.head(url,
+           headers: [{"user-agent", @ua}],
+           retry: false,
+           receive_timeout: 15_000,
+           redirect: false
+         ) do
       {:ok, %{status: 200}} -> true
       {:ok, %{status: 405}} -> match?({:ok, _}, get(url))
       _ -> false

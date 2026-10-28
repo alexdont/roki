@@ -26,7 +26,15 @@ defmodule RokiWeb.WatchedLive do
     user = Profile.user(username)
 
     if user == nil do
-      {:ok, assign(socket, page_title: "Watched", user: nil, username: username, owner?: false, visible?: false, profile: nil)}
+      {:ok,
+       assign(socket,
+         page_title: "Watched",
+         user: nil,
+         username: username,
+         owner?: false,
+         visible?: false,
+         profile: nil
+       )}
     else
       profile = Profile.get(user.uuid)
       owner? = viewer == user.uuid
@@ -98,9 +106,21 @@ defmodule RokiWeb.WatchedLive do
   end
 
   defp arranged(%{assigns: a}) when is_list(a.history) do
-    list = Profile.arrange(a.history, if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}), a.kind, a.sort, a.rating)
+    list =
+      Profile.arrange(
+        a.history,
+        if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}),
+        a.kind,
+        a.sort,
+        a.rating
+      )
+
     list = if a.status, do: Enum.filter(list, &(&1.status == a.status)), else: list
-    list = if a.genre, do: Enum.filter(list, &Roki.Genres.match?(a.genre, &1.type, &1.genres)), else: list
+
+    list =
+      if a.genre,
+        do: Enum.filter(list, &Roki.Genres.match?(a.genre, &1.type, &1.genres)),
+        else: list
 
     if a.q == "" do
       list
@@ -112,7 +132,12 @@ defmodule RokiWeb.WatchedLive do
 
   defp arranged(_socket), do: []
 
-  @statuses [{"finished", "Finished"}, {"progress", "In progress"}, {"up_to_date", "Up to date"}, {"on_hold", "On hold"}]
+  @statuses [
+    {"finished", "Finished"},
+    {"progress", "In progress"},
+    {"up_to_date", "Up to date"},
+    {"on_hold", "On hold"}
+  ]
 
   defp rating_note(:none), do: " without a rating"
   defp rating_note(nil), do: ""
@@ -122,16 +147,19 @@ defmodule RokiWeb.WatchedLive do
 
   defp status_param(value), do: if(value in Enum.map(@statuses, &elem(&1, 0)), do: value)
 
-  defp status_label(status), do: Enum.find_value(@statuses, "Finished", fn {k, v} -> k == status && v end)
+  defp status_label(status),
+    do: Enum.find_value(@statuses, "Finished", fn {k, v} -> k == status && v end)
 
   # Only a finished title has a watch date to change or a mark to take off.
-  defp status_title(item), do: status_label(item.status) <> if(item[:note], do: " · #{item.note}", else: "")
+  defp status_title(item),
+    do: status_label(item.status) <> if(item[:note], do: " · #{item.note}", else: "")
 
   defp finished?(%{status: status}), do: status == "finished"
   defp finished?(_), do: true
 
   defp finished_key?(socket, key) do
-    is_list(socket.assigns.history) and Enum.any?(socket.assigns.history, &(&1.key == key and finished?(&1)))
+    is_list(socket.assigns.history) and
+      Enum.any?(socket.assigns.history, &(&1.key == key and finished?(&1)))
   end
 
   # ── events ─────────────────────────────────────────────────────────
@@ -153,7 +181,11 @@ defmodule RokiWeb.WatchedLive do
     {:noreply, assign(socket, select?: on?, selected: MapSet.new(), dating?: false, notice: nil)}
   end
 
-  def handle_event("select_toggle", %{"key" => key}, %{assigns: %{owner?: true, select?: true}} = socket) do
+  def handle_event(
+        "select_toggle",
+        %{"key" => key},
+        %{assigns: %{owner?: true, select?: true}} = socket
+      ) do
     sel = socket.assigns.selected
 
     cond do
@@ -165,7 +197,9 @@ defmodule RokiWeb.WatchedLive do
 
   # Everything the filters show, not only the page on screen.
   def handle_event("select_all", _params, %{assigns: %{owner?: true, select?: true}} = socket),
-    do: {:noreply, assign(socket, :selected, MapSet.new(for i <- arranged(socket), finished?(i), do: i.key))}
+    do:
+      {:noreply,
+       assign(socket, :selected, MapSet.new(for i <- arranged(socket), finished?(i), do: i.key))}
 
   def handle_event("select_none", _params, %{assigns: %{owner?: true}} = socket),
     do: {:noreply, assign(socket, selected: MapSet.new(), dating?: false)}
@@ -176,21 +210,41 @@ defmodule RokiWeb.WatchedLive do
       else: {:noreply, socket}
   end
 
-  def handle_event("date_close", _params, socket), do: {:noreply, assign(socket, dating?: false, date_error: nil)}
+  def handle_event("date_close", _params, socket),
+    do: {:noreply, assign(socket, dating?: false, date_error: nil)}
 
   # The chosen day goes on every title selected, in the order the list shows them.
-  def handle_event("date_save", %{"date" => text}, %{assigns: %{owner?: true, select?: true}} = socket) do
+  def handle_event(
+        "date_save",
+        %{"date" => text},
+        %{assigns: %{owner?: true, select?: true}} = socket
+      ) do
     with {:ok, date} <- Date.from_iso8601(text),
          true <- Date.compare(date, Date.utc_today()) != :gt and date.year >= 1900 do
-      keys = for i <- arranged(socket), finished?(i), MapSet.member?(socket.assigns.selected, i.key), do: i.key
+      keys =
+        for i <- arranged(socket),
+            finished?(i),
+            MapSet.member?(socket.assigns.selected, i.key),
+            do: i.key
+
       {:ok, n} = Profile.set_watched_at(socket.assigns.uuid, keys, date)
 
       {:noreply,
        socket
-       |> assign(history: Profile.history_all(socket.assigns.uuid), dating?: false, selected: MapSet.new(), date_error: nil)
-       |> assign(notice: "#{n} #{if n == 1, do: "title", else: "titles"} set to #{Calendar.strftime(date, "%B %-d, %Y")}.")}
+       |> assign(
+         history: Profile.history_all(socket.assigns.uuid),
+         dating?: false,
+         selected: MapSet.new(),
+         date_error: nil
+       )
+       |> assign(
+         notice:
+           "#{n} #{if n == 1, do: "title", else: "titles"} set to #{Calendar.strftime(date, "%B %-d, %Y")}."
+       )}
     else
-      _ -> {:noreply, assign(socket, :date_error, "Pick a day that has happened (not in the future).")}
+      _ ->
+        {:noreply,
+         assign(socket, :date_error, "Pick a day that has happened (not in the future).")}
     end
   end
 
@@ -200,8 +254,14 @@ defmodule RokiWeb.WatchedLive do
 
     {:noreply,
      socket
-     |> assign(history: Profile.history_all(socket.assigns.uuid), selected: MapSet.new(), dating?: false)
-     |> assign(notice: "#{n} #{if n == 1, do: "title", else: "titles"} taken off your watched list.")}
+     |> assign(
+       history: Profile.history_all(socket.assigns.uuid),
+       selected: MapSet.new(),
+       dating?: false
+     )
+     |> assign(
+       notice: "#{n} #{if n == 1, do: "title", else: "titles"} taken off your watched list."
+     )}
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
@@ -209,9 +269,14 @@ defmodule RokiWeb.WatchedLive do
   # ── async results ──────────────────────────────────────────────────
 
   @impl true
-  def handle_async(:history, {:ok, items}, socket) when is_list(items), do: {:noreply, socket |> assign(:history, items) |> wait_for_genres()}
+  def handle_async(:history, {:ok, items}, socket) when is_list(items),
+    do: {:noreply, socket |> assign(:history, items) |> wait_for_genres()}
+
   def handle_async(:history, _other, socket), do: {:noreply, assign(socket, :history, [])}
-  def handle_async(:ratings, {:ok, ratings}, socket) when is_map(ratings), do: {:noreply, assign(socket, :ratings, ratings)}
+
+  def handle_async(:ratings, {:ok, ratings}, socket) when is_map(ratings),
+    do: {:noreply, assign(socket, :ratings, ratings)}
+
   def handle_async(:ratings, _other, socket), do: {:noreply, socket}
 
   # Genres are read from TMDB in the background, once for each title. While some are still to come
@@ -224,7 +289,9 @@ defmodule RokiWeb.WatchedLive do
 
   def handle_info(_other, socket), do: {:noreply, socket}
 
-  defp genres_pending(history) when is_list(history), do: Enum.count(history, &(&1.genres == nil and is_integer(&1.id)))
+  defp genres_pending(history) when is_list(history),
+    do: Enum.count(history, &(&1.genres == nil and is_integer(&1.id)))
+
   defp genres_pending(_), do: 0
 
   defp wait_for_genres(%{assigns: %{history: history, genre_waits: waits}} = socket) do
@@ -240,7 +307,18 @@ defmodule RokiWeb.WatchedLive do
 
   # The address of a view: the assigns, with `overrides` (a new search, a new view …) laid on.
   defp address(a, overrides) do
-    v = %{sort: a.sort, kind: a.kind, rating: a.rating, status: a.status, genre: a.genre, months: a.months?, q: a.q, view: a.view} |> Map.merge(Map.new(overrides))
+    v =
+      %{
+        sort: a.sort,
+        kind: a.kind,
+        rating: a.rating,
+        status: a.status,
+        genre: a.genre,
+        months: a.months?,
+        q: a.q,
+        view: a.view
+      }
+      |> Map.merge(Map.new(overrides))
 
     query =
       Enum.flat_map([:sort, :kind, :rating, :status, :genre, :months, :q, :view], fn
@@ -275,7 +353,9 @@ defmodule RokiWeb.WatchedLive do
 
   defp group_label(_), do: "No date"
 
-  defp groups(items, :latest, true), do: Enum.chunk_by(items, &group_label/1) |> Enum.map(&{group_label(hd(&1)), &1})
+  defp groups(items, :latest, true),
+    do: Enum.chunk_by(items, &group_label/1) |> Enum.map(&{group_label(hd(&1)), &1})
+
   defp groups(items, _sort, _months), do: [{nil, items}]
 
   defp kind_label(%{anime: true}), do: "Anime"
@@ -296,7 +376,8 @@ defmodule RokiWeb.WatchedLive do
       )
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -313,13 +394,19 @@ defmodule RokiWeb.WatchedLive do
               vanish with `contents` and `order-*` lays the pieces out). --%>
         <div class="contents lg:sticky lg:top-0 lg:z-30 lg:-mx-8 lg:flex lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 lg:border-b lg:border-base-300/60 lg:bg-base-100/90 lg:px-8 lg:py-3 lg:backdrop-blur">
           <div class="sticky top-0 z-30 -mx-4 flex items-center gap-2.5 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
-            <.link navigate={"/#{@username}"} class="flex min-w-0 shrink-0 items-center gap-2 text-base-content/70 hover:text-base-content lg:order-1">
+            <.link
+              navigate={"/#{@username}"}
+              class="flex min-w-0 shrink-0 items-center gap-2 text-base-content/70 hover:text-base-content lg:order-1"
+            >
               <span class="lg:hidden"><.user_avatar user={@user} size="sm" /></span>
               <span class="hidden lg:block"><.user_avatar user={@user} size="md" /></span>
               <span class="hidden truncate font-semibold lg:inline">{@user.username}</span>
             </.link>
             <h1 class="text-xl font-bold sm:text-2xl lg:order-2 lg:text-3xl">Watched</h1>
-            <span :if={is_list(@history)} class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60 lg:order-3 lg:bg-transparent lg:px-0 lg:text-sm">{length(@items)}</span>
+            <span
+              :if={is_list(@history)}
+              class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60 lg:order-3 lg:bg-transparent lg:px-0 lg:text-sm"
+            >{length(@items)}</span>
 
             <%!-- Select mode, for the owner: one button, on and off. --%>
             <button
@@ -327,7 +414,10 @@ defmodule RokiWeb.WatchedLive do
               type="button"
               phx-click="select_mode"
               aria-pressed={to_string(@select?)}
-              class={["btn btn-sm ml-auto gap-1.5 rounded-full lg:order-7 lg:btn-md", @select? && "btn-primary"]}
+              class={[
+                "btn btn-sm ml-auto gap-1.5 rounded-full lg:order-7 lg:btn-md",
+                @select? && "btn-primary"
+              ]}
             >
               <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
               {if @select?, do: "Done", else: "Select"}
@@ -336,17 +426,50 @@ defmodule RokiWeb.WatchedLive do
 
           <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
           <div class="flex items-center gap-2 pb-3 pt-3 lg:contents lg:py-0">
-            <form id="watched-search" phx-change="search" phx-submit="search" class="min-w-0 flex-1 sm:max-w-md lg:order-4 lg:w-96 lg:flex-none">
+            <form
+              id="watched-search"
+              phx-change="search"
+              phx-submit="search"
+              class="min-w-0 flex-1 sm:max-w-md lg:order-4 lg:w-96 lg:flex-none"
+            >
               <label class="flex h-10 w-full items-center gap-2 rounded-full bg-base-200 px-3.5 focus-within:ring-2 focus-within:ring-primary/60 lg:h-12 lg:border lg:border-base-300 lg:bg-base-100">
                 <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/50" />
-                <input type="text" name="q" value={@q} placeholder="Search what you watched…" autocomplete="off" phx-debounce="300" class="min-w-0 grow bg-transparent text-sm outline-none placeholder:text-base-content/45" />
+                <input
+                  type="text"
+                  name="q"
+                  value={@q}
+                  placeholder="Search what you watched…"
+                  autocomplete="off"
+                  phx-debounce="300"
+                  class="min-w-0 grow bg-transparent text-sm outline-none placeholder:text-base-content/45"
+                />
               </label>
             </form>
-            <div class="inline-flex shrink-0 overflow-hidden rounded-full bg-base-200 p-0.5 lg:order-6 lg:h-12 lg:items-center" role="group" aria-label="View">
-              <.link patch={address(assigns, view: :grid)} class={["flex h-9 w-9 items-center justify-center rounded-full transition lg:h-10 lg:w-10", @view == :grid && "bg-base-100 shadow-sm"]} aria-label="Grid view" title="Grid">
+            <div
+              class="inline-flex shrink-0 overflow-hidden rounded-full bg-base-200 p-0.5 lg:order-6 lg:h-12 lg:items-center"
+              role="group"
+              aria-label="View"
+            >
+              <.link
+                patch={address(assigns, view: :grid)}
+                class={[
+                  "flex h-9 w-9 items-center justify-center rounded-full transition lg:h-10 lg:w-10",
+                  @view == :grid && "bg-base-100 shadow-sm"
+                ]}
+                aria-label="Grid view"
+                title="Grid"
+              >
                 <.icon name="hero-squares-2x2" class="h-5 w-5" />
               </.link>
-              <.link patch={address(assigns, view: :rows)} class={["flex h-9 w-9 items-center justify-center rounded-full transition lg:h-10 lg:w-10", @view == :rows && "bg-base-100 shadow-sm"]} aria-label="List view" title="List">
+              <.link
+                patch={address(assigns, view: :rows)}
+                class={[
+                  "flex h-9 w-9 items-center justify-center rounded-full transition lg:h-10 lg:w-10",
+                  @view == :rows && "bg-base-100 shadow-sm"
+                ]}
+                aria-label="List view"
+                title="List"
+              >
                 <.icon name="hero-bars-3" class="h-5 w-5" />
               </.link>
             </div>
@@ -360,7 +483,8 @@ defmodule RokiWeb.WatchedLive do
                 patch={address(assigns, kind: k)}
                 class={[
                   "flex h-8 items-center justify-center whitespace-nowrap rounded-full px-2 text-sm font-medium transition lg:h-9 lg:px-4",
-                  @kind == k && "bg-base-100 text-primary shadow-sm lg:bg-primary lg:text-primary-content",
+                  @kind == k &&
+                    "bg-base-100 text-primary shadow-sm lg:bg-primary lg:text-primary-content",
                   @kind != k && "text-base-content/70 hover:text-base-content lg:bg-base-200"
                 ]}
               >
@@ -370,15 +494,37 @@ defmodule RokiWeb.WatchedLive do
 
             <%!-- Phone: sort and rating in one menu. --%>
             <div class="dropdown dropdown-end shrink-0 lg:hidden">
-              <div tabindex="0" role="button" class="btn btn-sm h-9 gap-1 rounded-full border-0 bg-base-200 px-3 font-medium" aria-label="Sort and filter">
+              <div
+                tabindex="0"
+                role="button"
+                class="btn btn-sm h-9 gap-1 rounded-full border-0 bg-base-200 px-3 font-medium"
+                aria-label="Sort and filter"
+              >
                 <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
                 {if @sort == :top, do: "Rating", else: "Latest"}
-                <span :if={filters_on(@status, @rating, @genre) > 0} class="badge badge-primary badge-xs">{filters_on(@status, @rating, @genre)}</span>
+                <span
+                  :if={filters_on(@status, @rating, @genre) > 0}
+                  class="badge badge-primary badge-xs"
+                >{filters_on(@status, @rating, @genre)}</span>
               </div>
-              <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
-                <p class="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">Sort</p>
+              <div
+                tabindex="0"
+                class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+              >
+                <p class="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+                  Sort
+                </p>
                 <div class="grid grid-cols-2 gap-1.5">
-                  <.link :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]} patch={address(assigns, sort: s)} onclick="document.activeElement.blur()" class={["btn btn-sm rounded-full border-0", @sort == s && "btn-primary", @sort != s && "bg-base-200"]}>{label}</.link>
+                  <.link
+                    :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]}
+                    patch={address(assigns, sort: s)}
+                    onclick="document.activeElement.blur()"
+                    class={[
+                      "btn btn-sm rounded-full border-0",
+                      @sort == s && "btn-primary",
+                      @sort != s && "bg-base-200"
+                    ]}
+                  >{label}</.link>
                 </div>
                 <.months_toggle a={assigns} class="mt-3" />
                 <.status_picker a={assigns} />
@@ -392,31 +538,65 @@ defmodule RokiWeb.WatchedLive do
               <.link
                 :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]}
                 patch={address(assigns, sort: s)}
-                class={["btn btn-sm h-9 rounded-full border-0 text-sm font-medium", @sort == s && "btn-primary", @sort != s && "bg-base-200"]}
+                class={[
+                  "btn btn-sm h-9 rounded-full border-0 text-sm font-medium",
+                  @sort == s && "btn-primary",
+                  @sort != s && "bg-base-200"
+                ]}
               >
                 {label}
               </.link>
               <.months_toggle a={assigns} pill />
               <div class="dropdown">
-                <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @genre && "btn-primary", !@genre && "bg-base-200"]}>
+                <div
+                  tabindex="0"
+                  role="button"
+                  class={[
+                    "btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium",
+                    @genre && "btn-primary",
+                    !@genre && "bg-base-200"
+                  ]}
+                >
                   {if @genre, do: Roki.Genres.label(@genre), else: "Genre"}
                   <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
                 </div>
-                <div tabindex="0" class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+                <div
+                  tabindex="0"
+                  class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+                >
                   <.genre_picker a={assigns} heading={false} />
                 </div>
               </div>
               <div class="dropdown">
-                <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @status && "btn-primary", !@status && "bg-base-200"]}>
+                <div
+                  tabindex="0"
+                  role="button"
+                  class={[
+                    "btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium",
+                    @status && "btn-primary",
+                    !@status && "bg-base-200"
+                  ]}
+                >
                   {if @status, do: status_label(@status), else: "Status"}
                   <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
                 </div>
-                <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+                <div
+                  tabindex="0"
+                  class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+                >
                   <.status_picker a={assigns} heading={false} />
                 </div>
               </div>
               <div :if={@owner? or @profile.show_ratings} class="dropdown">
-                <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @rating && "btn-primary", !@rating && "bg-base-200"]}>
+                <div
+                  tabindex="0"
+                  role="button"
+                  class={[
+                    "btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium",
+                    @rating && "btn-primary",
+                    !@rating && "bg-base-200"
+                  ]}
+                >
                   {cond do
                     @rating == :none -> "Not rated"
                     @rating -> "★ #{@rating}"
@@ -424,7 +604,10 @@ defmodule RokiWeb.WatchedLive do
                   end}
                   <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
                 </div>
-                <div tabindex="0" class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+                <div
+                  tabindex="0"
+                  class="dropdown-content z-40 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+                >
                   <.rating_picker a={assigns} heading={false} />
                 </div>
               </div>
@@ -432,12 +615,18 @@ defmodule RokiWeb.WatchedLive do
           </div>
         </div>
 
-        <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">{@notice}</p>
+        <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">
+          {@notice}
+        </p>
         <p :if={@genre && genres_pending(@history) > 0} class="text-sm text-base-content/60">
           Still reading the genres of {genres_pending(@history)} titles. They join the list as they arrive.
         </p>
 
-        <ul :if={@history == nil} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8" aria-busy="true">
+        <ul
+          :if={@history == nil}
+          class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+          aria-busy="true"
+        >
           <li :for={_ <- 1..8} class="space-y-1">
             <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
             <div class="skeleton h-4 w-3/4 rounded"></div>
@@ -445,59 +634,93 @@ defmodule RokiWeb.WatchedLive do
         </ul>
 
         <p :if={@history == []} class="text-sm text-base-content/50">
-          {if @owner?, do: "Nothing finished yet. What you watch to the end shows up here.", else: "Nothing here yet."}
+          {if @owner?,
+            do: "Nothing finished yet. What you watch to the end shows up here.",
+            else: "Nothing here yet."}
         </p>
-        <p :if={@history != nil and @history != [] and @items == []} class="text-sm text-base-content/50">
-          {if @q != "", do: "Nothing watched matches \"#{@q}\".", else: "Nothing of that kind#{rating_note(@rating)}."}
+        <p
+          :if={@history != nil and @history != [] and @items == []}
+          class="text-sm text-base-content/50"
+        >
+          {if @q != "",
+            do: "Nothing watched matches \"#{@q}\".",
+            else: "Nothing of that kind#{rating_note(@rating)}."}
         </p>
 
-        <div :if={is_list(@history)} id="watched-list" phx-hook="KeepPlace" data-page={div(@shown + @page - 1, @page)} data-restore-y={@place_y} class="space-y-6">
-        <div :for={{label, group} <- @groups} class="space-y-3">
-          <h2 :if={label} class="text-sm font-semibold uppercase tracking-wide text-base-content/60">{label}</h2>
+        <div
+          :if={is_list(@history)}
+          id="watched-list"
+          phx-hook="KeepPlace"
+          data-page={div(@shown + @page - 1, @page)}
+          data-restore-y={@place_y}
+          class="space-y-6"
+        >
+          <div :for={{label, group} <- @groups} class="space-y-3">
+            <h2 :if={label} class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+              {label}
+            </h2>
 
-          <%!-- Grid: the posters, a tick in the corner while selecting. --%>
-          <ul :if={@view == :grid} class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-            <li :for={i <- group} class="space-y-1">
-              <%!-- The same poster in both modes, so turning select mode on changes nothing's size
+            <%!-- Grid: the posters, a tick in the corner while selecting. --%>
+            <ul
+              :if={@view == :grid}
+              class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+            >
+              <li :for={i <- group} class="space-y-1">
+                <%!-- The same poster in both modes, so turning select mode on changes nothing's size
                     (and the page does not move): while selecting, a clear button lies over it and
                     the ring and the tick are drawn on top. --%>
-              <div class="relative">
-                <.poster item={Map.put(i, :badge, nil)} cached_titles={@cached_titles} compact title?={false} />
-                <.status_pill item={i} />
-                <button
-                  :if={@select? and finished?(i)}
-                  type="button"
-                  phx-click="select_toggle"
-                  phx-value-key={i.key}
-                  aria-pressed={to_string(MapSet.member?(@selected, i.key))}
-                  aria-label={"Select #{i.title}"}
-                  class="absolute inset-0 z-10 cursor-pointer"
-                >
-                </button>
-                <div
-                  :if={@select? and finished?(i)}
-                  class={[
-                    "pointer-events-none absolute inset-x-0 top-0 z-20 aspect-[2/3] rounded-box transition",
-                    MapSet.member?(@selected, i.key) && "ring-4 ring-primary"
-                  ]}
-                >
-                  <.tick selected={MapSet.member?(@selected, i.key)} />
+                <div class="relative">
+                  <.poster
+                    item={Map.put(i, :badge, nil)}
+                    cached_titles={@cached_titles}
+                    compact
+                    title?={false}
+                  />
+                  <.status_pill item={i} />
+                  <button
+                    :if={@select? and finished?(i)}
+                    type="button"
+                    phx-click="select_toggle"
+                    phx-value-key={i.key}
+                    aria-pressed={to_string(MapSet.member?(@selected, i.key))}
+                    aria-label={"Select #{i.title}"}
+                    class="absolute inset-0 z-10 cursor-pointer"
+                  ></button>
+                  <div
+                    :if={@select? and finished?(i)}
+                    class={[
+                      "pointer-events-none absolute inset-x-0 top-0 z-20 aspect-[2/3] rounded-box transition",
+                      MapSet.member?(@selected, i.key) && "ring-4 ring-primary"
+                    ]}
+                  >
+                    <.tick selected={MapSet.member?(@selected, i.key)} />
+                  </div>
                 </div>
-              </div>
-              <div class="flex items-center justify-between text-xs text-base-content/50">
-                <span>{day(i)}</span>
-                <span :if={i.score != nil and (@owner? or @profile.show_ratings)} class="font-semibold text-warning">★ {Profile.score_text(i.score)}</span>
-              </div>
-            </li>
-          </ul>
+                <div class="flex items-center justify-between text-xs text-base-content/50">
+                  <span>{day(i)}</span>
+                  <span
+                    :if={i.score != nil and (@owner? or @profile.show_ratings)}
+                    class="font-semibold text-warning"
+                  >★ {Profile.score_text(i.score)}</span>
+                </div>
+              </li>
+            </ul>
 
-          <%!-- Rows: one to a line, with what you would want to know. --%>
-          <ul :if={@view == :rows} class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300">
-            <li :for={i <- group}>
-              <.row item={i} select?={@select?} selected={MapSet.member?(@selected, i.key)} show_score={@owner? or @profile.show_ratings} />
-            </li>
-          </ul>
-        </div>
+            <%!-- Rows: one to a line, with what you would want to know. --%>
+            <ul
+              :if={@view == :rows}
+              class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300"
+            >
+              <li :for={i <- group}>
+                <.row
+                  item={i}
+                  select?={@select?}
+                  selected={MapSet.member?(@selected, i.key)}
+                  show_score={@owner? or @profile.show_ratings}
+                />
+              </li>
+            </ul>
+          </div>
         </div>
 
         <%!-- The end of the list: the next sixty are shown as it comes into view. --%>
@@ -515,15 +738,32 @@ defmodule RokiWeb.WatchedLive do
 
       <%!-- Select mode's bar: how many and which, then what to do with them. Two lines on a
             phone, one on a wide screen. --%>
-      <div :if={@select?} class="fixed inset-x-0 bottom-0 z-40 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.3)] backdrop-blur">
+      <div
+        :if={@select?}
+        class="fixed inset-x-0 bottom-0 z-40 border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.3)] backdrop-blur"
+      >
         <div class="mx-auto max-w-6xl space-y-3 sm:flex sm:items-center sm:gap-4 sm:space-y-0">
           <div class="flex items-center gap-1 sm:flex-1">
             <p class="min-w-0 flex-1 text-sm"><b>{MapSet.size(@selected)}</b> selected</p>
-            <button type="button" phx-click="select_all" class="btn btn-ghost btn-sm whitespace-nowrap">All {length(@items)}</button>
-            <button type="button" phx-click="select_none" class="btn btn-ghost btn-sm" disabled={MapSet.size(@selected) == 0}>None</button>
+            <button
+              type="button"
+              phx-click="select_all"
+              class="btn btn-ghost btn-sm whitespace-nowrap"
+            >All {length(@items)}</button>
+            <button
+              type="button"
+              phx-click="select_none"
+              class="btn btn-ghost btn-sm"
+              disabled={MapSet.size(@selected) == 0}
+            >None</button>
           </div>
           <div class="grid grid-cols-2 gap-2 sm:flex">
-            <button type="button" phx-click="date_open" class="btn btn-primary whitespace-nowrap" disabled={MapSet.size(@selected) == 0}>
+            <button
+              type="button"
+              phx-click="date_open"
+              class="btn btn-primary whitespace-nowrap"
+              disabled={MapSet.size(@selected) == 0}
+            >
               <.icon name="hero-calendar-days" class="h-4 w-4" /> Edit watch date
             </button>
             <button
@@ -540,16 +780,37 @@ defmodule RokiWeb.WatchedLive do
       </div>
 
       <%!-- The date editor: one day for everything selected. --%>
-      <div :if={@owner? and @dating?} class="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label="Edit watch date">
+      <div
+        :if={@owner? and @dating?}
+        class="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit watch date"
+      >
         <div class="absolute inset-0 bg-black/60" phx-click="date_close"></div>
-        <form id="date-form" phx-submit="date_save" class="relative w-full max-w-md space-y-4 rounded-t-box bg-base-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-box">
+        <form
+          id="date-form"
+          phx-submit="date_save"
+          class="relative w-full max-w-md space-y-4 rounded-t-box bg-base-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-box"
+        >
           <div>
-            <h2 class="text-lg font-semibold">When did you watch {if MapSet.size(@selected) == 1, do: "it", else: "them"}?</h2>
+            <h2 class="text-lg font-semibold">
+              When did you watch {if MapSet.size(@selected) == 1, do: "it", else: "them"}?
+            </h2>
             <p class="text-sm text-base-content/60">
               {MapSet.size(@selected)} {if MapSet.size(@selected) == 1, do: "title", else: "titles"} will be put on this day in your history — anywhere back, years if you like. They keep the order they have now.
             </p>
           </div>
-          <input type="date" name="date" value={@today} required min="1900-01-01" max={@today} class="input input-bordered w-full" autofocus />
+          <input
+            type="date"
+            name="date"
+            value={@today}
+            required
+            min="1900-01-01"
+            max={@today}
+            class="input input-bordered w-full"
+            autofocus
+          />
           <p :if={@date_error} class="text-sm text-error">{@date_error}</p>
           <div class="flex justify-end gap-2">
             <button type="button" phx-click="date_close" class="btn btn-ghost">Cancel</button>
@@ -581,7 +842,8 @@ defmodule RokiWeb.WatchedLive do
         @pill && "btn btn-sm h-9 gap-1.5 rounded-full border-0 text-sm font-medium",
         @pill && @a.months? && "btn-primary",
         @pill && !@a.months? && "bg-base-200",
-        !@pill && "flex items-center justify-between rounded-xl bg-base-200 px-3 py-2 text-sm font-medium",
+        !@pill &&
+          "flex items-center justify-between rounded-xl bg-base-200 px-3 py-2 text-sm font-medium",
         @a.sort != :latest && "opacity-50",
         @class
       ]}
@@ -590,7 +852,14 @@ defmodule RokiWeb.WatchedLive do
       <span class="flex items-center gap-1.5">
         <.icon name="hero-calendar-days" class="h-4 w-4" /> By month
       </span>
-      <input :if={!@pill} type="checkbox" class="toggle toggle-primary toggle-sm pointer-events-none" checked={@a.months?} tabindex="-1" aria-hidden="true" />
+      <input
+        :if={!@pill}
+        type="checkbox"
+        class="toggle toggle-primary toggle-sm pointer-events-none"
+        checked={@a.months?}
+        tabindex="-1"
+        aria-hidden="true"
+      />
     </.link>
     """
   end
@@ -611,12 +880,21 @@ defmodule RokiWeb.WatchedLive do
 
     ~H"""
     <div>
-      <p :if={@heading} class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">Genre</p>
+      <p
+        :if={@heading}
+        class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50"
+      >
+        Genre
+      </p>
       <div class="grid grid-cols-3 gap-1.5">
         <.link
           patch={address(@a, genre: nil)}
           onclick="document.activeElement.blur()"
-          class={["btn btn-sm rounded-full border-0 px-1", @a.genre == nil && "btn-primary", @a.genre != nil && "bg-base-200"]}
+          class={[
+            "btn btn-sm rounded-full border-0 px-1",
+            @a.genre == nil && "btn-primary",
+            @a.genre != nil && "bg-base-200"
+          ]}
         >
           All
         </.link>
@@ -624,7 +902,11 @@ defmodule RokiWeb.WatchedLive do
           :for={{slug, label} <- @options}
           patch={address(@a, genre: slug)}
           onclick="document.activeElement.blur()"
-          class={["btn btn-sm rounded-full border-0 px-1 text-xs", @a.genre == slug && "btn-primary", @a.genre != slug && "bg-base-200"]}
+          class={[
+            "btn btn-sm rounded-full border-0 px-1 text-xs",
+            @a.genre == slug && "btn-primary",
+            @a.genre != slug && "bg-base-200"
+          ]}
         >
           {label}
         </.link>
@@ -642,12 +924,21 @@ defmodule RokiWeb.WatchedLive do
 
     ~H"""
     <div>
-      <p :if={@heading} class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">Show</p>
+      <p
+        :if={@heading}
+        class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50"
+      >
+        Show
+      </p>
       <div class="grid grid-cols-2 gap-1.5">
         <.link
           patch={address(@a, status: nil)}
           onclick="document.activeElement.blur()"
-          class={["btn btn-sm rounded-full border-0", @a.status == nil && "btn-primary", @a.status != nil && "bg-base-200"]}
+          class={[
+            "btn btn-sm rounded-full border-0",
+            @a.status == nil && "btn-primary",
+            @a.status != nil && "bg-base-200"
+          ]}
         >
           All
         </.link>
@@ -655,7 +946,11 @@ defmodule RokiWeb.WatchedLive do
           :for={{key, label} <- @statuses}
           patch={address(@a, status: key)}
           onclick="document.activeElement.blur()"
-          class={["btn btn-sm rounded-full border-0 whitespace-nowrap", @a.status == key && "btn-primary", @a.status != key && "bg-base-200"]}
+          class={[
+            "btn btn-sm rounded-full border-0 whitespace-nowrap",
+            @a.status == key && "btn-primary",
+            @a.status != key && "bg-base-200"
+          ]}
         >
           {label}
         </.link>
@@ -674,7 +969,12 @@ defmodule RokiWeb.WatchedLive do
       title={status_title(@item)}
       class="pointer-events-none absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-1 text-[0.6rem] font-semibold leading-none text-white shadow backdrop-blur-sm"
     >
-      <span class={["h-1.5 w-1.5 rounded-full", @item.status == "progress" && "bg-warning", @item.status == "up_to_date" && "bg-success", @item.status == "on_hold" && "bg-base-content/50"]}></span>
+      <span class={[
+        "h-1.5 w-1.5 rounded-full",
+        @item.status == "progress" && "bg-warning",
+        @item.status == "up_to_date" && "bg-success",
+        @item.status == "on_hold" && "bg-base-content/50"
+      ]}></span>
       {status_label(@item.status)}
     </span>
     """
@@ -687,14 +987,23 @@ defmodule RokiWeb.WatchedLive do
   defp rating_picker(assigns) do
     ~H"""
     <div>
-      <p :if={@heading} class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">Rated</p>
+      <p
+        :if={@heading}
+        class="px-1 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-base-content/50"
+      >
+        Rated
+      </p>
       <div class="grid grid-cols-5 gap-1.5">
         <.link
           :for={n <- 10..1//-1}
           patch={address(@a, rating: if(@a.rating == n, do: nil, else: n))}
           onclick="document.activeElement.blur()"
           aria-label={"Rated #{n}"}
-          class={["btn btn-sm rounded-full border-0 px-0 tabular-nums", @a.rating == n && "btn-primary", @a.rating != n && "bg-base-200"]}
+          class={[
+            "btn btn-sm rounded-full border-0 px-0 tabular-nums",
+            @a.rating == n && "btn-primary",
+            @a.rating != n && "bg-base-200"
+          ]}
         >
           {n}
         </.link>
@@ -702,7 +1011,11 @@ defmodule RokiWeb.WatchedLive do
       <.link
         patch={address(@a, rating: if(@a.rating == :none, do: nil, else: :none))}
         onclick="document.activeElement.blur()"
-        class={["btn btn-sm mt-1.5 w-full rounded-full border-0", @a.rating == :none && "btn-primary", @a.rating != :none && "bg-base-200"]}
+        class={[
+          "btn btn-sm mt-1.5 w-full rounded-full border-0",
+          @a.rating == :none && "btn-primary",
+          @a.rating != :none && "bg-base-200"
+        ]}
       >
         Not rated yet
       </.link>
@@ -722,7 +1035,10 @@ defmodule RokiWeb.WatchedLive do
     ~H"""
     <span class={[
       "absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 shadow",
-      if(@selected, do: "border-primary bg-primary text-primary-content", else: "border-white bg-black/30 text-transparent")
+      if(@selected,
+        do: "border-primary bg-primary text-primary-content",
+        else: "border-white bg-black/30 text-transparent"
+      )
     ]}>
       <.icon name="hero-check-micro" class="h-4 w-4" />
     </span>
@@ -746,12 +1062,18 @@ defmodule RokiWeb.WatchedLive do
         phx-click="select_toggle"
         phx-value-key={@item.key}
         aria-pressed={to_string(@selected)}
-        class={["flex w-full items-center gap-3 p-2 text-left transition hover:bg-base-200 sm:p-3", @selected && "bg-primary/10"]}
+        class={[
+          "flex w-full items-center gap-3 p-2 text-left transition hover:bg-base-200 sm:p-3",
+          @selected && "bg-primary/10"
+        ]}
       >
         <.row_body item={@item} show_score={@show_score} />
         <span class={[
           "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2",
-          if(@selected, do: "border-primary bg-primary text-primary-content", else: "border-base-content/30 text-transparent")
+          if(@selected,
+            do: "border-primary bg-primary text-primary-content",
+            else: "border-base-content/30 text-transparent"
+          )
         ]}>
           <.icon name="hero-check-micro" class="h-4 w-4" />
         </span>
@@ -770,7 +1092,14 @@ defmodule RokiWeb.WatchedLive do
   defp row_body(assigns) do
     ~H"""
     <div class="h-[4.5rem] w-12 shrink-0 overflow-hidden rounded bg-base-300 sm:h-24 sm:w-16">
-      <img :if={@item.poster} src={Roki.Images.local(@item.poster)} alt="" loading="lazy" class="h-full w-full object-cover" draggable="false" />
+      <img
+        :if={@item.poster}
+        src={Roki.Images.local(@item.poster)}
+        alt=""
+        loading="lazy"
+        class="h-full w-full object-cover"
+        draggable="false"
+      />
     </div>
     <div class="min-w-0 flex-1">
       <div class="truncate font-medium">{@item.title}</div>
@@ -778,14 +1107,26 @@ defmodule RokiWeb.WatchedLive do
         {kind_label(@item)}<span :if={@item.year}> · {@item.year}</span>
       </div>
       <div :if={!finished?(@item)} class="flex items-center gap-1.5 text-xs text-base-content/70">
-        <span class={["h-1.5 w-1.5 rounded-full", @item.status == "progress" && "bg-warning", @item.status == "up_to_date" && "bg-success", @item.status == "on_hold" && "bg-base-content/50"]}></span>
-        <span class="font-medium">{status_label(@item.status)}</span><span :if={@item[:note]} class="truncate text-base-content/50"> · {@item.note}</span>
+        <span class={[
+          "h-1.5 w-1.5 rounded-full",
+          @item.status == "progress" && "bg-warning",
+          @item.status == "up_to_date" && "bg-success",
+          @item.status == "on_hold" && "bg-base-content/50"
+        ]}></span>
+        <span class="font-medium">{status_label(@item.status)}</span><span
+          :if={@item[:note]}
+          class="truncate text-base-content/50"
+        > · {@item.note}</span>
       </div>
       <div class="text-xs text-base-content/50 sm:hidden">{day(@item)}</div>
     </div>
     <div class="shrink-0 text-right">
-      <div :if={@item.score != nil and @show_score} class="font-semibold text-warning">★ {Profile.score_text(@item.score)}</div>
-      <div :if={@item.score == nil and @show_score} class="text-sm text-base-content/30">not rated</div>
+      <div :if={@item.score != nil and @show_score} class="font-semibold text-warning">
+        ★ {Profile.score_text(@item.score)}
+      </div>
+      <div :if={@item.score == nil and @show_score} class="text-sm text-base-content/30">
+        not rated
+      </div>
       <div class="hidden text-sm text-base-content/60 sm:block">{day(@item) || "No date"}</div>
     </div>
     """

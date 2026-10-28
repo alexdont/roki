@@ -48,7 +48,14 @@ defmodule RokiWeb.SearchLive do
 
       String.length(q) < 2 ->
         {:noreply,
-         assign(socket, q: q, genre: genre, shelf: empty(), franchises: [], seen: MapSet.new(), error: nil)}
+         assign(socket,
+           q: q,
+           genre: genre,
+           shelf: empty(),
+           franchises: [],
+           seen: MapSet.new(),
+           error: nil
+         )}
 
       true ->
         {:noreply,
@@ -81,8 +88,11 @@ defmodule RokiWeb.SearchLive do
       if genre do
         # The page it read to is what comes back, so "Load more" carries on from there.
         case Roki.Search.search_genre(client, uuid, q, page, genre, restore) do
-          {:ok, items, more?, franchises, seen, read_to} -> {q, genre, read_to, {:ok, items, more?, franchises, seen}}
-          error -> {q, genre, page, error}
+          {:ok, items, more?, franchises, seen, read_to} ->
+            {q, genre, read_to, {:ok, items, more?, franchises, seen}}
+
+          error ->
+            {q, genre, page, error}
         end
       else
         {q, nil, last, search_pages(client, uuid, q, last)}
@@ -118,7 +128,8 @@ defmodule RokiWeb.SearchLive do
 
   # A genre from the menu (or none): the same search, narrowed.
   def handle_event("genre", %{"genre" => genre}, socket),
-    do: {:noreply, push_patch(socket, to: search_path(socket.assigns.q, Roki.Genres.parse(genre)))}
+    do:
+      {:noreply, push_patch(socket, to: search_path(socket.assigns.q, Roki.Genres.parse(genre)))}
 
   def handle_event("placed", _params, socket), do: {:noreply, assign(socket, :place_y, nil)}
 
@@ -155,12 +166,18 @@ defmodule RokiWeb.SearchLive do
      })}
   end
 
-  def handle_async(:search, {:ok, {q, genre, _page, {:error, reason}}}, %{assigns: %{q: q, genre: genre}} = socket),
-    do:
-      {:noreply, assign(socket, error: reason, shelf: %{socket.assigns.shelf | loading?: false})}
+  def handle_async(
+        :search,
+        {:ok, {q, genre, _page, {:error, reason}}},
+        %{assigns: %{q: q, genre: genre}} = socket
+      ),
+      do:
+        {:noreply,
+         assign(socket, error: reason, shelf: %{socket.assigns.shelf | loading?: false})}
 
   # An answer for a query the user has since replaced — success or failure.
-  def handle_async(:search, {:ok, {_old_q, _old_genre, _page, _result}}, socket), do: {:noreply, socket}
+  def handle_async(:search, {:ok, {_old_q, _old_genre, _page, _result}}, socket),
+    do: {:noreply, socket}
 
   def handle_async(:search, {:exit, reason}, socket),
     do:
@@ -169,7 +186,8 @@ defmodule RokiWeb.SearchLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -192,27 +210,54 @@ defmodule RokiWeb.SearchLive do
       <%!-- The genre: the same search, only the titles of one. --%>
       <div :if={@q != ""} class="mx-auto flex max-w-2xl items-center gap-2 pb-2">
         <div class="dropdown">
-          <div tabindex="0" role="button" class={["btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium", @genre && "btn-primary", !@genre && "bg-base-200"]}>
+          <div
+            tabindex="0"
+            role="button"
+            class={[
+              "btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium",
+              @genre && "btn-primary",
+              !@genre && "bg-base-200"
+            ]}
+          >
             {if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
             <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
           </div>
-          <div tabindex="0" class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl">
+          <div
+            tabindex="0"
+            class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+          >
             <div class="grid grid-cols-3 gap-1.5">
-              <.link patch={search_path(@q, nil)} onclick="document.activeElement.blur()" class={["btn btn-sm rounded-full border-0 px-1", @genre == nil && "btn-primary", @genre != nil && "bg-base-200"]}>
+              <.link
+                patch={search_path(@q, nil)}
+                onclick="document.activeElement.blur()"
+                class={[
+                  "btn btn-sm rounded-full border-0 px-1",
+                  @genre == nil && "btn-primary",
+                  @genre != nil && "bg-base-200"
+                ]}
+              >
                 All
               </.link>
               <.link
                 :for={{slug, label} <- Roki.Genres.all()}
                 patch={search_path(@q, slug)}
                 onclick="document.activeElement.blur()"
-                class={["btn btn-sm rounded-full border-0 px-1 text-xs", @genre == slug && "btn-primary", @genre != slug && "bg-base-200"]}
+                class={[
+                  "btn btn-sm rounded-full border-0 px-1 text-xs",
+                  @genre == slug && "btn-primary",
+                  @genre != slug && "bg-base-200"
+                ]}
               >
                 {label}
               </.link>
             </div>
           </div>
         </div>
-        <.link :if={@genre} patch={search_path(@q, nil)} class="text-sm text-base-content/60 hover:text-base-content">Clear</.link>
+        <.link
+          :if={@genre}
+          patch={search_path(@q, nil)}
+          class="text-sm text-base-content/60 hover:text-base-content"
+        >Clear</.link>
       </div>
 
       <p :if={@q == ""} class="py-16 text-center text-base-content/60">

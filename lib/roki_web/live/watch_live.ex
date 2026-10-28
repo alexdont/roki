@@ -115,7 +115,14 @@ defmodule RokiWeb.WatchLive do
     parent = self()
 
     socket
-    |> assign(token: token, failed: nil, failed_reason: nil, player: nil, checks: [], decode_prompt: nil)
+    |> assign(
+      token: token,
+      failed: nil,
+      failed_reason: nil,
+      player: nil,
+      checks: [],
+      decode_prompt: nil
+    )
     |> start_async(
       :resolve,
       Roki.Study.wrap(fn ->
@@ -150,7 +157,10 @@ defmodule RokiWeb.WatchLive do
                announce(
                  parent,
                  token,
-                 if(Watch.local_player?(uuid, caps), do: "Opening the video…", else: "Getting the video ready…")
+                 if(Watch.local_player?(uuid, caps),
+                   do: "Opening the video…",
+                   else: "Getting the video ready…"
+                 )
                ),
              {:ok, pair, player} <-
                start_or_next(parent, token, uuid, caps, res, pair, hash == nil, skip, 4) do
@@ -429,7 +439,15 @@ defmodule RokiWeb.WatchLive do
         %{assigns: %{token: token, player: %{} = player}} = socket
       ) do
     kept = Enum.reject(player.tracks, &String.starts_with?(&1.url, "/stream/#{p.remux_id}/sub"))
-    data = %{player | url: p.url, resume: p.resume_at, start: p[:start] || 0, tracks: p.subtitles ++ kept}
+
+    data = %{
+      player
+      | url: p.url,
+        resume: p.resume_at,
+        start: p[:start] || 0,
+        tracks: p.subtitles ++ kept
+    }
+
     {:noreply, assign(socket, :player, data)}
   end
 
@@ -483,7 +501,10 @@ defmodule RokiWeb.WatchLive do
   # This browser is not asked for HEVC/AV1/VP9 as they are again (it remembers).
   defp no_direct(socket) do
     socket
-    |> assign(caps: Map.merge(socket.assigns.caps, %{hevc: false, av1: false, vp9: false, uhd: false}), fallback?: true)
+    |> assign(
+      caps: Map.merge(socket.assigns.caps, %{hevc: false, av1: false, vp9: false, uhd: false}),
+      fallback?: true
+    )
     |> push_event("roki:nodirect", %{})
   end
 
@@ -539,7 +560,9 @@ defmodule RokiWeb.WatchLive do
      start_async(
        socket,
        :restart,
-       Roki.Study.wrap(fn -> {token, Watch.restart(uuid, ctx, source, stream, caps, trunc(position))} end)
+       Roki.Study.wrap(fn ->
+         {token, Watch.restart(uuid, ctx, source, stream, caps, trunc(position))}
+       end)
      )}
   end
 
@@ -549,26 +572,45 @@ defmodule RokiWeb.WatchLive do
   # Nothing is converted or replaced behind the viewer's back: they are asked. The two answers —
   # convert this release for the browser (the server re-encodes it to H.264, minutes of work), or
   # look for another file the browser plays as it is — are `convert_it` and `find_other`.
-  def handle_event("player_failed", %{"local" => true} = params, %{assigns: %{player: %{local: true}, current: {source, _}}} = socket) do
-    Logger.warning("local player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} — the server takes over")
+  def handle_event(
+        "player_failed",
+        %{"local" => true} = params,
+        %{assigns: %{player: %{local: true}, current: {source, _}}} = socket
+      ) do
+    Logger.warning(
+      "local player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} — the server takes over"
+    )
 
     {:noreply,
      socket
-     |> assign(caps: Map.put(socket.assigns.caps, :local, false), status: "This device could not play it as it is — the server is preparing it…")
+     |> assign(
+       caps: Map.put(socket.assigns.caps, :local, false),
+       status: "This device could not play it as it is — the server is preparing it…"
+     )
      |> resolve()}
   end
 
-  def handle_event("player_failed", params, %{assigns: %{player: %{}, current: {source, _}}} = socket) do
+  def handle_event(
+        "player_failed",
+        params,
+        %{assigns: %{player: %{}, current: {source, _}}} = socket
+      ) do
     caps = socket.assigns.caps
 
-    Logger.warning("player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} #{inspect(params["ua"])}")
+    Logger.warning(
+      "player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} #{inspect(params["ua"])}"
+    )
 
     if not socket.assigns.fallback? and not Roki.Direct.wanted?(source, %{}) and
          Enum.any?([:hevc, :av1, :vp9], &(caps[&1] == true)) do
       {:noreply,
        assign(socket,
          player: nil,
-         decode_prompt: %{name: source.name, hash: source.hash, can_convert?: socket.assigns.heavy_allowed?}
+         decode_prompt: %{
+           name: source.name,
+           hash: source.hash,
+           can_convert?: socket.assigns.heavy_allowed?
+         }
        )}
     else
       {:noreply, socket}
@@ -578,11 +620,18 @@ defmodule RokiWeb.WatchLive do
   def handle_event("player_failed", _params, socket), do: {:noreply, socket}
 
   # "Convert it": the same release, re-encoded here to something every browser plays.
-  def handle_event("convert_it", _params, %{assigns: %{decode_prompt: %{can_convert?: true}}} = socket) do
+  def handle_event(
+        "convert_it",
+        _params,
+        %{assigns: %{decode_prompt: %{can_convert?: true}}} = socket
+      ) do
     {:noreply,
      socket
      |> no_direct()
-     |> assign(heavy_ok: true, status: "Converting it so this browser can play it — this takes a few minutes…")
+     |> assign(
+       heavy_ok: true,
+       status: "Converting it so this browser can play it — this takes a few minutes…"
+     )
      |> resolve()}
   end
 
@@ -592,11 +641,16 @@ defmodule RokiWeb.WatchLive do
     {:noreply,
      socket
      |> no_direct()
-     |> assign(hash: nil, skip: Enum.uniq([hash | socket.assigns.skip]), status: "Looking for a file this browser can play…")
+     |> assign(
+       hash: nil,
+       skip: Enum.uniq([hash | socket.assigns.skip]),
+       status: "Looking for a file this browser can play…"
+     )
      |> resolve()}
   end
 
-  def handle_event(event, _params, socket) when event in ["convert_it", "find_other"], do: {:noreply, socket}
+  def handle_event(event, _params, socket) when event in ["convert_it", "find_other"],
+    do: {:noreply, socket}
 
   # The OpenSubtitles choices for one language, listed on request from the subtitles menu.
   def handle_event("os_search", %{"lang" => lang}, %{assigns: %{ctx: ctx, uuid: uuid}} = socket)
@@ -646,12 +700,25 @@ defmodule RokiWeb.WatchLive do
   end
 
   # Another season picked in the episode menu: its episodes, for the menu to list.
-  def handle_event("season_episodes", %{"season" => s}, %{assigns: %{type: "tv", id: id, uuid: uuid}} = socket)
+  def handle_event(
+        "season_episodes",
+        %{"season" => s},
+        %{assigns: %{type: "tv", id: id, uuid: uuid}} = socket
+      )
       when is_integer(s) and s >= 0 do
     episodes =
       case Watch.episodes(id, s, uuid) do
-        {:ok, eps} -> for e <- eps, do: %{n: e.number, name: e.name, ok: e.aired?, now: s == socket.assigns.season and e.number == socket.assigns.episode}
-        _ -> []
+        {:ok, eps} ->
+          for e <- eps,
+              do: %{
+                n: e.number,
+                name: e.name,
+                ok: e.aired?,
+                now: s == socket.assigns.season and e.number == socket.assigns.episode
+              }
+
+        _ ->
+          []
       end
 
     {:reply, %{season: s, episodes: episodes}, socket}
@@ -816,7 +883,8 @@ defmodule RokiWeb.WatchLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -854,14 +922,23 @@ defmodule RokiWeb.WatchLive do
           Couldn't load this title just now. Try again in a minute.
         </p>
 
-        <div :if={@decode_prompt} class="space-y-3 rounded-box border border-warning/40 bg-warning/10 p-5" role="alert">
+        <div
+          :if={@decode_prompt}
+          class="space-y-3 rounded-box border border-warning/40 bg-warning/10 p-5"
+          role="alert"
+        >
           <p class="font-semibold">This browser can't show this video as it is.</p>
           <p class="text-sm text-base-content/70">
             {@decode_prompt.name} is encoded in a way this browser can't decode. You choose what happens
             next — nothing is converted unless you say so.
           </p>
           <div class="flex flex-wrap gap-2">
-            <button :if={@decode_prompt.can_convert?} type="button" phx-click="convert_it" class="btn btn-primary">
+            <button
+              :if={@decode_prompt.can_convert?}
+              type="button"
+              phx-click="convert_it"
+              class="btn btn-primary"
+            >
               Convert it for this browser
               <span class="text-xs font-normal opacity-80">(takes a few minutes)</span>
             </button>
@@ -895,7 +972,10 @@ defmodule RokiWeb.WatchLive do
         </div>
 
         <div
-          :if={@linked? and @player == nil and @failed == nil and @title_error == nil and @decode_prompt == nil}
+          :if={
+            @linked? and @player == nil and @failed == nil and @title_error == nil and
+              @decode_prompt == nil
+          }
           class="space-y-3 rounded-box bg-base-200 p-6 text-sm"
           aria-busy="true"
         >

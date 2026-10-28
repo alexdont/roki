@@ -33,7 +33,8 @@ defmodule RokiWeb.FriendsLiveTest do
     refute Social.title_uuid("movie", 603) == Social.title_uuid("movie", 604)
     assert {:ok, _} = Ecto.UUID.cast(Social.title_uuid("movie", 603))
     # A version 5 UUID: the version digit leads the third group.
-    assert Social.title_uuid("tv", 1) =~ ~r/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-/
+    assert Social.title_uuid("tv", 1) =~
+             ~r/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-/
   end
 
   test "asking, answering, taking back and ending a friendship", %{ann: ann, bob: bob} do
@@ -117,12 +118,25 @@ defmodule RokiWeb.FriendsLiveTest do
     assert missing =~ "There is no one called"
   end
 
-  defp told(user), do: for(n <- PhoenixKit.Notifications.recent_for_user(user.uuid, 20), do: PhoenixKit.Notifications.Render.render(n))
+  defp told(user),
+    do:
+      for(
+        n <- PhoenixKit.Notifications.recent_for_user(user.uuid, 20),
+        do: PhoenixKit.Notifications.Render.render(n)
+      )
 
-  test "a friend request tells the other person, with where to answer it; accepting tells the asker", %{ann: ann, bob: bob} do
+  test "a friend request tells the other person, with where to answer it; accepting tells the asker",
+       %{ann: ann, bob: bob} do
     {:ok, _} = Social.request(ann.uuid, bob.uuid)
 
-    assert [%{text: "friendann sent you a friend request", link: "/friendbob/friends", icon: "hero-user-plus"}] = told(bob)
+    assert [
+             %{
+               text: "friendann sent you a friend request",
+               link: "/friendbob/friends",
+               icon: "hero-user-plus"
+             }
+           ] = told(bob)
+
     assert told(ann) == []
 
     {:ok, _} = Social.accept(bob.uuid, ann.uuid)
@@ -135,7 +149,10 @@ defmodule RokiWeb.FriendsLiveTest do
     assert length(told(ann)) == 1
   end
 
-  test "when two people ask each other, both are friends and each is told the right thing", %{ann: ann, bob: bob} do
+  test "when two people ask each other, both are friends and each is told the right thing", %{
+    ann: ann,
+    bob: bob
+  } do
     {:ok, _} = Social.request(ann.uuid, bob.uuid)
     {:ok, _} = Social.request(bob.uuid, ann.uuid)
 
@@ -146,7 +163,8 @@ defmodule RokiWeb.FriendsLiveTest do
     assert Social.pending_count(bob.uuid) == 0
   end
 
-  test "asking again after taking a request back tells them again; a refused ask (already friends) says nothing", %{ann: ann, bob: bob} do
+  test "asking again after taking a request back tells them again; a refused ask (already friends) says nothing",
+       %{ann: ann, bob: bob} do
     {:ok, _} = Social.request(ann.uuid, bob.uuid)
     {:ok, _} = Social.cancel(ann.uuid, bob.uuid)
     {:ok, _} = Social.request(ann.uuid, bob.uuid)
@@ -157,23 +175,38 @@ defmodule RokiWeb.FriendsLiveTest do
     assert length(told(bob)) == 2
   end
 
-  test "a comment on a profile tells its owner, a reply tells the one replied to, and never the writer", %{ann: ann, bob: bob} do
-    {:ok, first} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "hello bob"})
+  test "a comment on a profile tells its owner, a reply tells the one replied to, and never the writer",
+       %{ann: ann, bob: bob} do
+    {:ok, first} =
+      PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "hello bob"})
+
     assert [%{text: "friendann commented on your profile", link: "/friendbob"}] = told(bob)
     assert told(ann) == []
 
     # Bob answers on his own page: ann is told, bob is not told of his own writing.
-    {:ok, _} = PhoenixKitComments.create_comment("profile", bob.uuid, bob.uuid, %{content: "hi ann", parent_uuid: first.uuid})
+    {:ok, _} =
+      PhoenixKitComments.create_comment("profile", bob.uuid, bob.uuid, %{
+        content: "hi ann",
+        parent_uuid: first.uuid
+      })
+
     assert Enum.map(told(ann), & &1.text) == ["friendbob replied to your comment"]
     assert length(told(bob)) == 1
 
     # Someone commenting on their own profile tells no one.
-    {:ok, _} = PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{content: "note to self"})
+    {:ok, _} =
+      PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{content: "note to self"})
+
     assert length(told(ann)) == 1
   end
 
-  test "a like tells the one who wrote the comment, never the liker, and not for a dislike", %{ann: ann, bob: bob} do
-    {:ok, comment} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "worth a like"})
+  test "a like tells the one who wrote the comment, never the liker, and not for a dislike", %{
+    ann: ann,
+    bob: bob
+  } do
+    {:ok, comment} =
+      PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "worth a like"})
+
     assert length(told(bob)) == 1
 
     PhoenixKitComments.like_comment(comment.uuid, bob.uuid)
@@ -184,29 +217,52 @@ defmodule RokiWeb.FriendsLiveTest do
     assert length(told(ann)) == 1
 
     # A dislike is not announced.
-    {:ok, other} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "meh"})
+    {:ok, other} =
+      PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "meh"})
+
     PhoenixKitComments.dislike_comment(other.uuid, bob.uuid)
     assert length(told(ann)) == 1
   end
 
-  test "a name written as @username is told, unless they switched comment notices off", %{ann: ann, bob: bob} do
+  test "a name written as @username is told, unless they switched comment notices off", %{
+    ann: ann,
+    bob: bob
+  } do
     carol = register("friendcarol")
 
-    {:ok, _} = PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{content: "thanks @friendbob and @friendcarol, not @nobodyatall"})
+    {:ok, _} =
+      PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{
+        content: "thanks @friendbob and @friendcarol, not @nobodyatall"
+      })
+
     assert Enum.map(told(bob), & &1.text) == ["friendann mentioned you in a comment"]
     assert Enum.map(told(carol), & &1.text) == ["friendann mentioned you in a comment"]
 
     Roki.Notify.set(carol.uuid, "comments", false)
-    {:ok, _} = PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{content: "again @friendcarol"})
+
+    {:ok, _} =
+      PhoenixKitComments.create_comment("profile", ann.uuid, ann.uuid, %{
+        content: "again @friendcarol"
+      })
+
     assert length(told(carol)) == 1
 
     # Naming yourself tells no one; the profile's owner is told once, as the owner, not twice.
-    {:ok, _} = PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "hello @friendbob @friendann"})
-    assert Enum.sort(Enum.map(told(bob), & &1.text)) == ["friendann commented on your profile", "friendann mentioned you in a comment"]
+    {:ok, _} =
+      PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{
+        content: "hello @friendbob @friendann"
+      })
+
+    assert Enum.sort(Enum.map(told(bob), & &1.text)) == [
+             "friendann commented on your profile",
+             "friendann mentioned you in a comment"
+           ]
+
     assert Roki.CommentHandler.mentioned("a @friendbob, @friendbob. and @friendbob") == [bob.uuid]
   end
 
-  test "friend activity: told only to friends who asked, once per title, and never for the test account", %{ann: ann, bob: bob} do
+  test "friend activity: told only to friends who asked, once per title, and never for the test account",
+       %{ann: ann, bob: bob} do
     carol = register("friendcarol2")
     # What friends did, apart from the friend requests that made them friends.
     news = fn user -> Enum.reject(told(user), &(&1.text =~ ~r/accepted|friend request/)) end
@@ -223,7 +279,9 @@ defmodule RokiWeb.FriendsLiveTest do
     Roki.Notify.set(bob.uuid, "friend_activity", true)
     Social.friend_activity(ann.uuid, :finished, "movie", 604, "Reloaded")
 
-    assert [%{text: "friendann finished Reloaded", link: "/title/movie/604", icon: "hero-film"}] = news.(bob)
+    assert [%{text: "friendann finished Reloaded", link: "/title/movie/604", icon: "hero-film"}] =
+             news.(bob)
+
     assert news.(carol) == []
 
     # Rating the same film right after finishing it is the same news.
@@ -241,20 +299,35 @@ defmodule RokiWeb.FriendsLiveTest do
     assert told(stranger) == []
   end
 
-  test "a reply on a title names the title and links to it; the moderation list names it too", %{ann: ann, bob: bob} do
+  test "a reply on a title names the title and links to it; the moderation list names it too", %{
+    ann: ann,
+    bob: bob
+  } do
     Social.remember_title("movie", 603, "The Matrix")
     thread = Social.title_uuid("movie", 603)
 
-    {:ok, first} = PhoenixKitComments.create_comment("title", thread, ann.uuid, %{content: "great"})
-    {:ok, _} = PhoenixKitComments.create_comment("title", thread, bob.uuid, %{content: "agreed", parent_uuid: first.uuid})
+    {:ok, first} =
+      PhoenixKitComments.create_comment("title", thread, ann.uuid, %{content: "great"})
 
-    assert [%{text: "friendbob replied to your comment on The Matrix", link: "/title/movie/603"}] = told(ann)
+    {:ok, _} =
+      PhoenixKitComments.create_comment("title", thread, bob.uuid, %{
+        content: "agreed",
+        parent_uuid: first.uuid
+      })
+
+    assert [%{text: "friendbob replied to your comment on The Matrix", link: "/title/movie/603"}] =
+             told(ann)
+
     # A first comment on a title has no one to tell.
     assert told(bob) == []
 
-    assert %{^thread => %{title: "The Matrix", path: "/title/movie/603"}} = Roki.CommentHandler.Title.resolve_comment_resources([thread])
+    assert %{^thread => %{title: "The Matrix", path: "/title/movie/603"}} =
+             Roki.CommentHandler.Title.resolve_comment_resources([thread])
+
     assert %{} = Roki.CommentHandler.Profile.resolve_comment_resources([bob.uuid])
-    assert Roki.CommentHandler.Profile.resolve_comment_resources([bob.uuid])[bob.uuid].path == "/friendbob"
+
+    assert Roki.CommentHandler.Profile.resolve_comment_resources([bob.uuid])[bob.uuid].path ==
+             "/friendbob"
   end
 
   test "the bell is in the header of a signed-in person's pages, and not a visitor's", %{ann: ann} do

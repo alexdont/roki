@@ -9,12 +9,18 @@ defmodule Roki.Notify do
 
   # key, label, what it is, on unless chosen otherwise
   @kinds [
-    {"release", "New episodes and releases", "A new episode of a show or anime you saved or are following, a saved film reaching theaters or digital.", true},
+    {"release", "New episodes and releases",
+     "A new episode of a show or anime you saved or are following, a saved film reaching theaters or digital.",
+     true},
     {"season", "New seasons", "A show you saved or follow gets a new season with a date.", true},
-    {"digest", "Your week ahead", "One summary on Sundays of what comes out in the coming week.", true},
+    {"digest", "Your week ahead", "One summary on Sundays of what comes out in the coming week.",
+     true},
     {"comments", "Comments", "Likes on your comments, and being mentioned in one.", true},
-    {"connection", "Connection problems", "A Real-Debrid, TorBox, MyAnimeList or TMDB login that stopped working or is about to.", true},
-    {"friend_activity", "What friends do", "A friend finished a film or rated something. Can be a lot, so it starts off.", false}
+    {"connection", "Connection problems",
+     "A Real-Debrid, TorBox, MyAnimeList or TMDB login that stopped working or is about to.",
+     true},
+    {"friend_activity", "What friends do",
+     "A friend finished a film or rated something. Can be a lot, so it starts off.", false}
   ]
 
   @doc "The kinds, in order: `[{key, label, description, default}]`."
@@ -22,7 +28,10 @@ defmodule Roki.Notify do
 
   @doc "Does this person want this kind of notification?"
   def wants?(uuid, key) when is_binary(uuid) do
-    case Repo.query!("select enabled from roki_notify_prefs where user_uuid = $1 and key = $2", [Ecto.UUID.dump!(uuid), key]).rows do
+    case Repo.query!("select enabled from roki_notify_prefs where user_uuid = $1 and key = $2", [
+           Ecto.UUID.dump!(uuid),
+           key
+         ]).rows do
       [[enabled]] -> enabled
       _ -> default(key)
     end
@@ -32,7 +41,12 @@ defmodule Roki.Notify do
 
   @doc "Every kind with what this person has chosen (or the default): `%{key => boolean}`."
   def choices(uuid) do
-    chosen = Repo.query!("select key, enabled from roki_notify_prefs where user_uuid = $1", [Ecto.UUID.dump!(uuid)]).rows |> Map.new(fn [k, e] -> {k, e} end)
+    chosen =
+      Repo.query!("select key, enabled from roki_notify_prefs where user_uuid = $1", [
+        Ecto.UUID.dump!(uuid)
+      ]).rows
+      |> Map.new(fn [k, e] -> {k, e} end)
+
     Map.new(@kinds, fn {key, _, _, default} -> {key, Map.get(chosen, key, default)} end)
   end
 

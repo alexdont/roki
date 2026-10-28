@@ -26,7 +26,8 @@ defmodule Roki.Subs do
         {:ok, json} ->
           case Jason.decode(json) do
             {:ok, list} when is_list(list) ->
-              for %{"file" => file} = s <- list, present?(dir, cue_file(file, part)),
+              for %{"file" => file} = s <- list,
+                  present?(dir, cue_file(file, part)),
                   do: %{file: file, lang: s["lang"] || "", name: name(s["lang"], "")}
 
             _ ->
@@ -46,7 +47,12 @@ defmodule Roki.Subs do
           |> Enum.map(fn vtt ->
             file = String.replace_suffix(vtt, ".vtt", "")
             [_, lang] = Regex.run(~r/^ext-([a-z]{2,3})/, file)
-            %{file: file, lang: lang, name: name(lang, if(file =~ "-os", do: " (OpenSubtitles)", else: " (fetched)"))}
+
+            %{
+              file: file,
+              lang: lang,
+              name: name(lang, if(file =~ "-os", do: " (OpenSubtitles)", else: " (fetched)"))
+            }
           end)
 
         _ ->
@@ -78,8 +84,11 @@ defmodule Roki.Subs do
     tracks
     |> Enum.group_by(& &1.name)
     |> Enum.flat_map(fn
-      {_name, [one]} -> [one]
-      {name, same} -> Enum.with_index(same, 1) |> Enum.map(fn {t, k} -> %{t | name: "#{name} #{k}"} end)
+      {_name, [one]} ->
+        [one]
+
+      {name, same} ->
+        Enum.with_index(same, 1) |> Enum.map(fn {t, k} -> %{t | name: "#{name} #{k}"} end)
     end)
     |> Enum.sort_by(& &1.file)
   end
@@ -90,6 +99,7 @@ defmodule Roki.Subs do
 
     Enum.map(tracks, fn t ->
       lang = if t.lang != "", do: ~s(,LANGUAGE="#{Roki.Watch.short_code(t.lang)}"), else: ""
+
       ~s(#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="#{t.name}"#{lang},DEFAULT=NO,AUTOSELECT=NO,URI="#{t.file}.m3u8#{q}")
     end)
   end
@@ -115,7 +125,10 @@ defmodule Roki.Subs do
           segments
           |> Enum.with_index()
           |> Enum.flat_map(fn {{_start, dur}, k} ->
-            ["#EXTINF:#{:erlang.float_to_binary(dur * 1.0, decimals: 3)},", "#{file}.#{k}.vtt#{q}"]
+            [
+              "#EXTINF:#{:erlang.float_to_binary(dur * 1.0, decimals: 3)},",
+              "#{file}.#{k}.vtt#{q}"
+            ]
           end)
 
         tail = if done?, do: ["#EXT-X-ENDLIST"], else: []
@@ -138,7 +151,8 @@ defmodule Roki.Subs do
         |> Enum.map(fn c -> "#{stamp(c.from)} --> #{stamp(c.to)}#{c.settings}\n#{c.text}" end)
 
       # The map belongs to the header block: on the line after WEBVTT, before the first blank line.
-      Enum.join(["WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:#{offset},LOCAL:00:00:00.000" | cues], "\n\n") <> "\n"
+      Enum.join(["WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:#{offset},LOCAL:00:00:00.000" | cues], "\n\n") <>
+        "\n"
     else
       _ -> nil
     end
@@ -157,7 +171,13 @@ defmodule Roki.Subs do
           %{start: start, fragments: fragments} ->
             durations = Enum.map(fragments, & &1.duration)
             done? = File.exists?(Path.join(dir, Roki.Direct.part_name("done", "", part)))
-            %{segments: starts(durations, start), done?: done?, target: target(durations), offset: 0}
+
+            %{
+              segments: starts(durations, start),
+              done?: done?,
+              target: target(durations),
+              offset: 0
+            }
 
           _ ->
             nil
@@ -169,7 +189,8 @@ defmodule Roki.Subs do
         case File.read(Path.join(dir, media)) do
           {:ok, content} ->
             durations =
-              Regex.scan(~r/^#EXTINF:([\d.]+)/m, content) |> Enum.map(fn [_, d] -> String.to_float(pad(d)) end)
+              Regex.scan(~r/^#EXTINF:([\d.]+)/m, content)
+              |> Enum.map(fn [_, d] -> String.to_float(pad(d)) end)
 
             %{
               segments: starts(durations, 0.0),
@@ -207,7 +228,14 @@ defmodule Roki.Subs do
         {_id, [timing | body]} ->
           case Regex.run(~r/^\s*([\d:.]+)\s*-->\s*([\d:.]+)(.*)$/, timing) do
             [_, from, to, settings] ->
-              [%{from: seconds(from), to: seconds(to), settings: settings, text: Enum.join(body, "\n")}]
+              [
+                %{
+                  from: seconds(from),
+                  to: seconds(to),
+                  settings: settings,
+                  text: Enum.join(body, "\n")
+                }
+              ]
 
             _ ->
               []
@@ -221,9 +249,14 @@ defmodule Roki.Subs do
 
   defp seconds(stamp) do
     case String.split(stamp, ":") do
-      [h, m, s] -> String.to_integer(h) * 3600 + String.to_integer(m) * 60 + String.to_float(pad(s))
-      [m, s] -> String.to_integer(m) * 60 + String.to_float(pad(s))
-      _ -> 0.0
+      [h, m, s] ->
+        String.to_integer(h) * 3600 + String.to_integer(m) * 60 + String.to_float(pad(s))
+
+      [m, s] ->
+        String.to_integer(m) * 60 + String.to_float(pad(s))
+
+      _ ->
+        0.0
     end
   end
 

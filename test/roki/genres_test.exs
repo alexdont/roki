@@ -34,7 +34,10 @@ defmodule Roki.GenresTest do
   end
 
   test "genres are kept per title and read back; a title not read yet is not in the answer" do
-    Roki.Repo.query!("insert into roki_titles (type, id, name, genres, seen_at) values ('movie', 1, 'A', '{27,53}', now()), ('movie', 2, 'B', null, now())")
+    Roki.Repo.query!(
+      "insert into roki_titles (type, id, name, genres, seen_at) values ('movie', 1, 'A', '{27,53}', now()), ('movie', 2, 'B', null, now())"
+    )
+
     assert Genres.known([{"movie", 1}, {"movie", 2}, {"tv", 3}]) == %{{"movie", 1} => [27, 53]}
     assert Genres.missing_count([{"movie", 1}, {"movie", 2}, {"tv", 3}]) == 2
   end

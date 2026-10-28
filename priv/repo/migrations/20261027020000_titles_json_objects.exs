@@ -6,6 +6,7 @@ defmodule Roki.Repo.Migrations.TitlesJsonObjects do
   # them (the runtime of a film, say).
   def up do
     execute "update roki_titles set data = (data #>> '{}')::jsonb where jsonb_typeof(data) = 'string'"
+
     execute "update roki_kept set data = (data #>> '{}')::jsonb where jsonb_typeof(data) = 'string'"
   end
 

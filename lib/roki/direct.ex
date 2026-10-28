@@ -273,14 +273,17 @@ defmodule Roki.Direct do
       {:ok, names} ->
         names
         |> Enum.flat_map(fn
-          "media.mp4" -> [0]
+          "media.mp4" ->
+            [0]
+
           "media-" <> rest ->
             case Integer.parse(rest) do
               {n, ".mp4"} -> [n]
               _ -> []
             end
 
-          _ -> []
+          _ ->
+            []
         end)
         |> Enum.sort()
 
@@ -316,8 +319,11 @@ defmodule Roki.Direct do
   # How far into the file a part has been written, in seconds.
   defp reach(id, part) do
     case Roki.Fmp4.scan(media(id, part)) do
-      %{start: start, fragments: fragments} -> start + Enum.sum(Enum.map(fragments, & &1.duration))
-      _ -> 0
+      %{start: start, fragments: fragments} ->
+        start + Enum.sum(Enum.map(fragments, & &1.duration))
+
+      _ ->
+        0
     end
   end
 
@@ -443,7 +449,9 @@ defmodule Roki.Direct do
       |> Enum.map(fn line -> %{uri: attr(line, "URI"), lang: attr(line, "LANGUAGE") || ""} end)
       |> Enum.uniq_by(& &1.uri)
       |> Enum.with_index()
-      |> Enum.map(fn {t, n} -> Map.merge(t, %{index: n, name: track_name(t.lang, n), file: t.uri}) end)
+      |> Enum.map(fn {t, n} ->
+        Map.merge(t, %{index: n, name: track_name(t.lang, n), file: t.uri})
+      end)
       |> unique_names()
 
     if tracks == [] do
@@ -457,10 +465,13 @@ defmodule Roki.Direct do
         |> Enum.map(fn {t, i} ->
           lang = if t.lang != "", do: ~s(,LANGUAGE="#{Roki.Watch.short_code(t.lang)}"), else: ""
           default = if i == chosen, do: "YES", else: "NO"
+
           ~s(#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="group_aud",NAME="#{t.name}"#{lang},DEFAULT=#{default},AUTOSELECT=YES,URI="#{t.uri}")
         end)
 
-      {before, after_media} = Enum.split_while(lines, &(not String.starts_with?(&1, "#EXT-X-MEDIA:TYPE=AUDIO")))
+      {before, after_media} =
+        Enum.split_while(lines, &(not String.starts_with?(&1, "#EXT-X-MEDIA:TYPE=AUDIO")))
+
       rest = Enum.reject(after_media, &String.starts_with?(&1, "#EXT-X-MEDIA:TYPE=AUDIO"))
       with_subtitles(Enum.join(before ++ renditions ++ rest, "\n"), subs)
     end
@@ -487,7 +498,11 @@ defmodule Roki.Direct do
 
   @doc "laev's single-audio media playlist under a master, so subtitle renditions can ride along."
   def wrap_media(media_name, subs),
-    do: with_subtitles("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-STREAM-INF:BANDWIDTH=8000000\n#{media_name}\n", subs)
+    do:
+      with_subtitles(
+        "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-STREAM-INF:BANDWIDTH=8000000\n#{media_name}\n",
+        subs
+      )
 
   defp attr(line, name) do
     case Regex.run(~r/(?:^|,)#{name}="([^"]*)"/, line) do
@@ -603,7 +618,10 @@ defmodule Roki.Direct do
   end
 
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
-    Logger.warning("direct #{state.id} (from #{state.part}) ffmpeg exited #{status}: #{state.last_error}")
+    Logger.warning(
+      "direct #{state.id} (from #{state.part}) ffmpeg exited #{status}: #{state.last_error}"
+    )
+
     {:stop, :normal, %{state | port: nil}}
   end
 
@@ -667,15 +685,29 @@ defmodule Roki.Direct do
 
     sub_outputs =
       Enum.flat_map(subs, fn s ->
-        ["-map", "0:#{s.index}", "-c:s", "webvtt", "-flush_packets", "1", "-f", "webvtt", out.(s.file, ".vtt")]
+        [
+          "-map",
+          "0:#{s.index}",
+          "-c:s",
+          "webvtt",
+          "-flush_packets",
+          "1",
+          "-f",
+          "webvtt",
+          out.(s.file, ".vtt")
+        ]
       end)
 
     {seek, copyts, discont, ts_delay} =
       if part > 0,
-        do: {["-ss", Integer.to_string(part)], ["-copyts"], "+frag_discont", ~w(-muxdelay 0 -muxpreload 0)},
+        do:
+          {["-ss", Integer.to_string(part)], ["-copyts"], "+frag_discont",
+           ~w(-muxdelay 0 -muxpreload 0)},
         else: {[], [], "", []}
 
-    read = ~w(ffmpeg -nostdin -loglevel error -rw_timeout 20000000) ++ seek ++ ["-i", url] ++ copyts
+    read =
+      ~w(ffmpeg -nostdin -loglevel error -rw_timeout 20000000) ++ seek ++ ["-i", url] ++ copyts
+
     # The input's audio streams, in order, as `0:a:N`; `audios` lists them in that order.
     audio_maps = Enum.flat_map(0..(length(audios) - 1)//1, &["-map", "0:a:#{&1}"])
 
@@ -705,16 +737,23 @@ defmodule Roki.Direct do
     if video in ["hevc", "h265"] do
       # The TS carries the video and every audio track; the second ffmpeg splits them out.
       first =
-        read ++ ~w(-map 0:v:0) ++ audio_maps ++ ~w(-sn -c:v copy) ++
+        read ++
+          ~w(-map 0:v:0) ++
+          audio_maps ++
+          ~w(-sn -c:v copy) ++
           Enum.flat_map(Enum.with_index(audios), &to_aac.(&1, ":#{elem(&1, 1)}")) ++
           ts_delay ++ ~w(-f mpegts -) ++ sub_outputs
 
       second =
-        ~w(ffmpeg -nostdin -loglevel error -f mpegts -i -) ++ copyts ++
+        ~w(ffmpeg -nostdin -loglevel error -f mpegts -i -) ++
+          copyts ++
           if multi? do
-            ~w(-map 0:v:0 -c:v copy -tag:v hvc1) ++ mp4 ++ [out.("media", ".mp4")] ++
+            ~w(-map 0:v:0 -c:v copy -tag:v hvc1) ++
+              mp4 ++
+              [out.("media", ".mp4")] ++
               Enum.flat_map(audios |> Enum.with_index(), fn {a, n} ->
-                ~w(-map 0:a:#{n} -c:a copy -bsf:a aac_adtstoasc) ++ audio_mp4 ++ [out.(a.file, ".mp4")]
+                ~w(-map 0:a:#{n} -c:a copy -bsf:a aac_adtstoasc) ++
+                  audio_mp4 ++ [out.(a.file, ".mp4")]
               end)
           else
             ~w(-map 0:v:0) ++
@@ -726,7 +765,10 @@ defmodule Roki.Direct do
     else
       if multi? do
         shell(
-          read ++ ~w(-map 0:v:0 -sn -c:v copy) ++ mp4 ++ [out.("media", ".mp4")] ++
+          read ++
+            ~w(-map 0:v:0 -sn -c:v copy) ++
+            mp4 ++
+            [out.("media", ".mp4")] ++
             Enum.flat_map(Enum.with_index(audios), fn {a, n} = pair ->
               ~w(-map 0:a:#{n}) ++ to_aac.(pair, "") ++ audio_mp4 ++ [out.(a.file, ".mp4")]
             end) ++ sub_outputs
@@ -735,7 +777,11 @@ defmodule Roki.Direct do
         audio_args = if audios == [], do: [], else: to_aac.({hd(audios), 0}, "")
 
         shell(
-          read ++ ~w(-map 0:v:0) ++ Enum.take(audio_maps, 2) ++ ~w(-sn -c:v copy) ++ audio_args ++
+          read ++
+            ~w(-map 0:v:0) ++
+            Enum.take(audio_maps, 2) ++
+            ~w(-sn -c:v copy) ++
+            audio_args ++
             mp4 ++ [out.("media", ".mp4")] ++ sub_outputs
         )
       end
@@ -753,7 +799,13 @@ defmodule Roki.Direct do
     |> Enum.filter(&(&1.kind == "audio"))
     |> Enum.with_index()
     |> Enum.map(fn {s, n} ->
-      %{index: s.index, codec: s.codec, lang: String.trim(s.lang || ""), file: "audio#{n}", name: track_name(s.lang, n)}
+      %{
+        index: s.index,
+        codec: s.codec,
+        lang: String.trim(s.lang || ""),
+        file: "audio#{n}",
+        name: track_name(s.lang, n)
+      }
     end)
     |> unique_names()
   end
@@ -770,8 +822,11 @@ defmodule Roki.Direct do
     tracks
     |> Enum.group_by(& &1.name)
     |> Enum.flat_map(fn
-      {_name, [one]} -> [one]
-      {name, same} -> Enum.with_index(same, 1) |> Enum.map(fn {t, k} -> %{t | name: "#{name} #{k}"} end)
+      {_name, [one]} ->
+        [one]
+
+      {name, same} ->
+        Enum.with_index(same, 1) |> Enum.map(fn {t, k} -> %{t | name: "#{name} #{k}"} end)
     end)
     |> Enum.sort_by(& &1.index)
   end

@@ -7,7 +7,9 @@ defmodule RokiWeb.ImageController do
   use RokiWeb, :controller
 
   def tmdb(conn, %{"size" => size, "file" => file}), do: serve(conn, size <> "/" <> file)
-  def mal(conn, %{"path" => parts}) when is_list(parts), do: serve(conn, "mal/" <> Enum.join(parts, "/"))
+
+  def mal(conn, %{"path" => parts}) when is_list(parts),
+    do: serve(conn, "mal/" <> Enum.join(parts, "/"))
 
   defp serve(conn, short) do
     case Roki.Images.ensure(short) do

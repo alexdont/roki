@@ -43,7 +43,10 @@ defmodule Roki.Kept do
   def get(kind, key, fresh_s \\ nil)
 
   def get(kind, key, fresh_s) do
-    case Repo.query!("select data, final, fetched_at from roki_kept where kind = $1 and key = $2", [kind, key]) do
+    case Repo.query!(
+           "select data, final, fetched_at from roki_kept where kind = $1 and key = $2",
+           [kind, key]
+         ) do
       %{rows: [[data, final, fetched_at]]} ->
         data = if is_binary(data), do: Jason.decode!(data), else: data
         age = NaiveDateTime.diff(NaiveDateTime.utc_now(), fetched_at)

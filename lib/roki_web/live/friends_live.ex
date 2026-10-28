@@ -28,7 +28,8 @@ defmodule RokiWeb.FriendsLive do
     {:ok, load(socket)}
   end
 
-  defp load(%{assigns: %{user: nil}} = socket), do: assign(socket, friends: [], incoming: [], outgoing: [])
+  defp load(%{assigns: %{user: nil}} = socket),
+    do: assign(socket, friends: [], incoming: [], outgoing: [])
 
   defp load(%{assigns: %{user: %{uuid: uuid}, owner?: owner?}} = socket) do
     assign(socket,
@@ -39,7 +40,11 @@ defmodule RokiWeb.FriendsLive do
   end
 
   @impl true
-  def handle_event(action, %{"uuid" => other}, %{assigns: %{owner?: true, user: %{uuid: me}}} = socket)
+  def handle_event(
+        action,
+        %{"uuid" => other},
+        %{assigns: %{owner?: true, user: %{uuid: me}}} = socket
+      )
       when action in ~w(accept decline cancel remove) do
     _ =
       case action do
@@ -57,7 +62,8 @@ defmodule RokiWeb.FriendsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}/friends"}
@@ -68,12 +74,17 @@ defmodule RokiWeb.FriendsLive do
 
       <div :if={@user} class="space-y-8">
         <div class="flex items-center gap-3">
-          <.link navigate={"/#{@user.username}"} class="flex items-center gap-2 text-base-content/70 hover:text-base-content">
+          <.link
+            navigate={"/#{@user.username}"}
+            class="flex items-center gap-2 text-base-content/70 hover:text-base-content"
+          >
             <.user_avatar user={@user} size="md" />
             <span class="font-semibold">{@user.username}</span>
           </.link>
           <h1 class="text-2xl font-bold sm:text-3xl">Friends</h1>
-          <span class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60">{length(@friends)}</span>
+          <span class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60">{length(
+            @friends
+          )}</span>
         </div>
 
         <section :if={@owner? and @incoming != []} class="space-y-3">
@@ -89,9 +100,14 @@ defmodule RokiWeb.FriendsLive do
 
         <section class="space-y-3">
           <p :if={@friends == []} class="text-sm text-base-content/50">
-            {if @owner?, do: "No friends yet. Open someone's profile and press Add friend.", else: "No friends yet."}
+            {if @owner?,
+              do: "No friends yet. Open someone's profile and press Add friend.",
+              else: "No friends yet."}
           </p>
-          <ul :if={@friends != []} class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300">
+          <ul
+            :if={@friends != []}
+            class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300"
+          >
             <li :for={u <- @friends} class="flex items-center gap-3 p-3">
               <.person user={u} />
               <button
@@ -125,7 +141,10 @@ defmodule RokiWeb.FriendsLive do
 
   defp person(assigns) do
     ~H"""
-    <.link navigate={"/#{@user.username}"} class="flex min-w-0 flex-1 items-center gap-3 hover:text-primary">
+    <.link
+      navigate={"/#{@user.username}"}
+      class="flex min-w-0 flex-1 items-center gap-3 hover:text-primary"
+    >
       <.user_avatar user={@user} size="md" />
       <span class="truncate font-medium">{@user.username}</span>
     </.link>

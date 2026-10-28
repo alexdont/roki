@@ -12,11 +12,14 @@ defmodule Roki.Social do
   # Comments hang off a `(resource_type, resource_uuid)`. A profile is its owner's uuid; a title
   # has no uuid of its own, only TMDB's number, so it gets one made from its kind and number —
   # the same one every time, for everyone (a UUID version 5 in a namespace of the site's own).
-  @namespace <<0x5A, 0x1E, 0x7C, 0x3D, 0x90, 0x4B, 0x42, 0x11, 0xB8, 0x6F, 0x0C, 0xE2, 0x71, 0xA3, 0x5D, 0x94>>
+  @namespace <<0x5A, 0x1E, 0x7C, 0x3D, 0x90, 0x4B, 0x42, 0x11, 0xB8, 0x6F, 0x0C, 0xE2, 0x71, 0xA3,
+               0x5D, 0x94>>
 
   @doc "The comment thread's resource id of a title (`\"movie\"` or `\"tv\"`, and TMDB's id)."
   def title_uuid(type, id) when type in ["movie", "tv"] and is_integer(id) do
-    <<a::32, b::16, _::4, c::12, _::2, d::14, e::48, _::binary>> = :crypto.hash(:sha, @namespace <> "#{type}:#{id}")
+    <<a::32, b::16, _::4, c::12, _::2, d::14, e::48, _::binary>> =
+      :crypto.hash(:sha, @namespace <> "#{type}:#{id}")
+
     Ecto.UUID.cast!(<<a::32, b::16, 5::4, c::12, 2::2, d::14, e::48>>)
   end
 
@@ -37,7 +40,15 @@ defmodule Roki.Social do
     with {:ok, _} = ok <- Conn.request_connection(viewer, other) do
       if Conn.connected?(viewer, other),
         do: notify_accepted(viewer, other),
-        else: notify("friend_request", viewer, other, "#{name(viewer)} sent you a friend request", "hero-user-plus", "/#{name(other)}/friends")
+        else:
+          notify(
+            "friend_request",
+            viewer,
+            other,
+            "#{name(viewer)} sent you a friend request",
+            "hero-user-plus",
+            "/#{name(other)}/friends"
+          )
 
       ok
     end
@@ -77,7 +88,8 @@ defmodule Roki.Social do
   def remove(viewer, other), do: Conn.remove_connection(viewer, other)
 
   defp incoming(viewer, other),
-    do: Enum.find(Conn.list_pending_requests(viewer, preload: false), &(&1.requester_uuid == other))
+    do:
+      Enum.find(Conn.list_pending_requests(viewer, preload: false), &(&1.requester_uuid == other))
 
   # ── notifications ──────────────────────────────────────────────────
 
@@ -92,7 +104,11 @@ defmodule Roki.Social do
       target_uuid: target_uuid,
       resource_type: "user",
       resource_uuid: actor_uuid,
-      metadata: %{"notification_text" => text, "notification_icon" => icon, "notification_link" => link}
+      metadata: %{
+        "notification_text" => text,
+        "notification_icon" => icon,
+        "notification_link" => link
+      }
     )
 
     :ok
@@ -109,7 +125,8 @@ defmodule Roki.Social do
   def friend_activity(actor, kind, type, id, title, score \\ nil)
 
   def friend_activity(actor, kind, type, id, title, score)
-      when kind in [:finished, :rated] and type in ["movie", "tv"] and is_integer(id) and is_binary(title) do
+      when kind in [:finished, :rated] and type in ["movie", "tv"] and is_integer(id) and
+             is_binary(title) do
     if friends_on?() and not Roki.Activity.silent?(actor) do
       who = name(actor)
 
@@ -156,7 +173,11 @@ defmodule Roki.Social do
     PhoenixKit.Activity.log("roki", "roki." <> kind,
       target_uuid: target,
       resource_type: "site",
-      metadata: %{"notification_text" => text, "notification_icon" => icon, "notification_link" => link}
+      metadata: %{
+        "notification_text" => text,
+        "notification_icon" => icon,
+        "notification_link" => link
+      }
     )
 
     :ok
@@ -165,7 +186,15 @@ defmodule Roki.Social do
   end
 
   defp notify_accepted(accepter, requester),
-    do: notify("friend_accepted", accepter, requester, "#{name(accepter)} accepted your friend request", "hero-user-group", "/#{name(accepter)}")
+    do:
+      notify(
+        "friend_accepted",
+        accepter,
+        requester,
+        "#{name(accepter)} accepted your friend request",
+        "hero-user-group",
+        "/#{name(accepter)}"
+      )
 
   @doc """
   Tell `target` about something in a comment thread, from `commenter`. `kind` is `:comment` (on
@@ -230,7 +259,8 @@ defmodule Roki.Social do
 
   @doc "The friends of someone, newest first: the other person of each, as PhoenixKit's user."
   def friends(uuid) do
-    for c <- Conn.list_connections(uuid), do: if(c.requester_uuid == uuid, do: c.recipient, else: c.requester)
+    for c <- Conn.list_connections(uuid),
+        do: if(c.requester_uuid == uuid, do: c.recipient, else: c.requester)
   end
 
   @doc "Requests that wait for this person's answer: the people who asked."

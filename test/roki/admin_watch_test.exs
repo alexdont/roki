@@ -15,7 +15,11 @@ defmodule Roki.AdminWatchTest do
   end
 
   defp bell(user),
-    do: for(n <- PhoenixKit.Notifications.recent_for_user(user.uuid, 20), do: PhoenixKit.Notifications.Render.render(n))
+    do:
+      for(
+        n <- PhoenixKit.Notifications.recent_for_user(user.uuid, 20),
+        do: PhoenixKit.Notifications.Render.render(n)
+      )
 
   test "the owner hears of each new account after the first look, never of their own" do
     owner = register("watchowner")
@@ -46,7 +50,13 @@ defmodule Roki.AdminWatchTest do
 
     Keys.record(borrower.uuid, :play, 2)
     assert AdminWatch.limits(owner.uuid, today) == 1
-    assert [%{text: "limitborrower reached today's limit of 2 plays", icon: "hero-exclamation-triangle"}] = bell(owner)
+
+    assert [
+             %{
+               text: "limitborrower reached today's limit of 2 plays",
+               icon: "hero-exclamation-triangle"
+             }
+           ] = bell(owner)
 
     # Not again the same day, and the owner's own account is never listed.
     assert AdminWatch.limits(owner.uuid, today) == 0

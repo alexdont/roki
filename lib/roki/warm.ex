@@ -17,8 +17,11 @@ defmodule Roki.Warm do
   @doc "Every account that has connected laev."
   def accounts do
     case File.ls(Roki.Laev.base_dir()) do
-      {:ok, dirs} -> for d <- dirs, match?({:ok, _}, Ecto.UUID.cast(d)), Roki.Laev.connected?(d), do: d
-      _ -> []
+      {:ok, dirs} ->
+        for d <- dirs, match?({:ok, _}, Ecto.UUID.cast(d)), Roki.Laev.connected?(d), do: d
+
+      _ ->
+        []
     end
   end
 
@@ -70,7 +73,12 @@ defmodule Roki.Warm do
       end)
 
     Logger.info("warm #{uuid}: #{seasons} seasons of episodes")
-    similar = Enum.count(keys, fn {type, id} -> match?({:ok, _}, Roki.Similar.for_title(uuid, type, id)) end)
+
+    similar =
+      Enum.count(keys, fn {type, id} ->
+        match?({:ok, _}, Roki.Similar.for_title(uuid, type, id))
+      end)
+
     Logger.info("warm #{uuid}: #{similar} recommendation lists")
 
     # The pictures, at the list's size and the title page's, four at a time.
@@ -88,10 +96,22 @@ defmodule Roki.Warm do
 
     pictures =
       posters
-      |> Task.async_stream(&Roki.Images.hold/1, max_concurrency: 4, timeout: 60_000, on_timeout: :kill_task)
+      |> Task.async_stream(&Roki.Images.hold/1,
+        max_concurrency: 4,
+        timeout: 60_000,
+        on_timeout: :kill_task
+      )
       |> Enum.count(&match?({:ok, :ok}, &1))
 
-    counts = %{watched: length(items), ratings: map_size(Roki.Profile.ratings(uuid)), titles: titles, seasons: seasons, similar: similar, pictures: pictures}
+    counts = %{
+      watched: length(items),
+      ratings: map_size(Roki.Profile.ratings(uuid)),
+      titles: titles,
+      seasons: seasons,
+      similar: similar,
+      pictures: pictures
+    }
+
     Logger.info("warm #{uuid}: done #{inspect(counts)}")
     counts
   end

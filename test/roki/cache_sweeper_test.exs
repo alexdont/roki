@@ -21,7 +21,9 @@ defmodule Roki.CacheSweeperTest do
     dir
   end
 
-  test "a conversion nobody fetched for the TTL goes; a fresh one and a running one stay", %{base: base} do
+  test "a conversion nobody fetched for the TTL goes; a fresh one and a running one stay", %{
+    base: base
+  } do
     old = conversion(base, "0000000000000001", 7 * 3600)
     fresh = conversion(base, "0000000000000002", 3600)
     running = conversion(base, "0000000000000003", 9 * 3600)

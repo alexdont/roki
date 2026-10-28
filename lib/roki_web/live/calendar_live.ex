@@ -90,7 +90,8 @@ defmodule RokiWeb.CalendarLive do
     assigns = assign_view(assigns)
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
@@ -290,7 +291,13 @@ defmodule RokiWeb.CalendarLive do
   defp thumb(assigns) do
     ~H"""
     <div class="h-14 w-10 shrink-0 overflow-hidden rounded bg-base-300">
-      <img :if={@poster} src={Roki.Images.local(@poster)} alt={@title} loading="lazy" class="h-full w-full object-cover" />
+      <img
+        :if={@poster}
+        src={Roki.Images.local(@poster)}
+        alt={@title}
+        loading="lazy"
+        class="h-full w-full object-cover"
+      />
     </div>
     """
   end

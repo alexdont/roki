@@ -74,7 +74,10 @@ defmodule RokiWeb.Layouts do
       |> assign(:username, username)
       |> assign(:bell_user, bell_user)
       |> assign(:user, username && PhoenixKit.Users.Auth.Scope.user(scope))
-      |> assign(:admin?, username != nil and PhoenixKit.Users.Auth.Scope.can_access_admin_area?(scope))
+      |> assign(
+        :admin?,
+        username != nil and PhoenixKit.Users.Auth.Scope.can_access_admin_area?(scope)
+      )
       |> assign(:sections, sections)
 
     ~H"""
@@ -179,78 +182,84 @@ defmodule RokiWeb.Layouts do
                 class="!rounded-full"
               />
             </button>
-              <%!-- The account menu: who you are first (it is the way to your profile and shelves), then
+            <%!-- The account menu: who you are first (it is the way to your profile and shelves), then
                     the few things you do now and then. Theme and player live in Settings. --%>
-              <div
-                :if={@username}
-                id="account-pop"
-                class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-0"
-                phx-click-away={JS.hide(to: "#account-pop")}
-                phx-window-keydown={JS.hide(to: "#account-pop")}
-                phx-key="escape"
+            <div
+              :if={@username}
+              id="account-pop"
+              class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-0"
+              phx-click-away={JS.hide(to: "#account-pop")}
+              phx-window-keydown={JS.hide(to: "#account-pop")}
+              phx-key="escape"
+            >
+              <.link
+                navigate={~p"/#{@username}"}
+                phx-click={JS.hide(to: "#account-pop")}
+                class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-base-200"
               >
-                <.link
-                  navigate={~p"/#{@username}"}
-                  phx-click={JS.hide(to: "#account-pop")}
-                  class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-base-200"
-                >
-                  <PhoenixKitWeb.Components.Core.UserInfo.user_avatar
-                    user={@user}
-                    size="lg"
-                    class="!rounded-full"
-                  />
-                  <span class="min-w-0">
-                    <span class="block truncate font-semibold">{@username}</span>
-                    <span class="block text-xs text-base-content/60">Profile, shelves and stats</span>
-                  </span>
-                </.link>
+                <PhoenixKitWeb.Components.Core.UserInfo.user_avatar
+                  user={@user}
+                  size="lg"
+                  class="!rounded-full"
+                />
+                <span class="min-w-0">
+                  <span class="block truncate font-semibold">{@username}</span>
+                  <span class="block text-xs text-base-content/60">Profile, shelves and stats</span>
+                </span>
+              </.link>
 
-                <div class="my-2 border-t border-base-300/70"></div>
+              <div class="my-2 border-t border-base-300/70"></div>
 
-                <.menu_row
-                  href={~p"/#{@username}/calendar"}
-                  icon="hero-calendar-days"
-                  class="md:hidden"
-                  active={active?(@current_path, ~p"/#{@username}/calendar")}
-                >
-                  New episodes
-                </.menu_row>
-                <%!-- Where Play opens things, right here: it is changed often enough to live in the menu. --%>
-                <div class="px-3 pb-1 pt-1.5">
-                  <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">Watch in</p>
-                  <.player_switch class="w-full" />
-                </div>
-
-                <div class="my-2 border-t border-base-300/70"></div>
-
-                <.menu_row
-                  href={~p"/#{@username}/friends"}
-                  icon="hero-user-group"
-                  active={active?(@current_path, ~p"/#{@username}/friends")}
-                >
-                  Friends
-                </.menu_row>
-                <.menu_row
-                  href={~p"/#{@username}/settings"}
-                  icon="hero-cog-6-tooth"
-                  active={active?(@current_path, ~p"/#{@username}/settings")}
-                >
-                  Settings
-                </.menu_row>
-                <.menu_row :if={@admin?} href={PhoenixKit.Utils.Routes.path("/admin")} icon="hero-shield-check">
-                  Admin
-                </.menu_row>
-
-                <div class="my-2 border-t border-base-300/70"></div>
-
-                <.link
-                  href={PhoenixKit.Utils.Routes.path("/users/log-out")}
-                  method="delete"
-                  class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-error transition hover:bg-error/10"
-                >
-                  <.icon name="hero-arrow-right-on-rectangle" class="h-5 w-5" /> Log out
-                </.link>
+              <.menu_row
+                href={~p"/#{@username}/calendar"}
+                icon="hero-calendar-days"
+                class="md:hidden"
+                active={active?(@current_path, ~p"/#{@username}/calendar")}
+              >
+                New episodes
+              </.menu_row>
+              <%!-- Where Play opens things, right here: it is changed often enough to live in the menu. --%>
+              <div class="px-3 pb-1 pt-1.5">
+                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+                  Watch in
+                </p>
+                <.player_switch class="w-full" />
               </div>
+
+              <div class="my-2 border-t border-base-300/70"></div>
+
+              <.menu_row
+                href={~p"/#{@username}/friends"}
+                icon="hero-user-group"
+                active={active?(@current_path, ~p"/#{@username}/friends")}
+              >
+                Friends
+              </.menu_row>
+              <.menu_row
+                href={~p"/#{@username}/settings"}
+                icon="hero-cog-6-tooth"
+                active={active?(@current_path, ~p"/#{@username}/settings")}
+              >
+                Settings
+              </.menu_row>
+              <.menu_row
+                :if={@admin?}
+                href={PhoenixKit.Utils.Routes.path("/admin")}
+                icon="hero-shield-check"
+              >
+                Admin
+              </.menu_row>
+
+              <div class="my-2 border-t border-base-300/70"></div>
+
+              <.link
+                href={PhoenixKit.Utils.Routes.path("/users/log-out")}
+                method="delete"
+                class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-error transition hover:bg-error/10"
+              >
+                <.icon name="hero-arrow-right-on-rectangle" class="h-5 w-5" /> Log out
+              </.link>
+            </div>
           </div>
 
           <%!-- A visitor gets the two ways in, nothing else. --%>

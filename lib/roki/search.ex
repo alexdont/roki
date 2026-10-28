@@ -89,7 +89,10 @@ defmodule Roki.Search do
         nil ->
           items = Enum.flat_map(results, fn {:ok, items, _, _} -> items end)
           {:ok, _, more?, _} = List.last(results)
-          seen = Enum.reduce(results, MapSet.new(), fn {:ok, _, _, s}, acc -> MapSet.union(acc, s) end)
+
+          seen =
+            Enum.reduce(results, MapSet.new(), fn {:ok, _, _, s}, acc -> MapSet.union(acc, s) end)
+
           {:ok, items, more?, [], seen, exact}
 
         error ->

@@ -18,27 +18,49 @@ defmodule Roki.DirectTest do
   end
 
   test "the preferred language is the default when the release has it" do
-    tracks = [%{file: "audio0", lang: "rus", name: "Russian"}, %{file: "audio1", lang: "kor", name: "Korean"}]
+    tracks = [
+      %{file: "audio0", lang: "rus", name: "Russian"},
+      %{file: "audio1", lang: "kor", name: "Korean"}
+    ]
 
     pl = Roki.Direct.master_playlist(tracks, 1_000_000, "ko")
     assert pl =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=NO)
     assert pl =~ ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES)
 
     # A language the release lacks leaves the first track the default.
-    assert Roki.Direct.master_playlist(tracks, 1_000_000, "en") =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
+    assert Roki.Direct.master_playlist(tracks, 1_000_000, "en") =~
+             ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
+
     # Preferences in order: the account's language first, then the title's own.
-    assert Roki.Direct.master_playlist(tracks, 1_000_000, ["en", "ko"]) =~ ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES)
-    assert Roki.Direct.master_playlist(tracks, 1_000_000, ["ru", "ko"]) =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
+    assert Roki.Direct.master_playlist(tracks, 1_000_000, ["en", "ko"]) =~
+             ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES)
+
+    assert Roki.Direct.master_playlist(tracks, 1_000_000, ["ru", "ko"]) =~
+             ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=YES)
   end
 
   test "a part's playlists name the part, its files carry it in their names" do
-    tracks = [%{file: "audio0", lang: "eng", name: "English"}, %{file: "audio1", lang: "kor", name: "Korean"}]
-    subs = [%{file: "sub0", lang: "fre", name: "French"}, %{file: "ext-en-os12", lang: "en", name: "English (OpenSubtitles)"}]
+    tracks = [
+      %{file: "audio0", lang: "eng", name: "English"},
+      %{file: "audio1", lang: "kor", name: "Korean"}
+    ]
+
+    subs = [
+      %{file: "sub0", lang: "fre", name: "French"},
+      %{file: "ext-en-os12", lang: "en", name: "English (OpenSubtitles)"}
+    ]
 
     pl = Roki.Direct.master_playlist(tracks, 1_000_000, "ko", subs, 1800)
-    assert pl =~ ~s(NAME="English",LANGUAGE="en",DEFAULT=NO,AUTOSELECT=YES,URI="audio0.m3u8?from=1800")
-    assert pl =~ ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES,AUTOSELECT=YES,URI="audio1.m3u8?from=1800")
-    assert pl =~ ~s(TYPE=SUBTITLES,GROUP-ID="subs",NAME="French",LANGUAGE="fr",DEFAULT=NO,AUTOSELECT=NO,URI="sub0.m3u8?from=1800")
+
+    assert pl =~
+             ~s(NAME="English",LANGUAGE="en",DEFAULT=NO,AUTOSELECT=YES,URI="audio0.m3u8?from=1800")
+
+    assert pl =~
+             ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES,AUTOSELECT=YES,URI="audio1.m3u8?from=1800")
+
+    assert pl =~
+             ~s(TYPE=SUBTITLES,GROUP-ID="subs",NAME="French",LANGUAGE="fr",DEFAULT=NO,AUTOSELECT=NO,URI="sub0.m3u8?from=1800")
+
     assert pl =~ ~s(URI="ext-en-os12.m3u8?from=1800")
     assert pl =~ ~s(AUDIO="aud",SUBTITLES="subs"\nvideo.m3u8?from=1800\n)
 
@@ -78,7 +100,11 @@ defmodule Roki.DirectTest do
     media = tidy |> String.split("\n") |> Enum.filter(&String.starts_with?(&1, "#EXT-X-MEDIA"))
     assert length(media) == 2
     # In the file's order: the first rendition stays first.
-    assert String.starts_with?(hd(media), ~s(#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="group_aud",NAME="Russian"))
+    assert String.starts_with?(
+             hd(media),
+             ~s(#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="group_aud",NAME="Russian")
+           )
+
     assert tidy =~ ~s(NAME="Russian",LANGUAGE="ru",DEFAULT=NO,AUTOSELECT=YES,URI="s_Rus.m3u8")
     assert tidy =~ ~s(NAME="Korean",LANGUAGE="ko",DEFAULT=YES,AUTOSELECT=YES,URI="s_Korean.m3u8")
     assert tidy =~ "#EXT-X-STREAM-INF:BANDWIDTH=10280966"

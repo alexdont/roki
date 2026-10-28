@@ -47,7 +47,8 @@ defmodule RokiWeb.StudyComponents do
 
   attr :seasons, :list,
     default: [],
-    doc: "the title's seasons, `%{number:, name:, episodes:}`, for the season row of the episode menu"
+    doc:
+      "the title's seasons, `%{number:, name:, episodes:}`, for the season row of the episode menu"
 
   attr :season, :integer, default: nil, doc: "the season that is playing"
   attr :home, :string, default: "/home", doc: "where closing goes when there is no page behind"

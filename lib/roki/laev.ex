@@ -38,7 +38,9 @@ defmodule Roki.Laev do
     lent = Roki.Keys.overrides(uuid, Laev.Config.read_dir(dir))
     # (A study session's languages are laev scope overrides, which win over any of this.)
     try do
-      dir |> Laev.Scope.load(lent |> Map.merge(app_keys()) |> Map.merge(extra)) |> Laev.Scope.run(fun)
+      dir
+      |> Laev.Scope.load(lent |> Map.merge(app_keys()) |> Map.merge(extra))
+      |> Laev.Scope.run(fun)
     after
       scrub_env()
     end
@@ -192,7 +194,11 @@ defmodule Roki.Laev do
   # "3 seasons watched". The total is the title's (kept beside it after the first look; a title
   # never opened costs one TMDB read, remembered). Where it cannot be had the words stay.
   defp with_episode_counts(uuid, items) do
-    started = for %{type: "tv", id: id, ep_done: done} <- items, is_integer(id) and is_integer(done), uniq: true, do: id
+    started =
+      for %{type: "tv", id: id, ep_done: done} <- items,
+          is_integer(id) and is_integer(done),
+          uniq: true,
+          do: id
 
     if started == [] do
       items
@@ -201,7 +207,11 @@ defmodule Roki.Laev do
 
       totals =
         started
-        |> Task.async_stream(&{&1, total_episodes(uuid, &1, today)}, max_concurrency: 4, timeout: 20_000, on_timeout: :kill_task)
+        |> Task.async_stream(&{&1, total_episodes(uuid, &1, today)},
+          max_concurrency: 4,
+          timeout: 20_000,
+          on_timeout: :kill_task
+        )
         |> Enum.reduce(%{}, fn
           {:ok, {id, total}}, acc when is_integer(total) and total > 0 -> Map.put(acc, id, total)
           _, acc -> acc
@@ -225,7 +235,8 @@ defmodule Roki.Laev do
   defp my_rating(ratings, %{type: type, id: id}) when is_integer(id) do
     case ratings[{type, id}] do
       nil when type == "tv" ->
-        scores = for mal <- Laev.AnimeMap.mal_ids("tv", id), score = ratings[{"mal", mal}], do: score
+        scores =
+          for mal <- Laev.AnimeMap.mal_ids("tv", id), score = ratings[{"mal", mal}], do: score
 
         case scores do
           [] -> nil
@@ -459,7 +470,10 @@ defmodule Roki.Laev do
 
     case File.ls(dir) do
       {:ok, names} ->
-        for n <- names, match?({:ok, b} when b in ["done", "seen"], read_mark(dir, n)), into: MapSet.new(), do: n
+        for n <- names,
+            match?({:ok, b} when b in ["done", "seen"], read_mark(dir, n)),
+            into: MapSet.new(),
+            do: n
 
       _ ->
         MapSet.new()
@@ -490,7 +504,8 @@ defmodule Roki.Laev do
 
     if new != [] do
       Task.start(fn ->
-        for {type, id, season, episode} <- new, do: record_finished(uuid, type, id, season, episode)
+        for {type, id, season, episode} <- new,
+            do: record_finished(uuid, type, id, season, episode)
       end)
     end
 
@@ -501,9 +516,17 @@ defmodule Roki.Laev do
   # are not a single thing finished.
   defp mark_target(name) do
     cond do
-      m = Regex.run(~r/^movie-(\d+)$/, name) -> [{"movie", String.to_integer(Enum.at(m, 1)), nil, nil}]
-      m = Regex.run(~r/^tv-(\d+)-s(\d+)e(\d+)$/, name) -> [{"tv", String.to_integer(Enum.at(m, 1)), String.to_integer(Enum.at(m, 2)), String.to_integer(Enum.at(m, 3))}]
-      true -> []
+      m = Regex.run(~r/^movie-(\d+)$/, name) ->
+        [{"movie", String.to_integer(Enum.at(m, 1)), nil, nil}]
+
+      m = Regex.run(~r/^tv-(\d+)-s(\d+)e(\d+)$/, name) ->
+        [
+          {"tv", String.to_integer(Enum.at(m, 1)), String.to_integer(Enum.at(m, 2)),
+           String.to_integer(Enum.at(m, 3))}
+        ]
+
+      true ->
+        []
     end
   end
 
@@ -559,7 +582,13 @@ defmodule Roki.Laev do
     "browser_max_size" => %{
       default: "40",
       allowed: ~w(10 20 40 80 off),
-      labels: %{"10" => "10 GB", "20" => "20 GB", "40" => "40 GB", "80" => "80 GB", "off" => "No limit"}
+      labels: %{
+        "10" => "10 GB",
+        "20" => "20 GB",
+        "40" => "40 GB",
+        "80" => "80 GB",
+        "off" => "No limit"
+      }
     },
     # How long found sources are kept so the next Play skips the search.
     "sources_cache" => %{
@@ -572,14 +601,20 @@ defmodule Roki.Laev do
     "anime_audio" => %{
       default: "mine",
       allowed: ~w(mine original),
-      labels: %{"mine" => "My language (the dub)", "original" => "Japanese (the original), subtitles in my language"}
+      labels: %{
+        "mine" => "My language (the dub)",
+        "original" => "Japanese (the original), subtitles in my language"
+      }
     },
     # Where the browser player's work happens: on the viewer's device (the release read straight
     # from its host, taken apart and decoded there) or on the server (ffmpeg, as before).
     "browser_work" => %{
       default: "device",
       allowed: ~w(device server),
-      labels: %{"device" => "This device (nothing on the server)", "server" => "The server (converts the release)"}
+      labels: %{
+        "device" => "This device (nothing on the server)",
+        "server" => "The server (converts the release)"
+      }
     },
     # The app Play opens when the device uses an external player.
     "external_app" => %{
@@ -602,8 +637,11 @@ defmodule Roki.Laev do
   """
   def with_audio(uuid, title, fun) when is_function(fun, 0) do
     case anime_audio(uuid, title) do
-      %{} = over when map_size(over) > 0 -> Laev.Scope.with_overrides(Map.merge(over, Laev.Scope.overrides()), fun)
-      _ -> fun.()
+      %{} = over when map_size(over) > 0 ->
+        Laev.Scope.with_overrides(Map.merge(over, Laev.Scope.overrides()), fun)
+
+      _ ->
+        fun.()
     end
   end
 
@@ -726,7 +764,9 @@ defmodule Roki.Laev do
     run(uuid, fn ->
       case Laev.Tmdb.start_login() do
         {:ok, token, _url} ->
-          Roki.TTLCache.fetch({:tmdb_login, token}, 900, fn -> {:ok, %{uuid: uuid, return_to: return_to}} end)
+          Roki.TTLCache.fetch({:tmdb_login, token}, 900, fn ->
+            {:ok, %{uuid: uuid, return_to: return_to}}
+          end)
 
           {:ok,
            "https://www.themoviedb.org/authenticate/#{token}?" <>
@@ -749,7 +789,8 @@ defmodule Roki.Laev do
         Roki.TTLCache.delete({:tmdb_login, token})
 
         with {:ok, session} <- run(uuid, fn -> Laev.Tmdb.finish_login(token) end),
-             name when is_binary(name) <- run_with(uuid, %{tmdb_session: session}, fn -> tmdb_name_of() end),
+             name when is_binary(name) <-
+               run_with(uuid, %{tmdb_session: session}, fn -> tmdb_name_of() end),
              false <- tmdb_account_taken?(uuid, name) do
           :ok = run(uuid, fn -> Laev.Config.write([{"TMDB_SESSION_ID", session}]) end)
           # Their ratings are on TMDB now: copy them here, and the rating button works at once.
@@ -772,7 +813,8 @@ defmodule Roki.Laev do
     end
   end
 
-  def tmdb_finish(_uuid, _token), do: {:error, "TMDB did not send anything back. Start again.", nil}
+  def tmdb_finish(_uuid, _token),
+    do: {:error, "TMDB did not send anything back. Start again.", nil}
 
   # Who a session belongs to, asked of TMDB, lower-cased; nil when it cannot be told. (A session
   # id is no use for this: every approval makes a new one, even for the same TMDB account.)
@@ -810,7 +852,8 @@ defmodule Roki.Laev do
     end)
   end
 
-  defp tmdb_linked?(uuid), do: Map.get(Laev.Config.read_dir(dir(uuid)), :tmdb_session) not in [nil, ""]
+  defp tmdb_linked?(uuid),
+    do: Map.get(Laev.Config.read_dir(dir(uuid)), :tmdb_session) not in [nil, ""]
 
   @doc """
   Where MyAnimeList sends people back to once they approve: this site's own callback, which the
@@ -1209,7 +1252,9 @@ defmodule Roki.Laev do
   """
   def unfinished(uuid) do
     run(uuid, fn ->
-      for row <- Laev.Shelf.rows(), is_map(row), is_binary(row[:title]) or is_integer(row[:mal_id]) do
+      for row <- Laev.Shelf.rows(),
+          is_map(row),
+          is_binary(row[:title]) or is_integer(row[:mal_id]) do
         at = row[:watched_at]
 
         %{

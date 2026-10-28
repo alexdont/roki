@@ -52,7 +52,12 @@ defmodule Roki.Fmp4 do
                 [] -> 0
               end
 
-            %{init: ftyp_size + moov_size, timescale: timescale, start: start, fragments: fragments}
+            %{
+              init: ftyp_size + moov_size,
+              timescale: timescale,
+              start: start,
+              fragments: fragments
+            }
 
           _ ->
             nil

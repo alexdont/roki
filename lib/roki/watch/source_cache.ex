@@ -117,7 +117,8 @@ defmodule Roki.Watch.SourceCache do
     end
   end
 
-  defp slug(value), do: value |> to_string() |> String.replace(~r/[^a-z0-9]/i, "") |> String.slice(0, 12)
+  defp slug(value),
+    do: value |> to_string() |> String.replace(~r/[^a-z0-9]/i, "") |> String.slice(0, 12)
 
   defp write(uuid, key, entry) do
     File.mkdir_p!(dir(uuid))

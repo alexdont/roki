@@ -36,7 +36,16 @@ defmodule Roki.Releases do
   def handle_info(:check, state) do
     # Apart from this process: one account failing must not stop the clock.
     Task.Supervisor.start_child(Roki.TaskSupervisor, fn ->
-      told = Enum.sum(for uuid <- Roki.Warm.accounts(), do: (Process.sleep(@gap_ms); check(uuid)))
+      told =
+        Enum.sum(
+          for uuid <- Roki.Warm.accounts(),
+              do:
+                (
+                  Process.sleep(@gap_ms)
+                  check(uuid)
+                )
+        )
+
       Logger.info("releases: #{told} new notifications")
     end)
 
@@ -50,8 +59,14 @@ defmodule Roki.Releases do
   def check(uuid, today \\ Date.utc_today()) do
     case Roki.Calendar.load({:releases, uuid}, uuid) do
       {:ok, %{events: saved_events, saved: saved}} ->
-        events = Enum.sort_by(saved_events ++ followed_events(uuid, saved), &Date.to_gregorian_days(&1.date))
-        notify_due(uuid, events, today) + announce_seasons(uuid, events, today) + week_ahead(uuid, events, today)
+        events =
+          Enum.sort_by(
+            saved_events ++ followed_events(uuid, saved),
+            &Date.to_gregorian_days(&1.date)
+          )
+
+        notify_due(uuid, events, today) + announce_seasons(uuid, events, today) +
+          week_ahead(uuid, events, today)
 
       _ ->
         0
@@ -70,7 +85,9 @@ defmodule Roki.Releases do
     if Notify.wants?(uuid, "release") do
       events
       |> Enum.filter(&due?(&1, today))
-      |> Enum.count(fn event -> claim(uuid, event) and Social.notify_release(uuid, notice(event, today)) == :ok end)
+      |> Enum.count(fn event ->
+        claim(uuid, event) and Social.notify_release(uuid, notice(event, today)) == :ok
+      end)
     else
       0
     end
@@ -88,7 +105,9 @@ defmodule Roki.Releases do
       )
 
     entries =
-      for [id, title] <- rows, not Map.has_key?(saved, {"tv", id}), do: %{"type" => "tv", "tmdb_id" => id, "title" => title}
+      for [id, title] <- rows,
+          not Map.has_key?(saved, {"tv", id}),
+          do: %{"type" => "tv", "tmdb_id" => id, "title" => title}
 
     case Roki.Calendar.events_for({:releases, uuid}, uuid, entries) do
       {:ok, events} -> events
@@ -103,7 +122,9 @@ defmodule Roki.Releases do
   def announce_seasons(uuid, events, today \\ Date.utc_today()) do
     if Notify.wants?(uuid, "season") do
       events
-      |> Enum.filter(&(&1.kind == :episode and &1.type == "tv" and is_integer(&1.season) and &1.season >= 2))
+      |> Enum.filter(
+        &(&1.kind == :episode and &1.type == "tv" and is_integer(&1.season) and &1.season >= 2)
+      )
       |> Enum.group_by(&{&1.id, &1.season, &1.title})
       |> Enum.count(fn {{id, season, title}, episodes} ->
         premiere = episodes |> Enum.map(& &1.date) |> Enum.min(Date)
@@ -129,8 +150,14 @@ defmodule Roki.Releases do
   def week_ahead(uuid, events, today \\ Date.utc_today()) do
     {year, week} = :calendar.iso_week_number(Date.to_erl(today))
 
-    if Date.day_of_week(today) == 7 and Notify.wants?(uuid, "digest") and claim(uuid, "digest", year * 100 + week, 0, 0, "digest") do
-      coming = Enum.filter(events, &(&1.kind in [:episode, :digital, :theatrical] and Date.diff(&1.date, today) in 1..7))
+    if Date.day_of_week(today) == 7 and Notify.wants?(uuid, "digest") and
+         claim(uuid, "digest", year * 100 + week, 0, 0, "digest") do
+      coming =
+        Enum.filter(
+          events,
+          &(&1.kind in [:episode, :digital, :theatrical] and Date.diff(&1.date, today) in 1..7)
+        )
+
       episodes = Enum.filter(coming, &(&1.kind == :episode))
       films = coming -- episodes
 
@@ -139,9 +166,15 @@ defmodule Roki.Releases do
       else
         username = PhoenixKit.Users.Auth.get_user(uuid) |> then(&(&1 && &1.username))
 
-        if Social.notify_system(uuid, "digest", digest_text(episodes, films), "hero-calendar-days", if(username, do: "/#{username}/calendar", else: "/")) == :ok,
-          do: 1,
-          else: 0
+        if Social.notify_system(
+             uuid,
+             "digest",
+             digest_text(episodes, films),
+             "hero-calendar-days",
+             if(username, do: "/#{username}/calendar", else: "/")
+           ) == :ok,
+           do: 1,
+           else: 0
       end
     else
       0
@@ -151,12 +184,18 @@ defmodule Roki.Releases do
   @doc false
   def digest_text(episodes, films) do
     shows = episodes |> Enum.map(& &1.title) |> Enum.uniq()
-    names = shows |> Enum.take(3) |> Enum.join(", ") |> then(&if(length(shows) > 3, do: &1 <> "…", else: &1))
+
+    names =
+      shows
+      |> Enum.take(3)
+      |> Enum.join(", ")
+      |> then(&if(length(shows) > 3, do: &1 <> "…", else: &1))
 
     parts =
       Enum.reject(
         [
-          episodes != [] && "#{length(episodes)} new #{if length(episodes) == 1, do: "episode", else: "episodes"} (#{names})",
+          episodes != [] &&
+            "#{length(episodes)} new #{if length(episodes) == 1, do: "episode", else: "episodes"} (#{names})",
           films != [] && "#{length(films)} #{if length(films) == 1, do: "film", else: "films"}"
         ],
         &(&1 == false)
@@ -165,13 +204,23 @@ defmodule Roki.Releases do
     "Your week ahead: " <> Enum.join(parts, " and ")
   end
 
-  defp due?(%{date: %Date{} = date, kind: kind}, today) when kind in [:episode, :digital, :theatrical],
-    do: Date.diff(today, date) in 0..1
+  defp due?(%{date: %Date{} = date, kind: kind}, today)
+       when kind in [:episode, :digital, :theatrical],
+       do: Date.diff(today, date) in 0..1
 
   defp due?(_event, _today), do: false
 
   # First to claim an event for a person is the one who tells them.
-  defp claim(uuid, event), do: claim(uuid, event.type, event.id, event.season || 0, event.episode || 0, Atom.to_string(event.kind))
+  defp claim(uuid, event),
+    do:
+      claim(
+        uuid,
+        event.type,
+        event.id,
+        event.season || 0,
+        event.episode || 0,
+        Atom.to_string(event.kind)
+      )
 
   @doc false
   def claim(uuid, type, id, season, episode, kind) do
@@ -193,9 +242,14 @@ defmodule Roki.Releases do
 
     {text, icon} =
       case event.kind do
-        :episode -> {"New episode of #{event.title}: #{episode(event)} came out #{day}", "hero-play-circle"}
-        :theatrical -> {"#{event.title} reached theaters #{day}", "hero-film"}
-        :digital -> {"#{event.title} came out on digital #{day}", "hero-film"}
+        :episode ->
+          {"New episode of #{event.title}: #{episode(event)} came out #{day}", "hero-play-circle"}
+
+        :theatrical ->
+          {"#{event.title} reached theaters #{day}", "hero-film"}
+
+        :digital ->
+          {"#{event.title} came out on digital #{day}", "hero-film"}
       end
 
     %{text: text, icon: icon, link: "/title/#{event.type}/#{event.id}"}

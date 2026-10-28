@@ -19,7 +19,10 @@ defmodule RokiWeb.LabController do
     # directory (pieces of real releases) by its file name.
     file = @samples[name] || (Regex.match?(~r/^[a-z0-9._-]+$/i, name) and "#{name}.mkv")
 
-    with :ok <- owner(conn), true <- is_binary(file) and File.exists?(Path.join(@sample_dir, file)) || {:error, :not_found} do
+    with :ok <- owner(conn),
+         true <-
+           (is_binary(file) and File.exists?(Path.join(@sample_dir, file))) ||
+             {:error, :not_found} do
       RokiWeb.RangeFile.send(conn, Path.join(@sample_dir, file), "video/x-matroska")
     else
       {:error, :forbidden} -> send_resp(conn, 403, "owner only")
@@ -63,7 +66,10 @@ defmodule RokiWeb.LabController do
 
         Process.get(:lab_conn) || open(conn, resp)
       rescue
-        e -> if Process.get(:lab_conn), do: Process.get(:lab_conn), else: send_resp(conn, 502, "upstream: #{Exception.message(e)}")
+        e ->
+          if Process.get(:lab_conn),
+            do: Process.get(:lab_conn),
+            else: send_resp(conn, 502, "upstream: #{Exception.message(e)}")
       end
     else
       {:error, :forbidden} -> send_resp(conn, 403, "owner only")
@@ -76,8 +82,15 @@ defmodule RokiWeb.LabController do
   @doc "The automatic run's report from a device, kept (`roki_kept`, kind `lab-report`) to be read here."
   def report(conn, params) do
     with :ok <- owner(conn) do
-      id = "#{System.os_time(:second)}-#{:crypto.strong_rand_bytes(3) |> Base.encode16(case: :lower)}"
-      Roki.Kept.put("lab-report", id, Map.take(params, ~w(at ua platform width height managedMediaSource caps results)))
+      id =
+        "#{System.os_time(:second)}-#{:crypto.strong_rand_bytes(3) |> Base.encode16(case: :lower)}"
+
+      Roki.Kept.put(
+        "lab-report",
+        id,
+        Map.take(params, ~w(at ua platform width height managedMediaSource caps results))
+      )
+
       json(conn, %{id: id})
     else
       _ -> send_resp(conn, 403, "owner only")
@@ -102,8 +115,13 @@ defmodule RokiWeb.LabController do
       n = min(String.to_integer(params["n"] || "5"), 50)
 
       rows =
-        Roki.Repo.query!("select key, data, fetched_at from roki_kept where kind = 'lab-report' order by fetched_at desc limit $1", [n]).rows
-        |> Enum.map(fn [key, data, at] -> %{id: key, at: at, report: if(is_binary(data), do: Jason.decode!(data), else: data)} end)
+        Roki.Repo.query!(
+          "select key, data, fetched_at from roki_kept where kind = 'lab-report' order by fetched_at desc limit $1",
+          [n]
+        ).rows
+        |> Enum.map(fn [key, data, at] ->
+          %{id: key, at: at, report: if(is_binary(data), do: Jason.decode!(data), else: data)}
+        end)
 
       json(conn, rows)
     else

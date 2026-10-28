@@ -61,11 +61,20 @@ defmodule Roki.AdminWatch do
             [since]
           )
 
-        PhoenixKit.Settings.update_setting(@marker, DateTime.to_iso8601(rows |> List.last() |> then(&if(&1, do: Enum.at(&1, 2), else: now))))
+        PhoenixKit.Settings.update_setting(
+          @marker,
+          DateTime.to_iso8601(rows |> List.last() |> then(&if(&1, do: Enum.at(&1, 2), else: now)))
+        )
 
         Enum.count(rows, fn [uuid, username, _at] ->
           Ecto.UUID.load!(uuid) != owner and
-            Social.notify_system(owner, "new_account", "New account: #{username}", "hero-user-plus", "/#{username}") == :ok
+            Social.notify_system(
+              owner,
+              "new_account",
+              "New account: #{username}",
+              "hero-user-plus",
+              "/#{username}"
+            ) == :ok
         end)
 
       _ ->
@@ -77,11 +86,21 @@ defmodule Roki.AdminWatch do
   @doc "Tell `owner` which accounts reached their daily plays today, once each."
   def limits(owner, today \\ Date.utc_today()) do
     Keys.all_grants()
-    |> Enum.filter(fn {uuid, grant} -> uuid != owner and is_integer(grant.daily_plays) and Keys.plays_today(uuid) >= grant.daily_plays end)
+    |> Enum.filter(fn {uuid, grant} ->
+      uuid != owner and is_integer(grant.daily_plays) and
+        Keys.plays_today(uuid) >= grant.daily_plays
+    end)
     |> Enum.count(fn {uuid, grant} ->
       name = PhoenixKit.Users.Auth.get_user(uuid) |> then(&((&1 && &1.username) || "An account"))
 
-      Releases.claim(uuid, "limit", today.year * 10_000 + today.month * 100 + today.day, 0, 0, "limit") and
+      Releases.claim(
+        uuid,
+        "limit",
+        today.year * 10_000 + today.month * 100 + today.day,
+        0,
+        0,
+        "limit"
+      ) and
         Social.notify_system(
           owner,
           "limit",

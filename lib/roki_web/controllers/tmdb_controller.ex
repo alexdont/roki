@@ -41,7 +41,9 @@ defmodule RokiWeb.TmdbController do
 
         case result do
           {:ok, return_to} ->
-            conn |> put_flash(:info, "TMDB linked. Your ratings are saved there now.") |> redirect(to: safe_path(return_to))
+            conn
+            |> put_flash(:info, "TMDB linked. Your ratings are saved there now.")
+            |> redirect(to: safe_path(return_to))
 
           {:error, why, return_to} ->
             conn |> put_flash(:error, why) |> redirect(to: safe_path(return_to))

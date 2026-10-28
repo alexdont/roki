@@ -82,10 +82,22 @@ defmodule Roki.ActivityTest do
 
   describe "batching and describing" do
     defp mv(user, id, at_min, kind, extra \\ %{}),
-      do: ev(user, id, at_min, Map.merge(%{type: "movie", season: nil, episode: nil, kind: kind}, extra))
+      do:
+        ev(
+          user,
+          id,
+          at_min,
+          Map.merge(%{type: "movie", season: nil, episode: nil, kind: kind}, extra)
+        )
 
     test "films finished within an hour are one batch; hours apart stay separate" do
-      [b] = Activity.group([mv("a", 1, 0, "finished"), mv("a", 2, 10, "finished"), mv("a", 3, 20, "finished")])
+      [b] =
+        Activity.group([
+          mv("a", 1, 0, "finished"),
+          mv("a", 2, 10, "finished"),
+          mv("a", 3, 20, "finished")
+        ])
+
       assert b.batch? and b.count == 3 and length(b.items) == 3
       assert Activity.describe(b).verb == "finished 3 films"
 
@@ -103,7 +115,12 @@ defmodule Roki.ActivityTest do
       assert d.verb == "added" and d.after == "to their history"
       assert d.detail =~ "2019"
 
-      [b] = Activity.group([mv("a", 1, 0, "backdated", %{watched_on: ~D[2019-03-02]}), mv("a", 2, 3, "backdated", %{watched_on: ~D[2020-01-05]})])
+      [b] =
+        Activity.group([
+          mv("a", 1, 0, "backdated", %{watched_on: ~D[2019-03-02]}),
+          mv("a", 2, 3, "backdated", %{watched_on: ~D[2020-01-05]})
+        ])
+
       d = Activity.describe(b)
       assert b.batch? and d.verb == "added 2 films"
       assert d.detail =~ "2019" and d.detail =~ "2020"

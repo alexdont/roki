@@ -57,7 +57,9 @@ defmodule Roki.Profile do
         }
 
       _ ->
-        @defaults |> Map.merge(%{public: true, show_history: true, show_ratings: true}) |> Map.put(:user_uuid, uuid)
+        @defaults
+        |> Map.merge(%{public: true, show_history: true, show_ratings: true})
+        |> Map.put(:user_uuid, uuid)
     end
   end
 
@@ -123,12 +125,18 @@ defmodule Roki.Profile do
 
     try do
       with {_, 0} <- System.cmd("ffmpeg", args, stderr_to_stdout: true),
-           {:ok, file_uuid} <- Roki.Media.store(out, user: uuid, folder: "Profile banners", filename: "banner-#{System.os_time(:second)}.jpg") do
+           {:ok, file_uuid} <-
+             Roki.Media.store(out,
+               user: uuid,
+               folder: "Profile banners",
+               filename: "banner-#{System.os_time(:second)}.jpg"
+             ) do
         set_banner(uuid, file_uuid)
         {:ok, get(uuid)}
       else
         {out_text, code} when is_integer(code) ->
-          {:error, "That picture could not be read (#{String.slice(String.trim(out_text), 0, 80)})."}
+          {:error,
+           "That picture could not be read (#{String.slice(String.trim(out_text), 0, 80)})."}
 
         {:error, reason} ->
           {:error, "The picture could not be kept (#{inspect(reason) |> String.slice(0, 80)})."}
@@ -221,19 +229,29 @@ defmodule Roki.Profile do
         if ids == [] do
           %{}
         else
-          Repo.query!("select id, (data->>'minutes')::int from roki_titles where type = 'movie' and id = any($1) and data is not null and jsonb_typeof(data) = 'object'", [ids]).rows
+          Repo.query!(
+            "select id, (data->>'minutes')::int from roki_titles where type = 'movie' and id = any($1) and data is not null and jsonb_typeof(data) = 'object'",
+            [ids]
+          ).rows
           |> Map.new(fn [id, minutes] -> {id, minutes} end)
         end
 
       topped =
         Enum.reduce(ids, 0, fn id, sum ->
           case runtimes[id] do
-            minutes when is_integer(minutes) -> sum + max(minutes * 60 - Map.get(billed, id, 0), 0)
-            _ -> sum
+            minutes when is_integer(minutes) ->
+              sum + max(minutes * 60 - Map.get(billed, id, 0), 0)
+
+            _ ->
+              sum
           end
         end)
 
-      {:ok, %{summary | totals: %{totals | seconds: (totals.seconds || 0) + topped, films: length(ids)}}}
+      {:ok,
+       %{
+         summary
+         | totals: %{totals | seconds: (totals.seconds || 0) + topped, films: length(ids)}
+       }}
     end
   end
 
@@ -257,7 +275,10 @@ defmodule Roki.Profile do
             at = DateTime.add(base, total - i, :second)
 
             %{num_rows: n} =
-              Repo.query!("update roki_watched set at = $4, dated = true where user_uuid = $1 and type = $2 and id = $3", [bin, type, id, at])
+              Repo.query!(
+                "update roki_watched set at = $4, dated = true where user_uuid = $1 and type = $2 and id = $3",
+                [bin, type, id, at]
+              )
 
             # Only what is on the list can be dated.
             if n > 0 do
@@ -280,9 +301,18 @@ defmodule Roki.Profile do
     # backdating — it must not read as if they had just watched it.
     items =
       for {type, id} <- parsed,
-          [tmdb_type, tmdb_id, title] <- Repo.query!("select tmdb_type, tmdb_id, title from roki_watched where user_uuid = $1 and type = $2 and id = $3", [bin, type, id]).rows,
+          [tmdb_type, tmdb_id, title] <-
+            Repo.query!(
+              "select tmdb_type, tmdb_id, title from roki_watched where user_uuid = $1 and type = $2 and id = $3",
+              [bin, type, id]
+            ).rows,
           tmdb_type in ["movie", "tv"] and is_integer(tmdb_id) do
-        %{type: tmdb_type, tmdb_id: tmdb_id, title: title || "Untitled", poster: (Roki.Titles.card(tmdb_type, tmdb_id) || %{})[:poster]}
+        %{
+          type: tmdb_type,
+          tmdb_id: tmdb_id,
+          title: title || "Untitled",
+          poster: (Roki.Titles.card(tmdb_type, tmdb_id) || %{})[:poster]
+        }
       end
 
     Roki.Activity.backdated(uuid, items, date)
@@ -300,8 +330,18 @@ defmodule Roki.Profile do
 
     for {type, id} <- parsed do
       Roki.Watch.unmark(uuid, type, id)
-      Repo.query!("delete from roki_watched where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
-      Repo.query!("delete from roki_watch_dates where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
+
+      Repo.query!("delete from roki_watched where user_uuid = $1 and type = $2 and id = $3", [
+        bin,
+        type,
+        id
+      ])
+
+      Repo.query!("delete from roki_watch_dates where user_uuid = $1 and type = $2 and id = $3", [
+        bin,
+        type,
+        id
+      ])
     end
 
     {:ok, length(parsed)}
@@ -324,7 +364,9 @@ defmodule Roki.Profile do
   defp sync_watched(uuid) do
     if Roki.Laev.connected?(uuid) and not TTLCache.cached?({:watched_sync, uuid}) do
       TTLCache.fetch({:watched_sync, uuid}, @history_ttl_s, fn ->
-        finished = Roki.Laev.completed(uuid) |> Enum.map(&Map.merge(%{status: "finished", note: nil}, &1))
+        finished =
+          Roki.Laev.completed(uuid) |> Enum.map(&Map.merge(%{status: "finished", note: nil}, &1))
+
         # Started and not finished: the rest of what was watched. A title laev also calls
         # finished stays finished.
         unfinished =
@@ -334,10 +376,20 @@ defmodule Roki.Profile do
           end
 
         items = finished ++ unfinished
-        Roki.Titles.remember(for i <- items, i.type != nil, do: %{type: i.type, id: i.id, title: i.title, poster: i.poster})
+
+        Roki.Titles.remember(
+          for i <- items,
+              i.type != nil,
+              do: %{type: i.type, id: i.id, title: i.title, poster: i.poster}
+        )
+
         replace_watched(uuid, items)
         # What genres these are, read behind the page (once each, kept).
-        Roki.Genres.fill_later(for(i <- items, i.type in ["movie", "tv"], is_integer(i.id), do: {i.type, i.id}), uuid)
+        Roki.Genres.fill_later(
+          for(i <- items, i.type in ["movie", "tv"], is_integer(i.id), do: {i.type, i.id}),
+          uuid
+        )
+
         {:ok, :done}
       end)
     end
@@ -352,14 +404,21 @@ defmodule Roki.Profile do
       items
       |> Enum.map(fn i ->
         {type, id} = if is_integer(i[:mal_id]), do: {"mal", i.mal_id}, else: {i.type, i.id}
-        {type, id, i.type, i.id, i[:season], i[:title], i[:anime] == true, DateTime.from_unix!(max(i.at || 0, 0)), i[:dated?] == true,
-         i[:status] || "finished", i[:note]}
+
+        {type, id, i.type, i.id, i[:season], i[:title], i[:anime] == true,
+         DateTime.from_unix!(max(i.at || 0, 0)), i[:dated?] == true, i[:status] || "finished",
+         i[:note]}
       end)
-      |> Enum.filter(fn {type, id, _, _, _, _, _, _, _, _, _} -> is_binary(type) and is_integer(id) end)
+      |> Enum.filter(fn {type, id, _, _, _, _, _, _, _, _, _} ->
+        is_binary(type) and is_integer(id)
+      end)
       |> Enum.uniq_by(fn {type, id, _, _, _, _, _, _, _, _, _} -> {type, id} end)
 
     Repo.transaction(fn ->
-      before = Repo.query!("select type, id from roki_watched where user_uuid = $1", [bin]).rows |> MapSet.new(fn [t, i] -> {t, i} end)
+      before =
+        Repo.query!("select type, id from roki_watched where user_uuid = $1", [bin]).rows
+        |> MapSet.new(fn [t, i] -> {t, i} end)
+
       Repo.query!("delete from roki_watched where user_uuid = $1", [bin])
 
       rows
@@ -368,9 +427,13 @@ defmodule Roki.Profile do
         {values, params} =
           chunk
           |> Enum.with_index()
-          |> Enum.map_reduce([], fn {{type, id, tt, tid, season, title, anime, at, dated, status, note}, i}, acc ->
+          |> Enum.map_reduce([], fn {{type, id, tt, tid, season, title, anime, at, dated, status,
+                                      note}, i},
+                                    acc ->
             n = i * 11
-            {"($1, " <> Enum.map_join(2..12, ", ", &"$#{n + &1}") <> ")", acc ++ [type, id, tt, tid, season, title, anime, at, dated, status, note]}
+
+            {"($1, " <> Enum.map_join(2..12, ", ", &"$#{n + &1}") <> ")",
+             acc ++ [type, id, tt, tid, season, title, anime, at, dated, status, note]}
           end)
 
         Repo.query!(
@@ -401,7 +464,8 @@ defmodule Roki.Profile do
 
     # Only a finished title is dated this way: one still in progress has the time laev last saw
     # it, or none, and a started show is not "watched today" for having appeared.
-    for {type, id, _, _, _, _, _, _, false, "finished", _} <- rows, not MapSet.member?(before, {type, id}) do
+    for {type, id, _, _, _, _, _, _, false, "finished", _} <- rows,
+        not MapSet.member?(before, {type, id}) do
       Repo.query!(
         "insert into roki_watch_dates (user_uuid, type, id, watched_at) values ($1, $2, $3, $4) on conflict (user_uuid, type, id) do nothing",
         [bin, type, id, now]
@@ -463,7 +527,10 @@ defmodule Roki.Profile do
 
     Enum.map(items, fn i ->
       card = cards[card_key(i)] || %{}
-      i |> Map.put(:year, card[:year]) |> Map.merge(%{poster: card[:poster], title: i.title || card[:title]})
+
+      i
+      |> Map.put(:year, card[:year])
+      |> Map.merge(%{poster: card[:poster], title: i.title || card[:title]})
     end)
   end
 
@@ -479,7 +546,9 @@ defmodule Roki.Profile do
     found = Roki.Laev.completed_posters(uuid, items)
 
     Roki.Titles.remember_later(
-      for %{type: type, id: id, title: title} <- items, poster = found[{type, id}], do: %{type: type, id: id, title: title, poster: poster}
+      for %{type: type, id: id, title: title} <- items,
+          poster = found[{type, id}],
+          do: %{type: type, id: id, title: title, poster: poster}
     )
 
     # An anime no TMDB title stands for: MyAnimeList's own picture, kept under the MAL id.
@@ -493,7 +562,12 @@ defmodule Roki.Profile do
       end
 
     names = Map.new(items, fn i -> {i[:mal_id], i[:title]} end)
-    Roki.Titles.remember_later(for {{"mal", id}, url} <- mal, do: %{type: "mal", id: id, title: names[id] || "MAL #{id}", poster: url})
+
+    Roki.Titles.remember_later(
+      for {{"mal", id}, url} <- mal,
+          do: %{type: "mal", id: id, title: names[id] || "MAL #{id}", poster: url}
+    )
+
     Map.merge(found, mal)
   end
 
@@ -522,7 +596,8 @@ defmodule Roki.Profile do
   def kinds, do: [all: "All", movie: "Movies", tv: "Shows", anime: "Anime"]
 
   @doc "The kind named in an address, else :all."
-  def kind(value), do: Enum.find_value(kinds(), :all, fn {k, _} -> Atom.to_string(k) == value && k end)
+  def kind(value),
+    do: Enum.find_value(kinds(), :all, fn {k, _} -> Atom.to_string(k) == value && k end)
 
   @doc "The order named in an address: :top for the owner's ratings, else :latest."
   def sort("top"), do: :top
@@ -586,7 +661,9 @@ defmodule Roki.Profile do
 
   @doc "A score as the page writes it: `10`, `8.5`."
   def score_text(score) when is_float(score) do
-    if score == Float.round(score), do: Integer.to_string(trunc(score)), else: :erlang.float_to_binary(score, decimals: 1)
+    if score == Float.round(score),
+      do: Integer.to_string(trunc(score)),
+      else: :erlang.float_to_binary(score, decimals: 1)
   end
 
   def score_text(score), do: to_string(score)
@@ -610,7 +687,8 @@ defmodule Roki.Profile do
   def shelves, do: @shelves
 
   @doc "A shelf named in an event or address, else nil."
-  def shelf(value), do: Enum.find_value(@shelves, fn {k, _} -> Atom.to_string(k) == value && k end)
+  def shelf(value),
+    do: Enum.find_value(@shelves, fn {k, _} -> Atom.to_string(k) == value && k end)
 
   @doc "How many a shelf holds."
   def top, do: @top
@@ -620,7 +698,8 @@ defmodule Roki.Profile do
   def ranked?(_profile, _kind), do: false
 
   @doc "Turn the numbers on a shelf on or off: `{:ok, profile}`."
-  def set_ranked(uuid, kind, on?) when kind in [:movie, :tv, :anime, :manga] and is_boolean(on?) do
+  def set_ranked(uuid, kind, on?)
+      when kind in [:movie, :tv, :anime, :manga] and is_boolean(on?) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     current = get(uuid).ranked
@@ -647,30 +726,59 @@ defmodule Roki.Profile do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     %{rows: rows} =
-      Repo.query!("select kind, position, type, id, title from roki_favorites where user_uuid = $1 order by kind, position", [bin])
+      Repo.query!(
+        "select kind, position, type, id, title from roki_favorites where user_uuid = $1 order by kind, position",
+        [bin]
+      )
 
-    items = for [kind, position, type, id, title] <- rows, do: %{kind: kind, position: position, type: type, id: id, title: title}
+    items =
+      for [kind, position, type, id, title] <- rows,
+          do: %{kind: kind, position: position, type: type, id: id, title: title}
+
     cards = Roki.Titles.cards(Enum.map(items, &{&1.type, &1.id}))
 
     items =
       Enum.map(items, fn i ->
         card = cards[{i.type, i.id}] || %{}
         {type, id} = if i.type == "mal", do: {nil, nil}, else: {i.type, i.id}
-        %{type: type, id: id, mal_id: if(i.type == "mal", do: i.id), title: i.title || card[:title], poster: card[:poster], position: i.position, badge: "##{i.position}", kind: i.kind}
+
+        %{
+          type: type,
+          id: id,
+          mal_id: if(i.type == "mal", do: i.id),
+          title: i.title || card[:title],
+          poster: card[:poster],
+          position: i.position,
+          badge: "##{i.position}",
+          kind: i.kind
+        }
       end)
 
-    for {kind, _} <- @shelves, into: %{}, do: {kind, Enum.filter(items, &(&1.kind == Atom.to_string(kind)))}
+    for {kind, _} <- @shelves,
+        into: %{},
+        do: {kind, Enum.filter(items, &(&1.kind == Atom.to_string(kind)))}
   end
 
   @doc """
   Put a title on a shelf, at the end: `{:ok, favorites}`, or `{:error, message}` when the
   shelf is full or the title is on a shelf already. `key` is `{"movie" | "tv" | "mal", id}`.
   """
-  def add_favorite(uuid, kind, {type, id}, title) when kind in [:movie, :tv, :anime, :manga] and is_integer(id) do
+  def add_favorite(uuid, kind, {type, id}, title)
+      when kind in [:movie, :tv, :anime, :manga] and is_integer(id) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     shelf = Atom.to_string(kind)
-    %{rows: [[n]]} = Repo.query!("select count(*) from roki_favorites where user_uuid = $1 and kind = $2", [bin, shelf])
-    %{rows: [[taken]]} = Repo.query!("select count(*) from roki_favorites where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
+
+    %{rows: [[n]]} =
+      Repo.query!("select count(*) from roki_favorites where user_uuid = $1 and kind = $2", [
+        bin,
+        shelf
+      ])
+
+    %{rows: [[taken]]} =
+      Repo.query!(
+        "select count(*) from roki_favorites where user_uuid = $1 and type = $2 and id = $3",
+        [bin, type, id]
+      )
 
     cond do
       taken > 0 ->
@@ -696,7 +804,10 @@ defmodule Roki.Profile do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     Repo.transaction(fn ->
-      case Repo.query!("delete from roki_favorites where user_uuid = $1 and type = $2 and id = $3 returning kind", [bin, type, id]) do
+      case Repo.query!(
+             "delete from roki_favorites where user_uuid = $1 and type = $2 and id = $3 returning kind",
+             [bin, type, id]
+           ) do
         %{rows: [[kind]]} -> renumber(bin, kind)
         _ -> :ok
       end
@@ -710,13 +821,28 @@ defmodule Roki.Profile do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     Repo.transaction(fn ->
-      case Repo.query!("select kind, position from roki_favorites where user_uuid = $1 and type = $2 and id = $3", [bin, type, id]) do
+      case Repo.query!(
+             "select kind, position from roki_favorites where user_uuid = $1 and type = $2 and id = $3",
+             [bin, type, id]
+           ) do
         %{rows: [[kind, pos]]} ->
           other = if dir == :up, do: pos - 1, else: pos + 1
           # Swap through a place no row has, since each place is taken once.
-          Repo.query!("update roki_favorites set position = 0 where user_uuid = $1 and kind = $2 and position = $3", [bin, kind, other])
-          Repo.query!("update roki_favorites set position = $3 where user_uuid = $1 and kind = $2 and position = $4", [bin, kind, other, pos])
-          Repo.query!("update roki_favorites set position = $3 where user_uuid = $1 and kind = $2 and position = 0", [bin, kind, pos])
+          Repo.query!(
+            "update roki_favorites set position = 0 where user_uuid = $1 and kind = $2 and position = $3",
+            [bin, kind, other]
+          )
+
+          Repo.query!(
+            "update roki_favorites set position = $3 where user_uuid = $1 and kind = $2 and position = $4",
+            [bin, kind, other, pos]
+          )
+
+          Repo.query!(
+            "update roki_favorites set position = $3 where user_uuid = $1 and kind = $2 and position = 0",
+            [bin, kind, pos]
+          )
+
           renumber(bin, kind)
 
         _ ->
@@ -729,14 +855,25 @@ defmodule Roki.Profile do
 
   # Places 1..n again, in the order they are.
   defp renumber(bin, kind) do
-    %{rows: rows} = Repo.query!("select type, id from roki_favorites where user_uuid = $1 and kind = $2 order by position", [bin, kind])
+    %{rows: rows} =
+      Repo.query!(
+        "select type, id from roki_favorites where user_uuid = $1 and kind = $2 order by position",
+        [bin, kind]
+      )
+
     # Through places no row has first, so no two rows share one on the way.
-    Repo.query!("update roki_favorites set position = position + 1000 where user_uuid = $1 and kind = $2", [bin, kind])
+    Repo.query!(
+      "update roki_favorites set position = position + 1000 where user_uuid = $1 and kind = $2",
+      [bin, kind]
+    )
 
     rows
     |> Enum.with_index(1)
     |> Enum.each(fn {[type, id], n} ->
-      Repo.query!("update roki_favorites set position = $4 where user_uuid = $1 and kind = $2 and type = $3 and id = $5", [bin, kind, type, n, id])
+      Repo.query!(
+        "update roki_favorites set position = $4 where user_uuid = $1 and kind = $2 and type = $3 and id = $5",
+        [bin, kind, type, n, id]
+      )
     end)
 
     :ok
@@ -748,12 +885,19 @@ defmodule Roki.Profile do
   """
   def candidates(uuid, kind, favorites \\ nil) when kind in [:movie, :tv, :anime, :manga] do
     favs = favorites || favorites(uuid)
-    taken = for {_, items} <- favs, i <- items, into: MapSet.new(), do: {i.type || "mal", i.id || i.mal_id}
+
+    taken =
+      for {_, items} <- favs,
+          i <- items,
+          into: MapSet.new(),
+          do: {i.type || "mal", i.id || i.mal_id}
 
     uuid
     |> history()
     |> Enum.filter(&of_kind?(&1, kind))
-    |> Enum.map(fn i -> Map.put(i, :on_shelf, MapSet.member?(taken, {i.type || "mal", i.id || i.mal_id})) end)
+    |> Enum.map(fn i ->
+      Map.put(i, :on_shelf, MapSet.member?(taken, {i.type || "mal", i.id || i.mal_id}))
+    end)
   end
 
   @doc """
@@ -796,12 +940,19 @@ defmodule Roki.Profile do
     favs = favorites(uuid)
     left = @top - length(favs[kind] || [])
     wanted = keys |> Enum.map(&parse_key/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()
-    allowed = for i <- picker(uuid, kind, favs), not i.on_shelf, into: %{}, do: {favorite_key(i), i.title}
+
+    allowed =
+      for i <- picker(uuid, kind, favs), not i.on_shelf, into: %{}, do: {favorite_key(i), i.title}
+
     chosen = wanted |> Enum.filter(&Map.has_key?(allowed, &1)) |> Enum.take(left)
 
     cond do
-      left <= 0 -> {:error, "The shelf holds #{@top}. Take one off first."}
-      chosen == [] -> {:error, "None of those can go on this shelf."}
+      left <= 0 ->
+        {:error, "The shelf holds #{@top}. Take one off first."}
+
+      chosen == [] ->
+        {:error, "None of those can go on this shelf."}
+
       true ->
         Enum.each(chosen, fn key -> add_favorite(uuid, kind, key, allowed[key]) end)
         {:ok, favorites(uuid), length(chosen)}
@@ -815,22 +966,34 @@ defmodule Roki.Profile do
   `{:ok, favorites}`, or `{:error, favorites}` — the shelf as it is — when the keys are not
   exactly the shelf's titles.
   """
-  def reorder_favorites(uuid, kind, ordered) when kind in [:movie, :tv, :anime, :manga] and is_list(ordered) do
+  def reorder_favorites(uuid, kind, ordered)
+      when kind in [:movie, :tv, :anime, :manga] and is_list(ordered) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     shelf = Atom.to_string(kind)
     keys = Enum.map(ordered, &parse_key/1)
 
-    %{rows: rows} = Repo.query!("select type, id from roki_favorites where user_uuid = $1 and kind = $2", [bin, shelf])
+    %{rows: rows} =
+      Repo.query!("select type, id from roki_favorites where user_uuid = $1 and kind = $2", [
+        bin,
+        shelf
+      ])
+
     current = for [t, i] <- rows, into: MapSet.new(), do: {t, i}
 
     if nil not in keys and length(keys) == MapSet.size(current) and MapSet.new(keys) == current do
       Repo.transaction(fn ->
-        Repo.query!("update roki_favorites set position = position + 1000 where user_uuid = $1 and kind = $2", [bin, shelf])
+        Repo.query!(
+          "update roki_favorites set position = position + 1000 where user_uuid = $1 and kind = $2",
+          [bin, shelf]
+        )
 
         keys
         |> Enum.with_index(1)
         |> Enum.each(fn {{t, i}, n} ->
-          Repo.query!("update roki_favorites set position = $4 where user_uuid = $1 and kind = $2 and type = $3 and id = $5", [bin, shelf, t, n, i])
+          Repo.query!(
+            "update roki_favorites set position = $4 where user_uuid = $1 and kind = $2 and type = $3 and id = $5",
+            [bin, shelf, t, n, i]
+          )
         end)
       end)
 
@@ -850,7 +1013,9 @@ defmodule Roki.Profile do
   def ratings(uuid) when is_binary(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
-    %{rows: rows} = Repo.query!("select type, id, score from roki_ratings where user_uuid = $1", [bin])
+    %{rows: rows} =
+      Repo.query!("select type, id, score from roki_ratings where user_uuid = $1", [bin])
+
     Map.new(rows, fn [type, id, score] -> {{type, id}, score * 1.0} end)
   end
 
@@ -862,14 +1027,19 @@ defmodule Roki.Profile do
   def rating(uuid, {type, id}) when is_binary(uuid) and is_binary(type) and is_integer(id) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
-    case Repo.query!("select score from roki_ratings where user_uuid = $1 and type = $2 and id = $3", [bin, type, id]) do
+    case Repo.query!(
+           "select score from roki_ratings where user_uuid = $1 and type = $2 and id = $3",
+           [bin, type, id]
+         ) do
       %{rows: [[score]]} ->
         {:ok, score * 1.0}
 
       _ ->
         case get(uuid).ratings_synced_at do
           %NaiveDateTime{} = at ->
-            if NaiveDateTime.diff(NaiveDateTime.utc_now(), at) < 24 * 3600, do: :none, else: :unknown
+            if NaiveDateTime.diff(NaiveDateTime.utc_now(), at) < 24 * 3600,
+              do: :none,
+              else: :unknown
 
           _ ->
             :unknown
@@ -881,7 +1051,8 @@ defmodule Roki.Profile do
   A rating made or taken back on the site, noted here at once: `target` is `{"mal", id}` or
   `{"movie" | "tv", id}`, `score` the rating or nil for none.
   """
-  def note_rating(uuid, {type, id}, score) when is_binary(uuid) and is_binary(type) and is_integer(id) do
+  def note_rating(uuid, {type, id}, score)
+      when is_binary(uuid) and is_binary(type) and is_integer(id) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     if is_number(score) and score > 0 do
@@ -895,7 +1066,11 @@ defmodule Roki.Profile do
         [bin, type, id, score * 1.0, now]
       )
     else
-      Repo.query!("delete from roki_ratings where user_uuid = $1 and type = $2 and id = $3", [bin, type, id])
+      Repo.query!("delete from roki_ratings where user_uuid = $1 and type = $2 and id = $3", [
+        bin,
+        type,
+        id
+      ])
     end
 
     :ok
@@ -929,34 +1104,34 @@ defmodule Roki.Profile do
   end
 
   defp read_ratings(uuid) do
-    Roki.Laev.run(uuid, fn -> 
-            tmdb =
-              if Laev.Tmdb.account?() do
-                for {kind, type} <- [{"movies", "movie"}, {"tv", "tv"}],
-                    r <- Laev.Tmdb.rated(kind),
-                    is_integer(r["id"]) and is_number(r["rating"]) do
-                  {type, r["id"], r["rating"] * 1.0, nil}
-                end
-              else
-                []
+    Roki.Laev.run(uuid, fn ->
+      tmdb =
+        if Laev.Tmdb.account?() do
+          for {kind, type} <- [{"movies", "movie"}, {"tv", "tv"}],
+              r <- Laev.Tmdb.rated(kind),
+              is_integer(r["id"]) and is_number(r["rating"]) do
+            {type, r["id"], r["rating"] * 1.0, nil}
+          end
+        else
+          []
+        end
+
+      mal =
+        if Laev.MAL.authenticated?() do
+          case Laev.MAL.list() do
+            {:ok, entries} ->
+              for %{mal_id: id, score: score} = e <- entries, is_integer(score) and score > 0 do
+                {"mal", id, score * 1.0, e[:updated] && DateTime.from_unix!(e[:updated])}
               end
 
-            mal =
-              if Laev.MAL.authenticated?() do
-                case Laev.MAL.list() do
-                  {:ok, entries} ->
-                    for %{mal_id: id, score: score} = e <- entries, is_integer(score) and score > 0 do
-                      {"mal", id, score * 1.0, e[:updated] && DateTime.from_unix!(e[:updated])}
-                    end
+            _ ->
+              []
+          end
+        else
+          []
+        end
 
-                  _ ->
-                    []
-                end
-              else
-                []
-              end
-
-            tmdb ++ mal
+      tmdb ++ mal
     end)
   end
 
@@ -969,7 +1144,9 @@ defmodule Roki.Profile do
   @doc "Drop the copy of this account's TMDB ratings (films and shows); MyAnimeList ones stay."
   def forget_tmdb_ratings(uuid) when is_binary(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
+
     Repo.query!("delete from roki_ratings where user_uuid = $1 and type in ('movie', 'tv')", [bin])
+
     TTLCache.delete({:ratings_refresh, uuid})
     :ok
   end
@@ -981,14 +1158,19 @@ defmodule Roki.Profile do
 
     {:ok, outcome} =
       Repo.transaction(fn ->
-        %{rows: [[old]]} = Repo.query!("select count(*) from roki_ratings where user_uuid = $1", [bin])
+        %{rows: [[old]]} =
+          Repo.query!("select count(*) from roki_ratings where user_uuid = $1", [bin])
+
         # A failed page costs twenty ratings, so anything more than a few fewer than the copy
         # already holds is taken for a failed read; a handful taken back on TMDB is not.
         partial? = old >= 20 and length(rows) < old - max(3, round(old * 0.005))
 
         if partial? do
           require Logger
-          Logger.warning("ratings read for #{uuid} returned #{length(rows)}, copy holds #{old}: merged, not replaced")
+
+          Logger.warning(
+            "ratings read for #{uuid} returned #{length(rows)}, copy holds #{old}: merged, not replaced"
+          )
         else
           Repo.query!("delete from roki_ratings where user_uuid = $1", [bin])
         end

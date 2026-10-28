@@ -17,16 +17,26 @@ defmodule RokiWeb.RelayTest do
     refute Relay.allowed?("http://real-debrid.com/plain")
   end
 
-  test "the relay answers nobody who is not signed in, no host it does not know, and no unsigned link", %{conn: conn} do
+  test "the relay answers nobody who is not signed in, no host it does not know, and no unsigned link",
+       %{conn: conn} do
     rd = "https://132-4.download.real-debrid.com/d/X/file.mkv"
     assert get(conn, "/relay", u: rd, t: Relay.sign(rd)).status == 403
 
     {:ok, user} =
-      PhoenixKit.Users.Auth.register_user(%{"email" => "relay@example.com", "password" => "a-long-enough-password-123", "username" => "relayer"})
+      PhoenixKit.Users.Auth.register_user(%{
+        "email" => "relay@example.com",
+        "password" => "a-long-enough-password-123",
+        "username" => "relayer"
+      })
 
     token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
     conn = Plug.Test.init_test_session(build_conn(), %{user_token: token})
-    assert get(conn, "/relay", u: "https://example.com/x.mkv", t: Relay.sign("https://example.com/x.mkv")).status == 400
+
+    assert get(conn, "/relay",
+             u: "https://example.com/x.mkv",
+             t: Relay.sign("https://example.com/x.mkv")
+           ).status == 400
+
     assert get(conn, "/relay", u: rd, t: "nope").status == 403
     assert get(conn, "/relay").status == 400
   end

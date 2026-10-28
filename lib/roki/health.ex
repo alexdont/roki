@@ -53,7 +53,8 @@ defmodule Roki.Health do
 
       results = [
         {"rd", if(blank?(own[:rd_token]), do: :none, else: rd(own[:rd_token]))},
-        {"torbox", if(blank?(own[:torbox_api_key]), do: :none, else: torbox(own[:torbox_api_key]))},
+        {"torbox",
+         if(blank?(own[:torbox_api_key]), do: :none, else: torbox(own[:torbox_api_key]))},
         {"mal", Roki.Laev.run(uuid, &mal/0)},
         {"tmdb", Roki.Laev.run(uuid, &tmdb/0)}
       ]
@@ -74,22 +75,40 @@ defmodule Roki.Health do
 
   @doc "Real-Debrid: `:ok`, `:unreachable`, or `{:bad, state}`."
   def rd(token) do
-    case Req.get("https://api.real-debrid.com/rest/1.0/user", auth: {:bearer, token}, retry: false, receive_timeout: 10_000) do
-      {:ok, %{status: 200, body: %{} = body}} -> premium(body["expiration"], body["type"] == "premium")
-      {:ok, %{status: 401}} -> {:bad, "rejected"}
-      {:ok, %{status: 403}} -> {:bad, "locked"}
-      _ -> :unreachable
+    case Req.get("https://api.real-debrid.com/rest/1.0/user",
+           auth: {:bearer, token},
+           retry: false,
+           receive_timeout: 10_000
+         ) do
+      {:ok, %{status: 200, body: %{} = body}} ->
+        premium(body["expiration"], body["type"] == "premium")
+
+      {:ok, %{status: 401}} ->
+        {:bad, "rejected"}
+
+      {:ok, %{status: 403}} ->
+        {:bad, "locked"}
+
+      _ ->
+        :unreachable
     end
   end
 
   @doc "TorBox: `:ok`, `:unreachable`, or `{:bad, state}`. A free plan has nothing to expire."
   def torbox(key) do
-    case Req.get("https://api.torbox.app/v1/api/user/me", auth: {:bearer, key}, retry: false, receive_timeout: 10_000) do
+    case Req.get("https://api.torbox.app/v1/api/user/me",
+           auth: {:bearer, key},
+           retry: false,
+           receive_timeout: 10_000
+         ) do
       {:ok, %{status: 200, body: %{"success" => true, "data" => data}}} ->
         if (data["plan"] || 0) == 0, do: :ok, else: premium(data["premium_expires_at"], true)
 
-      {:ok, %{status: s}} when s in [401, 403] -> {:bad, "rejected"}
-      _ -> :unreachable
+      {:ok, %{status: s}} when s in [401, 403] ->
+        {:bad, "rejected"}
+
+      _ ->
+        :unreachable
     end
   end
 
@@ -140,7 +159,12 @@ defmodule Roki.Health do
   """
   def settle(uuid, service, result) do
     bin = Ecto.UUID.dump!(uuid)
-    row = Repo.query!("select state, told_at from roki_health where user_uuid = $1 and service = $2", [bin, service]).rows
+
+    row =
+      Repo.query!(
+        "select state, told_at from roki_health where user_uuid = $1 and service = $2",
+        [bin, service]
+      ).rows
 
     case {result, row} do
       {r, _} when r in [:unreachable, :none] ->
@@ -153,15 +177,18 @@ defmodule Roki.Health do
         :quiet
 
       {{:bad, state}, []} ->
-        if debounce?(service, state), do: remember(bin, service, "suspect:" <> state, false), else: tell(uuid, bin, service, state)
+        if debounce?(service, state),
+          do: remember(bin, service, "suspect:" <> state, false),
+          else: tell(uuid, bin, service, state)
 
       {{:bad, state}, [["suspect:" <> state, _]]} ->
         tell(uuid, bin, service, state)
 
       {{:bad, state}, [[state, told_at]]} ->
-        if NaiveDateTime.diff(NaiveDateTime.utc_now(), told_at, :second) >= @remind_after_days * 86_400,
-          do: tell(uuid, bin, service, state),
-          else: :quiet
+        if NaiveDateTime.diff(NaiveDateTime.utc_now(), told_at, :second) >=
+             @remind_after_days * 86_400,
+           do: tell(uuid, bin, service, state),
+           else: :quiet
 
       {{:bad, state}, [["suspect:" <> _, _]]} ->
         remember(bin, service, "suspect:" <> state, false)
@@ -174,7 +201,9 @@ defmodule Roki.Health do
   # MyAnimeList and TMDB say "no" for a hiccup too.
   defp debounce?(service, _state), do: service in ["mal", "tmdb"]
 
-  defp clear(bin, service), do: Repo.query!("delete from roki_health where user_uuid = $1 and service = $2", [bin, service])
+  defp clear(bin, service),
+    do:
+      Repo.query!("delete from roki_health where user_uuid = $1 and service = $2", [bin, service])
 
   defp remember(bin, service, state, told?) do
     Repo.query!(
@@ -192,7 +221,14 @@ defmodule Roki.Health do
     %{text: text, icon: icon} = notice(service, state)
     username = PhoenixKit.Users.Auth.get_user(uuid) |> then(&(&1 && &1.username))
 
-    Social.notify_system(uuid, "connection", text, icon, if(username, do: "/#{username}/settings", else: "/"))
+    Social.notify_system(
+      uuid,
+      "connection",
+      text,
+      icon,
+      if(username, do: "/#{username}/settings", else: "/")
+    )
+
     remember(bin, service, state, true)
   end
 
@@ -202,15 +238,35 @@ defmodule Roki.Health do
 
     text =
       case state do
-        "rejected" -> "Your #{label} key was rejected, so nothing can play. Add a new one in settings."
-        "locked" -> "Your #{label} account is locked or not premium. Check it on #{label}."
-        "expired" -> "Your #{label} premium has ended. Renew it to keep playing."
-        "expiring:1" -> "Your #{label} premium ends within a day."
-        "expiring:3" -> "Your #{label} premium ends within 3 days."
-        "expiring:7" -> "Your #{label} premium ends within 7 days."
-        "invalid" -> "Your #{label} login stopped working. Connect it again in settings."
+        "rejected" ->
+          "Your #{label} key was rejected, so nothing can play. Add a new one in settings."
+
+        "locked" ->
+          "Your #{label} account is locked or not premium. Check it on #{label}."
+
+        "expired" ->
+          "Your #{label} premium has ended. Renew it to keep playing."
+
+        "expiring:1" ->
+          "Your #{label} premium ends within a day."
+
+        "expiring:3" ->
+          "Your #{label} premium ends within 3 days."
+
+        "expiring:7" ->
+          "Your #{label} premium ends within 7 days."
+
+        "invalid" ->
+          "Your #{label} login stopped working. Connect it again in settings."
       end
 
-    %{text: text, icon: if(String.starts_with?(state, "expiring"), do: "hero-clock", else: "hero-exclamation-triangle")}
+    %{
+      text: text,
+      icon:
+        if(String.starts_with?(state, "expiring"),
+          do: "hero-clock",
+          else: "hero-exclamation-triangle"
+        )
+    }
   end
 end

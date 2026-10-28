@@ -46,9 +46,15 @@ defmodule Roki.ActivityDbTest do
     Activity.insert_now(a.uuid, film(5), "finished")
     Activity.insert_now(b.uuid, film(6), "saved")
 
-    assert [%{kind: "saved", username: "activ3"}] = Activity.recent(10, users: [a.uuid], kinds: ["saved"])
+    assert [%{kind: "saved", username: "activ3"}] =
+             Activity.recent(10, users: [a.uuid], kinds: ["saved"])
+
     assert length(Activity.recent(10, users: [a.uuid])) == 2
-    names = Activity.recent(10, kinds: ["saved"]) |> Enum.flat_map(&if(&1.batch?, do: [&1.username], else: [&1.username]))
+
+    names =
+      Activity.recent(10, kinds: ["saved"])
+      |> Enum.flat_map(&if(&1.batch?, do: [&1.username], else: [&1.username]))
+
     assert "activ3" in names and "activ4" in names
   end
 end

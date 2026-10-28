@@ -2,7 +2,9 @@ defmodule Roki.LaevHidingTest do
   use ExUnit.Case, async: false
 
   test "while a sync can carry keys, laev's export cannot see the site's own MyAnimeList app, and it is back after" do
-    prior = {Application.get_env(:laev, :mal_client_id), Application.get_env(:laev, :mal_client_secret)}
+    prior =
+      {Application.get_env(:laev, :mal_client_id), Application.get_env(:laev, :mal_client_secret)}
+
     Application.put_env(:laev, :mal_client_id, "site-app-id")
     Application.put_env(:laev, :mal_client_secret, "site-app-secret")
     on_exit(fn -> restore(prior) end)
@@ -30,7 +32,9 @@ defmodule Roki.LaevHidingTest do
 
   defp restore({id, secret}) do
     for {key, value} <- [mal_client_id: id, mal_client_secret: secret] do
-      if value, do: Application.put_env(:laev, key, value), else: Application.delete_env(:laev, key)
+      if value,
+        do: Application.put_env(:laev, key, value),
+        else: Application.delete_env(:laev, key)
     end
   end
 end

@@ -166,7 +166,10 @@ defmodule Roki.Activity do
         ).num_rows > 0
 
       silent? =
-        Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [uuid_bin, @silent]).num_rows > 0
+        Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [
+          uuid_bin,
+          @silent
+        ]).num_rows > 0
 
       unless dup? or silent? do
         Repo.query!(
@@ -206,18 +209,39 @@ defmodule Roki.Activity do
 
   @doc "Is this account one whose doings are not shown to anyone (the test account)?"
   def silent?(uuid) when is_binary(uuid) do
-    Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [Ecto.UUID.dump!(uuid), @silent]).num_rows > 0
+    Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [
+      Ecto.UUID.dump!(uuid),
+      @silent
+    ]).num_rows > 0
   end
 
   @doc "A title was put on the Saved list."
-  def saved(uuid, %{type: type, id: id, title: title} = t) when type in ["movie", "tv"] and is_integer(id),
-    do: insert(uuid, %{type: type, tmdb_id: id, title: title, poster: poster_url(t[:poster_path])}, "saved")
+  def saved(uuid, %{type: type, id: id, title: title} = t)
+      when type in ["movie", "tv"] and is_integer(id),
+      do:
+        insert(
+          uuid,
+          %{type: type, tmdb_id: id, title: title, poster: poster_url(t[:poster_path])},
+          "saved"
+        )
 
   def saved(_uuid, _title), do: :ok
 
   @doc "A title was rated (`score`, as given)."
-  def rated(uuid, %{type: type, id: id, title: title} = t, score) when type in ["movie", "tv"] and is_integer(id) and is_number(score),
-    do: insert(uuid, %{type: type, tmdb_id: id, title: title, poster: poster_url(t[:poster_path]), score: score * 1.0}, "rated")
+  def rated(uuid, %{type: type, id: id, title: title} = t, score)
+      when type in ["movie", "tv"] and is_integer(id) and is_number(score),
+      do:
+        insert(
+          uuid,
+          %{
+            type: type,
+            tmdb_id: id,
+            title: title,
+            poster: poster_url(t[:poster_path]),
+            score: score * 1.0
+          },
+          "rated"
+        )
 
   def rated(_uuid, _title, _score), do: :ok
 
@@ -233,11 +257,19 @@ defmodule Roki.Activity do
       0
     else
       {:ok, bin} = Ecto.UUID.dump(uuid)
-      since = DateTime.utc_now() |> DateTime.add(-@window_days * 86_400) |> DateTime.to_naive() |> NaiveDateTime.truncate(:second)
+
+      since =
+        DateTime.utc_now()
+        |> DateTime.add(-@window_days * 86_400)
+        |> DateTime.to_naive()
+        |> NaiveDateTime.truncate(:second)
+
       now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
       counted =
-        for %{type: type, tmdb_id: id, title: title} = item <- items, type in ["movie", "tv"], is_integer(id) do
+        for %{type: type, tmdb_id: id, title: title} = item <- items,
+            type in ["movie", "tv"],
+            is_integer(id) do
           %{num_rows: turned} =
             Repo.query!(
               """
@@ -462,7 +494,21 @@ defmodule Roki.Activity do
       ).rows
 
     rows
-    |> Enum.map(fn [user, name, type, id, season, episode, title, poster, at, kind, seconds, watched_on, score] ->
+    |> Enum.map(fn [
+                     user,
+                     name,
+                     type,
+                     id,
+                     season,
+                     episode,
+                     title,
+                     poster,
+                     at,
+                     kind,
+                     seconds,
+                     watched_on,
+                     score
+                   ] ->
       %{
         user: user,
         username: name,
@@ -598,8 +644,13 @@ defmodule Roki.Activity do
           [],
           fn item, acc ->
             case acc do
-              [] -> {:cont, [item]}
-              [last | _] -> if DateTime.diff(item.at, last.at) > @batch_gap_s, do: {:cont, Enum.reverse(acc), [item]}, else: {:cont, [item | acc]}
+              [] ->
+                {:cont, [item]}
+
+              [last | _] ->
+                if DateTime.diff(item.at, last.at) > @batch_gap_s,
+                  do: {:cont, Enum.reverse(acc), [item]},
+                  else: {:cont, [item | acc]}
             end
           end,
           fn
@@ -623,12 +674,25 @@ defmodule Roki.Activity do
     newest_first = Enum.reverse(items)
     first = hd(newest_first)
 
-    %{first | batch?: true, count: length(items), items: newest_first, at: first.at, watched_on: nil}
+    %{
+      first
+      | batch?: true,
+        count: length(items),
+        items: newest_first,
+        at: first.at,
+        watched_on: nil
+    }
   end
 
   @doc "How a feed entry reads: `%{verb, subject, after, detail, icon, tone}`; `subject` is the title when it is one."
   def describe(%{batch?: true, kind: kind, count: n, items: items}) do
-    names = items |> Enum.map(& &1.title) |> Enum.take(3) |> Enum.join(", ") |> then(&if(n > 3, do: &1 <> "…", else: &1))
+    names =
+      items
+      |> Enum.map(& &1.title)
+      |> Enum.take(3)
+      |> Enum.join(", ")
+      |> then(&if(n > 3, do: &1 <> "…", else: &1))
+
     what = if Enum.all?(items, &(&1.type == "movie")), do: "#{n} films", else: "#{n} titles"
 
     {verb, after_} =
@@ -639,21 +703,47 @@ defmodule Roki.Activity do
       end
 
     # When it was really watched comes first: it is what a backdating is about, and the names may be long.
-    detail = [if(kind == "backdated", do: dates_text(items)), names] |> Enum.reject(&is_nil/1) |> Enum.join(" · ")
+    detail =
+      [if(kind == "backdated", do: dates_text(items)), names]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join(" · ")
+
     Map.merge(%{verb: verb, subject: nil, after: after_, detail: detail}, look(kind))
   end
 
   def describe(%{kind: "backdated"} = e),
-    do: Map.merge(%{verb: "added", subject: e.title, after: "to their history", detail: dates_text([e])}, look("backdated"))
+    do:
+      Map.merge(
+        %{verb: "added", subject: e.title, after: "to their history", detail: dates_text([e])},
+        look("backdated")
+      )
 
-  def describe(%{kind: "saved"} = e), do: Map.merge(%{verb: "saved", subject: e.title, after: "for later", detail: nil}, look("saved"))
+  def describe(%{kind: "saved"} = e),
+    do:
+      Map.merge(
+        %{verb: "saved", subject: e.title, after: "for later", detail: nil},
+        look("saved")
+      )
 
   def describe(%{kind: "rated"} = e),
-    do: Map.merge(%{verb: "rated", subject: e.title, after: nil, detail: score_text(e.score)}, look("rated"))
+    do:
+      Map.merge(
+        %{verb: "rated", subject: e.title, after: nil, detail: score_text(e.score)},
+        look("rated")
+      )
 
   def describe(%{kind: kind} = e) do
     {before, subject} = split_verb(e)
-    Map.merge(%{verb: before, subject: subject, after: nil, detail: if(watched_text(e), do: watched_text(e) <> " watched")}, look(kind))
+
+    Map.merge(
+      %{
+        verb: before,
+        subject: subject,
+        after: nil,
+        detail: if(watched_text(e), do: watched_text(e) <> " watched")
+      },
+      look(kind)
+    )
   end
 
   # What a run reads as, with the title taken out of the sentence `verb/1` makes.
@@ -673,9 +763,16 @@ defmodule Roki.Activity do
     dates = items |> Enum.map(& &1.watched_on) |> Enum.reject(&is_nil/1) |> Enum.sort(Date)
 
     case dates do
-      [] -> nil
-      [only] -> "watched " <> day(only)
-      many -> if List.first(many) == List.last(many), do: "watched " <> day(hd(many)), else: "watched #{day(List.first(many))} – #{day(List.last(many))}"
+      [] ->
+        nil
+
+      [only] ->
+        "watched " <> day(only)
+
+      many ->
+        if List.first(many) == List.last(many),
+          do: "watched " <> day(hd(many)),
+          else: "watched #{day(List.first(many))} – #{day(List.last(many))}"
     end
   end
 

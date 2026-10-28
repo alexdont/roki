@@ -395,7 +395,9 @@ defmodule Roki.Watch do
                 do: Laev.Tmdb.rate_movie(title.id, value),
                 else: Laev.Tmdb.rate_tv(title.id, value)
 
-            with {:ok, rating} <- result, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
+            with {:ok, rating} <- result,
+                 do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
+
             result
         end
       end)
@@ -403,7 +405,10 @@ defmodule Roki.Watch do
     with {:ok, rating} <- result do
       # Before the film is marked watched (rating it marks it): one piece of news, the rating.
       if is_number(rating) and title.type in ["movie", "tv"] do
-        Task.start(fn -> Roki.Social.friend_activity(uuid, :rated, title.type, title.id, title.title, rating) end)
+        Task.start(fn ->
+          Roki.Social.friend_activity(uuid, :rated, title.type, title.id, title.title, rating)
+        end)
+
         Roki.Activity.rated(uuid, title, rating)
       end
 
@@ -586,7 +591,10 @@ defmodule Roki.Watch do
                "#{tv_id}:#{season}",
                3 * 24 * 3600,
                fn -> read_episodes(tv_id, season, uuid) end,
-               fn eps -> eps != [] and Enum.all?(eps, &aired_by?(&1.air_date, Date.add(Date.utc_today(), -14))) end
+               fn eps ->
+                 eps != [] and
+                   Enum.all?(eps, &aired_by?(&1.air_date, Date.add(Date.utc_today(), -14)))
+               end
              )
            end) do
       # Whether an episode is out is counted at the time of asking, not of keeping.
@@ -1114,10 +1122,15 @@ defmodule Roki.Watch do
 
         "tv" ->
           Laev.Position.set_watched(%{type: "tv", tmdb_id: id, season: nil, episode: nil}, false)
-          for mal <- Laev.AnimeMap.mal_ids("tv", id), do: Laev.Position.set_watched(%{mal_id: mal}, false)
+
+          for mal <- Laev.AnimeMap.mal_ids("tv", id),
+              do: Laev.Position.set_watched(%{mal_id: mal}, false)
 
         "movie" ->
-          Laev.Position.set_watched(%{type: "movie", tmdb_id: id, season: nil, episode: nil}, false)
+          Laev.Position.set_watched(
+            %{type: "movie", tmdb_id: id, season: nil, episode: nil},
+            false
+          )
       end
 
       Laev.Sync.live_push()
@@ -1254,7 +1267,10 @@ defmodule Roki.Watch do
   """
   def restart(uuid, ctx, source, stream, caps, from) when is_number(from) do
     :ok = release_previous(uuid)
-    Roki.Laev.with_audio(uuid, ctx, fn -> do_start(uuid, ctx, source, stream, caps, from: max(0, from)) end)
+
+    Roki.Laev.with_audio(uuid, ctx, fn ->
+      do_start(uuid, ctx, source, stream, caps, from: max(0, from))
+    end)
   end
 
   @doc """
@@ -1268,7 +1284,9 @@ defmodule Roki.Watch do
     cap = size_cap(Roki.Laev.web_settings(uuid))
 
     if cap && is_integer(source[:size]) && source.size > cap,
-      do: {:error, {:too_big_one, Float.round(source.size / 1_073_741_824, 1), div(cap, 1_073_741_824)}},
+      do:
+        {:error,
+         {:too_big_one, Float.round(source.size / 1_073_741_824, 1), div(cap, 1_073_741_824)}},
       else: :ok
   end
 
@@ -1750,7 +1768,9 @@ defmodule Roki.Watch do
   def autoplay?(uuid), do: Roki.Laev.run(uuid, &Laev.Config.autoplay?/0)
 
   # A conversion that did not get going is stopped, not left to run its two hours.
-  defp ready(%{kind: :remux, remux_id: id} = src), do: await_segments(id, src[:part] || 0, 180_000)
+  defp ready(%{kind: :remux, remux_id: id} = src),
+    do: await_segments(id, src[:part] || 0, 180_000)
+
   defp ready(_), do: :ok
 
   # Playing can begin once the first two segments (about eight seconds) are written: the converter
@@ -1800,7 +1820,12 @@ defmodule Roki.Watch do
     # own copy of each (`sub0-1800.vtt`).
     for t <- Laev.Playback.subtitles(id), is_binary(t[:file]) do
       base = String.replace_suffix(t.file, ".vtt", "")
-      file = if String.starts_with?(base, "sub"), do: Roki.Direct.part_name(base, ".vtt", part), else: base <> ".vtt"
+
+      file =
+        if String.starts_with?(base, "sub"),
+          do: Roki.Direct.part_name(base, ".vtt", part),
+          else: base <> ".vtt"
+
       %{lang: t.lang, label: language(t.lang), url: "/stream/#{id}/#{file}"}
     end
   end
@@ -2171,8 +2196,11 @@ defmodule Roki.Watch do
         do: next_unseen(uuid, title, sections, counts)
 
     case next do
-      {sec, tmdb_ep} -> %{season: sec.season, episode: tmdb_ep, label: "#{sec.short}.E#{tmdb_ep - sec.from}"}
-      nil -> Map.take(play_info(sections, nil), [:season, :episode, :label])
+      {sec, tmdb_ep} ->
+        %{season: sec.season, episode: tmdb_ep, label: "#{sec.short}.E#{tmdb_ep - sec.from}"}
+
+      nil ->
+        Map.take(play_info(sections, nil), [:season, :episode, :label])
     end
   end
 
@@ -2183,7 +2211,9 @@ defmodule Roki.Watch do
   def study_episodes(uuid, title, sections) do
     for sec <- sections, sec.season > 0, {:ok, all} <- [episodes(title.id, sec.season, uuid)] do
       eps =
-        for e <- all, e.number > sec.from and (sec.count == nil or e.number <= sec.from + sec.count), do: e
+        for e <- all,
+            e.number > sec.from and (sec.count == nil or e.number <= sec.from + sec.count),
+            do: e
 
       watched = watched_episodes(uuid, title, sec.season, eps)
 

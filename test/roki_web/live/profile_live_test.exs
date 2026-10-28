@@ -31,7 +31,9 @@ defmodule RokiWeb.ProfileLiveTest do
     refute render_async(view) =~ "Favorite Movies"
   end
 
-  test "the owner writes the words where they go, and the rest from the banner's button", %{conn: conn} do
+  test "the owner writes the words where they go, and the rest from the banner's button", %{
+    conn: conn
+  } do
     user = register("ownerone")
     {:ok, view, html} = live(signed_in(user), "/ownerone")
     assert html =~ "Press here to write it"
@@ -81,8 +83,12 @@ defmodule RokiWeb.ProfileLiveTest do
     assert {:error, msg} = Roki.Profile.add_favorite(user.uuid, :tv, {"movie", 10_331}, "Easy A")
     assert msg =~ "already"
 
-    for n <- 1..9, do: {:ok, _} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", n}, "Film #{n}")
-    assert {:error, msg} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", 99}, "One too many")
+    for n <- 1..9,
+        do: {:ok, _} = Roki.Profile.add_favorite(user.uuid, :movie, {"movie", n}, "Film #{n}")
+
+    assert {:error, msg} =
+             Roki.Profile.add_favorite(user.uuid, :movie, {"movie", 99}, "One too many")
+
     assert msg =~ "holds 10"
 
     {:ok, favs} = Roki.Profile.move_favorite(user.uuid, {"movie", 9}, :up)
@@ -120,7 +126,11 @@ defmodule RokiWeb.ProfileLiveTest do
     view |> element("button[phx-click=shelf_edit][phx-value-kind=movie]") |> render_click()
 
     # Ten empty places, each one opens the picker; the grid is the drag hook's.
-    assert has_element?(view, "ul#shelf-movie[phx-hook=SortableGrid][data-sortable-event=shelf_reorder]")
+    assert has_element?(
+             view,
+             "ul#shelf-movie[phx-hook=SortableGrid][data-sortable-event=shelf_reorder]"
+           )
+
     assert has_element?(view, "button[phx-click=pick_open][phx-value-kind=movie]")
 
     assert view |> render() |> String.split(~s(phx-click="pick_open")) |> length() == 12
@@ -137,7 +147,12 @@ defmodule RokiWeb.ProfileLiveTest do
 
     refute render(view) =~ "Choose your favorite movies"
     assert has_element?(view, "li.sortable-item[data-id='movie:1']")
-    assert has_element?(view, "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
+
+    assert has_element?(
+             view,
+             "li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]"
+           )
+
     # The whole poster is what is dragged: no handle, no strip.
     refute has_element?(view, "li.sortable-item .pk-drag-handle")
     refute has_element?(view, "ul#shelf-movie[data-sortable-handle]")
@@ -153,18 +168,31 @@ defmodule RokiWeb.ProfileLiveTest do
     refute render(view) =~ "Top 10 Movies"
 
     # A drag: the new order is kept.
-    render_hook(view, "shelf_reorder", %{"ordered_ids" => ["movie:2", "movie:1"], "moved_id" => "movie:2", "kind" => "movie"})
+    render_hook(view, "shelf_reorder", %{
+      "ordered_ids" => ["movie:2", "movie:1"],
+      "moved_id" => "movie:2",
+      "kind" => "movie"
+    })
+
     assert Enum.map(Roki.Profile.favorites(user.uuid).movie, & &1.id) == [2, 1]
 
     # A cross takes one off and the rest close up.
-    view |> element("li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]") |> render_click()
+    view
+    |> element("li.sortable-item[data-id='movie:2'] button[phx-click=shelf_remove]")
+    |> render_click()
+
     assert Enum.map(Roki.Profile.favorites(user.uuid).movie, &{&1.id, &1.position}) == [{1, 1}]
 
     # In the picker what is on the shelf is ticked, not greyed out: unticking it and ticking
     # another swaps them on save.
     render_click(view, "pick_open", %{"kind" => "movie"})
     render_async(view)
-    assert has_element?(view, "button[phx-click=pick_toggle][phx-value-key='movie:1'][aria-pressed=true]")
+
+    assert has_element?(
+             view,
+             "button[phx-click=pick_toggle][phx-value-key='movie:1'][aria-pressed=true]"
+           )
+
     refute has_element?(view, "button[phx-click=pick_toggle][disabled]")
     view |> element("button[phx-click=pick_toggle][phx-value-key='movie:1']") |> render_click()
     view |> element("button[phx-click=pick_toggle][phx-value-key='movie:2']") |> render_click()
@@ -176,7 +204,11 @@ defmodule RokiWeb.ProfileLiveTest do
     user = register("halfway")
     {:ok, bin} = Ecto.UUID.dump(user.uuid)
 
-    for {id, title, status, note} <- [{1, "Done Film", "finished", nil}, {2, "Half Show", "progress", "2/5 seasons"}, {3, "Current Show", "up_to_date", "3/3 seasons"}] do
+    for {id, title, status, note} <- [
+          {1, "Done Film", "finished", nil},
+          {2, "Half Show", "progress", "2/5 seasons"},
+          {3, "Current Show", "up_to_date", "3/3 seasons"}
+        ] do
       Roki.Repo.query!(
         "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated, status, note) values ($1, $2, $3, $2, $3, $4, false, now(), true, $5, $6)",
         [bin, if(id == 1, do: "movie", else: "tv"), id, title, status, note]
@@ -227,11 +259,17 @@ defmodule RokiWeb.ProfileLiveTest do
         [bin, type, id, title]
       )
 
-      Roki.Repo.query!("insert into roki_titles (type, id, name, genres, seen_at) values ($1, $2, $3, $4, now())", [type, id, title, genres])
+      Roki.Repo.query!(
+        "insert into roki_titles (type, id, name, genres, seen_at) values ($1, $2, $3, $4, now())",
+        [type, id, title, genres]
+      )
     end
 
     # Rated: the scary one. Unrated: the rest.
-    Roki.Repo.query!("insert into roki_ratings (user_uuid, type, id, score) values ($1, 'movie', 1, 8)", [bin])
+    Roki.Repo.query!(
+      "insert into roki_ratings (user_uuid, type, id, score) values ($1, 'movie', 1, 8)",
+      [bin]
+    )
 
     {:ok, view, _} = live(signed_in(user), "/genrefan/watched?genre=horror")
     html = render_async(view)
@@ -263,7 +301,17 @@ defmodule RokiWeb.ProfileLiveTest do
     assert html =~ "Action Show"
     refute html =~ "Scary Film"
 
-    assert Enum.map(Roki.Profile.arrange(Roki.Profile.history(user.uuid), Roki.Profile.ratings(user.uuid), :all, :latest, :none), & &1.title) |> Enum.sort() ==
+    assert Enum.map(
+             Roki.Profile.arrange(
+               Roki.Profile.history(user.uuid),
+               Roki.Profile.ratings(user.uuid),
+               :all,
+               :latest,
+               :none
+             ),
+             & &1.title
+           )
+           |> Enum.sort() ==
              ["Action Show", "Funny Film", "Unread Film"]
 
     assert Roki.Profile.rating_param("none") == :none
@@ -324,7 +372,11 @@ defmodule RokiWeb.ProfileLiveTest do
     html = render(view)
     assert html =~ "set to March 9, 2018"
     assert html =~ "March 2018"
-    assert Enum.map(Roki.Profile.history(user.uuid), & &1.title) == ["Newest Film", "Forgotten Film"]
+
+    assert Enum.map(Roki.Profile.history(user.uuid), & &1.title) == [
+             "Newest Film",
+             "Forgotten Film"
+           ]
 
     # Remove the newest.
     view |> element("button[phx-click=select_toggle][phx-value-key='movie:1']") |> render_click()

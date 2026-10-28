@@ -280,7 +280,9 @@ defmodule RokiWeb.SourcesLive do
       do: {:noreply, assign(socket, playable: playable, rest: rest, phase: :ready, busy?: false)}
 
   def handle_async(:prestart, {:ok, {source, {:ok, _player}}}, socket),
-    do: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
+    do:
+      {:noreply,
+       push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
 
   def handle_async(:prestart, {:ok, {_source, {:error, reason}}}, socket) do
     {:noreply, assign(socket, starting: nil, current: nil, start_error: Resolver.failure(reason))}
@@ -325,7 +327,13 @@ defmodule RokiWeb.SourcesLive do
 
     if socket.assigns.auto == :pending do
       case preferred(socket, res) ||
-             Resolver.pick(res.playable, res.cap, res.good, socket.assigns.mode, socket.assigns.caps) do
+             Resolver.pick(
+               res.playable,
+               res.cap,
+               res.good,
+               socket.assigns.mode,
+               socket.assigns.caps
+             ) do
         {:play, pair} -> socket |> assign(auto: :done) |> start(pair)
         # A release that was kept from the last episode: a {source, stream} pair as it is.
         {%{} = _source, %{} = _stream} = pair -> socket |> assign(auto: :done) |> start(pair)
@@ -399,7 +407,9 @@ defmodule RokiWeb.SourcesLive do
 
         if socket.assigns.mode == :external or params["via"] == "external",
           do: {:noreply, hand_over(assign(socket, :auto, :done), pair)},
-          else: {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
+          else:
+            {:noreply,
+             push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
     end
   end
 
@@ -516,7 +526,8 @@ defmodule RokiWeb.SourcesLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}

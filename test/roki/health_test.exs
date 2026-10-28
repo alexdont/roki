@@ -15,7 +15,11 @@ defmodule Roki.HealthTest do
   end
 
   defp bell(user),
-    do: for(n <- PhoenixKit.Notifications.recent_for_user(user.uuid, 20), do: PhoenixKit.Notifications.Render.render(n))
+    do:
+      for(
+        n <- PhoenixKit.Notifications.recent_for_user(user.uuid, 20),
+        do: PhoenixKit.Notifications.Render.render(n)
+      )
 
   test "how near the end a premium is: fine, then the steps people are told at, then gone" do
     now = ~U[2026-10-27 12:00:00Z]
@@ -35,7 +39,14 @@ defmodule Roki.HealthTest do
     user = register("healthrd")
 
     assert Health.settle(user.uuid, "rd", {:bad, "rejected"}) == :told
-    assert [%{text: "Your Real-Debrid key was rejected, so nothing can play. Add a new one in settings.", link: "/healthrd/settings"}] = bell(user)
+
+    assert [
+             %{
+               text:
+                 "Your Real-Debrid key was rejected, so nothing can play. Add a new one in settings.",
+               link: "/healthrd/settings"
+             }
+           ] = bell(user)
 
     # Still broken at the next check: nothing new to say.
     assert Health.settle(user.uuid, "rd", {:bad, "rejected"}) == :quiet
@@ -59,7 +70,10 @@ defmodule Roki.HealthTest do
     assert Health.settle(user.uuid, "torbox", {:bad, "expiring:3"}) == :told
     assert Health.settle(user.uuid, "torbox", {:bad, "expiring:1"}) == :told
     assert Health.settle(user.uuid, "torbox", {:bad, "expired"}) == :told
-    assert Enum.map(bell(user), & &1.text) |> Enum.member?("Your TorBox premium ends within 3 days.")
+
+    assert Enum.map(bell(user), & &1.text)
+           |> Enum.member?("Your TorBox premium ends within 3 days.")
+
     assert length(bell(user)) == 4
   end
 
@@ -73,7 +87,8 @@ defmodule Roki.HealthTest do
     assert Health.settle(user.uuid, "mal", {:bad, "invalid"}) == :quiet
     assert Health.settle(user.uuid, "mal", {:bad, "invalid"}) == :told
 
-    assert [%{text: "Your MyAnimeList login stopped working. Connect it again in settings."}] = bell(user)
+    assert [%{text: "Your MyAnimeList login stopped working. Connect it again in settings."}] =
+             bell(user)
 
     assert Health.settle(user.uuid, "tmdb", {:bad, "invalid"}) == :quiet
     assert Health.settle(user.uuid, "tmdb", {:bad, "invalid"}) == :told
@@ -83,7 +98,11 @@ defmodule Roki.HealthTest do
     user = register("healthremind")
     assert Health.settle(user.uuid, "rd", {:bad, "locked"}) == :told
 
-    Roki.Repo.query!("update roki_health set told_at = now() - interval '8 days' where user_uuid = $1", [Ecto.UUID.dump!(user.uuid)])
+    Roki.Repo.query!(
+      "update roki_health set told_at = now() - interval '8 days' where user_uuid = $1",
+      [Ecto.UUID.dump!(user.uuid)]
+    )
+
     assert Health.settle(user.uuid, "rd", {:bad, "locked"}) == :told
     assert Health.settle(user.uuid, "rd", {:bad, "locked"}) == :quiet
     assert length(bell(user)) == 2

@@ -35,7 +35,12 @@ defmodule Roki.Media do
     with true <- is_binary(user) || {:error, :no_owner},
          {:ok, data} <- File.read(path),
          checksum = :crypto.hash(:sha256, data) |> Base.encode16(case: :lower),
-         {:ok, file} <- stored(Storage.store_file_in_buckets(path, "image", user, checksum, ext, filename, mime_type: mime)) do
+         {:ok, file} <-
+           stored(
+             Storage.store_file_in_buckets(path, "image", user, checksum, ext, filename,
+               mime_type: mime
+             )
+           ) do
       with folder when is_binary(folder) <- folder(Keyword.get(opts, :folder)),
            do: Storage.attach_file_to_folder(file, folder)
 
@@ -50,7 +55,8 @@ defmodule Roki.Media do
   defp stored(other), do: other
 
   @doc "The address a media file is served at (its original)."
-  def url(file_uuid, variant \\ "original") when is_binary(file_uuid), do: URLSigner.signed_url(file_uuid, variant)
+  def url(file_uuid, variant \\ "original") when is_binary(file_uuid),
+    do: URLSigner.signed_url(file_uuid, variant)
 
   @doc "Whether a value is a media file's uuid (as against a file name of the old kind)."
   def uuid?(value), do: is_binary(value) and match?({:ok, _}, Ecto.UUID.cast(value))

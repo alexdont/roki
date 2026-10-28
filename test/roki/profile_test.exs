@@ -26,16 +26,59 @@ defmodule Roki.ProfileTest do
 
   test "the history is arranged by kind, by rating, and down to the tens" do
     items = [
-      %{type: "movie", id: 1, mal_id: nil, title: "Film", anime: false, at: 300, dated?: true, poster: nil},
-      %{type: "tv", id: 2, mal_id: nil, title: "Show", anime: false, at: 200, dated?: true, poster: nil},
-      %{type: "tv", id: 3, mal_id: 5114, title: "Anime", anime: true, at: 100, dated?: true, poster: nil},
-      %{type: "movie", id: 4, mal_id: nil, title: "Unrated", anime: false, at: 400, dated?: true, poster: nil}
+      %{
+        type: "movie",
+        id: 1,
+        mal_id: nil,
+        title: "Film",
+        anime: false,
+        at: 300,
+        dated?: true,
+        poster: nil
+      },
+      %{
+        type: "tv",
+        id: 2,
+        mal_id: nil,
+        title: "Show",
+        anime: false,
+        at: 200,
+        dated?: true,
+        poster: nil
+      },
+      %{
+        type: "tv",
+        id: 3,
+        mal_id: 5114,
+        title: "Anime",
+        anime: true,
+        at: 100,
+        dated?: true,
+        poster: nil
+      },
+      %{
+        type: "movie",
+        id: 4,
+        mal_id: nil,
+        title: "Unrated",
+        anime: false,
+        at: 400,
+        dated?: true,
+        poster: nil
+      }
     ]
 
     ratings = %{{"movie", 1} => 8.0, {"tv", 2} => 10.0, {"mal", 5114} => 10.0}
 
     assert Enum.map(Profile.arrange(items, ratings, :all, :latest), & &1.id) == [1, 2, 3, 4]
-    assert Enum.map(Profile.arrange(items, ratings, :all, :top), &{&1.id, &1.badge}) == [{2, "★ 10"}, {3, "★ 10"}, {1, "★ 8"}, {4, nil}]
+
+    assert Enum.map(Profile.arrange(items, ratings, :all, :top), &{&1.id, &1.badge}) == [
+             {2, "★ 10"},
+             {3, "★ 10"},
+             {1, "★ 8"},
+             {4, nil}
+           ]
+
     assert Enum.map(Profile.arrange(items, ratings, :anime, :latest), & &1.id) == [3]
     assert Enum.map(Profile.arrange(items, ratings, :movie, :top, true), & &1.id) == []
     assert Enum.map(Profile.arrange(items, ratings, :all, :top, true), & &1.id) == [2, 3]
@@ -115,13 +158,21 @@ defmodule Roki.ProfileTest do
   test "a pull's news is the film or episode newly finished, never a backlog" do
     before = MapSet.new(["movie-1", "tv-5-s1e1"])
 
-    assert Roki.Laev.news(before, MapSet.new(["movie-1", "tv-5-s1e1", "movie-1561726"])) == [{"movie", 1_561_726, nil, nil}]
+    assert Roki.Laev.news(before, MapSet.new(["movie-1", "tv-5-s1e1", "movie-1561726"])) == [
+             {"movie", 1_561_726, nil, nil}
+           ]
+
     assert Roki.Laev.news(before, MapSet.put(before, "tv-5-s1e2")) == [{"tv", 5, 1, 2}]
     # A whole show or an anime entry is not one thing watched.
     assert Roki.Laev.news(before, MapSet.new(["movie-1", "tv-5-s1e1", "tv-9", "mal-30-e1"])) == []
     # A first sync, and an import.
     assert Roki.Laev.news(MapSet.new(), MapSet.new(["movie-1", "movie-2"])) == []
-    assert Roki.Laev.news(before, MapSet.union(before, MapSet.new(for n <- 100..110, do: "movie-#{n}"))) == []
+
+    assert Roki.Laev.news(
+             before,
+             MapSet.union(before, MapSet.new(for n <- 100..110, do: "movie-#{n}"))
+           ) == []
+
     assert Roki.Laev.news(before, before) == []
   end
 
@@ -133,11 +184,18 @@ defmodule Roki.ProfileTest do
     ])
 
     # Marked just now, all three: the order is the order of marking.
-    assert {:ok, 2} = Profile.set_watched_at(@uuid, ["movie:2", "tv:3", "movie:999"], ~D[2019-06-15])
+    assert {:ok, 2} =
+             Profile.set_watched_at(@uuid, ["movie:2", "tv:3", "movie:999"], ~D[2019-06-15])
+
     items = Profile.history(@uuid)
 
     # The newest is the one never backdated; the two old ones are in 2019, in the order given.
-    assert Enum.map(items, & &1.title) == ["Seen Last Week", "Found Years Later", "Another Old One"]
+    assert Enum.map(items, & &1.title) == [
+             "Seen Last Week",
+             "Found Years Later",
+             "Another Old One"
+           ]
+
     assert Enum.map(items, &DateTime.from_unix!(&1.at).year) |> Enum.take(-2) == [2019, 2019]
     assert hd(items).key == "movie:1"
 
@@ -145,17 +203,32 @@ defmodule Roki.ProfileTest do
     {:ok, bin} = Ecto.UUID.dump(@uuid)
     Roki.Repo.query!("update roki_watched set at = now() where user_uuid = $1", [bin])
     assert :ok = Profile.reapply_dates(@uuid)
-    assert Enum.map(Profile.history(@uuid), & &1.title) == ["Seen Last Week", "Found Years Later", "Another Old One"]
+
+    assert Enum.map(Profile.history(@uuid), & &1.title) == [
+             "Seen Last Week",
+             "Found Years Later",
+             "Another Old One"
+           ]
 
     # Putting one of the old ones on a later day moves just it.
     assert {:ok, 1} = Profile.set_watched_at(@uuid, ["movie:2"], ~D[2022-01-01])
-    assert Enum.map(Profile.history(@uuid), & &1.title) == ["Seen Last Week", "Found Years Later", "Another Old One"]
+
+    assert Enum.map(Profile.history(@uuid), & &1.title) == [
+             "Seen Last Week",
+             "Found Years Later",
+             "Another Old One"
+           ]
+
     assert DateTime.from_unix!(Enum.at(Profile.history(@uuid), 1).at).year == 2022
 
     # Taking one off the list takes its date with it.
     assert {:ok, 1} = Profile.remove_watched(@uuid, ["movie:2"])
     assert Enum.map(Profile.history(@uuid), & &1.key) == ["movie:1", "tv:3"]
-    assert Roki.Repo.query!("select count(*) from roki_watch_dates where user_uuid = $1 and id = 2", [bin]).rows == [[0]]
+
+    assert Roki.Repo.query!(
+             "select count(*) from roki_watch_dates where user_uuid = $1 and id = 2",
+             [bin]
+           ).rows == [[0]]
   end
 
   test "a profile's counts follow the finished titles" do
@@ -181,7 +254,9 @@ defmodule Roki.ProfileTest do
   end
 
   test "a banner is a media file; anything else named there is no banner" do
-    assert Profile.banner_url(%{banner: "0199f7a1-0000-7000-8000-000000000002"}) =~ ~r{/file/0199f7a1-0000-7000-8000-000000000002/original/}
+    assert Profile.banner_url(%{banner: "0199f7a1-0000-7000-8000-000000000002"}) =~
+             ~r{/file/0199f7a1-0000-7000-8000-000000000002/original/}
+
     assert Profile.banner_url(%{banner: "a-1.jpg"}) == nil
     assert Profile.banner_url(%{banner: nil}) == nil
   end

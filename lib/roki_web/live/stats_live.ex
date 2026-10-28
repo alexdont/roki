@@ -72,7 +72,8 @@ defmodule RokiWeb.StatsLive do
     assigns = assign_view(assigns)
 
     ~H"""
-    <Layouts.app socket={@socket}
+    <Layouts.app
+      socket={@socket}
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}

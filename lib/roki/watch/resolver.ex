@@ -33,7 +33,9 @@ defmodule Roki.Watch.Resolver do
         heavy_ok? \\ false,
         caps \\ %{}
       ) do
-    Roki.Laev.with_audio(uuid, title, fn -> do_run(parent, token, uuid, title, season, episode, force?, mode, quick?, heavy_ok?, caps) end)
+    Roki.Laev.with_audio(uuid, title, fn ->
+      do_run(parent, token, uuid, title, season, episode, force?, mode, quick?, heavy_ok?, caps)
+    end)
   end
 
   defp do_run(parent, token, uuid, title, season, episode, force?, mode, quick?, heavy_ok?, caps) do
@@ -90,7 +92,12 @@ defmodule Roki.Watch.Resolver do
   @doc "Check the next page of unchecked releases: `{:ok, token, playable, rest}`."
   def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false, caps \\ %{}) do
     {page, rest} = Watch.probe_page(rest)
-    {playable, late} = Roki.Laev.with_audio(uuid, ctx, fn -> probe_page(parent, token, uuid, ctx, page, false, light?, caps) end)
+
+    {playable, late} =
+      Roki.Laev.with_audio(uuid, ctx, fn ->
+        probe_page(parent, token, uuid, ctx, page, false, light?, caps)
+      end)
+
     rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
     if hours > 0, do: SourceCache.put(uuid, key, all, rest, light?)
@@ -600,7 +607,8 @@ defmodule Roki.Watch.Resolver do
       "Every release found (#{n}) is above the #{gb} GB limit for the browser player. (Settings → size limit, or use the external player.)"
 
   def failure({:too_big_one, size, gb}),
-    do: "That release is #{size} GB — above the #{gb} GB limit for the browser player. (Settings → size limit, or use the external player.)"
+    do:
+      "That release is #{size} GB — above the #{gb} GB limit for the browser player. (Settings → size limit, or use the external player.)"
 
   def failure(:too_heavy),
     do:

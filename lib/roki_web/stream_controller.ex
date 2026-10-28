@@ -54,8 +54,14 @@ defmodule RokiWeb.StreamController do
 
       Laev.Remux.entry_playlist(id) == "master.m3u8" ->
         case File.read(Path.join(Laev.Remux.dir(id), "master.m3u8")) do
-          {:ok, content} -> playlist(conn, Roki.Direct.tidy_master(content, prefer(conn, id), Roki.Subs.tracks(id)))
-          _ -> send_resp(conn, 404, "not ready")
+          {:ok, content} ->
+            playlist(
+              conn,
+              Roki.Direct.tidy_master(content, prefer(conn, id), Roki.Subs.tracks(id))
+            )
+
+          _ ->
+            send_resp(conn, 404, "not ready")
         end
 
       # laev's plain playlist: under a master when there are subtitles to list, else as it is.
