@@ -349,5 +349,42 @@ if (params.get("src")) {
   if (i >= 0) $("preset").value = params.get("src")
   else { $("preset").value = ""; $("url").disabled = false; $("url").value = params.get("src") }
 }
+// Bisecting a black screen on a device: `link=N` plays the server's Nth real release, `nocontrols=1`
+// takes the controls off the video, `fixed=1` puts it in a full-screen fixed box like the watch
+// page's, `report=1` sends the numbers home after `secs` seconds.
+if (params.get("nocontrols") === "1") $("video").removeAttribute("controls")
+if (params.get("fixed") === "1") {
+  const v = $("video")
+  const box = document.createElement("div")
+  box.style.cssText = "position:fixed;inset:0;z-index:60;overflow:hidden;background:#000"
+  const stage = document.createElement("div")
+  stage.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden"
+  v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;max-height:none"
+  document.body.appendChild(box); box.appendChild(stage); stage.appendChild(v)
+  const back = document.createElement("button"); back.textContent = "✕"; back.style.cssText = "position:absolute;top:8px;right:8px;z-index:2"; back.onclick = () => box.remove(); stage.appendChild(back)
+}
+if (params.get("link") !== null) {
+  const links = await (await fetch("/lab/links")).json()
+  const l = links[Number(params.get("link"))]
+  if (l) { $("preset").value = ""; $("url").disabled = false; $("url").value = l.provider === "tb" ? l.url : `/lab/bytes?u=${encodeURIComponent(l.url)}`; log(`Link ${params.get("link")}: ${l.name}`) }
+}
 if (params.get("runall")) { await runAll() }
-else if (params.get("autoplay")) { await probe(); if (params.get("audio")) $("audio").value = params.get("audio"); if (params.get("from")) $("from").value = params.get("from"); await play() }
+else if (params.get("autoplay")) {
+  await probe(); if (params.get("audio")) $("audio").value = params.get("audio"); if (params.get("from")) $("from").value = params.get("from")
+  if (params.get("report") === "1") {
+    // A phone plays nothing without a tap: one big button, and the case runs from it.
+    await new Promise((res) => {
+      const btn = document.createElement("button")
+      btn.textContent = "▶ Tap to run this case"
+      btn.style.cssText = "position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:100;font-size:20px;padding:18px 28px"
+      btn.onclick = () => { btn.remove(); res() }
+      document.body.appendChild(btn)
+    })
+    const secs = Math.max(5, Number(params.get("secs")) || 20)
+    const r = await play(secs)
+    const v = $("video")
+    const report = {at: new Date().toISOString(), ua: navigator.userAgent, platform: navigator.platform, width: innerWidth, height: innerHeight, managedMediaSource: !!window.ManagedMediaSource,
+      caps: [["one-case " + location.search]], results: [{name: `one-case ${location.search}`, ok: !!(r && r.frames > 0), ...r, controls: v.hasAttribute("controls"), rect: (() => { const b = v.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)] })()}]}
+    try { const res = await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}); log(`Report sent: ${res.status}`) } catch (e) { log("Report failed: " + e) }
+  } else await play()
+}
