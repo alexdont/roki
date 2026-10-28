@@ -387,16 +387,56 @@ defmodule RokiWeb.Layouts do
 
   The chapter reader itself is deliberately NOT wrapped: it is a full-screen canvas.
   """
+  # The manga pages' own navigation. The header above carries what spans the whole site
+  # (Movies, Shows, Anime, Manga, search, notifications, the account menu), so this row
+  # carries only what exists for manga and nothing else — which is why these pages no
+  # longer need a menu of their own. Settings and Stats are missing on purpose: they are
+  # this site's pages now, at /:username/settings and /:username/stats.
+  @manga_nav [
+    {"Explore", "/manga/explore"},
+    {"Categories", "/manga/categories"},
+    {"History", "/manga/history"},
+    {"Comments", "/manga/comments"},
+    {"Tierlist", "/manga/tierlist"},
+    {"Grid", "/manga/grid"}
+  ]
+
   def manga(assigns) do
+    path =
+      (assigns[:conn] && assigns.conn.request_path) || assigns[:current_path] || "/manga"
+
+    # Map.merge, not assign/2: a controller renders this layout with a plain assigns map,
+    # which Phoenix.Component.assign/2 refuses.
+    assigns =
+      Map.merge(assigns, %{path: path, nav: @manga_nav, resume: assigns[:resume_manga]})
+
     ~H"""
     <.app
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       socket={assigns[:socket]}
       conn={assigns[:conn]}
-      current_path={(assigns[:conn] && @conn.request_path) || "/manga"}
+      current_path={@path}
       flush
     >
+      <nav class="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 pt-6">
+        <a
+          :for={{label, href} <- @nav}
+          href={href}
+          class={["btn btn-sm", (@path == href && "btn-primary") || "btn-ghost"]}
+        >
+          {label}
+        </a>
+        <%!-- Carry on reading, from wherever you are. Each page used to draw this for
+             itself above its own menu; one row holds both now. --%>
+        <a
+          :if={@resume && @resume.last_chapter}
+          href={~p"/manga/#{@resume.source}/#{@resume.slug}/#{@resume.last_chapter}"}
+          class="btn btn-sm btn-primary ml-auto sm:px-8"
+        >
+          ▶ Resume
+        </a>
+      </nav>
       {@inner_content}
     </.app>
     """

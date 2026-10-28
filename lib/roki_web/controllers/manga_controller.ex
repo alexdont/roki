@@ -27,17 +27,6 @@ defmodule RokiWeb.MangaController do
     user && (user.custom_fields || %{})["reader_ui_v2"] != false
   end
 
-  def set_reader_v2(conn, params) do
-    user = conn.assigns[:phoenix_kit_current_user]
-    val = params["enabled"] in [true, "true", "1"]
-    current = user.custom_fields || %{}
-
-    {:ok, _} =
-      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "reader_ui_v2", val))
-
-    redirect(conn, to: if(val, do: ~p"/manga/home2", else: ~p"/manga"))
-  end
-
   def home(conn, params) do
     # XHR fetches to "/manga" are the home JSON API — never redirect
     # those, only full page loads.
@@ -479,6 +468,22 @@ defmodule RokiWeb.MangaController do
   # Smart panels (paged reader): Next / Prev step through the detected
   # panels of a page, each zoomed and centred, before turning the page.
   # Read client-side from the root layout's `smart-panels` meta tag.
+  @doc """
+  Which generation of the home and series pages to serve. Was the reader menu's
+  "Switch to old reader"; it is a row in the Reading settings now, so it saves the way
+  every other preference there does.
+  """
+  def update_reader_ui_v2(conn, %{"enabled" => enabled}) do
+    user = conn.assigns[:phoenix_kit_current_user]
+    val = enabled in [true, "true", "1"]
+    current = user.custom_fields || %{}
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "reader_ui_v2", val))
+
+    json(conn, %{ok: true, reader_ui_v2: val})
+  end
+
   def update_smart_panels(conn, %{"enabled" => enabled}) do
     user = conn.assigns[:phoenix_kit_current_user]
     val = enabled in [true, "true", "1"]

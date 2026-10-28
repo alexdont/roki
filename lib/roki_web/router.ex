@@ -43,7 +43,6 @@ defmodule RokiWeb.Router do
     get "/home2", MangaController, :home2
     # Persisted old/new UI switch — when on, "/" and "/..."
     # redirect to their v2 counterparts.
-    put "/manga_v2", MangaController, :set_reader_v2
     # Superseded by the HistoryLive route above; kept as a fallback so the
     # old calendar stays comparable (and revertable) while the new one beds in.
     get "/legacy/history", MangaController, :history
@@ -89,6 +88,7 @@ defmodule RokiWeb.Router do
     put "/settings/default_reading_direction", MangaController, :update_default_reading_direction
     put "/settings/default_smart_scroll", MangaController, :update_default_smart_scroll
     put "/settings/smart_panels", MangaController, :update_smart_panels
+    put "/settings/reader_ui_v2", MangaController, :update_reader_ui_v2
     put "/settings/default_page_padding", MangaController, :update_default_page_padding
     put "/settings/smart_scroll_config", MangaController, :update_smart_scroll_config
     put "/settings/timezone", MangaController, :update_timezone

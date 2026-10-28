@@ -50,6 +50,9 @@ defmodule RokiWeb.Live.HistoryLive do
       socket
       |> assign(
         page_title: "History",
+        # The manga layout's navigation row marks where you are; a live page has no conn
+        # to read the path from.
+        current_path: "/manga/history",
         user: user,
         offset_seconds: offset_seconds,
         all_activity: all_activity,
@@ -280,57 +283,6 @@ defmodule RokiWeb.Live.HistoryLive do
   def render(assigns) do
     ~H"""
     <div class="max-w-6xl mx-auto px-4 py-8">
-      <div class="flex items-center justify-between mb-6">
-        <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">📖 Reader</a>
-        <div class="flex items-center gap-2">
-          <a
-            :if={@resume_manga}
-            href={
-              ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
-            }
-            class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
-          >
-            ▶ Resume
-          </a>
-          <RokiWeb.Layouts.theme_toggle />
-          <%!-- LiveView takes the socket where the dead view passed @conn --%>
-          <RokiWeb.Layouts.notifications_bell parent={@socket} scope={@phoenix_kit_current_scope} />
-          <RokiWeb.Layouts.user_menu scope={@phoenix_kit_current_scope} current_path="/manga/history" />
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </div>
-            <ul
-              tabindex="0"
-              class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
-            >
-              <li><a href="/manga">Home</a></li>
-              <li><a href="/manga/explore">Explore</a></li>
-              <li><a href="/manga/history" class="font-semibold">History</a></li>
-              <li><a href="/manga/stats">Stats</a></li>
-              <li><a href="/manga/comments">Comments</a></li>
-              <li><a href="/manga/categories">Categories</a></li>
-              <li><a href="/manga/tierlist">Tierlist</a></li>
-              <li><a href="/manga/grid">Grid</a></li>
-              <li><a href="/manga/settings">Settings</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold">Reading History</h2>
         <div class="flex items-center gap-3">

@@ -380,6 +380,23 @@ defmodule RokiWeb.MangaSettings do
         </div>
         <button type="button" id="ssc-reset" class="btn btn-sm btn-ghost text-error w-full">Reset to defaults</button>
       </div>
+      <%!-- Was "Switch to old reader" in the reader's own menu. It is a preference, so it
+           lives with the preferences now that the menu is gone. --%>
+      <div class="flex items-center justify-between bg-base-200 rounded-xl p-4">
+        <div>
+          <p class="font-medium">Old reader pages</p>
+          <p class="text-sm text-base-content/60">
+            Serve the earlier home page and series page instead of the current ones. The reader
+            itself is the same either way.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          id="old-reader-toggle"
+          checked={(@user.custom_fields || %{})["reader_ui_v2"] == false}
+        />
+      </div>
     </div>
 
     <%!-- Colocated hook: this JS is extracted into the bundle at compile
@@ -483,6 +500,11 @@ defmodule RokiWeb.MangaSettings do
 
           if (t.id === "default-smart-scroll-toggle") {
             return this.put("/manga/settings/default_smart_scroll", { enabled: t.checked });
+          }
+
+          if (t.id === "old-reader-toggle") {
+            // The stored flag means "use the current pages", so this toggle is its opposite.
+            return this.put("/manga/settings/reader_ui_v2", { enabled: !t.checked });
           }
 
           if (t.id === "smart-panels-toggle") {
