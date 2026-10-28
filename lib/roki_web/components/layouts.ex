@@ -103,13 +103,6 @@ defmodule RokiWeb.Layouts do
           >
             {label}
           </.top_link>
-          <%!-- Placeholder: manga comes later. --%>
-          <span
-            class="flex cursor-not-allowed items-center gap-1.5 px-3 text-sm font-medium text-base-content/35"
-            title="Coming soon"
-          >
-            Manga <span class="badge badge-ghost badge-xs">soon</span>
-          </span>
         </nav>
 
         <div class="flex-1"></div>
@@ -339,9 +332,6 @@ defmodule RokiWeb.Layouts do
           {label}
           <.icon name="hero-chevron-right-micro" class="h-4 w-4 opacity-40" />
         </.link>
-        <div class="flex cursor-not-allowed items-center justify-between rounded-lg px-4 py-3 text-base font-medium text-base-content/40">
-          Manga <span class="badge badge-ghost badge-sm">soon</span>
-        </div>
       </nav>
     </header>
 
