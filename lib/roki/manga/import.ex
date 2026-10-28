@@ -115,7 +115,49 @@ defmodule Roki.Manga.Import do
     for table <- Enum.reverse(@owned), do: clear(table, people)
     for table <- @shared, do: copy_shared(table)
     for table <- @owned, do: copy_owned(table, people)
+    rehost_sidecar()
     true
+  end
+
+  @doc """
+  Cover addresses that point at a sidecar, pointed at ours.
+
+  A series whose pages come from an extension has the sidecar's own address saved inside its
+  cover url. On the machine this data came from that was a process on the loopback; here it is a
+  container on this stack's network, so the saved address resolves to nothing and the cover
+  silently fails to load. The address is in the rows, so every import brings it back — which is
+  why this runs as part of one rather than by hand afterwards.
+
+  Matched on shape (`scheme://host:port/sources/...`) rather than on the old host, so it keeps
+  working if either end moves again.
+  """
+  def rehost_sidecar do
+    base = Application.get_env(:roki, :kotatsu_url, "http://kotatsu:8420")
+
+    %{num_rows: saved} =
+      Repo.query!(
+        """
+        update saved_manga
+           set cover_url = $1 || substring(cover_url from '/sources/.*$')
+         where cover_url ~ '^https?://[^/]+:[0-9]+/sources/'
+           and cover_url not like $2
+        """,
+        [base, base <> "%"]
+      )
+
+    %{num_rows: meta} =
+      Repo.query!(
+        """
+        update manga_metadata
+           set data = jsonb_set(data, '{cover_url}',
+                        to_jsonb($1::text || substring(data->>'cover_url' from '/sources/.*$')))
+         where data->>'cover_url' ~ '^https?://[^/]+:[0-9]+/sources/'
+           and data->>'cover_url' not like $2
+        """,
+        [base, base <> "%"]
+      )
+
+    {saved, meta}
   end
 
   # Their rows, by whichever column that table uses to say whose they are.
