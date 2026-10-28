@@ -409,6 +409,30 @@ defmodule Roki.Manga.Library do
     end
   end
 
+  @doc """
+  One person's saved manga whose title matches, newest reading first — what this site's own
+  search shows under Manga, so a title someone is already reading is found from the same box
+  as a film.
+  """
+  def search_saved(user_uuid, query, limit \\ 12) do
+    q = "%" <> query <> "%"
+
+    from(s in SavedManga,
+      where: s.user_id == type(^user_uuid, Ecto.UUID),
+      where: ilike(s.title, ^q),
+      order_by: [desc: s.updated_at],
+      limit: ^limit,
+      select: %{
+        source: s.source,
+        slug: s.slug,
+        title: s.title,
+        cover_url: s.cover_url,
+        cover_file_uuid: s.cover_file_uuid
+      }
+    )
+    |> Repo.all()
+  end
+
   def search_saved_across_users(query, limit \\ 30) do
     q = "%" <> query <> "%"
 

@@ -32,6 +32,7 @@ defmodule RokiWeb.SearchLive do
      |> assign(:place_y, nil)
      |> assign(:franchises, [])
      |> assign(:seen, MapSet.new())
+     |> assign(:manga, [])
      |> assign(:error, nil)}
   end
 
@@ -54,6 +55,7 @@ defmodule RokiWeb.SearchLive do
            shelf: empty(),
            franchises: [],
            seen: MapSet.new(),
+           manga: [],
            error: nil
          )}
 
@@ -61,10 +63,16 @@ defmodule RokiWeb.SearchLive do
         {:noreply,
          socket
          |> assign(q: q, genre: genre, franchises: [], seen: MapSet.new(), error: nil)
+         |> assign(:manga, saved_manga(socket.assigns.uuid, q))
          |> take_place()
          |> fetch(1, true)}
     end
   end
+
+  # Manga is this site's as well, and it is not on TMDB: the titles this person is already
+  # reading, found from the same box. One query against our own table, so it needs no async.
+  defp saved_manga(nil, _q), do: []
+  defp saved_manga(uuid, q), do: Roki.Manga.Library.search_saved(uuid, q)
 
   # Back from a result: every page that was loaded, at once.
   defp take_place(%{assigns: %{place: %{pages: pages, y: y}}} = socket),
@@ -99,6 +107,16 @@ defmodule RokiWeb.SearchLive do
       end
     end)
   end
+
+  # The media library's copy when there is one, else the source's own address through this
+  # site, which carries the headers the source asks for.
+  defp manga_cover(%{cover_file_uuid: uuid}) when is_binary(uuid) and uuid != "",
+    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "medium")
+
+  defp manga_cover(%{cover_url: url}) when is_binary(url) and url != "",
+    do: ~p"/manga/proxy/image?#{%{url: url}}"
+
+  defp manga_cover(_), do: nil
 
   # One page, or pages `1..last` joined (items in order, the franchises of the first page).
   defp search_pages(client, uuid, q, 1), do: Roki.Search.search(client, uuid, q, 1)
@@ -300,6 +318,36 @@ defmodule RokiWeb.SearchLive do
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <.list_card :for={l <- @franchises} list={l} />
         </div>
+      </section>
+
+      <%!-- Manga keeps its own section rather than joining the grid: a chapter of a manhwa and
+            a film are not the same kind of thing, and the sources are searched on their own
+            page. --%>
+      <section :if={@uuid && String.length(@q) >= 2} class="space-y-3">
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 class="text-xl font-semibold">Manga</h2>
+          <a href={"/manga/search?q=" <> URI.encode_www_form(@q)} class="text-sm text-primary">
+            Search every source for “{@q}” →
+          </a>
+        </div>
+        <ul
+          :if={@manga != []}
+          class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+        >
+          <li :for={m <- @manga} class="space-y-1">
+            <a href={~p"/manga/#{m.source}/#{m.slug}"} title={m.title}>
+              <img
+                src={manga_cover(m)}
+                alt={m.title}
+                loading="lazy"
+                class="aspect-[2/3] w-full rounded-box object-cover"
+              />
+            </a>
+          </li>
+        </ul>
+        <p :if={@manga == []} class="text-sm text-base-content/60">
+          Nothing you are reading matches.
+        </p>
       </section>
 
       <section :if={@shelf.items != []} class="space-y-3">
