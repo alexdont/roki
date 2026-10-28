@@ -10,7 +10,7 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;over
 </style></head>
 <body>
 <div id="ask" hidden style="position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;gap:10px;justify-content:center;align-items:center;padding:12px;background:#222;border-top:1px solid #444"><span id="ask-q"></span><button id="seen" style="background:#2a6;color:#fff;border:0;border-radius:8px">I saw a picture</button><button id="black" style="background:#a33;color:#fff;border:0;border-radius:8px">Black</button></div>
-<header><button id="go">Run every case</button><span id="status">10 cases, 30 s each, then a tap to say what you saw. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
+<header><button id="go">Run every case</button><span id="status">8 cases, 30 s each, then a tap to say what you saw. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
 <iframe id="f" allow="autoplay; fullscreen" title="case"></iframe>
 <table id="t"><thead><tr><th>#</th><th>case</th><th>frames</th><th>t</th><th>rs</th><th>size</th><th>state</th></tr></thead><tbody></tbody></table>
 <div id="note"></div>
@@ -20,15 +20,13 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;over
 const W = "/watch/tv/278043/1/13?diag=1"
 const CASES = [
   ["watch page as it is", W, "study-video"],
-  ["fresh <video>: full-bleed fixed", W + "&fresh=1", "fresh-video"],
-  ["fresh <video>: fixed, 16 px in from the edges", W + "&fresh=1&geo=inset", "fresh-video"],
-  ["fresh <video>: fixed, full width, 400 px tall", W + "&fresh=1&geo=h400", "fresh-video"],
-  ["fresh <video>: fixed, full width, 480 px tall", W + "&fresh=1&geo=h480", "fresh-video"],
-  ["fresh <video>: fixed, half height", W + "&fresh=1&geo=short", "fresh-video"],
-  ["fresh <video>: full-bleed, picture stretched (object-fit: fill)", W + "&fresh=1&geo=fill", "fresh-video"],
-  ["fresh <video>: full-bleed, absolute in a wrapper (not fixed)", W + "&fresh=1&geo=abs", "fresh-video"],
-  ["fresh <video>: full-bleed fixed, no black background", W + "&fresh=1&geo=nobg", "fresh-video"],
-  ["bare page in the watch page's box (muted)", "/lab/local.html?auto=1&mute=1&link=0&fixed=1", "v"],
+  ["page's element swapped for a script-made twin (our player)", W + "&hook=1", "study-video"],
+  ["script-made twin without controlslist/class (our player)", W + "&hook=1&noattr=1", "study-video"],
+  ["page's own element, controlslist/class taken off", W + "&noattr=1", "study-video"],
+  ["page's own element, saved volume not applied", W + "&novol=1", "study-video"],
+  ["page's own element, neither attributes nor volume", W + "&noattr=1&novol=1", "study-video"],
+  ["twin, no attributes, no volume (our player)", W + "&hook=1&noattr=1&novol=1", "study-video"],
+  ["fresh <video> beside the player (control)", W + "&fresh=1", "fresh-video"],
 ]
 // What a decoded frame looks like, read back through a canvas: a mean brightness of 0 on a
 // frame the decoder has produced says the picture is black in the data, not just on the screen.
@@ -71,7 +69,7 @@ async function runCase(i) {
       r.t = +v.currentTime.toFixed(1); r.rs = v.readyState; r.size = `${v.videoWidth}×${v.videoHeight}`; r.paused = v.paused; r.muted = v.muted
       r.err = v.error ? (v.error.message || String(v.error.code)) : null
       r.state = r.err ? "error: " + r.err : (v.paused ? "paused" : "playing")
-      const badge = d.getElementById("diag-badge"); if (badge) r.build = badge.textContent.split(" ")[0]
+      const badge = d.getElementById("diag-badge"); if (badge) { r.build = badge.textContent.split(" ")[0]; r.badge = badge.textContent.split("\n")[0] }
       const pr = v.parentElement; r.parent = pr ? `${pr.tagName.toLowerCase()}${pr.id ? "#" + pr.id : ""}.${String(pr.className).slice(0, 30)}` : null
       const b = v.getBoundingClientRect(); r.rect = [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]
       r.controls = v.hasAttribute("controls"); r.src = String(v.currentSrc || v.src).slice(0, 12); r.html = d.documentElement.className
@@ -111,7 +109,7 @@ $("go").onclick = async () => {
   let sent = "not sent"
   try { const res = await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}); sent = res.ok ? "sent (" + (await res.json()).id + ")" : "refused " + res.status + " — signed in as the owner?" } catch (e) { sent = "failed: " + e.message }
   $("status").textContent = `Done. Report ${sent}.`
-  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, seen: r.seen, frames: r.frames, t: r.t, state: r.state, build: r.build, parent: r.parent, rect: r.rect, controls: r.controls, bright: r.bright, scale: r.scale, frameWidth: r.frameWidth})))
+  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, seen: r.seen, badge: r.badge, frames: r.frames, t: r.t, state: r.state, build: r.build, parent: r.parent, rect: r.rect, controls: r.controls, bright: r.bright, scale: r.scale, frameWidth: r.frameWidth})))
 }
 </script>
 </body></html>

@@ -15,7 +15,7 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b9" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b10" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -163,6 +163,15 @@ export const StudySidebar = {
       if (keep === "header" || keep === "all") document.documentElement.classList.add("keep-header")
     }
     this.video = document.getElementById(this.el.dataset.video)
+    // `hook=1`: the page's <video> swapped for a twin made by script before anything binds to it
+    // (same place, same attributes); `noattr=1` leaves the twin's controlslist and class off.
+    if (this.flags.get("hook") === "1") {
+      const old = this.video, v = document.createElement("video")
+      v.id = old.id; v.setAttribute("playsinline", "")
+      if (this.flags.get("noattr") !== "1") { v.setAttribute("controlslist", "nofullscreen"); v.className = old.className }
+      else v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000"
+      old.replaceWith(v); this.video = v
+    }
     this.list = this.el.querySelector("[data-role=list]")
     this.title = this.el.querySelector("[data-role=title]")
     this.count = this.el.querySelector("[data-role=count]")
@@ -1446,6 +1455,7 @@ export const StudySidebar = {
       const flags = this.flags
       if (flags.get("controls") === "1") v.setAttribute("controls", "")
       if (flags.get("mute") === "1") v.muted = true // so a frame may start it without a tap
+      if (flags.get("noattr") === "1" && flags.get("hook") !== "1") { v.removeAttribute("controlslist"); v.removeAttribute("class"); v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000" }
       // `bare=1`: the element taken out of the player's markup altogether, straight under <body>.
       if (flags.get("bare") === "1") { document.body.appendChild(v); v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain" }
       // `fresh=1`: a new <video> of the lab page's shape, under <body>, played instead of the
@@ -1788,7 +1798,8 @@ export const StudySidebar = {
     const tick = () => {
       const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}
       const r = v.getBoundingClientRect()
-      b.textContent = `${BUILD} ${this.flags.toString()}\nframes ${q.totalVideoFrames} t ${v.currentTime.toFixed(1)} rs ${v.readyState} ${v.videoWidth}×${v.videoHeight} ${v.paused ? "paused" : "playing"}${v.error ? " ERR " + v.error.message : ""}\nrect ${Math.round(r.width)}×${Math.round(r.height)} controls ${v.hasAttribute("controls")} html.${document.documentElement.className} parent ${v.parentElement && v.parentElement.className}`
+      const st = this.local && this.local.stats()
+      b.textContent = `${BUILD} ${this.flags.toString()} starts ${st ? st.starts : "?"}\nframes ${q.totalVideoFrames} t ${v.currentTime.toFixed(1)} rs ${v.readyState} ${v.videoWidth}×${v.videoHeight} ${v.paused ? "paused" : "playing"}${v.error ? " ERR " + v.error.message : ""}\nrect ${Math.round(r.width)}×${Math.round(r.height)} controls ${v.hasAttribute("controls")} html.${document.documentElement.className} parent ${v.parentElement && v.parentElement.className}`
     }
     tick(); this.diagTimer = setInterval(tick, 1000)
   },

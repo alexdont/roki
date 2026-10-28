@@ -107,10 +107,11 @@ export async function startLocalPlayer(video, url, opts = {}) {
     }))
 
   const MS = window.ManagedMediaSource || window.MediaSource
-  const state = {run: null, stopped: false, seeking: false, expect: null}
+  const state = {run: null, stopped: false, seeking: false, expect: null, starts: 0}
 
   // One read of the file from `from`: a conversion into a fresh MediaSource.
   async function start(from) {
+    state.starts++
     if (state.run) await state.run.stop()
     scanner.seek()
     const audio = audioIndex >= 0 ? audios[audioIndex] : null
@@ -246,7 +247,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
     get subtitleTracks() { return subtitleTracks() },
     onSubtitleTracks(fn) { scanner.onTracks = () => fn(subtitleTracks()); if (scanner.subtitleTracks.length) fn(subtitleTracks()) },
     seek(t) { video.currentTime = Math.max(0, t) },
-    stats() { const r = state.run; return r ? {from: r.from, bytes: r.bytes(), processed: r.processed(), type: r.type, subtitles: scanner.stats} : null },
+    stats() { const r = state.run; return r ? {from: r.from, bytes: r.bytes(), processed: r.processed(), type: r.type, starts: state.starts, subtitles: scanner.stats} : null },
     async stop() {
       state.stopped = true
       video.removeEventListener("seeking", onSeeking)
