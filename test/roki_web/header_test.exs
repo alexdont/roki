@@ -6,14 +6,18 @@ defmodule RokiWeb.HeaderTest do
   test "the header has the sections on the left and no Featured link", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/lists")
 
-    for {label, href} <- [{"Movies", "/movies"}, {"Shows", "/shows"}, {"Anime", "/anime"}] do
+    sections = [
+      {"Movies", "/movies"},
+      {"Shows", "/shows"},
+      {"Anime", "/anime"},
+      {"Manga", "/manga"}
+    ]
+
+    for {label, href} <- sections do
       assert html =~ ~s(href="#{href}")
       assert html =~ label
     end
 
-    # manga is a placeholder, not a link
-    assert html =~ "Manga"
-    refute html =~ ~s(href="/manga")
     # Featured is the logo
     refute html =~ ~r/>\s*Featured\s*</
   end

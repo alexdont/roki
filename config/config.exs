@@ -14,12 +14,15 @@ config :phoenix, :filter_parameters, ["password", "token"]
 
 # Who is told when something is said in a comment thread, and how a thread is named in the
 # moderation list (Roki.CommentHandler).
-# The Phase 1 spike of dev_docs/manga-migration-plan.md: the packaged manga reader mounted on
-# stub data (RokiWeb.MangaSpike) to prove it hosts here. Goes when the real store lands.
+# The manga reader (dev_docs/manga-migration-plan.md): the packaged reader, told where a series
+# comes from and where someone's place in it is kept.
 config :manhwa,
-  store: RokiWeb.MangaSpike,
-  current_user: {RokiWeb.MangaSpike, :current_user},
-  series_url: {RokiWeb.MangaSpike, :series_url}
+  store: Roki.Manga.Store,
+  current_user: {RokiWeb.MangaGlue, :current_user},
+  series_url: {RokiWeb.MangaGlue, :series_url}
+
+# Where the kotatsu sidecar answers — its own container on this stack's private network.
+config :roki, kotatsu_url: "http://kotatsu:8420"
 
 config :phoenix_kit, :comment_resource_handlers, %{
   "profile" => Roki.CommentHandler.Profile,

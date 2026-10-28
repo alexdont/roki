@@ -73,6 +73,10 @@ defmodule Roki.MixProject do
       {:etcher, "~> 0.22.0"},
       {:chapter, "~> 0.1"},
       {:dims, "~> 0.1"},
+      # The reader's own site scrapers come across with it: they parse HTML (floki) and need
+      # each site's own referer and user agent (guise).
+      {:floki, "~> 0.38"},
+      {:guise, "~> 0.1"},
       {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},

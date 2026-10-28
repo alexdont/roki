@@ -128,10 +128,15 @@ defmodule Roki.Manga.Import do
   Do it, for everyone in `@pairs` at once or not at all: `{:ok, [{table, count}]}`, or
   `{:error, {:blocked, people}}` when an account is still missing.
   """
-  def run do
-    case people() do
-      {ready, []} -> do_run(ready)
-      {_, blocked} -> {:error, {:blocked, blocked}}
+  def run(opts \\ []) do
+    {ready, blocked} = people()
+
+    case Keyword.get(opts, :only) do
+      # Everyone, or no one: a half-finished import is worse than none.
+      nil when blocked == [] -> do_run(ready)
+      nil -> {:error, {:blocked, blocked}}
+      # Named people only — for bringing someone across before the rest have accounts here.
+      names -> ready |> Enum.filter(&(&1.from in names)) |> do_run()
     end
   end
 

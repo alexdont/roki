@@ -7,6 +7,7 @@ defmodule Mix.Tasks.Roki.Manga.Import do
       PHX_SERVER=false mix roki.manga.import            # what would be written, nothing written
       PHX_SERVER=false mix roki.manga.import --rehearse # write it all, count it, roll it back
       PHX_SERVER=false mix roki.manga.import --run      # write it, for real
+      PHX_SERVER=false mix roki.manga.import --run --only sasha,maxdon2001   # just these
 
   `--run` refuses while anyone in the mapping has no account on one side, because a half-finished
   import is worse than none. It replaces rather than merges: see the module doc.
@@ -24,15 +25,16 @@ defmodule Mix.Tasks.Roki.Manga.Import do
     end
 
     case args do
-      ["--run"] -> do_run(Import)
+      ["--run"] -> do_run(Import, [])
+      ["--run", "--only", names] -> do_run(Import, only: String.split(names, ","))
       ["--rehearse"] -> Import.rehearse() |> show("rehearsed, then rolled back")
       [] -> Import.report() |> show("would write")
       other -> Mix.raise("unknown argument: #{Enum.join(other, " ")}")
     end
   end
 
-  defp do_run(mod) do
-    case mod.run() do
+  defp do_run(mod, opts) do
+    case mod.run(opts) do
       {:ok, counts} ->
         show({counts, []}, "written")
 

@@ -31,6 +31,10 @@ import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
 import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
+// The manga reader's scrolling viewer. PhoenixKit vendors fresco itself (hence FrescoCanvas,
+// the paged viewer), but not the strip — it registers into window.FrescoHooks when imported,
+// which is why those are spread into the socket below.
+import "../../deps/fresco_strip/priv/static/fresco_strip.js"
 // For the player lab and the console.
 window.rokiLocalPlayer = startLocalPlayer
 
@@ -121,7 +125,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...colocatedHooks, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel},
+  hooks: {...window.PhoenixKitHooks, ...window.FrescoHooks, ...colocatedHooks, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.

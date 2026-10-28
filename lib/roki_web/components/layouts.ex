@@ -60,7 +60,8 @@ defmodule RokiWeb.Layouts do
     sections = [
       {"Movies", ~p"/movies"},
       {"Shows", ~p"/shows"},
-      {"Anime", ~p"/anime"}
+      {"Anime", ~p"/anime"},
+      {"Manga", ~p"/manga"}
     ]
 
     # Whom the bell is for: a signed-in person, on a page that passed its socket.
