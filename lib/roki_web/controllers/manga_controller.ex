@@ -2734,15 +2734,50 @@ defmodule RokiWeb.MangaController do
   def grid(conn, params) do
     user = conn.assigns[:phoenix_kit_current_user]
     mode = normalize_grid_mode(params["mode"])
+    manga_mode? = mode in ["overall", "manga", "manhwa"]
+    roki_mode? = mode in ["overall", "movie", "tv", "anime"]
 
-    slots = Library.list_grid_slots(user.uuid, mode)
     saved_manga = Library.list_saved_manga(user.uuid)
+    watched = if roki_mode?, do: Roki.Profile.history(user.uuid), else: []
+
+    # One place, filled from whichever side put something there. Overall takes either.
+    manga_slots = if manga_mode?, do: Library.list_grid_slots(user.uuid, mode), else: []
+    roki_slots = if roki_mode?, do: Roki.Grid.board(user.uuid, mode), else: []
+    roki_index = Map.new(roki_slots, &{&1.slot, &1})
+
+    slots =
+      for slot <- 1..Roki.Grid.slots() do
+        manga =
+          Enum.find(manga_slots, &(&1.slot == slot)) ||
+            %{slot: slot, label: nil, source: nil, slug: nil}
+
+        roki = roki_index[slot] || %{slot: slot, label: nil, type: nil, id: nil}
+
+        %{
+          slot: slot,
+          label: roki.label || manga.label,
+          source: manga.source,
+          slug: manga.slug,
+          type: roki.type,
+          id: roki.id
+        }
+      end
 
     pool =
       case mode do
         "manga" -> Enum.filter(saved_manga, &(MangaHTML.tierlist_kind(&1) == "paged"))
         "manhwa" -> Enum.filter(saved_manga, &(MangaHTML.tierlist_kind(&1) == "scroll"))
-        _ -> saved_manga
+        "overall" -> saved_manga
+        _ -> []
+      end
+
+    roki_pool =
+      case mode do
+        "movie" -> Enum.filter(watched, &(&1.type == "movie" and not &1.anime))
+        "tv" -> Enum.filter(watched, &(&1.type == "tv" and not &1.anime))
+        "anime" -> Enum.filter(watched, & &1.anime)
+        "overall" -> watched
+        _ -> []
       end
 
     saved_index = Map.new(saved_manga, fn m -> {{m.source, m.slug}, m} end)
@@ -2752,40 +2787,76 @@ defmodule RokiWeb.MangaController do
     render(conn, :grid,
       slots: slots,
       saved_manga: pool,
+      roki_pool: roki_pool,
+      roki_index: Map.new(watched, &{{&1.type, &1.id}, &1}),
       saved_index: saved_index,
       cover_paths: cover_paths,
       active_mode: mode
     )
   end
 
+  @doc """
+  One place on the board, set or emptied. A place holds one thing, and the two sides keep their
+  own table, so whichever side is not being set is emptied first — otherwise a film dropped on
+  a place a manga was in would leave both there.
+  """
   def update_grid(conn, %{"slot" => slot} = params) do
     user = conn.assigns[:phoenix_kit_current_user]
-    id = params["id"]
     mode = normalize_grid_mode(params["mode"])
+    by_id = Map.new(Library.list_saved_manga(user.uuid), &{&1.id, {&1.source, &1.slug}})
 
     with {n, ""} when n in 1..15 <- Integer.parse(to_string(slot)),
-         {source, slug} <- parse_grid_id(id) do
-      Library.set_grid_slot(user.uuid, mode, n, source, slug)
+         {:ok, what} <- parse_grid_id(params["id"], by_id) do
+      if mode in ["overall", "manga", "manhwa"] do
+        # The reader's board writes over places that are already there, so they have to exist:
+        # reading it is what puts the fifteen empty ones in.
+        Library.list_grid_slots(user.uuid, mode)
+
+        case what do
+          {:manga, {source, slug}} -> Library.set_grid_slot(user.uuid, mode, n, source, slug)
+          _ -> Library.set_grid_slot(user.uuid, mode, n, nil, nil)
+        end
+      end
+
+      if mode in ["overall", "movie", "tv", "anime"] do
+        case what do
+          {:roki, key} -> Roki.Grid.set(user.uuid, mode, n, key)
+          _ -> Roki.Grid.clear(user.uuid, mode, n)
+        end
+      end
+
       json(conn, %{ok: true})
     else
       _ -> conn |> put_status(400) |> json(%{ok: false})
     end
   end
 
-  defp normalize_grid_mode(m) when m in ["overall", "manga", "manhwa"], do: m
+  defp normalize_grid_mode(m) when m in ["overall", "manga", "manhwa", "movie", "tv", "anime"],
+    do: m
+
   defp normalize_grid_mode(_), do: "overall"
 
-  defp parse_grid_id(nil), do: {nil, nil}
-  defp parse_grid_id(""), do: {nil, nil}
+  defp parse_grid_id(nil, _by_id), do: {:ok, :empty}
+  defp parse_grid_id("", _by_id), do: {:ok, :empty}
 
-  defp parse_grid_id(id) when is_binary(id) do
+  defp parse_grid_id("manga:" <> id, by_id) do
+    with {n, ""} <- Integer.parse(id), {_, _} = pair <- by_id[n], do: {:ok, {:manga, pair}}
+  end
+
+  defp parse_grid_id(id, _by_id) when is_binary(id) do
     case String.split(id, ":", parts: 2) do
-      [src, slug] when src != "" and slug != "" -> {src, slug}
-      _ -> :error
+      [type, n] when type in ["movie", "tv", "mal"] ->
+        case Integer.parse(n) do
+          {n, ""} -> {:ok, {:roki, {type, n}}}
+          _ -> :error
+        end
+
+      _ ->
+        :error
     end
   end
 
-  defp parse_grid_id(_), do: :error
+  defp parse_grid_id(_, _by_id), do: :error
 
   def tierlist(conn, _params) do
     user = conn.assigns[:phoenix_kit_current_user]

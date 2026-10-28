@@ -1,19 +1,21 @@
 <div class="max-w-6xl mx-auto px-4 py-8">
   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
     <h2 class="text-lg font-semibold">My Grid</h2>
-    <div id="grid-mode" style="display: flex; gap: 0.25rem;">
+    <div id="grid-mode" style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
       <a
-        href={~p"/manga/grid"}
-        class={"btn btn-sm " <> if(@active_mode == "overall", do: "btn-primary", else: "btn-outline")}
-      >Overall</a>
-      <a
-        href={~p"/manga/grid?mode=manga"}
-        class={"btn btn-sm " <> if(@active_mode == "manga", do: "btn-primary", else: "btn-outline")}
-      >Manga</a>
-      <a
-        href={~p"/manga/grid?mode=manhwa"}
-        class={"btn btn-sm " <> if(@active_mode == "manhwa", do: "btn-primary", else: "btn-outline")}
-      >Manhwa</a>
+        :for={
+          {mode, label} <- [
+            {"overall", "Overall"},
+            {"movie", "Movies"},
+            {"tv", "Shows"},
+            {"anime", "Anime"},
+            {"manga", "Manga"},
+            {"manhwa", "Manhwa"}
+          ]
+        }
+        href={"?mode=" <> mode}
+        class={"btn btn-sm " <> if(@active_mode == mode, do: "btn-primary", else: "btn-outline")}
+      >{label}</a>
     </div>
   </div>
 
@@ -51,10 +53,11 @@
           class="grid-slot border border-base-300 rounded-lg bg-base-200 relative"
         >
           <% manga = slot.source && Map.get(@saved_index, {slot.source, slot.slug}) %>
+          <% title = slot.type && Map.get(@roki_index, {slot.type, slot.id}) %>
           <%= if manga do %>
             <div
               class="grid-item cursor-grab active:cursor-grabbing"
-              data-id={"#{manga.source}:#{manga.slug}"}
+              data-id={"manga:#{manga.id}"}
               title={manga.title}
             >
               <img
@@ -69,7 +72,27 @@
               title="Clear"
             >×</button>
           <% else %>
-            <div class="grid-empty text-xs text-base-content/40">Drop here</div>
+            <%= if title do %>
+              <div
+                class="grid-item cursor-grab active:cursor-grabbing"
+                data-id={"#{slot.type}:#{slot.id}"}
+                title={title.title}
+              >
+                <img
+                  :if={title.poster}
+                  src={Roki.Images.local(title.poster)}
+                  alt={title.title}
+                  draggable="false"
+                />
+              </div>
+              <button
+                type="button"
+                class="grid-clear absolute top-1 right-1 btn btn-xs btn-circle btn-ghost"
+                title="Clear"
+              >×</button>
+            <% else %>
+              <div class="grid-empty text-xs text-base-content/40">Drop here</div>
+            <% end %>
           <% end %>
         </div>
       </div>
@@ -77,7 +100,7 @@
 
     <div class="lg:w-64 lg:shrink-0">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <h3 class="text-base font-semibold">Saved</h3>
+        <h3 class="text-base font-semibold">To place</h3>
         <div id="grid-pool-filter" style="display: flex; gap: 0.25rem;">
           <button type="button" data-filter="read" class="btn btn-xs btn-primary">Read</button>
           <button type="button" data-filter="all" class="btn btn-xs btn-outline">All</button>
@@ -90,7 +113,7 @@
         <div
           :for={manga <- @saved_manga}
           class="grid-item w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
-          data-id={"#{manga.source}:#{manga.slug}"}
+          data-id={"manga:#{manga.id}"}
           data-progress={
             if (manga.last_chapter && manga.last_chapter != "") || manga.completed,
               do: "read",
@@ -101,6 +124,22 @@
           <img
             src={cover_image_src(manga, @cover_paths, "medium")}
             alt={manga.title}
+            class="w-full aspect-[3/4] object-cover rounded shadow-sm"
+            draggable="false"
+          />
+        </div>
+        <%!-- Films, shows and anime, from what this account has finished. --%>
+        <div
+          :for={t <- @roki_pool}
+          class="grid-item w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
+          data-id={"#{t.type}:#{t.id}"}
+          data-progress="read"
+          title={t.title}
+        >
+          <img
+            :if={t.poster}
+            src={Roki.Images.local(t.poster)}
+            alt={t.title}
             class="w-full aspect-[3/4] object-cover rounded shadow-sm"
             draggable="false"
           />
