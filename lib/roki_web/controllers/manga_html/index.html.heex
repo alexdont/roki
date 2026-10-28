@@ -571,7 +571,8 @@
           <span class="text-lg">~{format_reading_time(@reading_estimate.seconds_remaining, false)}</span>
           <span class="text-base-content/60">
             ({@reading_estimate.chapters_remaining} chapter{if @reading_estimate.chapters_remaining !=
-                                                                 1, do: "s"} remaining)
+                                                                 1,
+                                                               do: "s"} remaining)
           </span>
         </p>
         <p>

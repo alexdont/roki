@@ -1,6 +1,5 @@
 <div class="max-w-6xl mx-auto px-4 py-8">
-  <div class="flex items-center justify-between mb-6">
-    <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">📖 Reader</a>
+  <div class="flex items-center justify-end mb-6">
     <div class="flex items-center gap-2">
       <%= if @resume_manga do %>
         <a
@@ -12,9 +11,6 @@
           ▶ Resume
         </a>
       <% end %>
-      <Layouts.theme_toggle />
-      <Layouts.notifications_bell parent={@conn} scope={@phoenix_kit_current_scope} />
-      <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
       <div class="dropdown dropdown-end">
         <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
           <svg
@@ -37,11 +33,9 @@
           class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
         >
           <li><a href="/manga">Home</a></li>
-          <li><a href="/manga/explore">Explore</a></li>
           <li><a href="/manga/history">History</a></li>
           <li><a href="/manga/stats">Stats</a></li>
           <li><a href="/manga/comments" class="font-semibold">Comments</a></li>
-          <li><a href="/manga/categories">Categories</a></li>
           <li><a href="/manga/tierlist">Tierlist</a></li>
           <li><a href="/manga/grid">Grid</a></li>
           <li><a href="/manga/settings">Settings</a></li>
