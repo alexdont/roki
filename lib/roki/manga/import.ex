@@ -124,6 +124,7 @@ defmodule Roki.Manga.Import do
     for table <- @shared, do: copy_shared(table)
     for table <- @owned, do: copy_owned(table, people)
     rehost_sidecar()
+    drop_missing_covers()
     true
   end
 
@@ -166,6 +167,29 @@ defmodule Roki.Manga.Import do
       )
 
     {saved, meta}
+  end
+
+  @doc """
+  Covers that point at a file nobody copied, forgotten.
+
+  `saved_manga.cover_file_uuid` points into the media library. A row whose file did not come
+  across still carries the uuid, so the page asks for a file that is not there and the cover
+  404s — four times per cover on the home page — while the `cover_url` beside it sits unused.
+  Clearing the uuid is what lets the address take over.
+
+  Runs as part of an import rather than by hand afterwards, for the same reason
+  `rehost_sidecar/0` does: the rows bring it back every time.
+  """
+  def drop_missing_covers do
+    %{num_rows: n} =
+      Repo.query!("""
+      update saved_manga s
+         set cover_file_uuid = null
+       where s.cover_file_uuid is not null
+         and not exists (select 1 from phoenix_kit_files f where f.uuid = s.cover_file_uuid)
+      """)
+
+    n
   end
 
   # Their rows, by whichever column that table uses to say whose they are.
