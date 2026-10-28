@@ -100,8 +100,12 @@ defmodule RokiWeb.KotatsuController do
 
       {prev_ch, next_ch, current} =
         case idx do
-          nil -> {nil, nil, nil}
-          i -> {if(i > 0, do: Enum.at(chapters, i - 1)), Enum.at(chapters, i + 1), Enum.at(chapters, i)}
+          nil ->
+            {nil, nil, nil}
+
+          i ->
+            {if(i > 0, do: Enum.at(chapters, i - 1)), Enum.at(chapters, i + 1),
+             Enum.at(chapters, i)}
         end
 
       render(conn, :read,
@@ -132,11 +136,17 @@ defmodule RokiWeb.KotatsuController do
   end
 
   defp source_error_message({:cloudflare, src}),
-    do: "#{src || "This source"} is behind a Cloudflare challenge right now — try again later or pick another source."
+    do:
+      "#{src || "This source"} is behind a Cloudflare challenge right now — try again later or pick another source."
 
   defp source_error_message(:not_found), do: "Not found on this source."
-  defp source_error_message(:rate_limited), do: "The source is rate-limiting us — wait a moment and retry."
-  defp source_error_message(:auth_required), do: "This source requires an account (not supported)."
+
+  defp source_error_message(:rate_limited),
+    do: "The source is rate-limiting us — wait a moment and retry."
+
+  defp source_error_message(:auth_required),
+    do: "This source requires an account (not supported)."
+
   defp source_error_message({:transport, _}), do: "Extension backend is not running."
   defp source_error_message({:upstream, %{detail: d}}) when is_binary(d), do: "Source error: #{d}"
   defp source_error_message(other), do: "Source error: #{inspect(other)}"

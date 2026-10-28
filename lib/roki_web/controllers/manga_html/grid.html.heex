@@ -4,7 +4,9 @@
     <div class="flex items-center gap-2">
       <%= if @resume_manga do %>
         <a
-          href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+          href={
+            ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
+          }
           class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
         >
           ▶ Resume
@@ -15,11 +17,25 @@
       <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
       <div class="dropdown dropdown-end">
         <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </div>
-        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+        <ul
+          tabindex="0"
+          class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+        >
           <li><a href="/manga">Home</a></li>
           <li><a href="/manga/explore">Explore</a></li>
           <li><a href="/manga/history">History</a></li>
@@ -37,9 +53,18 @@
   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
     <h2 class="text-lg font-semibold">My Grid</h2>
     <div id="grid-mode" style="display: flex; gap: 0.25rem;">
-      <a href={~p"/manga/grid"} class={"btn btn-sm " <> if(@active_mode == "overall", do: "btn-primary", else: "btn-outline")}>Overall</a>
-      <a href={~p"/manga/grid?mode=manga"} class={"btn btn-sm " <> if(@active_mode == "manga", do: "btn-primary", else: "btn-outline")}>Manga</a>
-      <a href={~p"/manga/grid?mode=manhwa"} class={"btn btn-sm " <> if(@active_mode == "manhwa", do: "btn-primary", else: "btn-outline")}>Manhwa</a>
+      <a
+        href={~p"/manga/grid"}
+        class={"btn btn-sm " <> if(@active_mode == "overall", do: "btn-primary", else: "btn-outline")}
+      >Overall</a>
+      <a
+        href={~p"/manga/grid?mode=manga"}
+        class={"btn btn-sm " <> if(@active_mode == "manga", do: "btn-primary", else: "btn-outline")}
+      >Manga</a>
+      <a
+        href={~p"/manga/grid?mode=manhwa"}
+        class={"btn btn-sm " <> if(@active_mode == "manhwa", do: "btn-primary", else: "btn-outline")}
+      >Manhwa</a>
     </div>
   </div>
 
@@ -89,7 +114,11 @@
                 draggable="false"
               />
             </div>
-            <button type="button" class="grid-clear absolute top-1 right-1 btn btn-xs btn-circle btn-ghost" title="Clear">×</button>
+            <button
+              type="button"
+              class="grid-clear absolute top-1 right-1 btn btn-xs btn-circle btn-ghost"
+              title="Clear"
+            >×</button>
           <% else %>
             <div class="grid-empty text-xs text-base-content/40">Drop here</div>
           <% end %>
@@ -113,7 +142,11 @@
           :for={manga <- @saved_manga}
           class="grid-item w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
           data-id={"#{manga.source}:#{manga.slug}"}
-          data-progress={if (manga.last_chapter && manga.last_chapter != "") || manga.completed, do: "read", else: "unread"}
+          data-progress={
+            if (manga.last_chapter && manga.last_chapter != "") || manga.completed,
+              do: "read",
+              else: "unread"
+          }
           title={manga.title}
         >
           <img

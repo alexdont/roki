@@ -105,7 +105,10 @@ defmodule Roki.Manga.Trackers.MAL do
     do: MyAnimeList.username(access_token, req_options: req_options())
 
   def update_list_status(access_token, mal_id, fields),
-    do: MyAnimeList.update_list_status(@media, access_token, mal_id, fields, req_options: req_options())
+    do:
+      MyAnimeList.update_list_status(@media, access_token, mal_id, fields,
+        req_options: req_options()
+      )
 
   # ── display helpers (delegated) ───────────────────────────────────
 

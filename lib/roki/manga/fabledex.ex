@@ -90,7 +90,11 @@ defmodule Roki.Manga.Fabledex do
 
   @doc "Saved chapter titles as `%{number => title}` (titled units only)."
   def chapter_titles(%MangaStoryData{units: units}) do
-    for %{"number" => n, "title" => t} <- units, is_integer(n), is_binary(t), t != "", into: %{},
+    for %{"number" => n, "title" => t} <- units,
+        is_integer(n),
+        is_binary(t),
+        t != "",
+        into: %{},
         do: {n, t}
   end
 
@@ -150,7 +154,8 @@ defmodule Roki.Manga.Fabledex do
           q = edition_query(story)
 
           with {:ok, arcs} <- fetch_list("/api/v1/stories/#{story_slug}/arcs#{q}", "arcs"),
-               {:ok, volumes} <- fetch_list("/api/v1/stories/#{story_slug}/volumes#{q}", "volumes"),
+               {:ok, volumes} <-
+                 fetch_list("/api/v1/stories/#{story_slug}/volumes#{q}", "volumes"),
                {:ok, units} <- fetch_list("/api/v1/stories/#{story_slug}/units#{q}", "units") do
             save(source, slug, %{
               story_slug: story_slug,
@@ -161,13 +166,19 @@ defmodule Roki.Manga.Fabledex do
             })
           else
             _ ->
-              Logger.warning("fabledex sync failed for #{source}/#{slug} (story #{story_slug}#{q}); kept saved copy")
+              Logger.warning(
+                "fabledex sync failed for #{source}/#{slug} (story #{story_slug}#{q}); kept saved copy"
+              )
+
               :error
           end
       end
     else
       _ ->
-        Logger.warning("fabledex sync failed for #{source}/#{slug} (stories listing); kept saved copy")
+        Logger.warning(
+          "fabledex sync failed for #{source}/#{slug} (stories listing); kept saved copy"
+        )
+
         :error
     end
   end
@@ -193,7 +204,8 @@ defmodule Roki.Manga.Fabledex do
     %MangaStoryData{}
     |> MangaStoryData.changeset(attrs)
     |> Repo.insert(
-      on_conflict: {:replace, [:story_slug, :story, :arcs, :volumes, :units, :synced_at, :updated_at]},
+      on_conflict:
+        {:replace, [:story_slug, :story, :arcs, :volumes, :units, :synced_at, :updated_at]},
       conflict_target: [:source, :slug],
       returning: true
     )
@@ -208,7 +220,9 @@ defmodule Roki.Manga.Fabledex do
   @doc false
   def match_story(stories, opts) do
     ids =
-      for {kind, id} <- [mal: opts[:mal_id], anilist: opts[:anilist_id]], id, do: {kind, to_string(id)}
+      for {kind, id} <- [mal: opts[:mal_id], anilist: opts[:anilist_id]],
+          id,
+          do: {kind, to_string(id)}
 
     candidates = (opts[:titles] || []) ++ split_alt_titles(opts[:alt_titles])
     titles = for t <- candidates, is_binary(t), n = normalize(t), n != "", do: n

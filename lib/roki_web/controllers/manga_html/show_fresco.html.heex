@@ -99,48 +99,170 @@
   data-reading-rotation={@reading_rotation}
   data-transient-mode={if @transient_mode, do: "1", else: "0"}
   data-images={fresco_images_json(@images)}
-  data-prev-chapter-url={if @prev_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}", else: ""}
-  data-next-chapter-url={if @next_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@next_chapter}", else: ""}
+  data-prev-chapter-url={
+    if @prev_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}", else: ""
+  }
+  data-next-chapter-url={
+    if @next_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@next_chapter}", else: ""
+  }
 >
   <%!-- Tap-zone visualization overlay — flashes the active zones for
        1.5s after a preset change, matching production. Pointer-events-
        none so it doesn't intercept reader taps. --%>
-  <div id="paged-tap-zone-overlay" class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500" style="opacity:0;"></div>
+  <div
+    id="paged-tap-zone-overlay"
+    class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500"
+    style="opacity:0;"
+  >
+  </div>
 
   <%!-- ───── Mobile top bar — matches production layout + classes ───── --%>
   <div class="reader-nav-mobile lg:hidden flex flex-col fixed top-0 left-0 right-0 z-30 bg-base-100 px-3 py-2 gap-2">
     <div class="flex items-center justify-between">
-      <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Home">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+      <a
+        href={~p"/manga/#{@source}/#{@slug}"}
+        class="btn btn-ghost min-h-[44px] min-w-[44px]"
+        title="Home"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"
+        /></svg>
       </a>
       <div class="flex items-center gap-1">
-        <a :if={@prev_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"}
-           class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Previous chapter">«</a>
+        <a
+          :if={@prev_chapter}
+          href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"}
+          class="btn btn-soft text-xl min-h-[44px] min-w-[44px]"
+          title="Previous chapter"
+        >«</a>
         <span class="font-bold text-sm px-1">Ch. {@chapter}</span>
         <span id="page-progress-mobile" class="text-xs text-base-content/60 px-1">p.{@page}/{@total_pages}</span>
-        <a :if={@next_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"}
-           class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Next chapter">»</a>
+        <a
+          :if={@next_chapter}
+          href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"}
+          class="btn btn-soft text-xl min-h-[44px] min-w-[44px]"
+          title="Next chapter"
+        >»</a>
       </div>
       <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost min-h-[44px]" title="Chapters">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+        /></svg>
       </a>
     </div>
 
     <div class="flex items-center justify-center gap-2">
-      <button id="paged-prev-page" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Previous page">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      <button
+        id="paged-prev-page"
+        class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]"
+        title="Previous page"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M15 19l-7-7 7-7"
+        /></svg>
       </button>
-      <button id="paged-annotate-toggle-mobile" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Draw comment">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+      <button
+        id="paged-annotate-toggle-mobile"
+        class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]"
+        title="Draw comment"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+        /></svg>
       </button>
-      <button id="paged-comments-toggle-mobile" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Show/hide comments">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      <button
+        id="paged-comments-toggle-mobile"
+        class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]"
+        title="Show/hide comments"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        /></svg>
       </button>
-      <button id="settings-btn-mobile" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Settings">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      <button
+        id="settings-btn-mobile"
+        class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]"
+        title="Settings"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+        /></svg>
       </button>
-      <button id="paged-next-page" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Next page">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+      <button
+        id="paged-next-page"
+        class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]"
+        title="Next page"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
       </button>
     </div>
   </div>
@@ -148,36 +270,148 @@
   <%!-- ───── Desktop sidebar ───── --%>
   <div class="reader-nav-desktop hidden lg:flex flex-col gap-2 items-center px-2 fixed top-1/2 right-3 -translate-y-1/2 z-30 bg-base-200/80 backdrop-blur-sm rounded-xl py-2">
     <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-sm btn-ghost" title="Home">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"
+      /></svg>
     </a>
     <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-sm btn-ghost" title="All Chapters">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+      /></svg>
     </a>
-    <a :if={@prev_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"} class="btn btn-sm btn-ghost" title="Previous chapter">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 20l7-7 7 7" /></svg>
+    <a
+      :if={@prev_chapter}
+      href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"}
+      class="btn btn-sm btn-ghost"
+      title="Previous chapter"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M5 20l7-7 7 7"
+      /></svg>
     </a>
     <div class="flex flex-col items-center text-xs font-bold text-base-content/60 leading-tight">
       <span>Ch. {@chapter}</span>
       <span id="page-progress-desktop" class="text-[10px] text-base-content/40">p.{@page}/{@total_pages}</span>
     </div>
-    <a :if={@next_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"} class="btn btn-sm btn-ghost" title="Next chapter">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 4l-7 7-7-7" /></svg>
+    <a
+      :if={@next_chapter}
+      href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"}
+      class="btn btn-sm btn-ghost"
+      title="Next chapter"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M19 4l-7 7-7-7"
+      /></svg>
     </a>
     <div class="w-6 border-t border-base-content/20 my-1"></div>
     <button id="paged-prev-page-desktop" class="btn btn-sm btn-ghost" title="Previous page">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
     </button>
     <button id="paged-next-page-desktop" class="btn btn-sm btn-ghost" title="Next page">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
     </button>
     <button id="paged-annotate-toggle-desktop" class="btn btn-sm btn-ghost" title="Draw comment">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+      /></svg>
     </button>
-    <button id="paged-comments-toggle-desktop" class="btn btn-sm btn-ghost" title="Show/hide comments">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+    <button
+      id="paged-comments-toggle-desktop"
+      class="btn btn-sm btn-ghost"
+      title="Show/hide comments"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      /><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+      /></svg>
     </button>
     <button id="settings-btn-desktop" class="btn btn-sm btn-ghost" title="Settings">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+      /><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+      /></svg>
     </button>
   </div>
 
@@ -189,7 +423,11 @@
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-medium">Reader</p>
         <div class="flex gap-1">
-          <a href={~p"/manga/legacy/#{@source}/#{@slug}/#{@chapter}"} class="btn btn-sm btn-outline" title="Open the legacy reader">Legacy</a>
+          <a
+            href={~p"/manga/legacy/#{@source}/#{@slug}/#{@chapter}"}
+            class="btn btn-sm btn-outline"
+            title="Open the legacy reader"
+          >Legacy</a>
           <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Fresco</span>
         </div>
       </div>
@@ -200,12 +438,20 @@
         <p class="text-sm font-medium">Reading mode</p>
         <div class="flex gap-1">
           <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Paged</span>
-          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_mode"} class="contents">
+          <form
+            method="post"
+            action={~p"/manga/#{@source}/#{@slug}/reading_mode"}
+            class="contents"
+          >
             <input type="hidden" name="_method" value="put" />
             <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
             <input type="hidden" name="mode" value="scroll" />
             <input type="hidden" name="device" value="" />
-            <input type="hidden" name="redirect_to" value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"} />
+            <input
+              type="hidden"
+              name="redirect_to"
+              value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"}
+            />
             <button type="submit" class="btn btn-sm btn-outline">Scroll</button>
           </form>
         </div>
@@ -220,8 +466,12 @@
       <div class="mb-4">
         <div class="flex items-center justify-between">
           <p class="text-sm font-medium">Double page</p>
-          <input type="checkbox" id="paged-double-page-toggle"
-                 class="toggle toggle-sm" checked={@double_page} />
+          <input
+            type="checkbox"
+            id="paged-double-page-toggle"
+            class="toggle toggle-sm"
+            checked={@double_page}
+          />
         </div>
       </div>
 
@@ -232,16 +482,42 @@
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm font-medium">Reading direction</p>
         <div class="flex gap-1">
-          <button type="button"
-                  data-paged-direction="ltr"
-                  class={paged_btn_class(@direction == "ltr") <> " inline-flex items-center gap-1"}>
+          <button
+            type="button"
+            data-paged-direction="ltr"
+            class={paged_btn_class(@direction == "ltr") <> " inline-flex items-center gap-1"}
+          >
             LTR
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            ><path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M14 5l7 7m0 0l-7 7m7-7H3"
+            /></svg>
           </button>
-          <button type="button"
-                  data-paged-direction="rtl"
-                  class={paged_btn_class(@direction == "rtl") <> " inline-flex items-center gap-1"}>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          <button
+            type="button"
+            data-paged-direction="rtl"
+            class={paged_btn_class(@direction == "rtl") <> " inline-flex items-center gap-1"}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            ><path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            /></svg>
             RTL
           </button>
         </div>
@@ -272,12 +548,13 @@
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm font-medium">Page rotation</p>
         <div class="flex gap-1">
-          <button type="button" data-paged-rotation-delta="-90"
-                  class="btn btn-sm btn-outline">-90°</button>
-          <button type="button" data-paged-rotation-reset
-                  class={paged_btn_class(@reading_rotation == 0)}>0°</button>
-          <button type="button" data-paged-rotation-delta="90"
-                  class="btn btn-sm btn-outline">+90°</button>
+          <button type="button" data-paged-rotation-delta="-90" class="btn btn-sm btn-outline">-90°</button>
+          <button
+            type="button"
+            data-paged-rotation-reset
+            class={paged_btn_class(@reading_rotation == 0)}
+          >0°</button>
+          <button type="button" data-paged-rotation-delta="90" class="btn btn-sm btn-outline">+90°</button>
         </div>
       </div>
 
@@ -287,7 +564,12 @@
           <p class="text-sm font-medium">Show comments</p>
           <p class="text-xs text-base-content/50">Hide annotation overlays on pages</p>
         </div>
-        <input type="checkbox" id="paged-comments-visible" class="toggle toggle-sm toggle-primary" checked />
+        <input
+          type="checkbox"
+          id="paged-comments-visible"
+          class="toggle toggle-sm toggle-primary"
+          checked
+        />
       </div>
 
       <%!-- Page padding — shrinks the rendered page width by `pct`% of
@@ -297,37 +579,74 @@
           <p class="text-sm font-medium">Page padding</p>
           <span id="paged-page-padding-label" class="text-xs font-mono">0%</span>
         </div>
-        <input type="range" id="paged-page-padding-slider" min="0" max="90" step="1" value="0" class="range range-xs range-primary w-full" />
+        <input
+          type="range"
+          id="paged-page-padding-slider"
+          min="0"
+          max="90"
+          step="1"
+          value="0"
+          class="range range-xs range-primary w-full"
+        />
       </div>
 
       <div class="mb-2">
         <p class="text-sm font-medium mb-2">Tap zones</p>
         <div class="flex flex-row gap-2">
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card" data-preset="default">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card"
+            data-preset="default"
+          >
             <input type="radio" name="paged_tap_preset" value="default" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">M</div>
-              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">P</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">
+                M
+              </div>
+              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">
+                P
+              </div>
             </div>
             <span class="text-xs font-medium">Default</span>
           </label>
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card" data-preset="left_right">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card"
+            data-preset="left_right"
+          >
             <input type="radio" name="paged_tap_preset" value="left_right" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">P</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">
+                P
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                N
+              </div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                M
+              </div>
             </div>
             <span class="text-xs font-medium">Left / Right</span>
           </label>
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card" data-preset="right_left">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card"
+            data-preset="right_left"
+          >
             <input type="radio" name="paged_tap_preset" value="right_left" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">P</div>
-              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">
+                P
+              </div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                M
+              </div>
             </div>
             <span class="text-xs font-medium">Right / Left</span>
           </label>
@@ -374,7 +693,16 @@
   <div class="relative flex-1 min-h-0">
     <Fresco.canvas
       id="fresco-reader"
-      canvas={fresco_canvas(@images, @direction, @etcher_annotations, @page, @double_page, @spread_starts)}
+      canvas={
+        fresco_canvas(
+          @images,
+          @direction,
+          @etcher_annotations,
+          @page,
+          @double_page,
+          @spread_starts
+        )
+      }
       class="w-full h-full"
       theme={:inherit}
       infinite_canvas
@@ -398,13 +726,16 @@
         "chapter" => @chapter,
         "user_id" => @current_user && @current_user.uuid,
         "user_token" => Plug.Conn.get_session(@conn, "user_token")
-      })}
+      }
+    )}
   </div>
 
   <%!-- Bottom-center page indicator pill — same classes + position as
        production paged reader. Updated in JS on every navigateTo. --%>
-  <div id="page-indicator-bottom"
-       class="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none">
+  <div
+    id="page-indicator-bottom"
+    class="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none"
+  >
     {@page} / {@total_pages}
   </div>
 
@@ -413,22 +744,36 @@
        ArrowLeft / ArrowRight on horizontal accumulation past a
        threshold so the existing keyboard nav (including RTL handling)
        does the work. Click anywhere or hit Escape to exit. --%>
-  <button id="mouse-gesture-btn" type="button"
-          class="hidden lg:flex fixed bottom-4 right-4 z-30 btn btn-sm btn-circle bg-base-300/70 hover:bg-base-300 border-0"
-          title="Mouse gesture navigation (click here, then move mouse to flip pages — click again to exit)">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+  <button
+    id="mouse-gesture-btn"
+    type="button"
+    class="hidden lg:flex fixed bottom-4 right-4 z-30 btn btn-sm btn-circle bg-base-300/70 hover:bg-base-300 border-0"
+    title="Mouse gesture navigation (click here, then move mouse to flip pages — click again to exit)"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      class="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      stroke-width="2"
+    >
       <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
     </svg>
   </button>
-  <div id="mouse-gesture-banner"
-       class="hidden fixed bottom-14 right-4 z-40 px-2 py-1 rounded-full bg-primary text-primary-content text-[11px] font-semibold shadow-lg pointer-events-none">
+  <div
+    id="mouse-gesture-banner"
+    class="hidden fixed bottom-14 right-4 z-40 px-2 py-1 rounded-full bg-primary text-primary-content text-[11px] font-semibold shadow-lg pointer-events-none"
+  >
     ← → · click to exit
   </div>
 
   <%!-- Page dimensions overlay — populated by JS when the settings
        toggle is on. Pinned top-left at z-50 so it survives nav toggle. --%>
-  <div id="paged-dims-overlay-panel"
-       class="hidden fixed top-2 left-2 z-50 bg-black/80 text-white text-xs font-mono leading-tight rounded p-2 max-w-[260px] max-h-[80vh] overflow-y-auto pointer-events-none">
+  <div
+    id="paged-dims-overlay-panel"
+    class="hidden fixed top-2 left-2 z-50 bg-black/80 text-white text-xs font-mono leading-tight rounded p-2 max-w-[260px] max-h-[80vh] overflow-y-auto pointer-events-none"
+  >
   </div>
 
   <%!-- Etcher shape-drawn composer — opens when EtcherHostLive pushes
@@ -446,21 +791,29 @@
       <%!-- Font ≥16px on mobile so iOS Safari doesn't auto-zoom on
            focus (and trap us at the zoomed scale). Drops back to
            text-sm at the lg breakpoint where desktop fits more text. --%>
-      <textarea id="etcher-composer-content"
-                rows="3"
-                class="textarea textarea-bordered w-full text-base lg:text-sm"
-                placeholder="Add a comment..."
-                maxlength="2000"></textarea>
+      <textarea
+        id="etcher-composer-content"
+        rows="3"
+        class="textarea textarea-bordered w-full text-base lg:text-sm"
+        placeholder="Add a comment..."
+        maxlength="2000"
+      ></textarea>
       <div id="etcher-composer-gif-preview" class="hidden mt-1 relative">
         <img class="max-w-full rounded-lg" />
-        <button type="button" id="etcher-composer-gif-remove"
-                class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✕</button>
+        <button
+          type="button"
+          id="etcher-composer-gif-remove"
+          class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+        >✕</button>
       </div>
       <div id="etcher-composer-error" class="hidden text-xs text-error mt-1"></div>
       <div class="flex items-center gap-2 mt-2">
-        <button type="button" id="etcher-composer-gif-btn"
-                class="btn btn-sm btn-ghost px-2 font-bold min-h-[2rem]"
-                style="border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);">GIF</button>
+        <button
+          type="button"
+          id="etcher-composer-gif-btn"
+          class="btn btn-sm btn-ghost px-2 font-bold min-h-[2rem]"
+          style="border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);"
+        >GIF</button>
       </div>
       <div id="etcher-composer-gif-picker" class="hidden mt-2"></div>
       <label class="flex items-center gap-2 mt-2 cursor-pointer text-xs text-base-content/60">
@@ -1172,7 +1525,6 @@
         if (el.style.transform) el.style.transform = "";
       });
     }
-
 
     // ── Navigation (in-place via fresco's fit, push history) ────────
     let frescoHandle = null;

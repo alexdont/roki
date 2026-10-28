@@ -23,7 +23,7 @@ defmodule Roki.Manga.MangaHere do
 
             href = if link, do: Floki.attribute(link, "href") |> List.first()
             title = if img, do: Floki.attribute(img, "alt") |> List.first()
-            title = title || (if link, do: Floki.text(link) |> String.trim())
+            title = title || if link, do: Floki.text(link) |> String.trim()
             cover_url = if img, do: Floki.attribute(img, "src") |> List.first() |> fix_scheme()
 
             slug =
@@ -192,7 +192,8 @@ defmodule Roki.Manga.MangaHere do
   defp extract_packed_images(body) do
     # The packed JS arguments follow the function body: }('template',radix,count,'dict'.split('|'),0,{}))
     # We match the arguments portion after the function definition
-    pattern = ~r/eval\(function\(p,a,c,k,e,d\).*?\}\('((?:[^'\\]|\\.)*)'\s*,\s*(\d+)\s*,\s*\d+\s*,\s*'((?:[^'\\]|\\.)*)'\s*\.split\('\|'\)/s
+    pattern =
+      ~r/eval\(function\(p,a,c,k,e,d\).*?\}\('((?:[^'\\]|\\.)*)'\s*,\s*(\d+)\s*,\s*\d+\s*,\s*'((?:[^'\\]|\\.)*)'\s*\.split\('\|'\)/s
 
     case Regex.run(pattern, body) do
       [_, template, radix_str, dict_str] ->
@@ -244,7 +245,10 @@ defmodule Roki.Manga.MangaHere do
 
   defp extract_urls_from_js(js) do
     urls =
-      Regex.scan(~r{(//(?:zjcdn\.org|[a-z]+\.mangahere\.[a-z]+|fmcdn\.mangahere\.com)/store/manga/[^'"\s\\]+)}, js)
+      Regex.scan(
+        ~r{(//(?:zjcdn\.org|[a-z]+\.mangahere\.[a-z]+|fmcdn\.mangahere\.com)/store/manga/[^'"\s\\]+)},
+        js
+      )
       |> Enum.map(fn [_, url] -> fix_scheme(url) end)
 
     if urls == [] do

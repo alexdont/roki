@@ -16,7 +16,9 @@ defmodule Roki.Manga.Cache do
 
       _ref ->
         case :ets.lookup(@table, key) do
-          [{^key, value, expiry}] when expiry > now -> value
+          [{^key, value, expiry}] when expiry > now ->
+            value
+
           _ ->
             value = fun.()
             :ets.insert(@table, {key, value, now + ttl_ms})

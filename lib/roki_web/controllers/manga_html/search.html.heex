@@ -4,7 +4,9 @@
     <div class="flex items-center gap-2">
       <%= if @resume_manga do %>
         <a
-          href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+          href={
+            ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
+          }
           class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
         >
           ▶ Resume
@@ -15,11 +17,25 @@
       <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
       <div class="dropdown dropdown-end">
         <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </div>
-        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+        <ul
+          tabindex="0"
+          class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+        >
           <li><a href="/manga">Home</a></li>
           <li><a href="/manga/explore">Explore</a></li>
           <li><a href="/manga/history">History</a></li>
@@ -53,7 +69,9 @@
 
   <%= if @others_saved != [] do %>
     <div class="border border-base-300 rounded-xl p-4 mb-6">
-      <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-4">Already saved</h3>
+      <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-4">
+        Already saved
+      </h3>
       <div class="flex overflow-x-auto gap-3 pb-2">
         <a
           :for={m <- @others_saved}
@@ -67,8 +85,13 @@
               alt={m.title}
               class="rounded-lg w-full aspect-[3/4] object-cover"
             />
-            <span class="absolute top-1 right-1 badge badge-sm bg-black/70 text-white border-0">{Roki.Manga.Sources.label(m.source)}</span>
-            <span :if={m.users > 1} class="absolute bottom-1 left-1 badge badge-sm bg-black/70 text-white border-0">{m.users}×</span>
+            <span class="absolute top-1 right-1 badge badge-sm bg-black/70 text-white border-0">{Roki.Manga.Sources.label(
+              m.source
+            )}</span>
+            <span
+              :if={m.users > 1}
+              class="absolute bottom-1 left-1 badge badge-sm bg-black/70 text-white border-0"
+            >{m.users}×</span>
           </figure>
           <p class="text-sm mt-1 line-clamp-2">{m.title}</p>
         </a>
@@ -78,14 +101,25 @@
 
   <%= if @mode == :kotatsu_single do %>
     <%!-- Single kotatsu-extension view --%>
-    <a href={~p"/manga/search?#{%{q: @query}}"} class="inline-flex items-center gap-1 text-sm text-primary mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <a
+      href={~p"/manga/search?#{%{q: @query}}"}
+      class="inline-flex items-center gap-1 text-sm text-primary mb-4"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
       All sources
     </a>
 
-    <h3 class="text-base font-semibold mb-4">{@kotatsu_source} <span class="badge badge-outline badge-sm ml-1">extension</span></h3>
+    <h3 class="text-base font-semibold mb-4">
+      {@kotatsu_source} <span class="badge badge-outline badge-sm ml-1">extension</span>
+    </h3>
 
     <%= cond do %>
       <% @kotatsu_error != nil -> %>
@@ -98,13 +132,17 @@
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           <a
             :for={result <- @results}
-            href={~p"/manga/kotatsu/#{Roki.Manga.KotatsuSource.build_slug(@kotatsu_source, result.ref.url)}?#{%{st: result.title}}"}
+            href={
+              ~p"/manga/kotatsu/#{Roki.Manga.KotatsuSource.build_slug(@kotatsu_source, result.ref.url)}?#{%{st: result.title}}"
+            }
             class="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
           >
             <figure class="px-2 pt-2">
               <%= if result.cover_url do %>
                 <img
-                  src={~p"/manga/kotatsu/image?#{%{source: @kotatsu_source, url: result.cover_url}}"}
+                  src={
+                    ~p"/manga/kotatsu/image?#{%{source: @kotatsu_source, url: result.cover_url}}"
+                  }
                   alt={result.title}
                   loading="lazy"
                   class="rounded-lg w-full aspect-[3/4] object-cover"
@@ -123,8 +161,17 @@
 
   <%= if @mode == :single do %>
     <%!-- Single-source view --%>
-    <a href={~p"/manga/search?#{%{q: @query}}"} class="inline-flex items-center gap-1 text-sm text-primary mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <a
+      href={~p"/manga/search?#{%{q: @query}}"}
+      class="inline-flex items-center gap-1 text-sm text-primary mb-4"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
       All sources
@@ -134,7 +181,10 @@
 
     <%= if @results != [] do %>
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        <div :for={result <- @results} class="card bg-base-200 shadow-sm hover:shadow-md transition-shadow">
+        <div
+          :for={result <- @results}
+          class="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
+        >
           <a href={~p"/manga/#{@source}/#{result.slug}?#{%{sq: @query, ss: @source}}"}>
             <figure class="px-2 pt-2">
               <%= if result.cover_url do %>
@@ -145,8 +195,19 @@
                 />
               <% else %>
                 <div class="rounded-lg w-full aspect-[3/4] bg-base-300 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-10 w-10 text-base-content/30"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
                   </svg>
                 </div>
               <% end %>
@@ -164,19 +225,34 @@
         <p class="text-base-content/70">No results found for "{@query}".</p>
       </div>
     <% end %>
-
   <% else %>
     <%!-- All-sources view --%>
     <%= if @query != "" do %>
       <%= for {lang_label, sources} <- @results_grouped do %>
         <div class="border border-base-300 rounded-xl p-4 mb-6">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-4">{lang_label}</h3>
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-4">
+            {lang_label}
+          </h3>
           <%= for {source_key, label, results} <- sources do %>
             <div class="mb-5 last:mb-0">
-              <a href={~p"/manga/search?#{%{q: @query, source: source_key}}"} class="inline-flex items-center gap-1 text-base font-semibold hover:text-primary mb-3">
+              <a
+                href={~p"/manga/search?#{%{q: @query, source: source_key}}"}
+                class="inline-flex items-center gap-1 text-base font-semibold hover:text-primary mb-3"
+              >
                 {label}
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </a>
 
@@ -185,7 +261,10 @@
               <% else %>
                 <div class="flex overflow-x-auto gap-3 pb-2">
                   <%= for result <- Enum.take(results, 10) do %>
-                    <a href={~p"/manga/#{source_key}/#{result.slug}?#{%{sq: @query}}"} class="flex-shrink-0 w-32">
+                    <a
+                      href={~p"/manga/#{source_key}/#{result.slug}?#{%{sq: @query}}"}
+                      class="flex-shrink-0 w-32"
+                    >
                       <figure>
                         <%= if result.cover_url do %>
                           <img
@@ -195,8 +274,19 @@
                           />
                         <% else %>
                           <div class="rounded-lg w-full aspect-[3/4] bg-base-300 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              class="h-10 w-10 text-base-content/30"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                              />
                             </svg>
                           </div>
                         <% end %>
@@ -217,18 +307,37 @@
            slowest site never blocks the page. --%>
       <%= if @kotatsu_pending != [] do %>
         <div class="border border-base-300 rounded-xl p-4 mb-6">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-4">Extensions</h3>
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-4">
+            Extensions
+          </h3>
           <%= for {ext_name, ext_label, searchable} <- @kotatsu_pending do %>
             <div class="mb-5 last:mb-0">
-              <a href={~p"/manga/search?#{%{q: @query, source: "kotatsu:" <> ext_name}}"} class="inline-flex items-center gap-1 text-base font-semibold hover:text-primary mb-3">
+              <a
+                href={~p"/manga/search?#{%{q: @query, source: "kotatsu:" <> ext_name}}"}
+                class="inline-flex items-center gap-1 text-base font-semibold hover:text-primary mb-3"
+              >
                 {ext_label}
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </a>
 
               <%= if searchable do %>
-                <div class="ext-async" data-url={~p"/manga/search/extension?#{%{source: ext_name, q: @query}}"}>
+                <div
+                  class="ext-async"
+                  data-url={~p"/manga/search/extension?#{%{source: ext_name, q: @query}}"}
+                >
                   <div class="flex items-center gap-2 text-sm text-base-content/40 py-4">
                     <span class="loading loading-spinner loading-xs"></span> Searching…
                   </div>

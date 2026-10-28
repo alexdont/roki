@@ -22,8 +22,34 @@ defmodule Roki.Manga.Library.MangaAnnotation do
 
   def changeset(annotation, attrs) do
     annotation
-    |> cast(attrs, [:comment_uuid, :user_id, :source, :slug, :chapter, :page, :title, :x_pct, :y_pct, :w_pct, :h_pct, :color, :visibility])
-    |> validate_required([:comment_uuid, :user_id, :source, :slug, :chapter, :page, :title, :x_pct, :y_pct, :w_pct, :h_pct])
+    |> cast(attrs, [
+      :comment_uuid,
+      :user_id,
+      :source,
+      :slug,
+      :chapter,
+      :page,
+      :title,
+      :x_pct,
+      :y_pct,
+      :w_pct,
+      :h_pct,
+      :color,
+      :visibility
+    ])
+    |> validate_required([
+      :comment_uuid,
+      :user_id,
+      :source,
+      :slug,
+      :chapter,
+      :page,
+      :title,
+      :x_pct,
+      :y_pct,
+      :w_pct,
+      :h_pct
+    ])
     |> validate_inclusion(:color, ~w(blue pink green purple))
     |> validate_inclusion(:visibility, ~w(public private))
     |> validate_number(:page, greater_than: 0)

@@ -171,7 +171,12 @@ defmodule RokiWeb.Live.HistoryLive do
       |> Enum.reject(fn e -> is_nil(e.title) or e.title == "" end)
       |> Enum.group_by(fn e -> {e.title, e.source, e.slug} end)
       |> Enum.map(fn {{title, source, slug}, entries} ->
-        %{title: title, source: source, slug: slug, seconds: Enum.sum(Enum.map(entries, & &1.seconds))}
+        %{
+          title: title,
+          source: source,
+          slug: slug,
+          seconds: Enum.sum(Enum.map(entries, & &1.seconds))
+        }
       end)
       |> Enum.sort_by(& &1.seconds, :desc)
 
@@ -280,7 +285,9 @@ defmodule RokiWeb.Live.HistoryLive do
         <div class="flex items-center gap-2">
           <a
             :if={@resume_manga}
-            href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+            href={
+              ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
+            }
             class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
           >
             ▶ Resume
@@ -291,11 +298,25 @@ defmodule RokiWeb.Live.HistoryLive do
           <RokiWeb.Layouts.user_menu scope={@phoenix_kit_current_scope} current_path="/manga/history" />
           <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </div>
-            <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+            <ul
+              tabindex="0"
+              class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+            >
               <li><a href="/manga">Home</a></li>
               <li><a href="/manga/explore">Explore</a></li>
               <li><a href="/manga/history" class="font-semibold">History</a></li>
@@ -371,9 +392,25 @@ defmodule RokiWeb.Live.HistoryLive do
                phx-click here would never reach it. --%>
           <:header :let={h}>
             <div class="flex items-center justify-between gap-3 px-1 py-2 mb-2">
-              <button type="button" phx-click={h.on_prev} class="btn btn-ghost btn-sm btn-square" aria-label="Previous month">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              <button
+                type="button"
+                phx-click={h.on_prev}
+                class="btn btn-ghost btn-sm btn-square"
+                aria-label="Previous month"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 19l-7-7 7-7"
+                  />
                 </svg>
               </button>
               <span class="font-semibold text-base">{h.title}</span>
@@ -384,8 +421,19 @@ defmodule RokiWeb.Live.HistoryLive do
                 class={["btn btn-ghost btn-sm btn-square", h.today_visible && "invisible"]}
                 aria-label="Next month"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </button>
             </div>
@@ -430,7 +478,10 @@ defmodule RokiWeb.Live.HistoryLive do
                      phone-width cells (~45px) and take the dead view's
                      sizes from `sm:` up, so three of them fit the row
                      instead of being clipped away. --%>
-                <div :if={covers != []} class="flex gap-px sm:gap-0.5 items-center justify-end min-w-0">
+                <div
+                  :if={covers != []}
+                  class="flex gap-px sm:gap-0.5 items-center justify-end min-w-0"
+                >
                   <div :for={c <- covers} class="relative flex-shrink min-w-0">
                     <img
                       :if={c.src}
@@ -481,8 +532,16 @@ defmodule RokiWeb.Live.HistoryLive do
                     ]}
                   >
                     <span class="flex items-center gap-1 min-w-0">
-                      <span :if={row_event.(entry) == "completed"} class="flex-shrink-0" title="Completed">✓</span>
-                      <span :if={row_event.(entry) == "caught_up"} class="flex-shrink-0" title="Caught up">⚡</span>
+                      <span
+                        :if={row_event.(entry) == "completed"}
+                        class="flex-shrink-0"
+                        title="Completed"
+                      >✓</span>
+                      <span
+                        :if={row_event.(entry) == "caught_up"}
+                        class="flex-shrink-0"
+                        title="Caught up"
+                      >⚡</span>
                       <span :if={row_event.(entry) == "started"} class="flex-shrink-0" title="Started">▶</span>
                       <span class="truncate max-w-[150px]">{entry.title}</span>
                     </span>
@@ -490,7 +549,9 @@ defmodule RokiWeb.Live.HistoryLive do
                       "tabular-nums",
                       if(row_event.(entry), do: "opacity-70", else: "text-base-content/50")
                     ]}>
-                      <span :if={entry.chapters_read > 0}>{entry.chapters_read} ch · </span>{MangaHTML.format_reading_time(entry.seconds)}
+                      <span :if={entry.chapters_read > 0}>{entry.chapters_read} ch · </span>{MangaHTML.format_reading_time(
+                        entry.seconds
+                      )}
                     </span>
                   </div>
                   <% event_only =
@@ -513,13 +574,20 @@ defmodule RokiWeb.Live.HistoryLive do
                       "caught_up" -> "⚡"
                       _ -> "▶"
                     end}</span>
-                    <span class="truncate max-w-[150px]">{get_in(@manga_meta, [key, :title]) || elem(key, 1)}</span>
+                    <span class="truncate max-w-[150px]">{get_in(@manga_meta, [key, :title]) ||
+                      elem(key, 1)}</span>
                   </div>
-                  <div :if={length(entries) > 1} class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold">
+                  <div
+                    :if={length(entries) > 1}
+                    class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold"
+                  >
                     <span>Total</span>
-                    <span class="tabular-nums">{MangaHTML.format_reading_time(Enum.sum(Enum.map(entries, & &1.seconds)))}</span>
+                    <span class="tabular-nums">{MangaHTML.format_reading_time(
+                      Enum.sum(Enum.map(entries, & &1.seconds))
+                    )}</span>
                   </div>
-                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300"></div>
+                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                  </div>
                 </div>
               </div>
             </div>
@@ -581,13 +649,24 @@ defmodule RokiWeb.Live.HistoryLive do
             <span class="text-base-content/70 truncate">{ev.title || "#{ev.source}/#{ev.slug}"}</span>
           </div>
           <span class="text-xs text-base-content/40 flex-shrink-0">
-            <span :if={ev.chapter}>ch {display_chapter(ev.chapter)} · </span>{MangaHTML.stint_local_time(ev.happened_at, @stint_tz)}
+            <span :if={ev.chapter}>ch {display_chapter(ev.chapter)} · </span>{MangaHTML.stint_local_time(
+              ev.happened_at,
+              @stint_tz
+            )}
           </span>
           <div class="dropdown dropdown-end flex-shrink-0">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-xs btn-square" aria-label="Event options">
+            <div
+              tabindex="0"
+              role="button"
+              class="btn btn-ghost btn-xs btn-square"
+              aria-label="Event options"
+            >
               <.kebab />
             </div>
-            <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-40 w-48 p-2 shadow-lg">
+            <ul
+              tabindex="0"
+              class="dropdown-content menu bg-base-100 rounded-box z-40 w-48 p-2 shadow-lg"
+            >
               <li>
                 <button
                   type="button"
@@ -633,16 +712,27 @@ defmodule RokiWeb.Live.HistoryLive do
                 <p :if={manga.last_chapter} class="text-sm text-base-content/60">
                   Chapter {manga.last_chapter}<span :if={manga.last_page}>, Page {manga.last_page}</span>
                 </p>
-                <p :if={line = MangaHTML.history_stat_line(manga, @chapter_reads, @stints)} class="text-xs text-base-content/40 mt-1">
+                <p
+                  :if={line = MangaHTML.history_stat_line(manga, @chapter_reads, @stints)}
+                  class="text-xs text-base-content/40 mt-1"
+                >
                   {line}
                 </p>
               </div>
             </a>
             <div class="dropdown dropdown-end flex-shrink-0">
-              <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square" aria-label="Activity options">
+              <div
+                tabindex="0"
+                role="button"
+                class="btn btn-ghost btn-sm btn-square"
+                aria-label="Activity options"
+              >
                 <.kebab />
               </div>
-              <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-40 w-56 p-2 shadow-lg">
+              <ul
+                tabindex="0"
+                class="dropdown-content menu bg-base-100 rounded-box z-40 w-56 p-2 shadow-lg"
+              >
                 <li>
                   <button
                     type="button"
@@ -700,29 +790,79 @@ defmodule RokiWeb.Live.HistoryLive do
           </span>
           <span :if={show_avg} class="timeday-title hidden" data-view="avg">Avg. reading by hour</span>
           <span :if={show_avg} class="timeday-title hidden" data-view="avgclock">
-            When you usually read<span :if={peak_hour && peak_hour.avg_seconds > 0}> · peak {String.pad_leading(Integer.to_string(peak_hour.hour), 2, "0")}:00</span>
+            When you usually read<span :if={peak_hour && peak_hour.avg_seconds > 0}> · peak {String.pad_leading(
+              Integer.to_string(peak_hour.hour),
+              2,
+              "0"
+            )}:00</span>
           </span>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <div :if={show_sessions} id="stint-meta" class="flex items-center gap-2" style="display: none">
+          <div
+            :if={show_sessions}
+            id="stint-meta"
+            class="flex items-center gap-2"
+            style="display: none"
+          >
             <div class="text-xs text-base-content/40">
               {length(@stints)} {if length(@stints) == 1, do: "session", else: "sessions"}
             </div>
             <div id="stint-zoomctl" class="flex items-center">
-              <button type="button" id="stint-zoom-out" class="btn btn-ghost btn-xs w-6 px-0" aria-label="Zoom out">−</button>
-              <span id="stint-zoom-level" class="text-[10px] text-base-content/40 tabular-nums w-8 text-center">1×</span>
-              <button type="button" id="stint-zoom-in" class="btn btn-ghost btn-xs w-6 px-0" aria-label="Zoom in">+</button>
+              <button
+                type="button"
+                id="stint-zoom-out"
+                class="btn btn-ghost btn-xs w-6 px-0"
+                aria-label="Zoom out"
+              >−</button>
+              <span
+                id="stint-zoom-level"
+                class="text-[10px] text-base-content/40 tabular-nums w-8 text-center"
+              >1×</span>
+              <button
+                type="button"
+                id="stint-zoom-in"
+                class="btn btn-ghost btn-xs w-6 px-0"
+                aria-label="Zoom in"
+              >+</button>
             </div>
           </div>
           <div
-            :if={(if(show_hours, do: 1, else: 0)) + (if show_sessions, do: 2, else: 0) + (if show_avg, do: 2, else: 0) > 1}
+            :if={
+              if(show_hours, do: 1, else: 0) + if(show_sessions, do: 2, else: 0) +
+                if(show_avg, do: 2, else: 0) > 1
+            }
             class="join"
           >
-            <button :if={show_hours} type="button" class="btn btn-xs join-item timeday-tab" data-view="hours">Hours</button>
-            <button :if={show_sessions} type="button" class="btn btn-xs join-item timeday-tab" data-view="sessions">Sessions</button>
-            <button :if={show_sessions} type="button" class="btn btn-xs join-item timeday-tab" data-view="clock">Clock</button>
-            <button :if={show_avg} type="button" class="btn btn-xs join-item timeday-tab" data-view="avg">Avg</button>
-            <button :if={show_avg} type="button" class="btn btn-xs join-item timeday-tab" data-view="avgclock">Avg Clock</button>
+            <button
+              :if={show_hours}
+              type="button"
+              class="btn btn-xs join-item timeday-tab"
+              data-view="hours"
+            >Hours</button>
+            <button
+              :if={show_sessions}
+              type="button"
+              class="btn btn-xs join-item timeday-tab"
+              data-view="sessions"
+            >Sessions</button>
+            <button
+              :if={show_sessions}
+              type="button"
+              class="btn btn-xs join-item timeday-tab"
+              data-view="clock"
+            >Clock</button>
+            <button
+              :if={show_avg}
+              type="button"
+              class="btn btn-xs join-item timeday-tab"
+              data-view="avg"
+            >Avg</button>
+            <button
+              :if={show_avg}
+              type="button"
+              class="btn btn-xs join-item timeday-tab"
+              data-view="avgclock"
+            >Avg Clock</button>
           </div>
         </div>
       </div>
@@ -736,7 +876,10 @@ defmodule RokiWeb.Live.HistoryLive do
             <span></span>
           </div>
           <div class="flex items-end gap-[3px] h-full flex-1">
-            <div :for={h <- @hourly_activity} class="flex-1 flex flex-col items-center justify-end h-full relative group">
+            <div
+              :for={h <- @hourly_activity}
+              class="flex-1 flex flex-col items-center justify-end h-full relative group"
+            >
               <div
                 class={[
                   "w-full rounded-t-sm transition-colors",
@@ -749,22 +892,36 @@ defmodule RokiWeb.Live.HistoryLive do
                 }
               >
               </div>
-              <div :if={h.seconds > 0} class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+              <div
+                :if={h.seconds > 0}
+                class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none"
+              >
                 <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
                   <div class="font-semibold mb-1">
-                    {h.hour |> Integer.to_string() |> String.pad_leading(2, "0")}:00 &ndash; {h.hour |> Integer.to_string() |> String.pad_leading(2, "0")}:59
+                    {h.hour |> Integer.to_string() |> String.pad_leading(2, "0")}:00 &ndash; {h.hour
+                    |> Integer.to_string()
+                    |> String.pad_leading(2, "0")}:59
                   </div>
-                  <div :for={entry <- h.entries} class="flex justify-between gap-4 text-base-content/70">
+                  <div
+                    :for={entry <- h.entries}
+                    class="flex justify-between gap-4 text-base-content/70"
+                  >
                     <span class="truncate max-w-[150px]">{entry.title}</span>
                     <span class="text-base-content/50 tabular-nums">
-                      <span :if={entry.chapters_read > 0}>{entry.chapters_read} ch · </span>{MangaHTML.format_reading_time(entry.seconds)}
+                      <span :if={entry.chapters_read > 0}>{entry.chapters_read} ch · </span>{MangaHTML.format_reading_time(
+                        entry.seconds
+                      )}
                     </span>
                   </div>
-                  <div :if={length(h.entries) > 1} class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold">
+                  <div
+                    :if={length(h.entries) > 1}
+                    class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold"
+                  >
                     <span>Total</span>
                     <span class="tabular-nums">{MangaHTML.format_reading_time(h.seconds)}</span>
                   </div>
-                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300"></div>
+                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                  </div>
                 </div>
               </div>
             </div>
@@ -792,11 +949,19 @@ defmodule RokiWeb.Live.HistoryLive do
               end
             ]}>
             </div>
-            <div :if={h.avg_seconds > 0} class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+            <div
+              :if={h.avg_seconds > 0}
+              class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none"
+            >
               <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
-                <div class="font-semibold">{String.pad_leading(Integer.to_string(h.hour), 2, "0")}:00</div>
-                <div class="text-base-content/70">avg {MangaHTML.format_reading_time(h.avg_seconds)}/day</div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300"></div>
+                <div class="font-semibold">
+                  {String.pad_leading(Integer.to_string(h.hour), 2, "0")}:00
+                </div>
+                <div class="text-base-content/70">
+                  avg {MangaHTML.format_reading_time(h.avg_seconds)}/day
+                </div>
+                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                </div>
               </div>
             </div>
           </div>
@@ -810,9 +975,29 @@ defmodule RokiWeb.Live.HistoryLive do
 
       <%!-- format: all-time average heatmap on one continuous 24h spiral. --%>
       <div :if={show_avg} class="timeday-view hidden" data-view="avgclock">
-        <svg viewBox="0 0 240 240" class="mx-auto w-full max-w-xs" role="img" aria-label="Average reading by hour on a 24-hour spiral">
-          <line :for={i <- 0..11} x1="120" y1="17" x2="120" y2="55" transform={"rotate(#{i * 30} 120 120)"} stroke="var(--color-base-content)" stroke-opacity="0.08" />
-          <path d={MangaHTML.clock_spiral_path(0, 86_400)} fill="none" stroke="var(--color-base-300)" stroke-opacity="0.6" stroke-width="11" />
+        <svg
+          viewBox="0 0 240 240"
+          class="mx-auto w-full max-w-xs"
+          role="img"
+          aria-label="Average reading by hour on a 24-hour spiral"
+        >
+          <line
+            :for={i <- 0..11}
+            x1="120"
+            y1="17"
+            x2="120"
+            y2="55"
+            transform={"rotate(#{i * 30} 120 120)"}
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.08"
+          />
+          <path
+            d={MangaHTML.clock_spiral_path(0, 86_400)}
+            fill="none"
+            stroke="var(--color-base-300)"
+            stroke-opacity="0.6"
+            stroke-width="11"
+          />
           <path
             :for={seg <- MangaHTML.avg_clock_arcs(@hourly_averages, avg_max)}
             d={MangaHTML.clock_spiral_path(seg.start_sec, seg.end_sec)}
@@ -822,15 +1007,60 @@ defmodule RokiWeb.Live.HistoryLive do
             stroke-width="11"
           />
           <%= for h <- @hourly_averages, h.avg_seconds > 0 do %>
-            <path d={MangaHTML.clock_spiral_path(h.hour * 3600, (h.hour + 1) * 3600)} fill="none" stroke="transparent" stroke-width="11">
-              <title>{String.pad_leading(Integer.to_string(h.hour), 2, "0")}:00 · avg {MangaHTML.format_reading_time(h.avg_seconds)}/day</title>
+            <path
+              d={MangaHTML.clock_spiral_path(h.hour * 3600, (h.hour + 1) * 3600)}
+              fill="none"
+              stroke="transparent"
+              stroke-width="11"
+            >
+              <title>
+                {String.pad_leading(Integer.to_string(h.hour), 2, "0")}:00 · avg {MangaHTML.format_reading_time(
+                  h.avg_seconds
+                )}/day
+              </title>
             </path>
           <% end %>
-          <text x="127" y="22" font-size="7" fill="var(--color-base-content)" fill-opacity="0.45" dominant-baseline="central">00</text>
-          <text x="127" y="37" font-size="7" fill="var(--color-base-content)" fill-opacity="0.45" dominant-baseline="central">12</text>
-          <text x="127" y="52" font-size="7" fill="var(--color-base-content)" fill-opacity="0.45" dominant-baseline="central">24</text>
+          <text
+            x="127"
+            y="22"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            00
+          </text>
+          <text
+            x="127"
+            y="37"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            12
+          </text>
+          <text
+            x="127"
+            y="52"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            24
+          </text>
           <circle cx="120" cy="120" r="60" fill="var(--color-base-300)" fill-opacity="0.5" />
-          <line :for={i <- 0..11} x1="120" y1="62" x2="120" y2="67" transform={"rotate(#{i * 30} 120 120)"} stroke="var(--color-base-content)" stroke-opacity="0.25" />
+          <line
+            :for={i <- 0..11}
+            x1="120"
+            y1="62"
+            x2="120"
+            y2="67"
+            transform={"rotate(#{i * 30} 120 120)"}
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.25"
+          />
           <text
             :for={{n, x, y} <- [{"12", 120, 73}, {"3", 167, 120}, {"6", 120, 167}, {"9", 73, 120}]}
             x={x}
@@ -844,7 +1074,10 @@ defmodule RokiWeb.Live.HistoryLive do
             {n}
           </text>
         </svg>
-        <p :if={peak_hour && peak_hour.avg_seconds > 0} class="text-center text-xs text-base-content/50 mt-1">
+        <p
+          :if={peak_hour && peak_hour.avg_seconds > 0}
+          class="text-center text-xs text-base-content/50 mt-1"
+        >
           You read most around {String.pad_leading(Integer.to_string(peak_hour.hour), 2, "0")}:00
           <span class="text-base-content/40">({MangaHTML.format_reading_time(peak_hour.avg_seconds)}/day)</span>
         </p>
@@ -873,7 +1106,10 @@ defmodule RokiWeb.Live.HistoryLive do
             </div>
             <div id="stint-scroll" class="flex-1 min-w-0 overflow-x-auto overflow-y-hidden">
               <div id="stint-zoom" class="flex flex-col gap-1.5" style="width: 100%">
-                <div :for={{_item, sts} <- stint_groups} class="relative h-4 rounded bg-base-300/60 overflow-hidden">
+                <div
+                  :for={{_item, sts} <- stint_groups}
+                  class="relative h-4 rounded bg-base-300/60 overflow-hidden"
+                >
                   <div
                     :for={s <- sts}
                     class="stint-bar absolute top-0.5 bottom-0.5 rounded-sm bg-primary/80 overflow-hidden"
@@ -904,14 +1140,20 @@ defmodule RokiWeb.Live.HistoryLive do
           <div class="flex flex-col gap-1 border-t border-base-content/10 pt-2">
             <div :for={s <- @stints} class="flex items-baseline gap-2 text-xs">
               <span class="tabular-nums text-base-content/70 shrink-0">
-                {MangaHTML.stint_local_time(s.started_at, @stint_tz)}–{MangaHTML.stint_local_time(s.ended_at, @stint_tz)}
+                {MangaHTML.stint_local_time(s.started_at, @stint_tz)}–{MangaHTML.stint_local_time(
+                  s.ended_at,
+                  @stint_tz
+                )}
               </span>
-              <span class="text-base-content/50 shrink-0">{MangaHTML.format_reading_time(s.seconds) || "<1m"}</span>
+              <span class="text-base-content/50 shrink-0">{MangaHTML.format_reading_time(s.seconds) ||
+                "<1m"}</span>
               <span class="truncate text-base-content/60">
                 {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))}
                 <% read = MangaHTML.chapters_in_stint(@chapter_reads, s) %>
                 <span :if={read != []} class="text-success/80">· read ch {Enum.join(read, ", ")}</span>
-                <span :if={read == [] and s.meta["chapter"]} class="text-base-content/40">· ch {s.meta["chapter"]}</span>
+                <span :if={read == [] and s.meta["chapter"]} class="text-base-content/40">· ch {s.meta[
+                  "chapter"
+                ]}</span>
               </span>
             </div>
           </div>
@@ -920,22 +1162,96 @@ defmodule RokiWeb.Live.HistoryLive do
 
       <%!-- format: session clock — 24h spiral around the analog clock. --%>
       <div :if={show_sessions} class="timeday-view hidden" data-view="clock">
-        <svg viewBox="0 0 240 240" class="mx-auto w-full max-w-xs" role="img" aria-label="Reading sessions on a 24-hour spiral">
-          <line :for={i <- 0..11} x1="120" y1="17" x2="120" y2="55" transform={"rotate(#{i * 30} 120 120)"} stroke="var(--color-base-content)" stroke-opacity="0.08" />
-          <path d={MangaHTML.clock_spiral_path(0, 86_400)} fill="none" stroke="var(--color-base-300)" stroke-opacity="0.6" stroke-width="11" />
+        <svg
+          viewBox="0 0 240 240"
+          class="mx-auto w-full max-w-xs"
+          role="img"
+          aria-label="Reading sessions on a 24-hour spiral"
+        >
+          <line
+            :for={i <- 0..11}
+            x1="120"
+            y1="17"
+            x2="120"
+            y2="55"
+            transform={"rotate(#{i * 30} 120 120)"}
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.08"
+          />
+          <path
+            d={MangaHTML.clock_spiral_path(0, 86_400)}
+            fill="none"
+            stroke="var(--color-base-300)"
+            stroke-opacity="0.6"
+            stroke-width="11"
+          />
           <%= for s <- @stints, span <- [MangaHTML.stint_day_seconds(s, @selected_date, @stint_tz)], span != nil do %>
-            <path d={MangaHTML.clock_spiral_path(elem(span, 0), elem(span, 1))} fill="none" stroke="var(--color-primary)" stroke-opacity="0.85" stroke-width="9" stroke-linecap="butt">
+            <path
+              d={MangaHTML.clock_spiral_path(elem(span, 0), elem(span, 1))}
+              fill="none"
+              stroke="var(--color-primary)"
+              stroke-opacity="0.85"
+              stroke-width="9"
+              stroke-linecap="butt"
+            >
               <title>
-                {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))} · {MangaHTML.stint_local_time(s.started_at, @stint_tz)}–{MangaHTML.stint_local_time(s.ended_at, @stint_tz)} · {MangaHTML.format_reading_time(s.seconds) || "<1m"}
+                {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))} · {MangaHTML.stint_local_time(
+                  s.started_at,
+                  @stint_tz
+                )}–{MangaHTML.stint_local_time(s.ended_at, @stint_tz)} · {MangaHTML.format_reading_time(
+                  s.seconds
+                ) || "<1m"}
               </title>
             </path>
           <% end %>
-          <text x="127" y="22" font-size="7" fill="var(--color-base-content)" fill-opacity="0.45" dominant-baseline="central">00</text>
-          <text x="127" y="37" font-size="7" fill="var(--color-base-content)" fill-opacity="0.45" dominant-baseline="central">12</text>
-          <text x="127" y="52" font-size="7" fill="var(--color-base-content)" fill-opacity="0.45" dominant-baseline="central">24</text>
-          <line id="clock-now" stroke="var(--color-error)" stroke-width="2" stroke-linecap="round" display="none" />
+          <text
+            x="127"
+            y="22"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            00
+          </text>
+          <text
+            x="127"
+            y="37"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            12
+          </text>
+          <text
+            x="127"
+            y="52"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            24
+          </text>
+          <line
+            id="clock-now"
+            stroke="var(--color-error)"
+            stroke-width="2"
+            stroke-linecap="round"
+            display="none"
+          />
           <circle cx="120" cy="120" r="60" fill="var(--color-base-300)" fill-opacity="0.5" />
-          <line :for={i <- 0..11} x1="120" y1="62" x2="120" y2="67" transform={"rotate(#{i * 30} 120 120)"} stroke="var(--color-base-content)" stroke-opacity="0.25" />
+          <line
+            :for={i <- 0..11}
+            x1="120"
+            y1="62"
+            x2="120"
+            y2="67"
+            transform={"rotate(#{i * 30} 120 120)"}
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.25"
+          />
           <text
             :for={{n, x, y} <- [{"12", 120, 73}, {"3", 167, 120}, {"6", 120, 167}, {"9", 73, 120}]}
             x={x}
@@ -948,8 +1264,28 @@ defmodule RokiWeb.Live.HistoryLive do
           >
             {n}
           </text>
-          <line id="clock-hand-h" x1="120" y1="126" x2="120" y2="92" stroke="var(--color-base-content)" stroke-opacity="0.75" stroke-width="3.5" stroke-linecap="round" />
-          <line id="clock-hand-m" x1="120" y1="128" x2="120" y2="76" stroke="var(--color-base-content)" stroke-opacity="0.55" stroke-width="2.5" stroke-linecap="round" />
+          <line
+            id="clock-hand-h"
+            x1="120"
+            y1="126"
+            x2="120"
+            y2="92"
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.75"
+            stroke-width="3.5"
+            stroke-linecap="round"
+          />
+          <line
+            id="clock-hand-m"
+            x1="120"
+            y1="128"
+            x2="120"
+            y2="76"
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.55"
+            stroke-width="2.5"
+            stroke-linecap="round"
+          />
           <circle cx="120" cy="120" r="3" fill="var(--color-base-content)" fill-opacity="0.75" />
         </svg>
       </div>

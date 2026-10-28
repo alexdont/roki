@@ -9,7 +9,8 @@ defmodule Roki.Manga.MangaFire do
   """
   def search(query) do
     with {:ok, vrf} <- get_vrf(query) do
-      url = "#{@base_url}/ajax/manga/search?keyword=#{URI.encode_www_form(query)}&vrf=#{URI.encode_www_form(vrf)}"
+      url =
+        "#{@base_url}/ajax/manga/search?keyword=#{URI.encode_www_form(query)}&vrf=#{URI.encode_www_form(vrf)}"
 
       case Req.get(url, headers: ajax_headers()) do
         {:ok, %{status: 200, body: body}} ->

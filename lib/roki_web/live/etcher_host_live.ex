@@ -132,25 +132,35 @@ defmodule RokiWeb.Live.EtcherHostLive do
       <div id={"comment-bridge-#{@fresco_id}"} phx-hook="CommentBridge"></div>
 
       <%= if @comment_modal_open and @current_user do %>
-        <div id={"comment-modal-root-#{@fresco_id}"} phx-hook="CommentModalScrollLock"
-             class={[
-               "fixed inset-0 z-[10000] flex justify-center",
-               if(@composer_only_mode?,
-                 do: "items-start pt-6 sm:pt-12",
-                 else: "items-end sm:items-center"
-               )
-             ]}>
-          <div id="comment-modal-backdrop" class="fixed inset-0 bg-black/50"
-               phx-click="close_comment_modal"></div>
-          <div id={"comment-modal-scroll-#{@fresco_id}"} phx-hook="CommentModalScroll"
-               class={[
-                 "relative z-10 w-full bg-base-100 shadow-2xl",
-                 if(@composer_only_mode?,
-                   do: "sm:max-w-md rounded-2xl etcher-composer-only overflow-visible",
-                   else: "sm:max-w-lg max-h-[85vh] rounded-t-2xl sm:rounded-2xl overflow-y-auto"
-                 )
-               ]}
-               style="overscroll-behavior: contain; touch-action: auto;">
+        <div
+          id={"comment-modal-root-#{@fresco_id}"}
+          phx-hook="CommentModalScrollLock"
+          class={[
+            "fixed inset-0 z-[10000] flex justify-center",
+            if(@composer_only_mode?,
+              do: "items-start pt-6 sm:pt-12",
+              else: "items-end sm:items-center"
+            )
+          ]}
+        >
+          <div
+            id="comment-modal-backdrop"
+            class="fixed inset-0 bg-black/50"
+            phx-click="close_comment_modal"
+          >
+          </div>
+          <div
+            id={"comment-modal-scroll-#{@fresco_id}"}
+            phx-hook="CommentModalScroll"
+            class={[
+              "relative z-10 w-full bg-base-100 shadow-2xl",
+              if(@composer_only_mode?,
+                do: "sm:max-w-md rounded-2xl etcher-composer-only overflow-visible",
+                else: "sm:max-w-lg max-h-[85vh] rounded-t-2xl sm:rounded-2xl overflow-y-auto"
+              )
+            ]}
+            style="overscroll-behavior: contain; touch-action: auto;"
+          >
             <%= unless @composer_only_mode? do %>
               <div class="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-base-100 border-b border-base-300 rounded-t-2xl">
                 <h3 class="font-bold text-lg">Comments</h3>
@@ -159,8 +169,11 @@ defmodule RokiWeb.Live.EtcherHostLive do
             <% end %>
             <%!-- Minimal float-x close button when chrome is stripped —
                  sits over the top-right corner of the slim composer. --%>
-            <button :if={@composer_only_mode?} phx-click="close_comment_modal"
-                    class="absolute top-1 right-1 z-20 btn btn-ghost btn-sm btn-circle">✕</button>
+            <button
+              :if={@composer_only_mode?}
+              phx-click="close_comment_modal"
+              class="absolute top-1 right-1 z-20 btn btn-ghost btn-sm btn-circle"
+            >✕</button>
             <%!-- In composer-only mode the CommentsComponent still
                  renders its "No comments yet" empty state. Hide it so
                  we land on just the composer (Leaf editor + paperclip +
@@ -206,12 +219,42 @@ defmodule RokiWeb.Live.EtcherHostLive do
                 composer_open_at={if @composer_only_mode?, do: :bottom, else: nil}
               >
                 <:form_extras :if={@composer_metadata}>
-                  <input :if={@composer_metadata["source"]} type="hidden" name="metadata[source]" value={@composer_metadata["source"]} />
-                  <input :if={@composer_metadata["slug"]} type="hidden" name="metadata[slug]" value={@composer_metadata["slug"]} />
-                  <input :if={@composer_metadata["chapter"]} type="hidden" name="metadata[chapter]" value={@composer_metadata["chapter"]} />
-                  <input :if={@composer_metadata["etcher_shape_uuid"]} type="hidden" name="metadata[etcher_shape_uuid]" value={@composer_metadata["etcher_shape_uuid"]} />
-                  <input :if={@composer_metadata["page"]} type="hidden" name="metadata[page]" value={@composer_metadata["page"]} />
-                  <input :if={@composer_metadata["title"]} type="hidden" name="metadata[title]" value={@composer_metadata["title"]} />
+                  <input
+                    :if={@composer_metadata["source"]}
+                    type="hidden"
+                    name="metadata[source]"
+                    value={@composer_metadata["source"]}
+                  />
+                  <input
+                    :if={@composer_metadata["slug"]}
+                    type="hidden"
+                    name="metadata[slug]"
+                    value={@composer_metadata["slug"]}
+                  />
+                  <input
+                    :if={@composer_metadata["chapter"]}
+                    type="hidden"
+                    name="metadata[chapter]"
+                    value={@composer_metadata["chapter"]}
+                  />
+                  <input
+                    :if={@composer_metadata["etcher_shape_uuid"]}
+                    type="hidden"
+                    name="metadata[etcher_shape_uuid]"
+                    value={@composer_metadata["etcher_shape_uuid"]}
+                  />
+                  <input
+                    :if={@composer_metadata["page"]}
+                    type="hidden"
+                    name="metadata[page]"
+                    value={@composer_metadata["page"]}
+                  />
+                  <input
+                    :if={@composer_metadata["title"]}
+                    type="hidden"
+                    name="metadata[title]"
+                    value={@composer_metadata["title"]}
+                  />
                 </:form_extras>
               </.live_component>
             </div>
@@ -269,7 +312,15 @@ defmodule RokiWeb.Live.EtcherHostLive do
 
         Enum.each(loaded, fn ch ->
           chapter_anns = Map.get(grouped, ch["chapter"], [])
-          Marks.replace_etcher_shapes(user_id, source, slug, ch["chapter"], chapter_anns, save_opts)
+
+          Marks.replace_etcher_shapes(
+            user_id,
+            source,
+            slug,
+            ch["chapter"],
+            chapter_anns,
+            save_opts
+          )
         end)
 
       true ->
@@ -315,7 +366,8 @@ defmodule RokiWeb.Live.EtcherHostLive do
   # shape selected (per-shape style edits flow through
   # `etcher:annotations-changed` unchanged).
   @impl true
-  def handle_event("etcher:line-params-changed", %{"line_params" => lp}, socket) when is_map(lp) do
+  def handle_event("etcher:line-params-changed", %{"line_params" => lp}, socket)
+      when is_map(lp) do
     case socket.assigns[:current_user] do
       %PhoenixKit.Users.Auth.User{} = user ->
         existing = user.custom_fields || %{}
@@ -448,6 +500,17 @@ defmodule RokiWeb.Live.EtcherHostLive do
      |> push_event("fresco:refit", %{})}
   end
 
+  @impl true
+  def handle_event("annotation_updated", _payload, socket) do
+    # No-op for now — production uses this to refresh per-annotation
+    # color / visibility chips in the modal header. Etcher owns shape
+    # color via its own toolbar so we don't need the chip; visibility
+    # toggling would be a follow-up.
+    {:noreply, socket}
+  end
+
+  def handle_event(_event, _payload, socket), do: {:noreply, socket}
+
   # CommentsComponent broadcasts `{:comments_updated, %{action: :created,
   # resource_uuid: ...}}` to its host LiveView after a successful post.
   # For a newly-drawn shape's *first* comment, we link the comment_uuid
@@ -472,7 +535,14 @@ defmodule RokiWeb.Live.EtcherHostLive do
 
     link_result =
       if user_id do
-        Marks.link_first_comment_to_shape(user_id, source, slug, chapter, resource_uuid, link_opts)
+        Marks.link_first_comment_to_shape(
+          user_id,
+          source,
+          slug,
+          chapter,
+          resource_uuid,
+          link_opts
+        )
       else
         {:ok, :no_change}
       end
@@ -541,17 +611,6 @@ defmodule RokiWeb.Live.EtcherHostLive do
       leaf_content_changed: %{kind: kind, content: content}
     )
   end
-
-  @impl true
-  def handle_event("annotation_updated", _payload, socket) do
-    # No-op for now — production uses this to refresh per-annotation
-    # color / visibility chips in the modal header. Etcher owns shape
-    # color via its own toolbar so we don't need the chip; visibility
-    # toggling would be a follow-up.
-    {:noreply, socket}
-  end
-
-  def handle_event(_event, _payload, socket), do: {:noreply, socket}
 
   # Every annotation either has no integer image_idx (canvas mode in
   # strip context — shouldn't happen but treat conservatively) or its

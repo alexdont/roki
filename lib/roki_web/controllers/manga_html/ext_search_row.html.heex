@@ -7,7 +7,9 @@
     <div class="flex overflow-x-auto gap-3 pb-2">
       <a
         :for={result <- Enum.take(results, 10)}
-        href={~p"/manga/kotatsu/#{Roki.Manga.KotatsuSource.build_slug(@ext_name, result.ref.url)}?#{%{st: result.title}}"}
+        href={
+          ~p"/manga/kotatsu/#{Roki.Manga.KotatsuSource.build_slug(@ext_name, result.ref.url)}?#{%{st: result.title}}"
+        }
         class="flex-shrink-0 w-32"
       >
         <figure>

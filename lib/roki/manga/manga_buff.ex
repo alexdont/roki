@@ -1,4 +1,7 @@
 defmodule Roki.Manga.MangaBuff do
+  # `parse_num/1` below is never called. It is dead in the app this file was copied from too, and
+  # this is a copy, so it stays — but this project compiles warnings as errors.
+  @compile {:nowarn_unused_function, {:parse_num, 1}}
   @base_url "https://mangabuff.ru"
 
   alias Guise
@@ -254,7 +257,10 @@ defmodule Roki.Manga.MangaBuff do
   end
 
   defp extract_meta_content(body, property) do
-    case Regex.run(~r/<meta\s+(?:property|name)="#{Regex.escape(property)}"\s+content="([^"]*)"/, body) do
+    case Regex.run(
+           ~r/<meta\s+(?:property|name)="#{Regex.escape(property)}"\s+content="([^"]*)"/,
+           body
+         ) do
       [_, content] -> decode_html_entities(content)
       _ -> nil
     end
@@ -287,13 +293,6 @@ defmodule Roki.Manga.MangaBuff do
   end
 
   defp chapter_sort_key(ch), do: Chapter.sort_key(ch)
-
-  defp parse_num(s) do
-    case Float.parse(s) do
-      {n, _} -> n
-      :error -> 0
-    end
-  end
 
   defp decode_json(body) when is_binary(body) do
     case Jason.decode(body) do

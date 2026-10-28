@@ -135,80 +135,264 @@
   #strip-debug-prev-line .strip-debug-label { top: 4px; }
 </style>
 
-<div id="fresco-strip-shell"
-     class="fixed inset-0 bg-base-100"
-     data-source={@source}
-     data-slug={@slug}
-     data-chapter={@chapter}
-     data-csrf-token={Phoenix.Controller.get_csrf_token()}
-     data-user-uuid={@current_user && @current_user.uuid}
-     data-total-pages={@total_pages}
-     data-resume-page={@resume_page}
-     data-resume-fraction={@resume_fraction}
-     data-transient-mode={if @transient_mode, do: "1", else: "0"}
-     data-default-padding-desktop={@page_padding_defaults[:desktop]}
-     data-default-padding-mobile={@page_padding_defaults[:mobile]}
-     data-prev-chapter-url={if @prev_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}", else: ""}
-     data-next-chapter-url={if @next_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@next_chapter}", else: ""}
-     data-next-chapter-api={if @next_chapter, do: ~p"/manga/api/#{@source}/#{@slug}/#{@next_chapter}/images", else: ""}>
-
+<div
+  id="fresco-strip-shell"
+  class="fixed inset-0 bg-base-100"
+  data-source={@source}
+  data-slug={@slug}
+  data-chapter={@chapter}
+  data-csrf-token={Phoenix.Controller.get_csrf_token()}
+  data-user-uuid={@current_user && @current_user.uuid}
+  data-total-pages={@total_pages}
+  data-resume-page={@resume_page}
+  data-resume-fraction={@resume_fraction}
+  data-transient-mode={if @transient_mode, do: "1", else: "0"}
+  data-default-padding-desktop={@page_padding_defaults[:desktop]}
+  data-default-padding-mobile={@page_padding_defaults[:mobile]}
+  data-prev-chapter-url={
+    if @prev_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}", else: ""
+  }
+  data-next-chapter-url={
+    if @next_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@next_chapter}", else: ""
+  }
+  data-next-chapter-api={
+    if @next_chapter, do: ~p"/manga/api/#{@source}/#{@slug}/#{@next_chapter}/images", else: ""
+  }
+>
   <%!-- Tap-zone visualization overlay — flashes the active zones
        for 1.5s after a preset change, matching the paged reader.
        pointer-events-none so it doesn't intercept scroll / tap. --%>
-  <div id="strip-tap-zone-overlay" class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500" style="opacity:0;"></div>
+  <div
+    id="strip-tap-zone-overlay"
+    class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500"
+    style="opacity:0;"
+  >
+  </div>
 
   <%!-- Mobile top bar — matches production classes exactly. Defaults
        to `hidden`; setNav("visible") swaps in `flex lg:hidden`. --%>
   <div class="reader-nav-mobile hidden flex-col fixed top-0 left-0 right-0 z-20 bg-base-100 px-3 py-2 gap-2">
     <div class="flex items-center justify-between">
-      <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Home">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+      <a
+        href={~p"/manga/#{@source}/#{@slug}"}
+        class="btn btn-ghost min-h-[44px] min-w-[44px]"
+        title="Home"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"
+        /></svg>
       </a>
       <div class="flex items-center gap-1">
-        <a :if={@prev_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"} class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Previous chapter">«</a>
+        <a
+          :if={@prev_chapter}
+          href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"}
+          class="btn btn-soft text-xl min-h-[44px] min-w-[44px]"
+          title="Previous chapter"
+        >«</a>
         <span id="strip-chapter-label-mobile" class="font-bold text-sm px-1">Ch. {@chapter}</span>
-        <a :if={@next_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"} class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Next chapter">»</a>
+        <a
+          :if={@next_chapter}
+          href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"}
+          class="btn btn-soft text-xl min-h-[44px] min-w-[44px]"
+          title="Next chapter"
+        >»</a>
       </div>
       <div class="flex items-center gap-0">
-        <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost min-h-[44px]" title="Chapters">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+        <a
+          href={~p"/manga/#{@source}/#{@slug}"}
+          class="btn btn-ghost min-h-[44px]"
+          title="Chapters"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+          ><path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+          /></svg>
         </a>
       </div>
     </div>
     <div class="flex items-center justify-center gap-2">
-      <button id="strip-annotate-toggle-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Draw comment">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+      <button
+        id="strip-annotate-toggle-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Draw comment"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+        /></svg>
       </button>
-      <button id="strip-comments-toggle-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Show/hide comments">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      <button
+        id="strip-comments-toggle-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Show/hide comments"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        /></svg>
       </button>
-      <button id="strip-settings-btn-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Settings">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      <button
+        id="strip-settings-btn-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Settings"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+        /></svg>
       </button>
     </div>
   </div>
 
   <%!-- Desktop sidebar — matches production classes exactly. Defaults
        to `hidden`; setNav("visible") swaps in `lg:flex`. --%>
-  <div id="strip-desktop-sidebar" class="reader-nav-desktop hidden flex-col gap-2 items-center px-2 fixed top-1/2 right-3 -translate-y-1/2 z-20 bg-base-200/80 backdrop-blur-sm rounded-xl py-2">
+  <div
+    id="strip-desktop-sidebar"
+    class="reader-nav-desktop hidden flex-col gap-2 items-center px-2 fixed top-1/2 right-3 -translate-y-1/2 z-20 bg-base-200/80 backdrop-blur-sm rounded-xl py-2"
+  >
     <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-sm btn-ghost" title="Home">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"
+      /></svg>
     </a>
     <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-sm btn-ghost" title="All Chapters">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+      /></svg>
     </a>
-    <a :if={@prev_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"} class="btn btn-sm btn-ghost" title="Previous chapter">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+    <a
+      :if={@prev_chapter}
+      href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"}
+      class="btn btn-sm btn-ghost"
+      title="Previous chapter"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
     </a>
     <span id="strip-chapter-label-desktop" class="text-xs font-bold text-base-content/60">Ch. {@chapter}</span>
-    <a :if={@next_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"} class="btn btn-sm btn-ghost" title="Next chapter">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+    <a
+      :if={@next_chapter}
+      href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"}
+      class="btn btn-sm btn-ghost"
+      title="Next chapter"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
     </a>
     <button id="strip-annotate-toggle-desktop" class="btn btn-sm btn-ghost" title="Draw comment">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+      /></svg>
     </button>
-    <button id="strip-comments-toggle-desktop" class="btn btn-sm btn-ghost" title="Show/hide comments">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+    <button
+      id="strip-comments-toggle-desktop"
+      class="btn btn-sm btn-ghost"
+      title="Show/hide comments"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      /><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+      /></svg>
     </button>
     <%!-- Scroll-speed controls (desktop only) — wheel multiplier.
          Dropped from mobile nav since touch scroll doesn't go through
@@ -219,7 +403,22 @@
     <button id="strip-speed-up" class="btn btn-sm btn-ghost" title="Faster scroll">🐇</button>
     <span class="h-px w-7 bg-base-content/20 my-1"></span>
     <button id="strip-settings-btn-desktop" class="btn btn-sm btn-ghost" title="Settings">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke-width="1.5"
+        stroke="currentColor"
+      ><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+      /><path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+      /></svg>
     </button>
   </div>
 
@@ -238,7 +437,11 @@
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-medium">Reader</p>
         <div class="flex gap-1">
-          <a href={~p"/manga/legacy/#{@source}/#{@slug}/#{@chapter}"} class="btn btn-sm btn-outline" title="Open the legacy reader">Legacy</a>
+          <a
+            href={~p"/manga/legacy/#{@source}/#{@slug}/#{@chapter}"}
+            class="btn btn-sm btn-outline"
+            title="Open the legacy reader"
+          >Legacy</a>
           <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Fresco</span>
         </div>
       </div>
@@ -251,12 +454,20 @@
         <p class="text-sm font-medium">Reading mode</p>
         <div class="flex gap-1">
           <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Scroll</span>
-          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_mode"} class="mode-switch-form contents">
+          <form
+            method="post"
+            action={~p"/manga/#{@source}/#{@slug}/reading_mode"}
+            class="mode-switch-form contents"
+          >
             <input type="hidden" name="_method" value="put" />
             <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
             <input type="hidden" name="mode" value="paged" />
             <input type="hidden" name="device" value="" />
-            <input type="hidden" name="redirect_to" value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"} />
+            <input
+              type="hidden"
+              name="redirect_to"
+              value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"}
+            />
             <button type="submit" class="btn btn-sm btn-outline">Paged</button>
           </form>
         </div>
@@ -269,7 +480,11 @@
           <p class="text-sm font-medium">Panel snap</p>
           <p class="text-xs text-base-content/50">Snap to panel edges on tap</p>
         </div>
-        <input type="checkbox" id="strip-panel-snap-toggle" class="toggle toggle-sm toggle-primary" />
+        <input
+          type="checkbox"
+          id="strip-panel-snap-toggle"
+          class="toggle toggle-sm toggle-primary"
+        />
       </div>
 
       <%!-- Show comments — toggles all Etcher annotation overlays. --%>
@@ -278,7 +493,12 @@
           <p class="text-sm font-medium">Show comments</p>
           <p class="text-xs text-base-content/50">Hide annotation overlays on pages</p>
         </div>
-        <input type="checkbox" id="strip-comments-visible" class="toggle toggle-sm toggle-primary" checked />
+        <input
+          type="checkbox"
+          id="strip-comments-visible"
+          class="toggle toggle-sm toggle-primary"
+          checked
+        />
       </div>
 
       <%!-- Auto reader — timer-driven panel-snap navigation. Toggle
@@ -292,12 +512,23 @@
             <p class="text-sm font-medium">Auto reader</p>
             <p class="text-xs text-base-content/50">Auto-snap to next panel on a timer</p>
           </div>
-          <input type="checkbox" id="strip-auto-reader-toggle" class="toggle toggle-sm toggle-primary" />
+          <input
+            type="checkbox"
+            id="strip-auto-reader-toggle"
+            class="toggle toggle-sm toggle-primary"
+          />
         </div>
         <div class="flex items-center justify-between">
           <p class="text-xs">Delay</p>
           <div class="flex items-center gap-2">
-            <input type="range" id="strip-auto-reader-delay" min="1" max="20" step="1" class="range range-xs range-primary w-24" />
+            <input
+              type="range"
+              id="strip-auto-reader-delay"
+              min="1"
+              max="20"
+              step="1"
+              class="range range-xs range-primary w-24"
+            />
             <span id="strip-auto-reader-delay-label" class="text-xs font-mono w-7 text-right">5s</span>
           </div>
         </div>
@@ -306,7 +537,11 @@
             <p class="text-xs">Smart</p>
             <p class="text-[10px] text-base-content/40">OCR adjusts delay per panel</p>
           </div>
-          <input type="checkbox" id="strip-auto-reader-smart-toggle" class="toggle toggle-xs toggle-primary" />
+          <input
+            type="checkbox"
+            id="strip-auto-reader-smart-toggle"
+            class="toggle toggle-xs toggle-primary"
+          />
         </div>
       </div>
 
@@ -320,14 +555,25 @@
           <p class="text-sm font-medium">Page padding</p>
           <span id="strip-page-padding-label" class="text-xs font-mono">0%</span>
         </div>
-        <input type="range" id="strip-page-padding-slider" min="0" max="90" step="1" value="0" class="range range-xs range-primary w-full" />
+        <input
+          type="range"
+          id="strip-page-padding-slider"
+          min="0"
+          max="90"
+          step="1"
+          value="0"
+          class="range range-xs range-primary w-full"
+        />
       </div>
 
       <%!-- Panel snap tuning (per-manga) — same controls as production's
            snap-config-section. Settings persist per slug in localStorage
            and feed into the gutter-detection algorithm. --%>
       <div id="strip-snap-config-section" class="mb-4 pl-2 border-l-2 border-primary/20 space-y-3">
-        <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Panel snap tuning (this manga) <span id="strip-build-stamp" class="normal-case font-normal"></span></p>
+        <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">
+          Panel snap tuning (this manga)
+          <span id="strip-build-stamp" class="normal-case font-normal"></span>
+        </p>
         <div class="flex items-center justify-between">
           <p class="text-xs">Jump style</p>
           <div class="flex gap-1" id="strip-snap-jump-style-btns">
@@ -347,7 +593,11 @@
         </div>
         <div class="flex items-center justify-between">
           <p class="text-xs">Long panel steps</p>
-          <input type="checkbox" id="strip-snap-long-panel-steps" class="toggle toggle-xs toggle-primary" />
+          <input
+            type="checkbox"
+            id="strip-snap-long-panel-steps"
+            class="toggle toggle-xs toggle-primary"
+          />
         </div>
         <div class="flex items-center justify-between">
           <div>
@@ -376,7 +626,9 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-xs">Merge close gutters</p>
-            <p class="text-[10px] text-base-content/40">Glue bands separated by &lt; N source-px</p>
+            <p class="text-[10px] text-base-content/40">
+              Glue bands separated by &lt; N source-px
+            </p>
           </div>
           <select id="strip-snap-gutter-merge-gap" class="select select-bordered select-xs w-28">
             <option value="0">Off</option>
@@ -385,7 +637,11 @@
             <option value="300">Aggressive</option>
           </select>
         </div>
-        <button type="button" id="strip-snap-config-reset" class="btn btn-xs btn-ghost text-error w-full">Reset to defaults</button>
+        <button
+          type="button"
+          id="strip-snap-config-reset"
+          class="btn btn-xs btn-ghost text-error w-full"
+        >Reset to defaults</button>
       </div>
 
       <%!-- Tap zone layout — 3 presets, matching production. Click a
@@ -393,31 +649,60 @@
       <div class="mb-2">
         <p class="text-sm font-medium mb-2">Tap zones</p>
         <div class="flex flex-row gap-2">
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 strip-tap-preset-card" data-preset="default">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 strip-tap-preset-card"
+            data-preset="default"
+          >
             <input type="radio" name="strip_tap_preset" value="default" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">M</div>
-              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">P</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">
+                M
+              </div>
+              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">
+                P
+              </div>
             </div>
             <span class="text-xs font-medium">Default</span>
           </label>
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 strip-tap-preset-card" data-preset="left_right">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 strip-tap-preset-card"
+            data-preset="left_right"
+          >
             <input type="radio" name="strip_tap_preset" value="left_right" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">P</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">
+                P
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                N
+              </div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                M
+              </div>
             </div>
             <span class="text-xs font-medium">Left / Right</span>
           </label>
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 strip-tap-preset-card" data-preset="right_left">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 strip-tap-preset-card"
+            data-preset="right_left"
+          >
             <input type="radio" name="strip_tap_preset" value="right_left" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">P</div>
-              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">
+                P
+              </div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                M
+              </div>
             </div>
             <span class="text-xs font-medium">Right / Left</span>
           </label>
@@ -440,14 +725,22 @@
           <p class="text-sm font-medium">Snap debugger</p>
           <p class="text-xs text-base-content/50">Rate each snap good/bad after it lands</p>
         </div>
-        <input type="checkbox" id="strip-snap-debug-toggle" class="toggle toggle-sm toggle-primary" />
+        <input
+          type="checkbox"
+          id="strip-snap-debug-toggle"
+          class="toggle toggle-sm toggle-primary"
+        />
       </div>
 
       <div class="modal-action">
-        <button class="btn btn-sm" onclick="document.getElementById('strip-settings-modal').close()">Close</button>
+        <button
+          class="btn btn-sm"
+          onclick="document.getElementById('strip-settings-modal').close()"
+        >Close</button>
       </div>
     </div>
-    <div class="modal-backdrop" onclick="document.getElementById('strip-settings-modal').close()"></div>
+    <div class="modal-backdrop" onclick="document.getElementById('strip-settings-modal').close()">
+    </div>
   </dialog>
 
   <FrescoStrip.viewer
@@ -462,16 +755,20 @@
   <%!-- Bottom-center page indicator — updated via the scroll_strip's
        `viewport-change` event so it tracks the dominant image as the
        user scrolls. Matches production strip's progress pill. --%>
-  <div id="strip-page-indicator"
-       class="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none">
+  <div
+    id="strip-page-indicator"
+    class="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none"
+  >
     1 / {length(@images)}
   </div>
 
   <%!-- Auto-reader resume button — hidden by default; shows when the
        user pauses auto-reader by scrolling / touching / tapping a key.
        Same placement + style as the legacy reader. --%>
-  <button id="strip-auto-reader-resume"
-          class="hidden fixed bottom-20 right-4 z-30 btn btn-lg bg-base-300/80 backdrop-blur border-none shadow-lg gap-2">
+  <button
+    id="strip-auto-reader-resume"
+    class="hidden fixed bottom-20 right-4 z-30 btn btn-lg bg-base-300/80 backdrop-blur border-none shadow-lg gap-2"
+  >
     <span class="text-lg">▶</span> Resume
   </button>
 
@@ -479,15 +776,27 @@
        the cursor; we map vertical mouse movement to window.scrollBy
        so the user can flick the strip up/down with the mouse alone.
        Click anywhere (or Escape) to release. --%>
-  <button id="mouse-gesture-btn" type="button"
-          class="hidden lg:flex fixed bottom-4 right-4 z-30 btn btn-sm btn-circle bg-base-300/70 hover:bg-base-300 border-0"
-          title="Mouse gesture navigation (click here, then move mouse to scroll — click again to exit)">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+  <button
+    id="mouse-gesture-btn"
+    type="button"
+    class="hidden lg:flex fixed bottom-4 right-4 z-30 btn btn-sm btn-circle bg-base-300/70 hover:bg-base-300 border-0"
+    title="Mouse gesture navigation (click here, then move mouse to scroll — click again to exit)"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      class="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      stroke-width="2"
+    >
       <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
     </svg>
   </button>
-  <div id="mouse-gesture-banner"
-       class="hidden fixed bottom-14 right-4 z-40 px-2 py-1 rounded-full bg-primary text-primary-content text-[11px] font-semibold shadow-lg pointer-events-none">
+  <div
+    id="mouse-gesture-banner"
+    class="hidden fixed bottom-14 right-4 z-40 px-2 py-1 rounded-full bg-primary text-primary-content text-[11px] font-semibold shadow-lg pointer-events-none"
+  >
     ↑ ↓ · click to exit
   </div>
 
@@ -501,21 +810,29 @@
       <%!-- Font ≥16px on mobile so iOS Safari doesn't auto-zoom on
            focus (and trap us at the zoomed scale). Drops back to
            text-sm at the lg breakpoint where desktop fits more text. --%>
-      <textarea id="etcher-composer-content"
-                rows="3"
-                class="textarea textarea-bordered w-full text-base lg:text-sm"
-                placeholder="Add a comment..."
-                maxlength="2000"></textarea>
+      <textarea
+        id="etcher-composer-content"
+        rows="3"
+        class="textarea textarea-bordered w-full text-base lg:text-sm"
+        placeholder="Add a comment..."
+        maxlength="2000"
+      ></textarea>
       <div id="etcher-composer-gif-preview" class="hidden mt-1 relative">
         <img class="max-w-full rounded-lg" />
-        <button type="button" id="etcher-composer-gif-remove"
-                class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✕</button>
+        <button
+          type="button"
+          id="etcher-composer-gif-remove"
+          class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+        >✕</button>
       </div>
       <div id="etcher-composer-error" class="hidden text-xs text-error mt-1"></div>
       <div class="flex items-center gap-2 mt-2">
-        <button type="button" id="etcher-composer-gif-btn"
-                class="btn btn-sm btn-ghost px-2 font-bold min-h-[2rem]"
-                style="border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);">GIF</button>
+        <button
+          type="button"
+          id="etcher-composer-gif-btn"
+          class="btn btn-sm btn-ghost px-2 font-bold min-h-[2rem]"
+          style="border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);"
+        >GIF</button>
       </div>
       <div id="etcher-composer-gif-picker" class="hidden mt-2"></div>
       <label class="flex items-center gap-2 mt-2 cursor-pointer text-xs text-base-content/60">
@@ -543,23 +860,32 @@
       "chapter" => @chapter,
       "user_id" => @current_user && @current_user.uuid,
       "user_token" => Plug.Conn.get_session(@conn, "user_token")
-    })}
+    }
+  )}
 
   <%!-- Snap verdict bar — controlled entirely from JS. Hidden until
        the debugger toggle is on AND a snap has just settled. Tapping
        a button POSTs the labeled sample; the bar then hides. --%>
-  <div id="strip-snap-verdict-bar"
-       class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 bg-base-300/95 backdrop-blur-sm rounded-full shadow-lg px-2 py-1.5 flex items-center gap-2">
+  <div
+    id="strip-snap-verdict-bar"
+    class="hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 bg-base-300/95 backdrop-blur-sm rounded-full shadow-lg px-2 py-1.5 flex items-center gap-2"
+  >
     <span class="text-xs font-medium px-2 text-base-content/70">Snap?</span>
-    <button id="strip-snap-verdict-good"
-            class="btn btn-sm btn-circle btn-success"
-            title="Good (g)">👍</button>
-    <button id="strip-snap-verdict-bad"
-            class="btn btn-sm btn-circle btn-error"
-            title="Bad (b)">👎</button>
-    <button id="strip-snap-verdict-skip"
-            class="btn btn-sm btn-circle btn-ghost"
-            title="Skip">✕</button>
+    <button
+      id="strip-snap-verdict-good"
+      class="btn btn-sm btn-circle btn-success"
+      title="Good (g)"
+    >👍</button>
+    <button
+      id="strip-snap-verdict-bad"
+      class="btn btn-sm btn-circle btn-error"
+      title="Bad (b)"
+    >👎</button>
+    <button
+      id="strip-snap-verdict-skip"
+      class="btn btn-sm btn-circle btn-ghost"
+      title="Skip"
+    >✕</button>
   </div>
 </div>
 
@@ -3770,7 +4096,6 @@
           layer.patchShape(shape_uuid, { metadata: tooltip_metadata || {} });
         }
       });
-
 
       // ── Deep-link ?ann=<etcher_shape_uuid> ───────────────────────
       // /comments links a comment back to its shape via ?ann=. Since

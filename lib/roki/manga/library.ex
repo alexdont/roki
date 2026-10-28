@@ -43,7 +43,8 @@ defmodule Roki.Manga.Library do
 
   def manga_readers(source, slug, exclude_user_id) do
     from(s in SavedManga,
-      join: u in "phoenix_kit_users", on: u.uuid == s.user_id,
+      join: u in "phoenix_kit_users",
+      on: u.uuid == s.user_id,
       where: s.source == ^source and s.slug == ^slug,
       where: s.user_id != ^exclude_user_id,
       select: %{
@@ -104,10 +105,13 @@ defmodule Roki.Manga.Library do
 
     query =
       case opts[:category_id] do
-        nil -> query
+        nil ->
+          query
+
         id ->
           from s in query,
-            join: m in MangaCategoryMembership, on: m.saved_manga_id == s.id,
+            join: m in MangaCategoryMembership,
+            on: m.saved_manga_id == s.id,
             where: m.category_id == ^id
       end
 
@@ -170,7 +174,9 @@ defmodule Roki.Manga.Library do
 
     Map.new(@default_page_padding, fn {form_factor, fallback} ->
       value = fields["default_page_padding_#{form_factor}"]
-      {form_factor, if(is_integer(value) and value >= 0 and value <= 90, do: value, else: fallback)}
+
+      {form_factor,
+       if(is_integer(value) and value >= 0 and value <= 90, do: value, else: fallback)}
     end)
   end
 
@@ -179,7 +185,7 @@ defmodule Roki.Manga.Library do
   def list_categories(user_id) do
     MangaCategory
     |> where(user_id: ^user_id)
-    |> order_by([c], [asc: c.position, asc: c.name])
+    |> order_by([c], asc: c.position, asc: c.name)
     |> Repo.all()
   end
 
@@ -228,11 +234,18 @@ defmodule Roki.Manga.Library do
   end
 
   def toggle_manga_category(saved_manga_id, category_id) do
-    case Repo.get_by(MangaCategoryMembership, saved_manga_id: saved_manga_id, category_id: category_id) do
+    case Repo.get_by(MangaCategoryMembership,
+           saved_manga_id: saved_manga_id,
+           category_id: category_id
+         ) do
       nil ->
         %MangaCategoryMembership{}
-        |> MangaCategoryMembership.changeset(%{saved_manga_id: saved_manga_id, category_id: category_id})
+        |> MangaCategoryMembership.changeset(%{
+          saved_manga_id: saved_manga_id,
+          category_id: category_id
+        })
         |> Repo.insert()
+
         {:ok, :added}
 
       membership ->
@@ -326,10 +339,17 @@ defmodule Roki.Manga.Library do
       |> Repo.one()
 
     cond do
-      is_nil(saved) -> :noop
-      is_nil(saved.last_chapter) -> do_snap(user_id, source, slug, chapter, saved, user_timezone)
-      chapter_gt?(chapter, saved.last_chapter) -> do_snap(user_id, source, slug, chapter, saved, user_timezone)
-      true -> :noop
+      is_nil(saved) ->
+        :noop
+
+      is_nil(saved.last_chapter) ->
+        do_snap(user_id, source, slug, chapter, saved, user_timezone)
+
+      chapter_gt?(chapter, saved.last_chapter) ->
+        do_snap(user_id, source, slug, chapter, saved, user_timezone)
+
+      true ->
+        :noop
     end
   end
 
@@ -420,7 +440,7 @@ defmodule Roki.Manga.Library do
       reader_count: count(s.id),
       total_seconds: sum(s.reading_seconds)
     })
-    |> order_by([s], [desc: count(s.id), desc: sum(s.reading_seconds)])
+    |> order_by([s], desc: count(s.id), desc: sum(s.reading_seconds))
     |> Repo.all()
   end
 
@@ -469,18 +489,40 @@ defmodule Roki.Manga.Library do
   end
 
   @progress_fields [
-    :last_chapter, :last_page, :last_page_fraction, :last_chapter_total_pages,
-    :max_chapter, :total_chapters, :last_chapter_number,
-    :chapter_near_end, :prev_chapter_near_end,
-    :reading_mode, :reading_mode_desktop, :reading_mode_mobile,
-    :reading_direction, :reading_rotation,
-    :tap_zone_preset, :tap_zone_preset_desktop, :tap_zone_preset_mobile,
-    :smart_crop, :comments_visible, :completed, :newest_chapter_at,
-    :chapter_seconds, :visiting_seconds, :prev_chapter_seconds,
-    :visiting_chapter, :prev_chapter
+    :last_chapter,
+    :last_page,
+    :last_page_fraction,
+    :last_chapter_total_pages,
+    :max_chapter,
+    :total_chapters,
+    :last_chapter_number,
+    :chapter_near_end,
+    :prev_chapter_near_end,
+    :reading_mode,
+    :reading_mode_desktop,
+    :reading_mode_mobile,
+    :reading_direction,
+    :reading_rotation,
+    :tap_zone_preset,
+    :tap_zone_preset_desktop,
+    :tap_zone_preset_mobile,
+    :smart_crop,
+    :comments_visible,
+    :completed,
+    :newest_chapter_at,
+    :chapter_seconds,
+    :visiting_seconds,
+    :prev_chapter_seconds,
+    :visiting_chapter,
+    :prev_chapter
   ]
 
-  def migrate_manga(user_id, {old_source, old_slug}, {new_source, new_slug, new_title, new_cover_url}, opts) do
+  def migrate_manga(
+        user_id,
+        {old_source, old_slug},
+        {new_source, new_slug, new_title, new_cover_url},
+        opts
+      ) do
     Repo.transaction(fn ->
       old_saved = get_saved_manga(user_id, old_source, old_slug)
       unless old_saved, do: Repo.rollback(:not_saved)
@@ -536,17 +578,20 @@ defmodule Roki.Manga.Library do
       if opts["migrate_time"] do
         SavedManga
         |> where(id: ^new_saved.id)
-        |> Repo.update_all(set: [
-          reading_seconds: old_saved.reading_seconds || 0,
-          reading_seconds_adjusted: old_saved.reading_seconds_adjusted,
-          reading_seconds_offsite: old_saved.reading_seconds_offsite,
-          reading_seconds_offsite_approximate: old_saved.reading_seconds_offsite_approximate
-        ])
+        |> Repo.update_all(
+          set: [
+            reading_seconds: old_saved.reading_seconds || 0,
+            reading_seconds_adjusted: old_saved.reading_seconds_adjusted,
+            reading_seconds_offsite: old_saved.reading_seconds_offsite,
+            reading_seconds_offsite_approximate: old_saved.reading_seconds_offsite_approximate
+          ]
+        )
 
         {:ok, uid_bin} = Ecto.UUID.dump(user_id)
 
         # Merge conflicting reading activity rows into existing target rows
-        Ecto.Adapters.SQL.query!(Repo,
+        Ecto.Adapters.SQL.query!(
+          Repo,
           """
           UPDATE reading_activity AS target
           SET reading_seconds = target.reading_seconds + old.reading_seconds,
@@ -560,7 +605,8 @@ defmodule Roki.Manga.Library do
         )
 
         # Delete old rows that had conflicts (now merged)
-        Ecto.Adapters.SQL.query!(Repo,
+        Ecto.Adapters.SQL.query!(
+          Repo,
           """
           DELETE FROM reading_activity AS old
           USING reading_activity AS target
@@ -597,7 +643,10 @@ defmodule Roki.Manga.Library do
 
       # Tierlist rating: keep the target's rating if it already has
       # one, otherwise the old rating follows the title.
-      if Repo.exists?(MangaTierlist |> where(user_id: ^user_id, source: ^new_source, slug: ^new_slug)) do
+      if Repo.exists?(
+           MangaTierlist
+           |> where(user_id: ^user_id, source: ^new_source, slug: ^new_slug)
+         ) do
         MangaTierlist
         |> where(user_id: ^user_id, source: ^old_source, slug: ^old_slug)
         |> Repo.delete_all()
@@ -619,7 +668,8 @@ defmodule Roki.Manga.Library do
       |> where([a], a.user_id == ^user_id)
       |> Repo.update_all(set: [source: new_source, slug: new_slug])
 
-      Ecto.Adapters.SQL.query!(Repo,
+      Ecto.Adapters.SQL.query!(
+        Repo,
         """
         UPDATE phoenix_kit_comments
         SET metadata = metadata || jsonb_build_object('source', $1::text, 'slug', $2::text)
@@ -930,14 +980,21 @@ defmodule Roki.Manga.Library do
     page = meta["page"]
 
     cond do
-      not (is_binary(source) and source != "") -> :ok
-      not (is_binary(slug) and slug != "") -> :ok
-      is_nil(chapter) -> :ok
+      not (is_binary(source) and source != "") ->
+        :ok
+
+      not (is_binary(slug) and slug != "") ->
+        :ok
+
+      is_nil(chapter) ->
+        :ok
+
       true ->
         recipients = list_recipients_past_position(source, slug, chapter, page, commenter_uuid)
 
         if recipients != [] do
           title = lookup_manga_title(source, slug)
+
           Enum.each(recipients, fn user_uuid ->
             aggregate_past_chapter_notification(user_uuid, source, slug, title)
           end)
@@ -969,7 +1026,11 @@ defmodule Roki.Manga.Library do
     |> Enum.map(& &1.user_id)
   end
 
-  defp past_position?(%{last_chapter: saved_chapter, last_page: saved_page}, comment_chapter, comment_page) do
+  defp past_position?(
+         %{last_chapter: saved_chapter, last_page: saved_page},
+         comment_chapter,
+         comment_page
+       ) do
     cond do
       chapter_gt?(saved_chapter, comment_chapter) ->
         true
@@ -985,12 +1046,14 @@ defmodule Roki.Manga.Library do
   end
 
   defp parse_int(n) when is_integer(n), do: n
+
   defp parse_int(s) when is_binary(s) do
     case Integer.parse(s) do
       {n, _} -> n
       :error -> nil
     end
   end
+
   defp parse_int(_), do: nil
 
   defp lookup_manga_title(source, slug) do
@@ -1045,7 +1108,7 @@ defmodule Roki.Manga.Library do
         text = "#{new_count} new #{label} on earlier chapters of #{display_title}"
 
         new_meta =
-          (is_map(existing.metadata) && existing.metadata || %{})
+          ((is_map(existing.metadata) && existing.metadata) || %{})
           |> Map.put("notification_text", text)
           |> Map.put("comment_count", new_count)
 
@@ -1121,19 +1184,22 @@ defmodule Roki.Manga.Library do
 
   def update_tap_zone_preset(user_id, source, slug, preset, device \\ nil)
 
-  def update_tap_zone_preset(user_id, source, slug, preset, "desktop") when preset in @valid_tap_zone_presets do
+  def update_tap_zone_preset(user_id, source, slug, preset, "desktop")
+      when preset in @valid_tap_zone_presets do
     SavedManga
     |> where(user_id: ^user_id, source: ^source, slug: ^slug)
     |> Repo.update_all(set: [tap_zone_preset_desktop: preset, updated_at: DateTime.utc_now()])
   end
 
-  def update_tap_zone_preset(user_id, source, slug, preset, "mobile") when preset in @valid_tap_zone_presets do
+  def update_tap_zone_preset(user_id, source, slug, preset, "mobile")
+      when preset in @valid_tap_zone_presets do
     SavedManga
     |> where(user_id: ^user_id, source: ^source, slug: ^slug)
     |> Repo.update_all(set: [tap_zone_preset_mobile: preset, updated_at: DateTime.utc_now()])
   end
 
-  def update_tap_zone_preset(user_id, source, slug, preset, _device) when preset in @valid_tap_zone_presets do
+  def update_tap_zone_preset(user_id, source, slug, preset, _device)
+      when preset in @valid_tap_zone_presets do
     SavedManga
     |> where(user_id: ^user_id, source: ^source, slug: ^slug)
     |> Repo.update_all(set: [tap_zone_preset: preset])
@@ -1141,7 +1207,8 @@ defmodule Roki.Manga.Library do
 
   @valid_directions ["rtl", "ltr"]
 
-  def update_reading_direction(user_id, source, slug, direction) when direction in @valid_directions do
+  def update_reading_direction(user_id, source, slug, direction)
+      when direction in @valid_directions do
     SavedManga
     |> where(user_id: ^user_id, source: ^source, slug: ^slug)
     |> Repo.update_all(set: [reading_direction: direction, updated_at: DateTime.utc_now()])
@@ -1155,7 +1222,8 @@ defmodule Roki.Manga.Library do
 
   @valid_rotations [0, 90, 180, 270]
 
-  def update_reading_rotation(user_id, source, slug, rotation) when rotation in @valid_rotations do
+  def update_reading_rotation(user_id, source, slug, rotation)
+      when rotation in @valid_rotations do
     SavedManga
     |> where(user_id: ^user_id, source: ^source, slug: ^slug)
     |> Repo.update_all(set: [reading_rotation: rotation, updated_at: DateTime.utc_now()])
@@ -1167,7 +1235,17 @@ defmodule Roki.Manga.Library do
     |> Repo.update_all(set: [smart_crop: enabled])
   end
 
-  def update_progress(user_id, source, slug, chapter, page, elapsed \\ 0, user_timezone \\ nil, total_pages \\ nil, page_fraction \\ 0.0) do
+  def update_progress(
+        user_id,
+        source,
+        slug,
+        chapter,
+        page,
+        elapsed \\ 0,
+        user_timezone \\ nil,
+        total_pages \\ nil,
+        page_fraction \\ 0.0
+      ) do
     elapsed = elapsed |> max(0) |> min(300)
     page_fraction = page_fraction |> max(0.0) |> min(1.0)
 
@@ -1193,7 +1271,10 @@ defmodule Roki.Manga.Library do
 
     current_max = saved && saved.max_chapter
     effective_position = (saved && saved.visiting_chapter) || (saved && saved.last_chapter)
-    is_going_backward = effective_position && chapter != effective_position && !chapter_gt?(chapter, effective_position)
+
+    is_going_backward =
+      effective_position && chapter != effective_position &&
+        !chapter_gt?(chapter, effective_position)
 
     near_end = total_pages && total_pages > 0 && page >= ceil(total_pages * 0.9)
 
@@ -1204,6 +1285,7 @@ defmodule Roki.Manga.Library do
     prev_seconds =
       if is_going_backward do
         visiting_ch = saved && saved.visiting_chapter
+
         cond do
           visiting_ch == chapter -> (saved && saved.visiting_seconds) || 0
           saved && saved.prev_chapter == chapter -> (saved && saved.prev_chapter_seconds) || 0
@@ -1225,6 +1307,7 @@ defmodule Roki.Manga.Library do
       else
         (saved && saved.chapter_near_end) || false
       end
+
     is_near_end = was_near_end || near_end
 
     # Chapter-counting time bar, scaled to chapter length. The old
@@ -1244,8 +1327,10 @@ defmodule Roki.Manga.Library do
     if elapsed > 0 do
       title = (saved && saved.title) || ""
 
-      count_chapter = is_near_end and new_seconds >= required_seconds and
-                      (prev_seconds < required_seconds or (not was_near_end and near_end))
+      count_chapter =
+        is_near_end and new_seconds >= required_seconds and
+          (prev_seconds < required_seconds or (not was_near_end and near_end))
+
       chapters_read = if count_chapter, do: 1, else: 0
 
       # Saved titles only (like stints below): checking whether a
@@ -1322,22 +1407,28 @@ defmodule Roki.Manga.Library do
     if is_going_backward do
       # Reading behind current position — don't update last_chapter until 5 min
       visiting_ch = saved && saved.visiting_chapter
+
       prev_visiting_sec =
         cond do
           visiting_ch == chapter -> (saved && saved.visiting_seconds) || 0
           saved && saved.prev_chapter == chapter -> (saved && saved.prev_chapter_seconds) || 0
           true -> 0
         end
+
       new_visiting_sec = prev_visiting_sec + elapsed
 
       if new_visiting_sec >= 300 do
         # Commit: update last_chapter, clear visiting state
         Repo.update_all(query,
           set: [
-            last_chapter: chapter, last_page: page, last_page_fraction: page_fraction, last_chapter_total_pages: total_pages,
+            last_chapter: chapter,
+            last_page: page,
+            last_page_fraction: page_fraction,
+            last_chapter_total_pages: total_pages,
             chapter_seconds: new_visiting_sec,
             chapter_near_end: near_end || false,
-            visiting_chapter: nil, visiting_seconds: 0,
+            visiting_chapter: nil,
+            visiting_seconds: 0,
             completed: false,
             updated_at: now
           ],
@@ -1346,7 +1437,12 @@ defmodule Roki.Manga.Library do
       else
         # Track visiting time, don't touch last_chapter
         Repo.update_all(query,
-          set: [visiting_chapter: chapter, visiting_seconds: new_visiting_sec, completed: false, updated_at: now],
+          set: [
+            visiting_chapter: chapter,
+            visiting_seconds: new_visiting_sec,
+            completed: false,
+            updated_at: now
+          ],
           inc: [reading_seconds: elapsed]
         )
       end
@@ -1364,27 +1460,51 @@ defmodule Roki.Manga.Library do
 
           if returning_to_prev do
             # Restore: swap current ↔ prev
-            [last_chapter: chapter, last_page: page, last_page_fraction: page_fraction, last_chapter_total_pages: total_pages,
-             chapter_seconds: (saved.prev_chapter_seconds || 0),
-             chapter_near_end: (saved.prev_chapter_near_end || false) || (near_end || false),
-             prev_chapter: saved.last_chapter,
-             prev_chapter_seconds: (saved.chapter_seconds || 0),
-             prev_chapter_near_end: (saved.chapter_near_end || false),
-             visiting_chapter: nil, visiting_seconds: 0, completed: false, updated_at: now]
+            [
+              last_chapter: chapter,
+              last_page: page,
+              last_page_fraction: page_fraction,
+              last_chapter_total_pages: total_pages,
+              chapter_seconds: saved.prev_chapter_seconds || 0,
+              chapter_near_end: saved.prev_chapter_near_end || false || (near_end || false),
+              prev_chapter: saved.last_chapter,
+              prev_chapter_seconds: saved.chapter_seconds || 0,
+              prev_chapter_near_end: saved.chapter_near_end || false,
+              visiting_chapter: nil,
+              visiting_seconds: 0,
+              completed: false,
+              updated_at: now
+            ]
           else
             # Normal forward: snapshot current into prev
-            [last_chapter: chapter, last_page: page, last_page_fraction: page_fraction, last_chapter_total_pages: total_pages,
-             chapter_seconds: elapsed,
-             chapter_near_end: near_end || false,
-             prev_chapter: saved.last_chapter,
-             prev_chapter_seconds: (saved.chapter_seconds || 0),
-             prev_chapter_near_end: (saved.chapter_near_end || false),
-             visiting_chapter: nil, visiting_seconds: 0, completed: false, updated_at: now]
+            [
+              last_chapter: chapter,
+              last_page: page,
+              last_page_fraction: page_fraction,
+              last_chapter_total_pages: total_pages,
+              chapter_seconds: elapsed,
+              chapter_near_end: near_end || false,
+              prev_chapter: saved.last_chapter,
+              prev_chapter_seconds: saved.chapter_seconds || 0,
+              prev_chapter_near_end: saved.chapter_near_end || false,
+              visiting_chapter: nil,
+              visiting_seconds: 0,
+              completed: false,
+              updated_at: now
+            ]
           end
         else
-          [last_chapter: chapter, last_page: page, last_page_fraction: page_fraction, last_chapter_total_pages: total_pages,
-           chapter_near_end: is_near_end || false,
-           visiting_chapter: nil, visiting_seconds: 0, completed: false, updated_at: now]
+          [
+            last_chapter: chapter,
+            last_page: page,
+            last_page_fraction: page_fraction,
+            last_chapter_total_pages: total_pages,
+            chapter_near_end: is_near_end || false,
+            visiting_chapter: nil,
+            visiting_seconds: 0,
+            completed: false,
+            updated_at: now
+          ]
         end
 
       sets = if advancing, do: Keyword.put(sets, :max_chapter, chapter), else: sets
@@ -1397,8 +1517,10 @@ defmodule Roki.Manga.Library do
           chapter_changed && saved && saved.prev_chapter == chapter ->
             # Returning to prev: increment restored chapter_seconds
             [reading_seconds: elapsed, chapter_seconds: elapsed]
+
           chapter_changed ->
             [reading_seconds: elapsed]
+
           true ->
             [reading_seconds: elapsed, chapter_seconds: elapsed]
         end
@@ -1617,7 +1739,8 @@ defmodule Roki.Manga.Library do
 
   defp earliest_activity_hour(user_id, source, slug, date) do
     from(a in ReadingActivity,
-      where: a.user_id == ^user_id and a.source == ^source and a.slug == ^slug and a.date == ^date,
+      where:
+        a.user_id == ^user_id and a.source == ^source and a.slug == ^slug and a.date == ^date,
       select: min(a.hour)
     )
     |> Repo.one()
@@ -1638,12 +1761,6 @@ defmodule Roki.Manga.Library do
     e -> Logger.warning("library event log failed: #{inspect(e)}")
   end
 
-  @doc """
-  Library milestone events ("completed", "caught_up") on the user's
-  local `date`, oldest first, with the series title joined in —
-  `utc_offset` in seconds, same day-bounds convention as
-  `chapter_reads_on_date/3` and `Stint.on_date/3`.
-  """
   @doc """
   All milestone events whose local day falls in `first..last`
   (inclusive), oldest first — for calendar-range displays.
@@ -1711,7 +1828,8 @@ defmodule Roki.Manga.Library do
 
     Repo.transaction(fn ->
       from(a in ReadingActivity,
-        where: a.user_id == ^user_id and a.date == ^date and a.source == ^source and a.slug == ^slug
+        where:
+          a.user_id == ^user_id and a.date == ^date and a.source == ^source and a.slug == ^slug
       )
       |> Repo.delete_all()
 
@@ -1748,7 +1866,15 @@ defmodule Roki.Manga.Library do
     :ok
   end
 
-  def record_daily_activity(user_id, source, slug, title, elapsed, user_timezone \\ nil, chapters_read \\ 0) do
+  def record_daily_activity(
+        user_id,
+        source,
+        slug,
+        title,
+        elapsed,
+        user_timezone \\ nil,
+        chapters_read \\ 0
+      ) do
     offset_hours = parse_timezone_offset(user_timezone)
     utc_now = DateTime.utc_now()
     shifted = DateTime.add(utc_now, round(offset_hours * 3600), :second)
@@ -1758,11 +1884,21 @@ defmodule Roki.Manga.Library do
 
     Repo.insert(
       %ReadingActivity{
-        user_id: user_id, date: today, hour: hour, source: source, slug: slug,
-        title: title, reading_seconds: elapsed, chapters_read: chapters_read,
-        inserted_at: now, updated_at: now
+        user_id: user_id,
+        date: today,
+        hour: hour,
+        source: source,
+        slug: slug,
+        title: title,
+        reading_seconds: elapsed,
+        chapters_read: chapters_read,
+        inserted_at: now,
+        updated_at: now
       },
-      on_conflict: [inc: [reading_seconds: elapsed, chapters_read: chapters_read], set: [updated_at: now]],
+      on_conflict: [
+        inc: [reading_seconds: elapsed, chapters_read: chapters_read],
+        set: [updated_at: now]
+      ],
       conflict_target: [:user_id, :date, :hour, :source, :slug]
     )
   end
@@ -1794,8 +1930,13 @@ defmodule Roki.Manga.Library do
       |> where(user_id: ^user_id, date: ^date)
       |> where([a], a.reading_seconds > 0)
       |> where([a], a.updated_at >= ^@hour_feature_cutoff)
-      |> select([a], %{hour: a.hour, seconds: a.reading_seconds, title: a.title, chapters_read: a.chapters_read})
-      |> order_by([a], [asc: a.hour, desc: a.reading_seconds])
+      |> select([a], %{
+        hour: a.hour,
+        seconds: a.reading_seconds,
+        title: a.title,
+        chapters_read: a.chapters_read
+      })
+      |> order_by([a], asc: a.hour, desc: a.reading_seconds)
       |> Repo.all()
 
     rows
@@ -1803,10 +1944,15 @@ defmodule Roki.Manga.Library do
     |> then(fn grouped ->
       Enum.map(0..23, fn h ->
         entries = Map.get(grouped, h, [])
+
         %{
           hour: h,
           seconds: Enum.reduce(entries, 0, fn e, acc -> acc + e.seconds end),
-          entries: Enum.map(entries, &%{title: &1.title, seconds: &1.seconds, chapters_read: &1.chapters_read})
+          entries:
+            Enum.map(
+              entries,
+              &%{title: &1.title, seconds: &1.seconds, chapters_read: &1.chapters_read}
+            )
         }
       end)
     end)
@@ -1840,15 +1986,22 @@ defmodule Roki.Manga.Library do
     ReadingActivity
     |> where(user_id: ^user_id)
     |> where([a], a.date >= ^cutoff)
-    |> order_by([a], [asc: a.date, desc: a.reading_seconds])
+    |> order_by([a], asc: a.date, desc: a.reading_seconds)
     |> Repo.all()
     |> Enum.group_by(& &1.date, fn a ->
-      %{title: a.title, source: a.source, slug: a.slug, seconds: a.reading_seconds, chapters_read: a.chapters_read}
+      %{
+        title: a.title,
+        source: a.source,
+        slug: a.slug,
+        seconds: a.reading_seconds,
+        chapters_read: a.chapters_read
+      }
     end)
   end
 
   def deterministic_uuid(input) do
-    <<a::binary-size(4), b::binary-size(2), _::binary-size(2), c::binary-size(2), d::binary-size(6), _::binary>> =
+    <<a::binary-size(4), b::binary-size(2), _::binary-size(2), c::binary-size(2),
+      d::binary-size(6), _::binary>> =
       :crypto.hash(:sha, input)
 
     # Set version 5 (name-based SHA-1) and variant bits
@@ -1925,7 +2078,9 @@ defmodule Roki.Manga.Library do
 
         case result do
           {:ok, _} ->
-            if first_link?, do: apply_media_type_reading_mode(user_id, source, slug, mal.media_type)
+            if first_link?,
+              do: apply_media_type_reading_mode(user_id, source, slug, mal.media_type)
+
             {:ok, mal_map}
 
           {:error, cs} ->
@@ -2065,7 +2220,9 @@ defmodule Roki.Manga.Library do
 
             fields =
               %{}
-              |> then(fn f -> if new_chapters > 0, do: Map.put(f, :num_chapters_read, new_chapters), else: f end)
+              |> then(fn f ->
+                if new_chapters > 0, do: Map.put(f, :num_chapters_read, new_chapters), else: f
+              end)
               |> then(fn f -> if status, do: Map.put(f, :status, status), else: f end)
               |> then(fn f -> if score_changed, do: Map.put(f, :score, tier_score), else: f end)
 
@@ -2075,7 +2232,9 @@ defmodule Roki.Manga.Library do
                   link.data
                   |> Map.put("last_pushed", new_chapters)
                   |> then(fn d -> if status, do: Map.put(d, "last_status", status), else: d end)
-                  |> then(fn d -> if score_changed, do: Map.put(d, "last_score", tier_score), else: d end)
+                  |> then(fn d ->
+                    if score_changed, do: Map.put(d, "last_score", tier_score), else: d
+                  end)
 
                 link |> Ecto.Changeset.change(data: new_data) |> Repo.update()
                 :ok
@@ -2154,8 +2313,11 @@ defmodule Roki.Manga.Library do
   defp ensure_fresh_mal_token(token) do
     stale? =
       case token.expires_at do
-        %DateTime{} = exp -> DateTime.compare(DateTime.utc_now(), DateTime.add(exp, -60, :second)) != :lt
-        _ -> false
+        %DateTime{} = exp ->
+          DateTime.compare(DateTime.utc_now(), DateTime.add(exp, -60, :second)) != :lt
+
+        _ ->
+          false
       end
 
     cond do
@@ -2383,12 +2545,14 @@ defmodule Roki.Manga.Library do
   # bytewise comparison never matched and every mark comment looked
   # orphaned. Coerce both sides through `Ecto.UUID.cast/1` first.
   defp uuid_to_string(nil), do: nil
+
   defp uuid_to_string(<<_::128>> = bin) do
     case Ecto.UUID.cast(bin) do
       {:ok, s} -> s
       :error -> nil
     end
   end
+
   defp uuid_to_string(s) when is_binary(s), do: s
 
   defp resolve_mark_comment_visibility(comments, source, slug, user_uuid) do
@@ -2429,11 +2593,19 @@ defmodule Roki.Manga.Library do
       # either source the `/slug/comments` link can't preload the
       # right page, so the user lands on page 1.
       page_from_meta = Map.get(meta, "page")
+
       page_from_shape =
         case item && get_in(item, ["etcher", "image_id"]) do
-          "page-" <> n -> case Integer.parse(n) do {p, ""} -> p; _ -> nil end
-          _ -> nil
+          "page-" <> n ->
+            case Integer.parse(n) do
+              {p, ""} -> p
+              _ -> nil
+            end
+
+          _ ->
+            nil
         end
+
       page = page_from_meta || page_from_shape
 
       # Orphan comments — the etcher shape that anchored the comment
@@ -2445,28 +2617,31 @@ defmodule Roki.Manga.Library do
       orphan? = is_nil(item)
 
       if not orphan? and (visibility == "public" or owner?) do
-        [%{
-          kind: :mark,
-          # `id` is what the template feeds into `comment_reader_url/1` →
-          # `?ann=` — use the etcher shape uuid so the reader can map
-          # back to the original DOM rect. Falls back to the comment uuid.
-          id: Map.get(meta, "etcher_shape_uuid") || comment_uuid_str,
-          comment_uuid: comment_uuid_str,
-          title: Map.get(meta, "title"),
-          source: source,
-          slug: slug,
-          chapter: chapter,
-          page: page,
-          content: c.content,
-          metadata: meta,
-          color: (item && (get_in(item, ["etcher", "style", "color"]) || item["color"])) || "blue",
-          visibility: visibility,
-          user_id: c.user_id,
-          username: c.username,
-          like_count: c.like_count,
-          reply_count: c.reply_count,
-          inserted_at: c.inserted_at
-        }]
+        [
+          %{
+            kind: :mark,
+            # `id` is what the template feeds into `comment_reader_url/1` →
+            # `?ann=` — use the etcher shape uuid so the reader can map
+            # back to the original DOM rect. Falls back to the comment uuid.
+            id: Map.get(meta, "etcher_shape_uuid") || comment_uuid_str,
+            comment_uuid: comment_uuid_str,
+            title: Map.get(meta, "title"),
+            source: source,
+            slug: slug,
+            chapter: chapter,
+            page: page,
+            content: c.content,
+            metadata: meta,
+            color:
+              (item && (get_in(item, ["etcher", "style", "color"]) || item["color"])) || "blue",
+            visibility: visibility,
+            user_id: c.user_id,
+            username: c.username,
+            like_count: c.like_count,
+            reply_count: c.reply_count,
+            inserted_at: c.inserted_at
+          }
+        ]
       else
         []
       end
@@ -2647,10 +2822,12 @@ defmodule Roki.Manga.Library do
   def create_annotation(user, source, slug, chapter, attrs) do
     page = attrs["page"] || attrs[:page]
     resource_id = Ecto.UUID.generate()
-    manga_title = case get_manga_metadata(source, slug) do
-      %{data: %{"title" => title}} -> title
-      _ -> nil
-    end
+
+    manga_title =
+      case get_manga_metadata(source, slug) do
+        %{data: %{"title" => title}} -> title
+        _ -> nil
+      end
 
     gif_url = attrs["gif_url"] || attrs[:gif_url]
 
@@ -2677,7 +2854,10 @@ defmodule Roki.Manga.Library do
              "manga_annotation",
              resource_id,
              user.uuid,
-             %{content: gif_content_fallback(attrs["content"] || attrs[:content], gif_url), metadata: metadata}
+             %{
+               content: gif_content_fallback(attrs["content"] || attrs[:content], gif_url),
+               metadata: metadata
+             }
            ) do
         {:ok, comment} ->
           case %MangaAnnotation{}
@@ -2703,7 +2883,9 @@ defmodule Roki.Manga.Library do
               })
 
               annotation
-            {:error, changeset} -> Repo.rollback(changeset)
+
+            {:error, changeset} ->
+              Repo.rollback(changeset)
           end
 
         {:error, reason} ->
@@ -2897,7 +3079,7 @@ defmodule Roki.Manga.Library do
     |> Enum.take(limit)
   end
 
-  defp list_recent_mark_comments(limit, user_uuid, before \\ nil) do
+  defp list_recent_mark_comments(limit, user_uuid, before) do
     reply_count_subquery =
       from(r in "phoenix_kit_comments",
         where: r.status == "published",
@@ -2927,7 +3109,9 @@ defmodule Roki.Manga.Library do
         }
       )
 
-    candidates_q = if before, do: where(candidates_q, [c], c.inserted_at < ^before), else: candidates_q
+    candidates_q =
+      if before, do: where(candidates_q, [c], c.inserted_at < ^before), else: candidates_q
+
     candidates = Repo.all(candidates_q)
 
     # Visibility resolution per (source, slug) — group candidates so we
@@ -2961,6 +3145,7 @@ defmodule Roki.Manga.Library do
         case {m.source, m.slug, m.title} do
           {src, slg, t} when is_binary(src) and is_binary(slg) and (is_nil(t) or t == "") ->
             [{src, slg}]
+
           _ ->
             []
         end
@@ -3075,8 +3260,11 @@ defmodule Roki.Manga.Library do
   def notify_comment_action(comment, actor_uuid, action) do
     {text_prefix, icon, action_key} =
       case action do
-        :liked -> {"liked your comment", "hero-heart", "comment.liked"}
-        :replied -> {"replied to your comment", "hero-chat-bubble-left-ellipsis", "comment.replied"}
+        :liked ->
+          {"liked your comment", "hero-heart", "comment.liked"}
+
+        :replied ->
+          {"replied to your comment", "hero-chat-bubble-left-ellipsis", "comment.replied"}
       end
 
     actor_name = lookup_username(actor_uuid) || "Someone"
@@ -3100,7 +3288,10 @@ defmodule Roki.Manga.Library do
   end
 
   defp lookup_username(user_uuid) do
-    from(u in "phoenix_kit_users", where: u.uuid == type(^user_uuid, Ecto.UUID), select: u.username)
+    from(u in "phoenix_kit_users",
+      where: u.uuid == type(^user_uuid, Ecto.UUID),
+      select: u.username
+    )
     |> Repo.one()
   end
 
@@ -3227,7 +3418,11 @@ defmodule Roki.Manga.Library do
         parent.resource_type,
         parent.resource_uuid,
         user_uuid,
-        %{content: gif_content_fallback(content, gif_url), parent_uuid: comment_uuid, metadata: metadata}
+        %{
+          content: gif_content_fallback(content, gif_url),
+          parent_uuid: comment_uuid,
+          metadata: metadata
+        }
       )
     else
       {:error, :not_found}
@@ -3271,7 +3466,10 @@ defmodule Roki.Manga.Library do
 
   @doc "All of a user's MAL links as `%{{source, slug} => mal_id}`."
   def list_mal_links(user_uuid) do
-    from(l in MangaMalLink, where: l.user_id == ^user_uuid, select: {{l.source, l.slug}, l.mal_id})
+    from(l in MangaMalLink,
+      where: l.user_id == ^user_uuid,
+      select: {{l.source, l.slug}, l.mal_id}
+    )
     |> Repo.all()
     |> Map.new()
   end
@@ -3325,10 +3523,11 @@ defmodule Roki.Manga.Library do
         end
 
       Map.new(links, fn {{_source, _slug} = key, {mal_id, mean_raw}} ->
-        tier = case tier_index[key] do
-          {t, _} -> t
-          _ -> nil
-        end
+        tier =
+          case tier_index[key] do
+            {t, _} -> t
+            _ -> nil
+          end
 
         expected = Roki.Manga.Trackers.MAL.tier_score(tier)
         actual = Map.get(scores, mal_id)
@@ -3341,7 +3540,8 @@ defmodule Roki.Manga.Library do
             true -> :out_of_sync
           end
 
-        {key, %{status: status, mal_score: actual, expected: expected, mal_mean: parse_mean(mean_raw)}}
+        {key,
+         %{status: status, mal_score: actual, expected: expected, mal_mean: parse_mean(mean_raw)}}
       end)
     end
   end
@@ -3396,12 +3596,24 @@ defmodule Roki.Manga.Library do
       end
 
     cond do
-      saved.completed -> nil
-      not is_integer(chapters_read) -> nil
-      chapters_read < 3 -> nil
-      total_seconds < 600 -> nil
-      is_nil(chapters_remaining) -> nil
-      chapters_remaining <= 0 -> nil
+      saved.completed ->
+        nil
+
+      not is_integer(chapters_read) ->
+        nil
+
+      chapters_read < 3 ->
+        nil
+
+      total_seconds < 600 ->
+        nil
+
+      is_nil(chapters_remaining) ->
+        nil
+
+      chapters_remaining <= 0 ->
+        nil
+
       true ->
         seconds_per_chapter = div(total_seconds, chapters_read)
         seconds_remaining = seconds_per_chapter * chapters_remaining
@@ -3550,8 +3762,7 @@ defmodule Roki.Manga.Library do
   def set_grid_slot(user_uuid, mode, slot, source, slug)
       when slot in 1..15 and mode in @grid_modes do
     from(g in MangaGridSlot,
-      where:
-        g.user_id == type(^user_uuid, Ecto.UUID) and g.mode == ^mode and g.slot == ^slot
+      where: g.user_id == type(^user_uuid, Ecto.UUID) and g.mode == ^mode and g.slot == ^slot
     )
     |> Repo.update_all(
       set: [

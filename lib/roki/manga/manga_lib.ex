@@ -43,7 +43,8 @@ defmodule Roki.Manga.MangaLib do
   def get_manga(slug_url) do
     url = "#{@api_url}/manga/#{slug_url}?fields[]=summary&fields[]=genres&fields[]=authors"
 
-    with {:ok, %{status: 200, body: body}} <- Req.get(url, headers: Guise.headers("https://mangalib.me/")),
+    with {:ok, %{status: 200, body: body}} <-
+           Req.get(url, headers: Guise.headers("https://mangalib.me/")),
          {:ok, %{"data" => data}} <- decode(body) do
       chapters_url = "#{@api_url}/manga/#{slug_url}/chapters"
 
@@ -153,13 +154,6 @@ defmodule Roki.Manga.MangaLib do
   end
 
   defp chapter_sort_key(ch), do: Chapter.sort_key(ch)
-
-  defp parse_num(s) do
-    case Float.parse(s) do
-      {n, _} -> n
-      :error -> 0
-    end
-  end
 
   defp decode(body) when is_map(body), do: {:ok, body}
   defp decode(body) when is_binary(body), do: Jason.decode(body)

@@ -1,48 +1,177 @@
 <TesseractJs.Component.preload />
 <TesseractJs.Component.script />
-<div id="reader" phx-update="ignore" class="mx-auto px-0 lg:px-4 pt-4" data-slug={@slug} data-chapter={@chapter} data-start-page={@start_page} data-source={@source} data-chapters={Jason.encode!(@chapters)} data-title={@manga_title} data-user-uuid={@current_user && @current_user.uuid} data-comments-visible={to_string(@comments_visible)} data-annotation-counts={Jason.encode!(@chapter_annotation_counts)} data-mode={@mode} data-mode-desktop={@mode_desktop} data-mode-mobile={@mode_mobile} data-tap-zone-preset={@tap_zone_preset} data-default-smart-scroll={to_string(@default_smart_scroll)} data-smart-scroll-config={Jason.encode!(@smart_scroll_config)}>
+<div
+  id="reader"
+  phx-update="ignore"
+  class="mx-auto px-0 lg:px-4 pt-4"
+  data-slug={@slug}
+  data-chapter={@chapter}
+  data-start-page={@start_page}
+  data-source={@source}
+  data-chapters={Jason.encode!(@chapters)}
+  data-title={@manga_title}
+  data-user-uuid={@current_user && @current_user.uuid}
+  data-comments-visible={to_string(@comments_visible)}
+  data-annotation-counts={Jason.encode!(@chapter_annotation_counts)}
+  data-mode={@mode}
+  data-mode-desktop={@mode_desktop}
+  data-mode-mobile={@mode_mobile}
+  data-tap-zone-preset={@tap_zone_preset}
+  data-default-smart-scroll={to_string(@default_smart_scroll)}
+  data-smart-scroll-config={Jason.encode!(@smart_scroll_config)}
+>
   <%!-- Mobile top bar --%>
   <div class="reader-nav-mobile hidden flex-col fixed top-0 left-0 right-0 z-20 bg-base-100 px-3 py-2 gap-2">
     <div class="flex items-center justify-between">
-      <a href={@search_back_url || "/manga"} class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Home">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" />
+      <a
+        href={@search_back_url || "/manga"}
+        class="btn btn-ghost min-h-[44px] min-w-[44px]"
+        title="Home"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"
+          />
         </svg>
       </a>
       <div class="flex items-center gap-1">
-        <a :if={@prev_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@prev_chapter}?#{@search_params}"} class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Previous chapter">«</a>
+        <a
+          :if={@prev_chapter}
+          href={~p"/manga/legacy/#{@source}/#{@slug}/#{@prev_chapter}?#{@search_params}"}
+          class="btn btn-soft text-xl min-h-[44px] min-w-[44px]"
+          title="Previous chapter"
+        >«</a>
         <span id="chapter-indicator-mobile" class="font-bold text-sm px-1">Ch. {@chapter}</span>
         <span id="page-progress-mobile" class="text-xs text-base-content/60"></span>
-        <a :if={@next_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@next_chapter}?#{@search_params}"} class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Next chapter">»</a>
+        <a
+          :if={@next_chapter}
+          href={~p"/manga/legacy/#{@source}/#{@slug}/#{@next_chapter}?#{@search_params}"}
+          class="btn btn-soft text-xl min-h-[44px] min-w-[44px]"
+          title="Next chapter"
+        >»</a>
       </div>
       <div class="flex items-center gap-0">
-        <a href={~p"/manga/#{@source}/#{@slug}?#{@search_params}"} class="btn btn-ghost min-h-[44px]" title="Chapters">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+        <a
+          href={~p"/manga/#{@source}/#{@slug}?#{@search_params}"}
+          class="btn btn-ghost min-h-[44px]"
+          title="Chapters"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+          ><path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+          /></svg>
         </a>
       </div>
     </div>
     <div class="flex items-center justify-center gap-2">
-      <button id="scroll-speed-down-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Slower scroll">🐢</button>
+      <button
+        id="scroll-speed-down-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Slower scroll"
+      >🐢</button>
       <span id="scroll-speed-label-mobile" class="text-xs font-bold text-base-content/60">1x</span>
-      <button id="scroll-speed-up-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Faster scroll">🐇</button>
-      <button id="tap-zone-settings-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Settings">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      <button
+        id="scroll-speed-up-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Faster scroll"
+      >🐇</button>
+      <button
+        id="tap-zone-settings-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Settings"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+        /></svg>
       </button>
       <span class="w-px h-7 bg-base-content/20 mx-1"></span>
-      <button id="annotate-toggle-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Draw comment">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+      <button
+        id="annotate-toggle-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Draw comment"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+        /></svg>
       </button>
-      <button id="comments-visible-toggle-mobile" class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]" title="Show/hide comments">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      <button
+        id="comments-visible-toggle-mobile"
+        class="btn btn-ghost btn-sm min-h-[48px] min-w-[48px]"
+        title="Show/hide comments"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        /></svg>
       </button>
     </div>
   </div>
 
   <%!-- Tap zone overlay (shown on preset change) --%>
-  <div id="tap-zone-overlay" class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500" style="opacity:0;"></div>
+  <div
+    id="tap-zone-overlay"
+    class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500"
+    style="opacity:0;"
+  >
+  </div>
 
   <%!-- Auto reader resume button --%>
-  <button id="auto-reader-resume" class="hidden fixed bottom-20 right-4 z-30 btn btn-lg bg-base-300/80 backdrop-blur border-none shadow-lg gap-2">
+  <button
+    id="auto-reader-resume"
+    class="hidden fixed bottom-20 right-4 z-30 btn btn-lg bg-base-300/80 backdrop-blur border-none shadow-lg gap-2"
+  >
     <span class="text-lg">▶</span> Resume
   </button>
 
@@ -71,12 +200,20 @@
         <p class="text-sm font-medium">Reading mode</p>
         <div class="flex gap-1">
           <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Scroll</span>
-          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_mode"} class="mode-switch-form contents">
+          <form
+            method="post"
+            action={~p"/manga/#{@source}/#{@slug}/reading_mode"}
+            class="mode-switch-form contents"
+          >
             <input type="hidden" name="_method" value="put" />
             <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
             <input type="hidden" name="mode" value="paged" />
             <input type="hidden" name="device" value="" />
-            <input type="hidden" name="redirect_to" value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"} />
+            <input
+              type="hidden"
+              name="redirect_to"
+              value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"}
+            />
             <button type="submit" class="btn btn-sm btn-outline">Paged</button>
           </form>
         </div>
@@ -103,7 +240,14 @@
         <div class="flex items-center justify-between">
           <p class="text-xs">Timer</p>
           <div class="flex items-center gap-2">
-            <input type="range" id="auto-reader-delay" min="1" max="20" step="1" class="range range-xs range-primary w-20" />
+            <input
+              type="range"
+              id="auto-reader-delay"
+              min="1"
+              max="20"
+              step="1"
+              class="range range-xs range-primary w-20"
+            />
             <span id="auto-reader-delay-label" class="text-xs font-mono w-6 text-right">5s</span>
           </div>
         </div>
@@ -112,13 +256,19 @@
             <p class="text-xs">Smart timer</p>
             <p class="text-[10px] text-base-content/40">OCR adjusts delay per panel</p>
           </div>
-          <input type="checkbox" id="auto-reader-smart-toggle" class="toggle toggle-xs toggle-primary" />
+          <input
+            type="checkbox"
+            id="auto-reader-smart-toggle"
+            class="toggle toggle-xs toggle-primary"
+          />
         </div>
       </div>
 
       <%!-- Panel snap tuning (per-manga overrides) --%>
       <div id="snap-config-section" class="mb-4 pl-2 border-l-2 border-primary/20 space-y-3">
-        <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Panel snap tuning (this manga)</p>
+        <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">
+          Panel snap tuning (this manga)
+        </p>
         <div class="flex items-center justify-between">
           <p class="text-xs">Jump style</p>
           <div class="flex gap-1" id="snap-jump-style-btns">
@@ -138,12 +288,18 @@
         </div>
         <div class="flex items-center justify-between">
           <p class="text-xs">Long panel steps</p>
-          <input type="checkbox" id="snap-long-panel-steps" class="toggle toggle-xs toggle-primary" />
+          <input
+            type="checkbox"
+            id="snap-long-panel-steps"
+            class="toggle toggle-xs toggle-primary"
+          />
         </div>
         <div class="flex items-center justify-between">
           <div>
             <p class="text-xs">Gutter tolerance</p>
-            <p id="snap-gutter-hint" class="text-[10px] text-base-content/40">Solid + light texture</p>
+            <p id="snap-gutter-hint" class="text-[10px] text-base-content/40">
+              Solid + light texture
+            </p>
           </div>
           <select id="snap-gutter-tolerance" class="select select-bordered select-xs w-28">
             <option value="50">Strict</option>
@@ -155,7 +311,9 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-xs">Min gutter width</p>
-            <p id="snap-gutter-width-hint" class="text-[10px] text-base-content/40">Standard gutter width</p>
+            <p id="snap-gutter-width-hint" class="text-[10px] text-base-content/40">
+              Standard gutter width
+            </p>
           </div>
           <select id="snap-min-gutter-width" class="select select-bordered select-xs w-28">
             <option value="20">Narrow</option>
@@ -170,7 +328,11 @@
           </div>
           <input type="checkbox" id="snap-debug-toggle" class="toggle toggle-xs toggle-primary" />
         </div>
-        <button type="button" id="snap-config-reset" class="btn btn-xs btn-ghost text-error w-full">Reset to defaults</button>
+        <button
+          type="button"
+          id="snap-config-reset"
+          class="btn btn-xs btn-ghost text-error w-full"
+        >Reset to defaults</button>
       </div>
 
       <%!-- Page rotation --%>
@@ -178,7 +340,11 @@
         <p class="text-sm font-medium">Page rotation</p>
         <div class="flex gap-1">
           <button type="button" data-rotation="-90" class="btn btn-xs btn-outline rotation-btn">↶ 90°</button>
-          <button type="button" data-rotation="0" class="btn btn-xs btn-outline btn-active rotation-btn">0°</button>
+          <button
+            type="button"
+            data-rotation="0"
+            class="btn btn-xs btn-outline btn-active rotation-btn"
+          >0°</button>
           <button type="button" data-rotation="90" class="btn btn-xs btn-outline rotation-btn">90° ↷</button>
         </div>
       </div>
@@ -189,38 +355,75 @@
           <p class="text-sm font-medium">Page padding</p>
           <span id="page-padding-label" class="text-xs font-mono">0%</span>
         </div>
-        <input type="range" id="page-padding-slider" min="0" max="90" step="1" value="0" class="range range-xs range-primary w-full" />
+        <input
+          type="range"
+          id="page-padding-slider"
+          min="0"
+          max="90"
+          step="1"
+          value="0"
+          class="range range-xs range-primary w-full"
+        />
       </div>
 
       <%!-- Tap zone layout --%>
       <div class="mb-2">
         <p class="text-sm font-medium mb-2">Tap zones</p>
         <div class="flex flex-row gap-2">
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-primary bg-primary/5 tap-zone-preset-card" data-preset="default">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-primary bg-primary/5 tap-zone-preset-card"
+            data-preset="default"
+          >
             <input type="radio" name="tap_zone_preset" value="default" class="hidden" checked />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">M</div>
-              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">P</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">
+                M
+              </div>
+              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">
+                P
+              </div>
             </div>
             <span class="text-xs font-medium">Default</span>
           </label>
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-base-content/20 bg-transparent tap-zone-preset-card" data-preset="left_right">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-base-content/20 bg-transparent tap-zone-preset-card"
+            data-preset="left_right"
+          >
             <input type="radio" name="tap_zone_preset" value="left_right" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">P</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">
+                P
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                N
+              </div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                M
+              </div>
             </div>
             <span class="text-xs font-medium">Left / Right</span>
           </label>
-          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-base-content/20 bg-transparent tap-zone-preset-card" data-preset="right_left">
+          <label
+            class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-base-content/20 bg-transparent tap-zone-preset-card"
+            data-preset="right_left"
+          >
             <input type="radio" name="tap_zone_preset" value="right_left" class="hidden" />
             <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">P</div>
-              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                N
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">
+                P
+              </div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                M
+              </div>
             </div>
             <span class="text-xs font-medium">Right / Left</span>
           </label>
@@ -237,10 +440,18 @@
   <div>
     <div>
       <div id="pages" class="flex flex-col items-center gap-0">
-        <div id={"chapter-#{@chapter}-header"} class="w-full text-center py-4 text-base-content/50 font-bold text-sm">
+        <div
+          id={"chapter-#{@chapter}-header"}
+          class="w-full text-center py-4 text-base-content/50 font-bold text-sm"
+        >
           Chapter {@chapter}
         </div>
-        <div :for={{img, idx} <- Enum.with_index(@images, 1)} class="relative w-full annotation-container" data-chapter={@chapter} data-page={idx}>
+        <div
+          :for={{img, idx} <- Enum.with_index(@images, 1)}
+          class="relative w-full annotation-container"
+          data-chapter={@chapter}
+          data-page={idx}
+        >
           <img
             src={~p"/manga/proxy/image?#{%{url: clean_image_url(img.url)}}"}
             data-src={~p"/manga/proxy/image?#{%{url: clean_image_url(img.url)}}"}
@@ -264,25 +475,91 @@
     </div>
 
     <%!-- Desktop sidebar --%>
-    <div id="desktop-sidebar" class="reader-nav-desktop hidden flex-col gap-2 items-center px-2 fixed top-1/2 -translate-y-1/2 z-20 bg-base-200/80 backdrop-blur-sm rounded-xl py-2">
+    <div
+      id="desktop-sidebar"
+      class="reader-nav-desktop hidden flex-col gap-2 items-center px-2 fixed top-1/2 -translate-y-1/2 z-20 bg-base-200/80 backdrop-blur-sm rounded-xl py-2"
+    >
       <a href={@search_back_url || "/manga"} class="btn btn-sm btn-ghost" title="Home">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"
+        /></svg>
       </a>
-      <a href={~p"/manga/#{@source}/#{@slug}?#{@search_params}"} class="btn btn-sm btn-ghost" title="All Chapters">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+      <a
+        href={~p"/manga/#{@source}/#{@slug}?#{@search_params}"}
+        class="btn btn-sm btn-ghost"
+        title="All Chapters"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+        /></svg>
       </a>
-      <a :if={@prev_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@prev_chapter}?#{@search_params}"} class="btn btn-sm btn-ghost" title="Previous chapter">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+      <a
+        :if={@prev_chapter}
+        href={~p"/manga/legacy/#{@source}/#{@slug}/#{@prev_chapter}?#{@search_params}"}
+        class="btn btn-sm btn-ghost"
+        title="Previous chapter"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
       </a>
       <span id="chapter-indicator" class="text-xs font-bold text-base-content/60">
         Ch. {@chapter}
       </span>
       <span id="page-progress" class="text-xs font-bold text-base-content/60"></span>
-      <a :if={@next_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@next_chapter}?#{@search_params}"} class="btn btn-sm btn-ghost" title="Next chapter">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+      <a
+        :if={@next_chapter}
+        href={~p"/manga/legacy/#{@source}/#{@slug}/#{@next_chapter}?#{@search_params}"}
+        class="btn btn-sm btn-ghost"
+        title="Next chapter"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
       </a>
       <button id="tap-zone-settings-desktop" class="btn btn-sm btn-ghost" title="Settings">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+        /></svg>
       </button>
       <div class="w-6 border-t border-base-content/20 my-1"></div>
       <button id="scroll-speed-down" class="btn btn-sm btn-ghost" title="Slower scroll">🐢</button>
@@ -290,10 +567,37 @@
       <button id="scroll-speed-up" class="btn btn-sm btn-ghost" title="Faster scroll">🐇</button>
       <div class="w-6 border-t border-base-content/20 my-1"></div>
       <button id="annotate-toggle" class="btn btn-sm btn-ghost" title="Draw comment">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+        /></svg>
       </button>
       <button id="comments-visible-toggle" class="btn btn-sm btn-ghost" title="Show/hide comments">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        /><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+        /></svg>
       </button>
     </div>
   </div>
@@ -2189,7 +2493,6 @@
         closeAnnotationPopover();
       });
     }
-
 
     async function loadReplies(container, commentUuid, ch, parentCommentUuid) {
       try {

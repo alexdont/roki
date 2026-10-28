@@ -17,7 +17,16 @@ defmodule Roki.Manga.Library.ReadingActivity do
 
   def changeset(activity, attrs) do
     activity
-    |> cast(attrs, [:user_id, :date, :hour, :source, :slug, :title, :reading_seconds, :chapters_read])
+    |> cast(attrs, [
+      :user_id,
+      :date,
+      :hour,
+      :source,
+      :slug,
+      :title,
+      :reading_seconds,
+      :chapters_read
+    ])
     |> validate_required([:user_id, :date, :source, :slug, :title])
     |> unique_constraint([:user_id, :date, :hour, :source, :slug])
   end

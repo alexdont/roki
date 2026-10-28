@@ -363,13 +363,6 @@ defmodule Roki.Manga.Remanga do
 
   defp chapter_sort_key(ch), do: Chapter.sort_key(ch)
 
-  defp parse_num(s) do
-    case Float.parse(s) do
-      {n, _} -> n
-      :error -> 0
-    end
-  end
-
   defp headers do
     Guise.headers("https://remanga.org/")
   end

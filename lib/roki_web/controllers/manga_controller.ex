@@ -24,7 +24,10 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
     val = params["enabled"] in [true, "true", "1"]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "reader_ui_v2", val))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "reader_ui_v2", val))
+
     redirect(conn, to: if(val, do: ~p"/manga/home2", else: ~p"/manga"))
   end
 
@@ -113,7 +116,12 @@ defmodule RokiWeb.MangaController do
               # Drives the `.chapter-progress` fill on the "Ch. N"
               # badge — how far into the current chapter the user has
               # read.
-              chapter_percent: MangaHTML.chapter_read_percent(m.last_page, m.last_page_fraction, m.last_chapter_total_pages)
+              chapter_percent:
+                MangaHTML.chapter_read_percent(
+                  m.last_page,
+                  m.last_page_fraction,
+                  m.last_chapter_total_pages
+                )
             }
           end)
 
@@ -142,7 +150,10 @@ defmodule RokiWeb.MangaController do
           pairs = Enum.map(saved_manga, &{&1.source, &1.slug})
 
           pairs =
-            if resume_manga && !Enum.any?(pairs, fn {s, sl} -> s == resume_manga.source && sl == resume_manga.slug end) do
+            if resume_manga &&
+                 !Enum.any?(pairs, fn {s, sl} ->
+                   s == resume_manga.source && sl == resume_manga.slug
+                 end) do
               [{resume_manga.source, resume_manga.slug} | pairs]
             else
               pairs
@@ -157,11 +168,14 @@ defmodule RokiWeb.MangaController do
           custom = user.custom_fields || %{}
           auto_resume = !is_internal && custom["auto_resume"] == true
           auto_resume_timer = custom["auto_resume_timer"] || 5
+
           auto_resume_art_url =
             case custom["auto_resume_art"] do
               uuid when is_binary(uuid) and uuid != "" ->
                 PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "original")
-              _ -> nil
+
+              _ ->
+                nil
             end
 
           render(conn, template,
@@ -229,12 +243,19 @@ defmodule RokiWeb.MangaController do
 
     manga_list =
       activity
-      |> Enum.filter(fn {date, _} -> Date.compare(date, cal_first) != :lt and Date.compare(date, cal_last) != :gt end)
+      |> Enum.filter(fn {date, _} ->
+        Date.compare(date, cal_first) != :lt and Date.compare(date, cal_last) != :gt
+      end)
       |> Enum.flat_map(fn {_date, entries} -> entries end)
       |> Enum.reject(fn e -> is_nil(e.title) or e.title == "" end)
       |> Enum.group_by(fn e -> {e.title, e.source, e.slug} end)
       |> Enum.map(fn {{title, source, slug}, entries} ->
-        %{title: title, source: source, slug: slug, seconds: entries |> Enum.map(& &1.seconds) |> Enum.sum()}
+        %{
+          title: title,
+          source: source,
+          slug: slug,
+          seconds: entries |> Enum.map(& &1.seconds) |> Enum.sum()
+        }
       end)
       |> Enum.sort_by(& &1.seconds, :desc)
 
@@ -243,13 +264,19 @@ defmodule RokiWeb.MangaController do
 
     filtered_activity =
       case manga_filter do
-        nil -> activity
-        "" -> activity
+        nil ->
+          activity
+
+        "" ->
+          activity
+
         filter ->
           [filter_source, filter_slug] = String.split(filter, "/", parts: 2)
+
           activity
           |> Enum.map(fn {date, entries} ->
-            {date, Enum.filter(entries, fn e -> e.source == filter_source and e.slug == filter_slug end)}
+            {date,
+             Enum.filter(entries, fn e -> e.source == filter_source and e.slug == filter_slug end)}
           end)
           |> Enum.reject(fn {_date, entries} -> entries == [] end)
           |> Map.new()
@@ -335,14 +362,24 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
     val = enabled in [true, "true", "1"]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "auto_resume", val))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "auto_resume", val))
+
     json(conn, %{ok: true, auto_resume: val})
   end
 
-  def update_auto_resume_art(conn, %{"file_uuid" => file_uuid}) when is_binary(file_uuid) and file_uuid != "" do
+  def update_auto_resume_art(conn, %{"file_uuid" => file_uuid})
+      when is_binary(file_uuid) and file_uuid != "" do
     user = conn.assigns[:phoenix_kit_current_user]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "auto_resume_art", file_uuid))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(
+        user,
+        Map.put(current, "auto_resume_art", file_uuid)
+      )
+
     art_url = PhoenixKit.Modules.Storage.URLSigner.signed_url(file_uuid, "original")
     json(conn, %{ok: true, art_url: art_url})
   end
@@ -350,7 +387,13 @@ defmodule RokiWeb.MangaController do
   def update_auto_resume_art(conn, %{"clear" => _}) do
     user = conn.assigns[:phoenix_kit_current_user]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.delete(current, "auto_resume_art"))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(
+        user,
+        Map.delete(current, "auto_resume_art")
+      )
+
     json(conn, %{ok: true, art_url: nil})
   end
 
@@ -363,7 +406,13 @@ defmodule RokiWeb.MangaController do
 
     if val in @valid_timer_values do
       current = user.custom_fields || %{}
-      {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "auto_resume_timer", val))
+
+      {:ok, _} =
+        PhoenixKit.Users.Auth.update_user_custom_fields(
+          user,
+          Map.put(current, "auto_resume_timer", val)
+        )
+
       json(conn, %{ok: true, auto_resume_timer: val})
     else
       conn |> put_status(422) |> json(%{error: "Invalid timer value"})
@@ -375,7 +424,13 @@ defmodule RokiWeb.MangaController do
 
     if preset in @valid_tap_zone_presets do
       current = user.custom_fields || %{}
-      {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "default_tap_zone", preset))
+
+      {:ok, _} =
+        PhoenixKit.Users.Auth.update_user_custom_fields(
+          user,
+          Map.put(current, "default_tap_zone", preset)
+        )
+
       json(conn, %{ok: true, default_tap_zone: preset})
     else
       conn |> put_status(422) |> json(%{error: "Invalid tap zone preset"})
@@ -386,7 +441,13 @@ defmodule RokiWeb.MangaController do
       when direction in ["rtl", "ltr"] do
     user = conn.assigns[:phoenix_kit_current_user]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "default_reading_direction", direction))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(
+        user,
+        Map.put(current, "default_reading_direction", direction)
+      )
+
     json(conn, %{ok: true, default_reading_direction: direction})
   end
 
@@ -398,7 +459,13 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
     val = enabled in [true, "true", "1"]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "default_smart_scroll", val))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(
+        user,
+        Map.put(current, "default_smart_scroll", val)
+      )
+
     json(conn, %{ok: true, default_smart_scroll: val})
   end
 
@@ -409,7 +476,10 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
     val = enabled in [true, "true", "1"]
     current = user.custom_fields || %{}
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "smart_panels", val))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "smart_panels", val))
+
     json(conn, %{ok: true, smart_panels: val})
   end
 
@@ -467,48 +537,86 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
 
     validated = %{}
-    validated = case config["jump_style"] do
-      v when v in @valid_jump_styles -> Map.put(validated, "jump_style", v)
-      _ -> validated
-    end
-    validated = case config["scan_distance"] do
-      v when is_number(v) and v >= 1 and v <= 5 -> Map.put(validated, "scan_distance", v)
-      v when is_binary(v) ->
-        case Integer.parse(v) do
-          {n, ""} when n in @valid_scan_distances -> Map.put(validated, "scan_distance", n)
-          _ -> validated
-        end
-      _ -> validated
-    end
-    validated = case config["long_panel_steps"] do
-      v when is_boolean(v) -> Map.put(validated, "long_panel_steps", v)
-      _ -> validated
-    end
-    validated = case config["gutter_tolerance"] do
-      v when is_integer(v) and v in @valid_gutter_tolerances -> Map.put(validated, "gutter_tolerance", v)
-      v when is_number(v) and round(v) in @valid_gutter_tolerances -> Map.put(validated, "gutter_tolerance", round(v))
-      v when is_binary(v) ->
-        case Integer.parse(v) do
-          {n, ""} when n in @valid_gutter_tolerances -> Map.put(validated, "gutter_tolerance", n)
-          _ -> validated
-        end
-      _ -> validated
-    end
-    validated = case config["min_gutter_width"] do
-      v when is_integer(v) and v in @valid_min_gutter_widths -> Map.put(validated, "min_gutter_width", v)
-      v when is_number(v) and round(v) in @valid_min_gutter_widths -> Map.put(validated, "min_gutter_width", round(v))
-      v when is_binary(v) ->
-        case Integer.parse(v) do
-          {n, ""} when n in @valid_min_gutter_widths -> Map.put(validated, "min_gutter_width", n)
-          _ -> validated
-        end
-      _ -> validated
-    end
+
+    validated =
+      case config["jump_style"] do
+        v when v in @valid_jump_styles -> Map.put(validated, "jump_style", v)
+        _ -> validated
+      end
+
+    validated =
+      case config["scan_distance"] do
+        v when is_number(v) and v >= 1 and v <= 5 ->
+          Map.put(validated, "scan_distance", v)
+
+        v when is_binary(v) ->
+          case Integer.parse(v) do
+            {n, ""} when n in @valid_scan_distances -> Map.put(validated, "scan_distance", n)
+            _ -> validated
+          end
+
+        _ ->
+          validated
+      end
+
+    validated =
+      case config["long_panel_steps"] do
+        v when is_boolean(v) -> Map.put(validated, "long_panel_steps", v)
+        _ -> validated
+      end
+
+    validated =
+      case config["gutter_tolerance"] do
+        v when is_integer(v) and v in @valid_gutter_tolerances ->
+          Map.put(validated, "gutter_tolerance", v)
+
+        v when is_number(v) and round(v) in @valid_gutter_tolerances ->
+          Map.put(validated, "gutter_tolerance", round(v))
+
+        v when is_binary(v) ->
+          case Integer.parse(v) do
+            {n, ""} when n in @valid_gutter_tolerances ->
+              Map.put(validated, "gutter_tolerance", n)
+
+            _ ->
+              validated
+          end
+
+        _ ->
+          validated
+      end
+
+    validated =
+      case config["min_gutter_width"] do
+        v when is_integer(v) and v in @valid_min_gutter_widths ->
+          Map.put(validated, "min_gutter_width", v)
+
+        v when is_number(v) and round(v) in @valid_min_gutter_widths ->
+          Map.put(validated, "min_gutter_width", round(v))
+
+        v when is_binary(v) ->
+          case Integer.parse(v) do
+            {n, ""} when n in @valid_min_gutter_widths ->
+              Map.put(validated, "min_gutter_width", n)
+
+            _ ->
+              validated
+          end
+
+        _ ->
+          validated
+      end
 
     current = user.custom_fields || %{}
     existing = Map.get(current, "smart_scroll_config", %{})
     merged = Map.merge(existing, validated)
-    {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.put(current, "smart_scroll_config", merged))
+
+    {:ok, _} =
+      PhoenixKit.Users.Auth.update_user_custom_fields(
+        user,
+        Map.put(current, "smart_scroll_config", merged)
+      )
+
     json(conn, %{ok: true, smart_scroll_config: merged})
   end
 
@@ -763,7 +871,7 @@ defmodule RokiWeb.MangaController do
       Enum.reduce(stats, {0, 0, 0}, fn m, {total, onsite, offsite} ->
         # On-site = manual override (when set) else raw tracker.
         # Off-site = explicit user entry; nil/0 means none.
-        on = (m.reading_seconds_adjusted || m.reading_seconds) || 0
+        on = m.reading_seconds_adjusted || m.reading_seconds || 0
         off = m.reading_seconds_offsite || 0
         {total + on + off, onsite + on, offsite + off}
       end)
@@ -810,15 +918,20 @@ defmodule RokiWeb.MangaController do
           %{"sq" => q} when q != "" ->
             query = if params["ss"], do: %{q: q, source: params["ss"]}, else: %{q: q}
             ~p"/manga/search?#{query}"
-          _ -> nil
+
+          _ ->
+            nil
         end
 
       search_params =
         case params do
           %{"sq" => q} when q != "" ->
             if params["ss"], do: %{sq: q, ss: params["ss"]}, else: %{sq: q}
-          _ -> %{}
+
+          _ ->
+            %{}
         end
+
       saved_manga = if user, do: Library.get_saved_manga(user.uuid, source, slug)
       metadata = Library.get_manga_metadata(source, slug)
 
@@ -841,10 +954,24 @@ defmodule RokiWeb.MangaController do
             last_num = RokiWeb.MangaHTML.last_chapter_number(manga.chapters)
 
             {prev_total, new_total} =
-              Library.update_total_chapters(user.uuid, source, slug, length(manga.chapters), last_num)
+              Library.update_total_chapters(
+                user.uuid,
+                source,
+                slug,
+                length(manga.chapters),
+                last_num
+              )
 
-            Library.notify_new_chapters(user.uuid, source, slug, manga.title, prev_total, new_total)
+            Library.notify_new_chapters(
+              user.uuid,
+              source,
+              slug,
+              manga.title,
+              prev_total,
+              new_total
+            )
           end
+
           reading_mode = if saved_manga, do: saved_manga.reading_mode, else: manga.reading_mode
 
           # Fabledex story data — rendered from the locally saved copy
@@ -875,14 +1002,23 @@ defmodule RokiWeb.MangaController do
           cover_img_src =
             cond do
               saved_manga && saved_manga.cover_file_uuid ->
-                PhoenixKit.Modules.Storage.URLSigner.signed_url(saved_manga.cover_file_uuid, "original")
+                PhoenixKit.Modules.Storage.URLSigner.signed_url(
+                  saved_manga.cover_file_uuid,
+                  "original"
+                )
+
               metadata && metadata.cover_file_uuid ->
-                PhoenixKit.Modules.Storage.URLSigner.signed_url(metadata.cover_file_uuid, "original")
+                PhoenixKit.Modules.Storage.URLSigner.signed_url(
+                  metadata.cover_file_uuid,
+                  "original"
+                )
+
               true ->
                 ~p"/manga/proxy/image?#{%{url: manga.cover_url}}"
             end
 
           categories = Library.list_categories(user.uuid)
+
           manga_category_ids =
             if saved_manga, do: Library.list_manga_category_ids(saved_manga.id), else: []
 
@@ -1192,7 +1328,13 @@ defmodule RokiWeb.MangaController do
     conn =
       with {id, _} <- Integer.parse(to_string(mal_id)),
            {:ok, _} <-
-             Library.link_mal_manga(user.uuid, source, slug, id, Roki.Manga.Trackers.MAL.app_client_id()) do
+             Library.link_mal_manga(
+               user.uuid,
+               source,
+               slug,
+               id,
+               Roki.Manga.Trackers.MAL.app_client_id()
+             ) do
         put_flash(conn, :info, "Linked to MyAnimeList")
       else
         _ -> put_flash(conn, :error, "Could not link to MyAnimeList")
@@ -1217,7 +1359,13 @@ defmodule RokiWeb.MangaController do
     conn =
       case Library.mal_data(user.uuid, source, slug) do
         %{"id" => mal_id} when is_integer(mal_id) ->
-          case Library.link_mal_manga(user.uuid, source, slug, mal_id, Roki.Manga.Trackers.MAL.app_client_id()) do
+          case Library.link_mal_manga(
+                 user.uuid,
+                 source,
+                 slug,
+                 mal_id,
+                 Roki.Manga.Trackers.MAL.app_client_id()
+               ) do
             {:ok, _} -> put_flash(conn, :info, "MyAnimeList info updated")
             _ -> put_flash(conn, :error, "Could not update from MyAnimeList")
           end
@@ -1236,7 +1384,9 @@ defmodule RokiWeb.MangaController do
 
       _ ->
         case Sources.module(source) do
-          nil -> nil
+          nil ->
+            nil
+
           mod ->
             case mod.get_manga(slug) do
               {:ok, manga} -> List.last(manga.chapters || [])
@@ -1359,7 +1509,12 @@ defmodule RokiWeb.MangaController do
       Enum.reduce(manga_list, %{refreshed: 0, with_new: 0, errors: 0, new_total: 0}, fn m, acc ->
         case do_refresh_one(user, m.source, m.slug) do
           {:ok, %{delta: delta}} when delta > 0 ->
-            %{acc | refreshed: acc.refreshed + 1, with_new: acc.with_new + 1, new_total: acc.new_total + delta}
+            %{
+              acc
+              | refreshed: acc.refreshed + 1,
+                with_new: acc.with_new + 1,
+                new_total: acc.new_total + delta
+            }
 
           {:ok, _} ->
             %{acc | refreshed: acc.refreshed + 1}
@@ -1456,7 +1611,11 @@ defmodule RokiWeb.MangaController do
 
   @valid_modes ["scroll", "paged", "double_page"]
 
-  def update_reading_mode(conn, %{"source" => source, "slug" => slug, "mode" => mode, "redirect_to" => redirect_to} = params)
+  def update_reading_mode(
+        conn,
+        %{"source" => source, "slug" => slug, "mode" => mode, "redirect_to" => redirect_to} =
+          params
+      )
       when mode in @valid_modes do
     if Sources.valid?(source) do
       user = conn.assigns[:phoenix_kit_current_user]
@@ -1482,7 +1641,15 @@ defmodule RokiWeb.MangaController do
       when mode in @valid_modes do
     if Sources.valid?(source) do
       user = conn.assigns[:phoenix_kit_current_user]
-      Library.update_reading_mode(user.uuid, source, slug, mode, effective_update_device(conn, params))
+
+      Library.update_reading_mode(
+        user.uuid,
+        source,
+        slug,
+        mode,
+        effective_update_device(conn, params)
+      )
+
       redirect(conn, to: ~p"/manga/#{source}/#{slug}")
     else
       send_resp(conn, 404, "Unknown source")
@@ -1508,20 +1675,13 @@ defmodule RokiWeb.MangaController do
     end
   end
 
-  defp normalize_reading_direction(dir) when is_binary(dir) do
-    d = dir |> String.downcase()
-    cond do
-      String.contains?(d, "left") -> "ltr"
-      String.contains?(d, "manhwa") or String.contains?(d, "manhua") or String.contains?(d, "webtoon") -> "ltr"
-      true -> "rtl"
-    end
-  end
-
-  defp normalize_reading_direction(_), do: "rtl"
-
   @valid_directions ["rtl", "ltr"]
 
-  def update_reading_direction(conn, %{"source" => source, "slug" => slug, "direction" => direction})
+  def update_reading_direction(conn, %{
+        "source" => source,
+        "slug" => slug,
+        "direction" => direction
+      })
       when direction in @valid_directions do
     if Sources.valid?(source) do
       user = conn.assigns[:phoenix_kit_current_user]
@@ -1675,7 +1835,10 @@ defmodule RokiWeb.MangaController do
     end
   end
 
-  def update_tap_zone_preset(conn, %{"source" => source, "slug" => slug, "preset" => preset} = params) do
+  def update_tap_zone_preset(
+        conn,
+        %{"source" => source, "slug" => slug, "preset" => preset} = params
+      ) do
     if Sources.valid?(source) do
       user = conn.assigns[:phoenix_kit_current_user]
       device = normalize_device(params["device"])
@@ -1757,22 +1920,45 @@ defmodule RokiWeb.MangaController do
     end
   end
 
-  def update_progress(conn, %{"source" => source, "slug" => slug, "chapter" => chapter, "page" => page} = params) do
+  def update_progress(
+        conn,
+        %{"source" => source, "slug" => slug, "chapter" => chapter, "page" => page} = params
+      ) do
     if Sources.valid?(source) do
       user = conn.assigns[:phoenix_kit_current_user]
       page = if is_binary(page), do: String.to_integer(page), else: page
       elapsed = parse_elapsed(params["elapsed"])
       user_timezone = user.user_timezone
-      total_pages = case params["total_pages"] do
-        n when is_integer(n) and n > 0 -> n
-        n when is_binary(n) -> case Integer.parse(n) do
-          {v, _} when v > 0 -> v
-          _ -> nil
+
+      total_pages =
+        case params["total_pages"] do
+          n when is_integer(n) and n > 0 ->
+            n
+
+          n when is_binary(n) ->
+            case Integer.parse(n) do
+              {v, _} when v > 0 -> v
+              _ -> nil
+            end
+
+          _ ->
+            nil
         end
-        _ -> nil
-      end
+
       page_fraction = parse_page_fraction(params["page_fraction"])
-      Library.update_progress(user.uuid, source, slug, chapter, page, elapsed, user_timezone, total_pages, page_fraction)
+
+      Library.update_progress(
+        user.uuid,
+        source,
+        slug,
+        chapter,
+        page,
+        elapsed,
+        user_timezone,
+        total_pages,
+        page_fraction
+      )
+
       json(conn, %{ok: true})
     else
       conn |> put_status(404) |> json(%{error: "Unknown source"})
@@ -1782,12 +1968,14 @@ defmodule RokiWeb.MangaController do
   defp parse_page_fraction(nil), do: 0.0
   defp parse_page_fraction(f) when is_float(f), do: f |> max(0.0) |> min(1.0)
   defp parse_page_fraction(n) when is_integer(n), do: n |> max(0) |> min(1) |> :erlang.float()
+
   defp parse_page_fraction(s) when is_binary(s) do
     case Float.parse(s) do
       {f, _} -> f |> max(0.0) |> min(1.0)
       :error -> 0.0
     end
   end
+
   defp parse_page_fraction(_), do: 0.0
 
   @doc """
@@ -1808,12 +1996,17 @@ defmodule RokiWeb.MangaController do
 
       page_index =
         case page_index do
-          n when is_integer(n) -> n
-          n when is_binary(n) -> case Integer.parse(n) do
-            {v, ""} -> v
-            _ -> 0
-          end
-          _ -> 0
+          n when is_integer(n) ->
+            n
+
+          n when is_binary(n) ->
+            case Integer.parse(n) do
+              {v, ""} -> v
+              _ -> 0
+            end
+
+          _ ->
+            0
         end
 
       cond do
@@ -1911,8 +2104,12 @@ defmodule RokiWeb.MangaController do
 
     category_id =
       case params["category_id"] do
-        "" -> nil
-        nil -> nil
+        "" ->
+          nil
+
+        nil ->
+          nil
+
         id ->
           case Integer.parse(id) do
             {int_id, ""} -> int_id
@@ -1942,7 +2139,8 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
 
     with {int_id, ""} <- Integer.parse(to_string(cat_id)),
-         saved_manga when not is_nil(saved_manga) <- Library.get_saved_manga(user.uuid, source, slug) do
+         saved_manga when not is_nil(saved_manga) <-
+           Library.get_saved_manga(user.uuid, source, slug) do
       {_ok, action} = Library.toggle_manga_category(saved_manga.id, int_id)
       category_ids = Library.list_manga_category_ids(saved_manga.id)
       json(conn, %{ok: true, action: action, category_ids: category_ids})
@@ -2041,14 +2239,6 @@ defmodule RokiWeb.MangaController do
   defp effective_reading_mode(saved_manga, _),
     do: saved_manga.reading_mode_desktop || saved_manga.reading_mode
 
-  defp effective_tap_zone_preset(nil, _device), do: nil
-
-  defp effective_tap_zone_preset(saved_manga, "mobile"),
-    do: saved_manga.tap_zone_preset_mobile || saved_manga.tap_zone_preset
-
-  defp effective_tap_zone_preset(saved_manga, _),
-    do: saved_manga.tap_zone_preset_desktop || saved_manga.tap_zone_preset
-
   def show_fresco(conn, %{"source" => source, "slug" => slug, "chapter" => chapter} = params) do
     with true <- Sources.valid?(source),
          mod when not is_nil(mod) <- Sources.module(source) do
@@ -2136,6 +2326,7 @@ defmodule RokiWeb.MangaController do
               params["double"] in ["0", "false"] -> false
               true -> effective_reading_mode(saved_manga, device) == "double_page"
             end
+
           direction =
             cond do
               params["dir"] == "ltr" -> "ltr"
@@ -2156,7 +2347,10 @@ defmodule RokiWeb.MangaController do
           # callers see only the public set.
           etcher_annotations =
             Roki.Manga.Library.Marks.list_visible_etcher_shape_payloads(
-              source, slug, chapter, user && user.uuid
+              source,
+              slug,
+              chapter,
+              user && user.uuid
             )
 
           reading_rotation = (saved_manga && saved_manga.reading_rotation) || 0
@@ -2213,7 +2407,10 @@ defmodule RokiWeb.MangaController do
   # vertical-strip WIP). DOM <img> + native browser scroll, with the
   # gutter-snap algorithm ported verbatim from the production scroll
   # reader (show.html.heex). Production reader untouched.
-  def show_fresco_strip(conn, %{"source" => source, "slug" => slug, "chapter" => chapter} = params) do
+  def show_fresco_strip(
+        conn,
+        %{"source" => source, "slug" => slug, "chapter" => chapter} = params
+      ) do
     # The reader's whole JS engine is INLINE in this page. Without an
     # explicit cache policy iOS (standalone webapps especially) caches the
     # HTML heuristically and keeps executing week-old reader code through
@@ -2268,7 +2465,10 @@ defmodule RokiWeb.MangaController do
 
           etcher_annotations =
             Roki.Manga.Library.Marks.list_visible_etcher_shape_payloads(
-              source, slug, chapter, user && user.uuid
+              source,
+              slug,
+              chapter,
+              user && user.uuid
             )
 
           {resume_page, resume_fraction} =
@@ -2318,9 +2518,15 @@ defmodule RokiWeb.MangaController do
       user_id = if user, do: user.uuid, else: "anon"
 
       chapter_images_result =
-        Roki.Manga.SourceThrottle.throttled_fetch(source, user_id, {source, slug, chapter, :images}, :timer.hours(6), fn ->
-          mod.get_chapter_images(slug, chapter)
-        end)
+        Roki.Manga.SourceThrottle.throttled_fetch(
+          source,
+          user_id,
+          {source, slug, chapter, :images},
+          :timer.hours(6),
+          fn ->
+            mod.get_chapter_images(slug, chapter)
+          end
+        )
 
       case chapter_images_result do
         {:ok, images} ->
@@ -2348,7 +2554,10 @@ defmodule RokiWeb.MangaController do
 
           etcher_shapes =
             Roki.Manga.Library.Marks.list_visible_etcher_shape_payloads(
-              source, slug, chapter, user && user.uuid
+              source,
+              slug,
+              chapter,
+              user && user.uuid
             )
 
           # probe_paged: full dims for pageable chapter lengths so the
@@ -2611,6 +2820,7 @@ defmodule RokiWeb.MangaController do
       |> render(:annotations_more, assigns)
     else
       colors_used = Library.list_user_annotation_colors(user.uuid)
+
       %{titles: filter_titles, usernames: filter_usernames} =
         Library.list_user_annotation_filters(user.uuid)
 
@@ -2655,10 +2865,12 @@ defmodule RokiWeb.MangaController do
           |> Map.drop([:metadata])
         end)
 
-      title = case annotations do
-        [first | _] -> first.title
-        [] -> slug
-      end
+      title =
+        case annotations do
+          [first | _] -> first.title
+          [] -> slug
+        end
+
       render(conn, :manga_annotations,
         annotations: annotations,
         source: source,
@@ -2693,7 +2905,10 @@ defmodule RokiWeb.MangaController do
     end
   end
 
-  def create_annotation(conn, %{"source" => source, "slug" => slug, "chapter" => chapter} = params) do
+  def create_annotation(
+        conn,
+        %{"source" => source, "slug" => slug, "chapter" => chapter} = params
+      ) do
     user = conn.assigns[:phoenix_kit_current_user]
 
     case Library.create_annotation(user, source, slug, chapter, params) do
@@ -2771,17 +2986,15 @@ defmodule RokiWeb.MangaController do
   def toggle_like(conn, %{"id" => comment_uuid}) do
     user = conn.assigns[:phoenix_kit_current_user]
 
-    case Library.toggle_like_annotation(comment_uuid, user.uuid) do
-      {:ok, liked, like_count} ->
-        json(conn, %{liked: liked, like_count: like_count})
-
-      {:error, _reason} ->
-        conn |> put_status(422) |> json(%{error: "Failed to toggle like"})
-    end
+    # `toggle_like_annotation/2` answers `{:ok, liked, count}` and nothing else, so the error
+    # branch that used to sit here could never be reached.
+    {:ok, liked, like_count} = Library.toggle_like_annotation(comment_uuid, user.uuid)
+    json(conn, %{liked: liked, like_count: like_count})
   end
 
   def list_replies(conn, %{"id" => comment_uuid}) do
     user = conn.assigns[:phoenix_kit_current_user]
+
     replies =
       Library.list_annotation_replies(comment_uuid, user.uuid)
       |> Enum.map(&resolve_avatar_url/1)
@@ -2841,8 +3054,9 @@ defmodule RokiWeb.MangaController do
     assign(conn, :resume_manga, resume)
   end
 
-  defp download_and_store_cover(cover_url, _user_uuid) when not is_binary(cover_url) or cover_url == "",
-    do: nil
+  defp download_and_store_cover(cover_url, _user_uuid)
+       when not is_binary(cover_url) or cover_url == "",
+       do: nil
 
   defp download_and_store_cover(cover_url, user_uuid) do
     cond do
@@ -2880,7 +3094,12 @@ defmodule RokiWeb.MangaController do
           File.write!(tmp_path, body)
 
           case PhoenixKit.Modules.Storage.store_file_in_buckets(
-                 tmp_path, "image", user_uuid, checksum, ext, "cover.#{ext}"
+                 tmp_path,
+                 "image",
+                 user_uuid,
+                 checksum,
+                 ext,
+                 "cover.#{ext}"
                ) do
             {:ok, file} -> file.uuid
             {:ok, file, :duplicate} -> file.uuid
@@ -2931,7 +3150,10 @@ defmodule RokiWeb.MangaController do
     json(conn, %{items: items})
   end
 
-  def create_mark_annotation(conn, %{"source" => source, "slug" => slug, "chapter" => chapter} = params) do
+  def create_mark_annotation(
+        conn,
+        %{"source" => source, "slug" => slug, "chapter" => chapter} = params
+      ) do
     user = conn.assigns[:phoenix_kit_current_user]
 
     attrs = %{
@@ -2960,7 +3182,11 @@ defmodule RokiWeb.MangaController do
     end
   end
 
-  def attach_etcher_comment(conn, %{"source" => source, "slug" => slug, "chapter" => chapter, "shape_uuid" => shape_uuid} = params) do
+  def attach_etcher_comment(
+        conn,
+        %{"source" => source, "slug" => slug, "chapter" => chapter, "shape_uuid" => shape_uuid} =
+          params
+      ) do
     user = conn.assigns[:phoenix_kit_current_user]
 
     # Build giphy payload from gif_url if the composer included one
@@ -3012,7 +3238,12 @@ defmodule RokiWeb.MangaController do
     end
   end
 
-  def delete_mark(conn, %{"source" => source, "slug" => slug, "chapter" => chapter, "item_id" => item_id}) do
+  def delete_mark(conn, %{
+        "source" => source,
+        "slug" => slug,
+        "chapter" => chapter,
+        "item_id" => item_id
+      }) do
     user = conn.assigns[:phoenix_kit_current_user]
 
     # Annotation deletes also need to remove the linked comment, so
@@ -3035,8 +3266,11 @@ defmodule RokiWeb.MangaController do
 
           _ ->
             case Roki.Manga.Library.Marks.delete_item(user.uuid, source, slug, chapter, item_id) do
-              {:ok, _} -> json(conn, %{ok: true})
-              {:error, changeset} -> conn |> put_status(422) |> json(%{error: inspect(changeset.errors)})
+              {:ok, _} ->
+                json(conn, %{ok: true})
+
+              {:error, changeset} ->
+                conn |> put_status(422) |> json(%{error: inspect(changeset.errors)})
             end
         end
     end
@@ -3071,7 +3305,8 @@ defmodule RokiWeb.MangaController do
     |> Map.delete(:avatar_file_uuid)
   end
 
-  defp resolve_avatar_url(map), do: Map.put(map, :avatar_url, nil) |> Map.delete(:avatar_file_uuid)
+  defp resolve_avatar_url(map),
+    do: Map.put(map, :avatar_url, nil) |> Map.delete(:avatar_file_uuid)
 
   defp avatar_url_for_user(user) do
     case user.custom_fields do

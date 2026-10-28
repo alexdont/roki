@@ -246,7 +246,9 @@ defmodule Roki.Manga.Library.Marks do
 
       orphaned_comment_uuids =
         existing_etcher
-        |> Enum.reject(fn it -> MapSet.member?(incoming_uuids, get_in(it, ["etcher", "uuid"])) end)
+        |> Enum.reject(fn it ->
+          MapSet.member?(incoming_uuids, get_in(it, ["etcher", "uuid"]))
+        end)
         |> Enum.map(& &1["comment_uuid"])
         |> Enum.reject(&is_nil/1)
 
@@ -264,6 +266,7 @@ defmodule Roki.Manga.Library.Marks do
           new_items =
             Enum.map(annotations, fn ann ->
               uuid = ann["uuid"]
+
               base =
                 Map.get(by_uuid, uuid) ||
                   %{
@@ -373,6 +376,7 @@ defmodule Roki.Manga.Library.Marks do
   # in from the comment).
   defp build_etcher_payloads(items) do
     etcher_items = Enum.filter(items, &(&1["type"] == "etcher_shape"))
+
     comment_uuids =
       etcher_items |> Enum.map(& &1["comment_uuid"]) |> Enum.reject(&is_nil/1)
 
@@ -457,8 +461,7 @@ defmodule Roki.Manga.Library.Marks do
       from(c in "phoenix_kit_comments",
         join: u in "phoenix_kit_users",
         on: u.uuid == c.user_uuid,
-        where:
-          c.uuid in type(^uuids, {:array, Ecto.UUID}) and c.status == "published",
+        where: c.uuid in type(^uuids, {:array, Ecto.UUID}) and c.status == "published",
         select: %{
           uuid: type(c.uuid, Ecto.UUID),
           content: c.content,
@@ -738,7 +741,6 @@ defmodule Roki.Manga.Library.Marks do
     end)
   end
 
-
   @doc """
   Stamp an etcher shape with a freshly-allocated `resource_uuid` so the
   PhoenixKit CommentsComponent has a thread key to query against from
@@ -905,7 +907,15 @@ defmodule Roki.Manga.Library.Marks do
 
   defp chapters_to_search(chapter, _), do: [chapter]
 
-  defp find_and_link_shape(user_id, source, slug, chapters, resource_uuid, etcher_shape_uuid, comment_uuid) do
+  defp find_and_link_shape(
+         user_id,
+         source,
+         slug,
+         chapters,
+         resource_uuid,
+         etcher_shape_uuid,
+         comment_uuid
+       ) do
     Enum.reduce_while(chapters, {:no_match, nil}, fn ch, acc ->
       case get_user_row(user_id, source, slug, ch) do
         nil ->
@@ -993,10 +1003,11 @@ defmodule Roki.Manga.Library.Marks do
   defp put_author_name(ann, _), do: ann
 
   defp put_owner_uuid(ann, owner_uuid) when is_binary(owner_uuid) do
-    owner = case Ecto.UUID.cast(owner_uuid) do
-      {:ok, s} -> s
-      _ -> owner_uuid
-    end
+    owner =
+      case Ecto.UUID.cast(owner_uuid) do
+        {:ok, s} -> s
+        _ -> owner_uuid
+      end
 
     metadata = Map.get(ann, "metadata") || %{}
     Map.put(ann, "metadata", Map.put(metadata, "owner_uuid", owner))
@@ -1038,8 +1049,14 @@ defmodule Roki.Manga.Library.Marks do
           end)
 
         case item && get_in(item, ["etcher", "image_id"]) do
-          "page-" <> n -> case Integer.parse(n) do {p, ""} -> p; _ -> nil end
-          _ -> nil
+          "page-" <> n ->
+            case Integer.parse(n) do
+              {p, ""} -> p
+              _ -> nil
+            end
+
+          _ ->
+            nil
         end
     end
   end

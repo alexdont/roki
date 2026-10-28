@@ -3,6 +3,11 @@
      div (if present) replaces the old sentinel so the IntersectionObserver
      keeps firing. No outer chrome — the page already has the layout. --%>
 <.annotation_row :for={a <- @annotations} a={a} />
-<div :if={@next_cursor} id="ann-loader" data-next={@next_cursor} class="text-center py-6 text-sm text-base-content/40">
+<div
+  :if={@next_cursor}
+  id="ann-loader"
+  data-next={@next_cursor}
+  class="text-center py-6 text-sm text-base-content/40"
+>
   Loading more…
 </div>

@@ -23,14 +23,33 @@ defmodule RokiWeb.KotatsuHTML do
   end
 
   defp locale_label(""), do: "Multilingual"
+
   defp locale_label(code) do
     names = %{
-      "en" => "English", "fr" => "French", "es" => "Spanish", "de" => "German",
-      "it" => "Italian", "pt" => "Portuguese", "ru" => "Russian", "ja" => "Japanese",
-      "zh" => "Chinese", "ko" => "Korean", "id" => "Indonesian", "vi" => "Vietnamese",
-      "th" => "Thai", "ar" => "Arabic", "tr" => "Turkish", "pl" => "Polish",
-      "uk" => "Ukrainian", "nl" => "Dutch", "be" => "Belarusian", "cs" => "Czech",
-      "hi" => "Hindi", "ta" => "Tamil", "my" => "Burmese", "fil" => "Filipino"
+      "en" => "English",
+      "fr" => "French",
+      "es" => "Spanish",
+      "de" => "German",
+      "it" => "Italian",
+      "pt" => "Portuguese",
+      "ru" => "Russian",
+      "ja" => "Japanese",
+      "zh" => "Chinese",
+      "ko" => "Korean",
+      "id" => "Indonesian",
+      "vi" => "Vietnamese",
+      "th" => "Thai",
+      "ar" => "Arabic",
+      "tr" => "Turkish",
+      "pl" => "Polish",
+      "uk" => "Ukrainian",
+      "nl" => "Dutch",
+      "be" => "Belarusian",
+      "cs" => "Czech",
+      "hi" => "Hindi",
+      "ta" => "Tamil",
+      "my" => "Burmese",
+      "fil" => "Filipino"
     }
 
     Map.get(names, code, String.upcase(code))

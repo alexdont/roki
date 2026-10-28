@@ -132,8 +132,6 @@ defmodule RokiWeb.Router do
     get "/giphy/trending", GiphyController, :trending
     post "/fresco-debug-log", MangaController, :fresco_debug_log
 
-
-
     # Last on purpose: each of these begins with a wildcard segment, so a literal route
     # declared after them would never be reached. In the app this came from, the series
     # paths carried an extra /manga segment that kept them apart; here they do not.
@@ -146,7 +144,11 @@ defmodule RokiWeb.Router do
     post "/:source/:slug/:chapter/annotations/:id/like", MangaController, :toggle_like
     get "/:source/:slug/:chapter/annotations/:id/replies", MangaController, :list_replies
     post "/:source/:slug/:chapter/annotations/:id/replies", MangaController, :create_reply
-    delete "/:source/:slug/:chapter/annotations/:id/replies/:reply_id", MangaController, :delete_reply
+
+    delete "/:source/:slug/:chapter/annotations/:id/replies/:reply_id",
+           MangaController,
+           :delete_reply
+
     # ─── Per-(user, chapter) page overrides — manual fixes for the
     # double-page spread engine when a provider injects an ad or
     # forgets a page. Toggle: same body inserts on absence, removes
@@ -154,15 +156,18 @@ defmodule RokiWeb.Router do
     post "/:source/:slug/:chapter/page_overrides",
          MangaController,
          :toggle_page_override
+
     # ─── Generic per-(user, chapter) marks API for the new fresco readers.
     # Items are typed (annotation / drawing / marker / highlight); only
     # the annotation type is wired up so far, but the list/delete
     # endpoints are type-agnostic so future types reuse them.
     get "/:source/:slug/:chapter/marks", MangaController, :list_marks
     post "/:source/:slug/:chapter/marks/annotations", MangaController, :create_mark_annotation
+
     post "/:source/:slug/:chapter/marks/etcher-shapes/:shape_uuid/comment",
          MangaController,
          :attach_etcher_comment
+
     delete "/:source/:slug/:chapter/marks/:item_id", MangaController, :delete_mark
   end
 
@@ -173,7 +178,6 @@ defmodule RokiWeb.Router do
   scope "/manga" do
     pipe_through [:browser, :require_auth]
 
-
     live_session :reader_settings,
       on_mount: [{PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope}] do
       live "/settings", RokiWeb.Live.ReaderSettingsLive, :index
@@ -183,12 +187,12 @@ defmodule RokiWeb.Router do
       # /manga/legacy/history as a fallback.
       live "/history", RokiWeb.Live.HistoryLive, :index
 
-    # Last on purpose: each of these begins with a wildcard segment, so a literal route
-    # declared after them would never be reached. In the app this came from, the series
-    # paths carried an extra /manga segment that kept them apart; here they do not.
-    # Static path; must be declared before the dynamic :chapter live route below
-    # so it isn't shadowed by /manga/:source/:slug/:chapter.
-    get "/:source/:slug/comments", RokiWeb.MangaController, :manga_annotations
+      # Last on purpose: each of these begins with a wildcard segment, so a literal route
+      # declared after them would never be reached. In the app this came from, the series
+      # paths carried an extra /manga segment that kept them apart; here they do not.
+      # Static path; must be declared before the dynamic :chapter live route below
+      # so it isn't shadowed by /manga/:source/:slug/:chapter.
+      get "/:source/:slug/comments", RokiWeb.MangaController, :manga_annotations
     end
 
     # Legacy MangaReaderLive — kept reachable at `/manga/legacy/manga/...`
@@ -201,7 +205,6 @@ defmodule RokiWeb.Router do
       live "/legacy/:source/:slug/:chapter", RokiWeb.Live.MangaReaderLive, :show
       live "/legacy/:source/:slug/:chapter/:page", RokiWeb.Live.MangaReaderLive, :show
     end
-
 
     # Last on purpose: each of these begins with a wildcard segment, so a literal route
     # declared after them would never be reached. In the app this came from, the series

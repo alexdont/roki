@@ -1,7 +1,13 @@
 <div class="max-w-4xl mx-auto px-4 py-8">
   <div class="flex items-center justify-between mb-6">
     <a href={~p"/manga/settings"} class="btn btn-ghost btn-sm gap-1">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
       Settings
@@ -30,11 +36,21 @@
 
     <div class="flex flex-wrap gap-4 mb-6">
       <label class="label cursor-pointer gap-2">
-        <input type="checkbox" id="ext-hide-broken" class="toggle toggle-sm toggle-primary" checked />
+        <input
+          type="checkbox"
+          id="ext-hide-broken"
+          class="toggle toggle-sm toggle-primary"
+          checked
+        />
         <span class="label-text text-sm">Hide broken</span>
       </label>
       <label class="label cursor-pointer gap-2">
-        <input type="checkbox" id="ext-hide-adult" class="toggle toggle-sm toggle-primary" checked />
+        <input
+          type="checkbox"
+          id="ext-hide-adult"
+          class="toggle toggle-sm toggle-primary"
+          checked
+        />
         <span class="label-text text-sm">Hide 18+</span>
       </label>
     </div>
@@ -77,7 +93,9 @@
 
       <%= for {locale, sources} <- sources_by_locale(@sources) do %>
         <div class="mb-6 ext-locale-group">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-2">{locale}</h3>
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+            {locale}
+          </h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-1">
             <label
               :for={s <- sources}
@@ -95,10 +113,16 @@
               />
               <span class="text-sm truncate">{s.title}</span>
               <%= if Map.get(s, :broken) do %>
-                <span class="badge badge-error badge-xs" title="Marked broken by the parser maintainers">broken</span>
+                <span
+                  class="badge badge-error badge-xs"
+                  title="Marked broken by the parser maintainers"
+                >broken</span>
               <% end %>
               <%= if Map.get(s, :search_supported) == false do %>
-                <span class="badge badge-ghost badge-xs" title="No text search — appears in Explore only">no search</span>
+                <span
+                  class="badge badge-ghost badge-xs"
+                  title="No text search — appears in Explore only"
+                >no search</span>
               <% end %>
               <span class="text-xs text-base-content/40 truncate ml-auto">{s.id}</span>
             </label>

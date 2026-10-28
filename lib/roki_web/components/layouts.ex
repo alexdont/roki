@@ -601,6 +601,7 @@ defmodule RokiWeb.Layouts do
 
   attr :parent, :any, required: true, doc: "@conn (controller pages) or @socket (LiveView pages)"
   attr :scope, :any, default: nil, doc: "the @phoenix_kit_current_scope assign"
+
   def notifications_bell(assigns) do
     user =
       case assigns[:scope] do
@@ -622,6 +623,7 @@ defmodule RokiWeb.Layouts do
 
   attr :scope, :any, required: true, doc: "the @phoenix_kit_current_scope assign"
   attr :current_path, :string, default: ""
+
   def user_menu(assigns) do
     ~H"""
     <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown

@@ -9,11 +9,25 @@
       <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
       <div class="dropdown dropdown-end">
         <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </div>
-        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+        <ul
+          tabindex="0"
+          class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+        >
           <li><a href="/manga" class="font-semibold">Home</a></li>
           <li><a href="/manga/explore">Explore</a></li>
           <li><a href="/manga/history">History</a></li>
@@ -26,7 +40,11 @@
           <li>
             <form method="post" action={~p"/manga/manga_v2"}>
               <input type="hidden" name="_method" value="put" />
-              <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+              <input
+                type="hidden"
+                name="_csrf_token"
+                value={Plug.CSRFProtection.get_csrf_token()}
+              />
               <input type="hidden" name="enabled" value="0" />
               <button type="submit" class="w-full text-left">Switch to old reader</button>
             </form>
@@ -45,30 +63,33 @@
            text — same scope, one story. Falls back to the overall manga
            percent when there's no per-chapter data. --%>
       <% resume_pct =
-        chapter_read_percent(resume.last_page, resume.last_page_fraction, resume.last_chapter_total_pages) ||
+        chapter_read_percent(
+          resume.last_page,
+          resume.last_page_fraction,
+          resume.last_chapter_total_pages
+        ) ||
           Roki.Manga.Library.chapter_progress_percent(resume) %>
-      <%
-        # Strip / manhwa mode → percent-left tail; paged mode →
-        # "Page N" when we have it; otherwise just the chapter
-        # (mirrors the manga details page label).
-        strip? = strip_mode?(resume.reading_mode)
-        pct_left =
-          strip? &&
-            percent_left(
-              resume.last_page,
-              resume.last_page_fraction,
-              resume.last_chapter_total_pages
-            )
+      <% # Strip / manhwa mode → percent-left tail; paged mode →
+      # "Page N" when we have it; otherwise just the chapter
+      # (mirrors the manga details page label).
+      strip? = strip_mode?(resume.reading_mode)
 
-        tail =
-          cond do
-            pct_left -> " · #{pct_left}% left"
-            !strip? && resume.last_page -> " · Page #{resume.last_page}"
-            true -> ""
-          end
+      pct_left =
+        strip? &&
+          percent_left(
+            resume.last_page,
+            resume.last_page_fraction,
+            resume.last_chapter_total_pages
+          )
 
-        resume_cover = cover_image_src(resume, @cover_paths, "medium")
-      %>
+      tail =
+        cond do
+          pct_left -> " · #{pct_left}% left"
+          !strip? && resume.last_page -> " · Page #{resume.last_page}"
+          true -> ""
+        end
+
+      resume_cover = cover_image_src(resume, @cover_paths, "medium") %>
       <%!-- The whole banner is a big continue-to-chapter target (the
            full-surface absolute link below, same pattern as the grid
            tiles) — tap anywhere, no precise aiming, mobile friendly.
@@ -83,13 +104,13 @@
           decoding="async"
           class="v2-hero-backdrop absolute inset-0 w-full h-full object-cover scale-110 blur-xl brightness-[0.35] saturate-150 transition-[filter] duration-300 group-hover:brightness-[0.45]"
         />
-        <div class="v2-hero-overlay absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent"></div>
+        <div class="v2-hero-overlay absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent">
+        </div>
         <a
           href={~p"/manga/#{resume.source}/#{resume.slug}/#{resume.last_chapter}"}
           class="absolute inset-0 z-10"
           aria-label={"Continue #{resume.title} at chapter #{resume.last_chapter}"}
-        >
-        </a>
+        ></a>
         <div class="relative z-20 flex items-center gap-4 sm:gap-6 p-4 sm:p-6 pointer-events-none">
           <img
             src={resume_cover}
@@ -98,8 +119,12 @@
             class="w-24 sm:w-32 aspect-[3/4] rounded-xl object-cover shadow-2xl ring-1 ring-white/20 group-hover:ring-white/40 transition-all flex-shrink-0"
           />
           <div class="flex-1 min-w-0 text-white">
-            <p class="text-[11px] uppercase tracking-widest text-white/60 mb-1">Continue reading</p>
-            <h2 class="text-xl sm:text-3xl font-extrabold drop-shadow-md line-clamp-2">{resume.title}</h2>
+            <p class="text-[11px] uppercase tracking-widest text-white/60 mb-1">
+              Continue reading
+            </p>
+            <h2 class="text-xl sm:text-3xl font-extrabold drop-shadow-md line-clamp-2">
+              {resume.title}
+            </h2>
             <p class="text-sm text-white/70 mt-1 truncate">
               <%= if resume.max_chapter && resume.max_chapter != resume.last_chapter do %>
                 Rereading Ch. {resume.last_chapter}{tail}
@@ -112,23 +137,46 @@
               href={~p"/manga/manga2/#{resume.source}/#{resume.slug}"}
               class="btn btn-sm sm:btn-md rounded-full px-5 sm:px-7 mt-3 sm:mt-4 gap-2 pointer-events-auto bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-sm shadow-lg"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              ><path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              /></svg>
               Details
             </a>
           </div>
         </div>
-        <div :if={resume_pct} class="absolute bottom-0 left-0 z-20 h-1 bg-primary rounded-r-full pointer-events-none" style={"width: #{resume_pct}%"}></div>
+        <div
+          :if={resume_pct}
+          class="absolute bottom-0 left-0 z-20 h-1 bg-primary rounded-r-full pointer-events-none"
+          style={"width: #{resume_pct}%"}
+        >
+        </div>
       </div>
 
       <%= if @auto_resume do %>
         <dialog id="auto-resume-modal" class="modal cursor-pointer">
           <%= if @auto_resume_art_url do %>
-            <div class="fixed inset-0 z-[-1]" style={"background: url('#{@auto_resume_art_url}') center/cover no-repeat; opacity: 0.5;"}></div>
+            <div
+              class="fixed inset-0 z-[-1]"
+              style={"background: url('#{@auto_resume_art_url}') center/cover no-repeat; opacity: 0.5;"}
+            >
+            </div>
           <% end %>
           <div class="modal-box pointer-events-none">
             <h3 class="text-lg font-bold mb-2">Auto-resume</h3>
             <p>
-              Resuming <strong>{resume.title}</strong> (Chapter {resume.last_chapter}) in <span id="auto-resume-countdown">{@auto_resume_timer}</span> seconds...
+              Resuming <strong>{resume.title}</strong>
+              (Chapter {resume.last_chapter}) in
+              <span id="auto-resume-countdown">{@auto_resume_timer}</span>
+              seconds...
             </p>
             <p class="text-sm text-base-content/50 mt-3">Click anywhere to cancel</p>
           </div>
@@ -261,8 +309,7 @@
           onclick="toggleReading()"
           title={"#{@chip_counts.reading} titles"}
         >
-          Reading
-          <span class="chip-count hidden"></span>
+          Reading <span class="chip-count hidden"></span>
         </button>
         <button
           type="button"
@@ -270,8 +317,7 @@
           onclick="toggleCaughtUp()"
           title={"#{@chip_counts.caughtup} titles"}
         >
-          Caught Up
-          <span class="chip-count hidden"></span>
+          Caught Up <span class="chip-count hidden"></span>
         </button>
         <button
           type="button"
@@ -279,8 +325,7 @@
           onclick="toggleMangaToRead()"
           title={"#{@chip_counts.mangatoread} titles"}
         >
-          Manga To Read
-          <span class="chip-count hidden"></span>
+          Manga To Read <span class="chip-count hidden"></span>
         </button>
         <button
           type="button"
@@ -288,8 +333,7 @@
           onclick="toggleManhwaToRead()"
           title={"#{@chip_counts.manhwatoread} titles"}
         >
-          Manhwa To Read
-          <span class="chip-count hidden"></span>
+          Manhwa To Read <span class="chip-count hidden"></span>
         </button>
         <button
           type="button"
@@ -297,8 +341,7 @@
           onclick="toggleCompleted()"
           title={"#{@chip_counts.completed} titles"}
         >
-          Completed
-          <span class="chip-count hidden"></span>
+          Completed <span class="chip-count hidden"></span>
         </button>
         <%= for cat <- @categories do %>
           <button
@@ -309,17 +352,35 @@
             title={"#{Map.get(@category_counts, cat.id, 0)} titles"}
           >
             {cat.name}
-            <span class={["chip-count", @active_category != cat.id && "hidden"]}>{Map.get(@category_counts, cat.id, 0)}</span>
+            <span class={["chip-count", @active_category != cat.id && "hidden"]}>{Map.get(
+              @category_counts,
+              cat.id,
+              0
+            )}</span>
           </button>
           <button
             type="button"
             data-bulk-for={cat.id}
-            class={["btn btn-sm btn-circle btn-ghost bulk-add-btn", if(@active_category != cat.id, do: "hidden", else: "")]}
+            class={[
+              "btn btn-sm btn-circle btn-ghost bulk-add-btn",
+              if(@active_category != cat.id, do: "hidden", else: "")
+            ]}
             onclick="openBulkAddModal()"
             title="Add manga to category"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 4v16m8-8H4"
+              />
             </svg>
           </button>
         <% end %>
@@ -338,24 +399,56 @@
         title="Sync chapters on all caught-up titles"
         onclick="syncCaughtUp()"
       >
-        <svg id="caughtup-sync-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        <svg
+          id="caughtup-sync-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        ><path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+        /></svg>
         <span id="caughtup-sync-spinner" class="loading loading-spinner loading-xs hidden"></span>
         <span class="hidden sm:inline">Sync</span>
       </button>
       <div class="dropdown dropdown-end flex-shrink-0">
         <button id="sort-filter-btn" tabindex="0" class="btn btn-sm btn-ghost gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
+            />
           </svg>
           <span id="sort-filter-label" class="hidden sm:inline">Sort</span>
         </button>
-        <ul tabindex="0" class="dropdown-content z-[1] menu menu-sm p-2 shadow bg-base-200 rounded-box w-52">
+        <ul
+          tabindex="0"
+          class="dropdown-content z-[1] menu menu-sm p-2 shadow bg-base-200 rounded-box w-52"
+        >
           <li class="menu-title text-xs">Sort by</li>
           <li><a onclick="setSort('updated_at')" data-sort="updated_at">Last Read</a></li>
-          <li><a onclick="setSort('newest_chapter_at')" data-sort="newest_chapter_at">Newest Chapter</a></li>
+          <li>
+            <a onclick="setSort('newest_chapter_at')" data-sort="newest_chapter_at">Newest Chapter</a>
+          </li>
           <li><a onclick="setSort('inserted_at')" data-sort="inserted_at">Date Added</a></li>
-          <li><a onclick="setSort('chapters_desc')" data-sort="chapters_desc">Most Chapters</a></li>
-          <li><a onclick="setSort('chapters_asc')" data-sort="chapters_asc">Fewest Chapters</a></li>
+          <li>
+            <a onclick="setSort('chapters_desc')" data-sort="chapters_desc">Most Chapters</a>
+          </li>
+          <li>
+            <a onclick="setSort('chapters_asc')" data-sort="chapters_asc">Fewest Chapters</a>
+          </li>
           <li><a onclick="setSort('catch_up')" data-sort="catch_up">Fastest to Catch Up</a></li>
           <li class="menu-title text-xs mt-1">Filter</li>
           <li><a onclick="setFilter('all')" data-filter="all">All</a></li>
@@ -363,17 +456,28 @@
           <li><a onclick="setFilter('unread')" data-filter="unread">Unread</a></li>
           <li class="menu-title text-xs mt-1">Series status</li>
           <li><a onclick="setPublicationStatus('any')" data-pub-status="any">Any</a></li>
-          <li><a onclick="setPublicationStatus('ongoing')" data-pub-status="ongoing">Ongoing</a></li>
-          <li><a onclick="setPublicationStatus('completed')" data-pub-status="completed">Completed</a></li>
+          <li>
+            <a onclick="setPublicationStatus('ongoing')" data-pub-status="ongoing">Ongoing</a>
+          </li>
+          <li>
+            <a onclick="setPublicationStatus('completed')" data-pub-status="completed">Completed</a>
+          </li>
           <li><a onclick="setPublicationStatus('hiatus')" data-pub-status="hiatus">Hiatus</a></li>
-          <li><a onclick="setPublicationStatus('unknown')" data-pub-status="unknown">Unknown</a></li>
+          <li>
+            <a onclick="setPublicationStatus('unknown')" data-pub-status="unknown">Unknown</a>
+          </li>
           <li class="menu-title text-xs mt-1">View · per row</li>
           <%!-- Edits the setting for the device you're on (mobile
                <1024px / desktop) — each remembers its own value. --%>
           <li>
             <div class="flex items-center gap-0.5">
               <%= for n <- 2..7 do %>
-                <button type="button" class="btn btn-xs btn-ghost btn-square" data-grid-cols={n} onclick={"setGridCols(#{n})"}>{n}</button>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost btn-square"
+                  data-grid-cols={n}
+                  onclick={"setGridCols(#{n})"}
+                >{n}</button>
               <% end %>
             </div>
           </li>
@@ -388,7 +492,20 @@
            links to the details page; the pill (Continue/Start) sits
            above that link via z-index. data-key drives the FLIP
            reorder animation. --%>
-      <div :for={manga <- @saved_manga} class="group relative rounded-xl overflow-hidden bg-base-300 animate-pulse cover-shell shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 aspect-[3/4]" data-key={"#{manga.source}:#{manga.slug}"} data-inserted-at={manga.inserted_at} data-updated-at={manga.updated_at} data-newest-chapter-at={manga.newest_chapter_at} data-last-chapter={manga.last_chapter} data-total-chapters={manga.total_chapters} data-last-chapter-number={manga.last_chapter_number} data-completed={to_string(manga.completed || false)} data-kind={tierlist_kind(manga)} data-publication-status={publication_status(manga, @publication_statuses)}>
+      <div
+        :for={manga <- @saved_manga}
+        class="group relative rounded-xl overflow-hidden bg-base-300 animate-pulse cover-shell shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 aspect-[3/4]"
+        data-key={"#{manga.source}:#{manga.slug}"}
+        data-inserted-at={manga.inserted_at}
+        data-updated-at={manga.updated_at}
+        data-newest-chapter-at={manga.newest_chapter_at}
+        data-last-chapter={manga.last_chapter}
+        data-total-chapters={manga.total_chapters}
+        data-last-chapter-number={manga.last_chapter_number}
+        data-completed={to_string(manga.completed || false)}
+        data-kind={tierlist_kind(manga)}
+        data-publication-status={publication_status(manga, @publication_statuses)}
+      >
         <img
           src={cover_image_src(manga, @cover_paths, "medium")}
           alt={manga.title}
@@ -398,24 +515,51 @@
           onload="this.parentElement.classList.remove('animate-pulse','bg-base-300')"
           onerror="this.parentElement.classList.remove('animate-pulse')"
         />
-        <a href={~p"/manga/manga2/#{manga.source}/#{manga.slug}"} class="absolute inset-0 z-10" aria-label={manga.title}></a>
-        <% chapter_pct = chapter_read_percent(manga.last_page, manga.last_page_fraction, manga.last_chapter_total_pages) %>
+        <a
+          href={~p"/manga/manga2/#{manga.source}/#{manga.slug}"}
+          class="absolute inset-0 z-10"
+          aria-label={manga.title}
+        ></a>
+        <% chapter_pct =
+          chapter_read_percent(
+            manga.last_page,
+            manga.last_page_fraction,
+            manga.last_chapter_total_pages
+          ) %>
         <%!-- Both corner chips live in ONE flex row pinned across the
              card top, so they're always on exactly the same level. The
              comment chip carries ml-auto so it hugs the right edge even
              when there's no chapter chip on the left. --%>
         <div class="absolute top-1 left-1 right-1 z-20 flex items-center gap-1 pointer-events-none">
-          <span :if={manga.last_chapter} class="badge badge-sm bg-black/45 backdrop-blur-md border-white/15 text-white/90 font-semibold chapter-progress" style={if chapter_pct, do: "--progress: #{chapter_pct}%"}>
-            {manga.last_chapter}<%= if manga.max_chapter && manga.max_chapter != manga.last_chapter do %>
+          <span
+            :if={manga.last_chapter}
+            class="badge badge-sm bg-black/45 backdrop-blur-md border-white/15 text-white/90 font-semibold chapter-progress"
+            style={if chapter_pct, do: "--progress: #{chapter_pct}%"}
+          >
+            {manga.last_chapter}
+            <%= if manga.max_chapter && manga.max_chapter != manga.last_chapter do %>
               <span class="opacity-50">&nbsp;/ {manga.max_chapter}</span>
             <% else %>
               <% total = manga.last_chapter_number || manga.total_chapters %>
-              <%= if total do %><span class="opacity-50">&nbsp;/ {total}</span><% end %>
+              <%= if total do %>
+                <span class="opacity-50">&nbsp;/ {total}</span>
+              <% end %>
             <% end %>
           </span>
           <% count = Map.get(@comment_counts, {manga.source, manga.slug}, 0) %>
           <span :if={count > 0} class="badge badge-sm badge-primary gap-1 ml-auto">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            ><path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+            /></svg>
             {count}
           </span>
         </div>
@@ -424,16 +568,38 @@
           <div class="flex items-center justify-end gap-2 mt-1.5">
             <%= if manga.completed do %>
               <span class="badge badge-sm badge-success gap-1 flex-shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-3 w-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M5 13l4 4L19 7"
+                /></svg>
                 Done
               </span>
             <% else %>
               <%= if manga.last_chapter do %>
                 <a
                   href={~p"/manga/#{manga.source}/#{manga.slug}/#{manga.last_chapter}"}
-                  class={["btn btn-xs rounded-full px-3 gap-1 flex-shrink-0 shadow-md pointer-events-auto", if(manga.max_chapter && manga.max_chapter != manga.last_chapter, do: "btn-secondary", else: "btn-primary")]}
+                  class={[
+                    "btn btn-xs rounded-full px-3 gap-1 flex-shrink-0 shadow-md pointer-events-auto",
+                    if(manga.max_chapter && manga.max_chapter != manga.last_chapter,
+                      do: "btn-secondary",
+                      else: "btn-primary"
+                    )
+                  ]}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-3 w-3"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  ><path d="M8 5v14l11-7z" /></svg>
                   {manga.last_chapter}
                 </a>
               <% else %>
@@ -447,8 +613,17 @@
             <% end %>
           </div>
         </div>
-        <% pct = if manga.completed, do: 100, else: Roki.Manga.Library.chapter_progress_percent(manga) %>
-        <div :if={pct} class={["absolute bottom-0 left-0 z-30 h-[3px] pointer-events-none", if(manga.completed, do: "bg-success", else: "bg-primary")]} style={"width: #{pct}%"}></div>
+        <% pct =
+          if manga.completed, do: 100, else: Roki.Manga.Library.chapter_progress_percent(manga) %>
+        <div
+          :if={pct}
+          class={[
+            "absolute bottom-0 left-0 z-30 h-[3px] pointer-events-none",
+            if(manga.completed, do: "bg-success", else: "bg-primary")
+          ]}
+          style={"width: #{pct}%"}
+        >
+        </div>
       </div>
     </div>
     <div id="manga-empty" class="hidden text-center py-16">
@@ -459,10 +634,17 @@
       <%!-- Category filter chips when filtering with no results --%>
       <div class="flex items-center gap-2 mb-4">
         <%= if @categories != [] do %>
-          <div id="category-chips" class="flex items-center gap-2 overflow-x-auto pb-1 flex-1 min-w-0">
-            <button type="button" class="h2-chip cat-chip" onclick="filterCategory(null)" title={"#{@chip_counts.all} titles"}>
-              All
-              <span class="chip-count hidden">{@chip_counts.all}</span>
+          <div
+            id="category-chips"
+            class="flex items-center gap-2 overflow-x-auto pb-1 flex-1 min-w-0"
+          >
+            <button
+              type="button"
+              class="h2-chip cat-chip"
+              onclick="filterCategory(null)"
+              title={"#{@chip_counts.all} titles"}
+            >
+              All <span class="chip-count hidden">{@chip_counts.all}</span>
             </button>
             <%= for cat <- @categories do %>
               <button
@@ -473,17 +655,35 @@
                 title={"#{Map.get(@category_counts, cat.id, 0)} titles"}
               >
                 {cat.name}
-                <span class={["chip-count", @active_category != cat.id && "hidden"]}>{Map.get(@category_counts, cat.id, 0)}</span>
+                <span class={["chip-count", @active_category != cat.id && "hidden"]}>{Map.get(
+                  @category_counts,
+                  cat.id,
+                  0
+                )}</span>
               </button>
               <button
                 type="button"
                 data-bulk-for={cat.id}
-                class={["btn btn-sm btn-circle btn-ghost bulk-add-btn", if(@active_category != cat.id, do: "hidden", else: "")]}
+                class={[
+                  "btn btn-sm btn-circle btn-ghost bulk-add-btn",
+                  if(@active_category != cat.id, do: "hidden", else: "")
+                ]}
                 onclick="openBulkAddModal()"
                 title="Add manga to category"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 4v16m8-8H4"
+                  />
                 </svg>
               </button>
             <% end %>
@@ -493,18 +693,38 @@
         <% end %>
         <div class="dropdown dropdown-end flex-shrink-0">
           <button tabindex="0" class="btn btn-sm btn-ghost gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
+              />
             </svg>
             <span class="hidden sm:inline">Sort</span>
           </button>
-          <ul tabindex="0" class="dropdown-content z-[1] menu menu-sm p-2 shadow bg-base-200 rounded-box w-52">
+          <ul
+            tabindex="0"
+            class="dropdown-content z-[1] menu menu-sm p-2 shadow bg-base-200 rounded-box w-52"
+          >
             <li class="menu-title text-xs">Sort by</li>
             <li><a onclick="setSort('updated_at')" data-sort="updated_at">Last Read</a></li>
-            <li><a onclick="setSort('newest_chapter_at')" data-sort="newest_chapter_at">Newest Chapter</a></li>
+            <li>
+              <a onclick="setSort('newest_chapter_at')" data-sort="newest_chapter_at">Newest Chapter</a>
+            </li>
             <li><a onclick="setSort('inserted_at')" data-sort="inserted_at">Date Added</a></li>
-            <li><a onclick="setSort('chapters_desc')" data-sort="chapters_desc">Most Chapters</a></li>
-            <li><a onclick="setSort('chapters_asc')" data-sort="chapters_asc">Fewest Chapters</a></li>
+            <li>
+              <a onclick="setSort('chapters_desc')" data-sort="chapters_desc">Most Chapters</a>
+            </li>
+            <li>
+              <a onclick="setSort('chapters_asc')" data-sort="chapters_asc">Fewest Chapters</a>
+            </li>
             <li><a onclick="setSort('catch_up')" data-sort="catch_up">Fastest to Catch Up</a></li>
             <li class="menu-title text-xs mt-1">Filter</li>
             <li><a onclick="setFilter('all')" data-filter="all">All</a></li>
@@ -536,7 +756,11 @@
     <div id="bulk-add-loading" class="flex justify-center py-8">
       <span class="loading loading-spinner loading-md"></span>
     </div>
-    <div id="bulk-add-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[70vh] overflow-y-auto"></div>
+    <div
+      id="bulk-add-list"
+      class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[70vh] overflow-y-auto"
+    >
+    </div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>

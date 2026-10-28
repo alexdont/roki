@@ -9,7 +9,8 @@ defmodule Roki.Manga.Atsumaru do
         "q" => query,
         "query_by" => "title,englishTitle,otherNames,authors",
         "query_by_weights" => "4,3,2,1",
-        "include_fields" => "id,title,englishTitle,poster,posterSmall,posterMedium,type,isAdult,status,year",
+        "include_fields" =>
+          "id,title,englishTitle,poster,posterSmall,posterMedium,type,isAdult,status,year",
         "limit" => "12",
         "num_typos" => "4,3,2,1"
       })
@@ -147,7 +148,8 @@ defmodule Roki.Manga.Atsumaru do
       reading_mode: detect_reading_mode(type),
       written_by: format_authors(data["authors"]),
       illustrated_by: nil,
-      year: if(data["released"], do: to_string(DateTime.from_unix!(div(data["released"], 1000)).year)),
+      year:
+        if(data["released"], do: to_string(DateTime.from_unix!(div(data["released"], 1000)).year)),
       genres: Enum.map(data["genres"] || [], & &1["name"]),
       synopsis: data["synopsis"] || "",
       chapters: chapter_numbers,
@@ -182,6 +184,7 @@ defmodule Roki.Manga.Atsumaru do
 
   defp chapter_number_string(ch) do
     num = ch["number"]
+
     if is_float(num) and num != trunc(num) do
       to_string(num)
     else
@@ -205,6 +208,7 @@ defmodule Roki.Manga.Atsumaru do
   end
 
   defp poster_url(nil), do: nil
+
   defp poster_url(path) do
     if String.starts_with?(path, "/") do
       @base_url <> path
@@ -218,11 +222,13 @@ defmodule Roki.Manga.Atsumaru do
   end
 
   defp decode(body) when is_map(body), do: body
+
   defp decode(body) when is_binary(body) do
     case Jason.decode(body) do
       {:ok, data} -> data
       _ -> %{}
     end
   end
+
   defp decode(_), do: %{}
 end

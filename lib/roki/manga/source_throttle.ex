@@ -65,7 +65,8 @@ defmodule Roki.Manga.SourceThrottle do
 
   @impl true
   def init(source) do
-    {:ok, %{source: source, last_request: System.monotonic_time(:millisecond) - 5000}, @idle_timeout}
+    {:ok, %{source: source, last_request: System.monotonic_time(:millisecond) - 5000},
+     @idle_timeout}
   end
 
   @impl true

@@ -4,7 +4,11 @@ defmodule RokiWeb.Live.MangaReaderLive do
   alias Roki.Manga.{Sources, Library}
 
   @impl true
-  def mount(%{"source" => source, "slug" => slug, "chapter" => chapter} = params, _session, socket) do
+  def mount(
+        %{"source" => source, "slug" => slug, "chapter" => chapter} = params,
+        _session,
+        socket
+      ) do
     with true <- Sources.valid?(source),
          mod when not is_nil(mod) <- Sources.module(source) do
       user = socket.assigns.phoenix_kit_current_scope.user
@@ -14,14 +18,18 @@ defmodule RokiWeb.Live.MangaReaderLive do
           %{"sq" => q} when q != "" ->
             query = if params["ss"], do: %{q: q, source: params["ss"]}, else: %{q: q}
             ~p"/manga/search?#{query}"
-          _ -> nil
+
+          _ ->
+            nil
         end
 
       search_params =
         case params do
           %{"sq" => q} when q != "" ->
             if params["ss"], do: %{sq: q, ss: params["ss"]}, else: %{sq: q}
-          _ -> %{}
+
+          _ ->
+            %{}
         end
 
       saved_manga = if user, do: Library.get_saved_manga(user.uuid, source, slug)
@@ -40,14 +48,21 @@ defmodule RokiWeb.Live.MangaReaderLive do
 
       reading_direction =
         cond do
-          saved_manga && saved_manga.reading_direction -> saved_manga.reading_direction
-          metadata && metadata.data["reading_direction"] -> normalize_reading_direction(metadata.data["reading_direction"])
-          true -> user_default_direction
+          saved_manga && saved_manga.reading_direction ->
+            saved_manga.reading_direction
+
+          metadata && metadata.data["reading_direction"] ->
+            normalize_reading_direction(metadata.data["reading_direction"])
+
+          true ->
+            user_default_direction
         end
 
       chapters =
         case metadata do
-          %{data: %{"chapters" => ch}} when ch != [] -> ch
+          %{data: %{"chapters" => ch}} when ch != [] ->
+            ch
+
           _ ->
             Roki.Manga.Cache.fetch({source, slug, :chapters}, :timer.hours(1), fn ->
               case mod.get_manga(slug) do
@@ -64,9 +79,15 @@ defmodule RokiWeb.Live.MangaReaderLive do
       user_id = if user, do: user.uuid, else: "anon"
 
       chapter_images_result =
-        Roki.Manga.SourceThrottle.throttled_fetch(source, user_id, {source, slug, chapter, :images}, :timer.hours(6), fn ->
-          mod.get_chapter_images(slug, chapter)
-        end)
+        Roki.Manga.SourceThrottle.throttled_fetch(
+          source,
+          user_id,
+          {source, slug, chapter, :images},
+          :timer.hours(6),
+          fn ->
+            mod.get_chapter_images(slug, chapter)
+          end
+        )
 
       case chapter_images_result do
         {:ok, images} ->
@@ -79,6 +100,7 @@ defmodule RokiWeb.Live.MangaReaderLive do
                   {n, ""} when n >= 1 -> n
                   _ -> 1
                 end
+
               _ ->
                 if saved_manga && saved_manga.last_chapter == chapter && saved_manga.last_page do
                   saved_manga.last_page
@@ -95,8 +117,10 @@ defmodule RokiWeb.Live.MangaReaderLive do
 
           {tap_zone_desktop, tap_zone_mobile} =
             if saved_manga do
-              {saved_manga.tap_zone_preset_desktop || saved_manga.tap_zone_preset || user_default_tap_zone,
-               saved_manga.tap_zone_preset_mobile || saved_manga.tap_zone_preset || user_default_tap_zone}
+              {saved_manga.tap_zone_preset_desktop || saved_manga.tap_zone_preset ||
+                 user_default_tap_zone,
+               saved_manga.tap_zone_preset_mobile || saved_manga.tap_zone_preset ||
+                 user_default_tap_zone}
             else
               {user_default_tap_zone, user_default_tap_zone}
             end
@@ -109,15 +133,18 @@ defmodule RokiWeb.Live.MangaReaderLive do
 
           default_smart_scroll = (user.custom_fields || %{})["default_smart_scroll"] == true
 
-          smart_scroll_config = (user.custom_fields || %{})["smart_scroll_config"] || %{
-            "jump_style" => "smooth",
-            "scan_distance" => 3,
-            "long_panel_steps" => true,
-            "gutter_tolerance" => 300,
-            "min_gutter_width" => 50
-          }
+          smart_scroll_config =
+            (user.custom_fields || %{})["smart_scroll_config"] ||
+              %{
+                "jump_style" => "smooth",
+                "scan_distance" => 3,
+                "long_panel_steps" => true,
+                "gutter_tolerance" => 300,
+                "min_gutter_width" => 50
+              }
 
-          chapter_annotation_counts = Library.count_annotations_by_chapter(source, slug, user.uuid)
+          chapter_annotation_counts =
+            Library.count_annotations_by_chapter(source, slug, user.uuid)
 
           device_mode =
             case params["device"] do
@@ -179,9 +206,23 @@ defmodule RokiWeb.Live.MangaReaderLive do
     <div id="comment-bridge" phx-hook="CommentBridge"></div>
 
     <%= if @comment_modal_open do %>
-      <div id="comment-modal-root" phx-hook="CommentModalScrollLock" class="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center">
-        <div id="comment-modal-backdrop" class="fixed inset-0 bg-black/50" phx-click="close_comment_modal"></div>
-        <div id="comment-modal-scroll" phx-hook="CommentModalScroll" class="relative z-10 w-full sm:max-w-lg max-h-[85vh] overflow-y-auto bg-base-100 rounded-t-2xl sm:rounded-2xl shadow-2xl" style="overscroll-behavior: contain; touch-action: auto;">
+      <div
+        id="comment-modal-root"
+        phx-hook="CommentModalScrollLock"
+        class="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center"
+      >
+        <div
+          id="comment-modal-backdrop"
+          class="fixed inset-0 bg-black/50"
+          phx-click="close_comment_modal"
+        >
+        </div>
+        <div
+          id="comment-modal-scroll"
+          phx-hook="CommentModalScroll"
+          class="relative z-10 w-full sm:max-w-lg max-h-[85vh] overflow-y-auto bg-base-100 rounded-t-2xl sm:rounded-2xl shadow-2xl"
+          style="overscroll-behavior: contain; touch-action: auto;"
+        >
           <div class="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-base-100 border-b border-base-300 rounded-t-2xl">
             <h3 class="font-bold text-lg">Comments</h3>
             <button phx-click="close_comment_modal" class="btn btn-ghost btn-sm btn-circle">✕</button>
@@ -202,7 +243,10 @@ defmodule RokiWeb.Live.MangaReaderLive do
                       title={c}
                       class={[
                         "w-6 h-6 rounded-full cursor-pointer border-2",
-                        if(c == @comment_annotation_color, do: "border-base-content", else: "border-transparent")
+                        if(c == @comment_annotation_color,
+                          do: "border-base-content",
+                          else: "border-transparent"
+                        )
                       ]}
                       style={"background: #{ann_color_rgb(c)}"}
                       onclick={"window.updateAnnotationField(#{Jason.encode!(to_string(@comment_annotation_id))}, #{Jason.encode!(@source)}, #{Jason.encode!(@slug)}, #{Jason.encode!(@comment_chapter)}, {color: #{Jason.encode!(c)}})"}
@@ -257,7 +301,9 @@ defmodule RokiWeb.Live.MangaReaderLive do
   def handle_event("open_comment_modal", params, socket) do
     resource_uuid =
       params["comment_uuid"] ||
-        Library.deterministic_uuid("#{socket.assigns.source}:#{socket.assigns.slug}:#{params["chapter"]}:#{params["page"]}")
+        Library.deterministic_uuid(
+          "#{socket.assigns.source}:#{socket.assigns.slug}:#{params["chapter"]}:#{params["page"]}"
+        )
 
     is_own = params["is_own"] in [true, "true"]
 
@@ -292,7 +338,8 @@ defmodule RokiWeb.Live.MangaReaderLive do
       {:noreply,
        assign(socket,
          comment_annotation_color: params["color"] || socket.assigns.comment_annotation_color,
-         comment_annotation_visibility: params["visibility"] || socket.assigns.comment_annotation_visibility
+         comment_annotation_visibility:
+           params["visibility"] || socket.assigns.comment_annotation_visibility
        )}
     else
       {:noreply, socket}
@@ -308,10 +355,17 @@ defmodule RokiWeb.Live.MangaReaderLive do
 
   defp normalize_reading_direction(dir) when is_binary(dir) do
     d = String.downcase(dir)
+
     cond do
-      String.contains?(d, "left") -> "ltr"
-      String.contains?(d, "manhwa") or String.contains?(d, "manhua") or String.contains?(d, "webtoon") -> "ltr"
-      true -> "rtl"
+      String.contains?(d, "left") ->
+        "ltr"
+
+      String.contains?(d, "manhwa") or String.contains?(d, "manhua") or
+          String.contains?(d, "webtoon") ->
+        "ltr"
+
+      true ->
+        "rtl"
     end
   end
 

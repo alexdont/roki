@@ -238,14 +238,6 @@ defmodule RokiWeb.MangaHTML do
   defdelegate chapter_sort_key(ch), to: Chapter, as: :sort_key
 
   @doc """
-  Returns the highest chapter number as an integer (floor), parsing the
-  highest-sorted chapter string for its numeric prefix. Returns nil when
-  no chapter parses cleanly — caller should fall back to `length/1`.
-
-  Used by the manga index header to display "133 Chapters" even when the
-  series has sub-chapters (`2.5`, `12.5`, …) that inflate the raw count.
-  """
-  @doc """
   Percent of the current chapter remaining for the resume label.
   Manhwa / strip readers show "12% left" instead of a page number, since
   per-image page numbers aren't meaningful in a long-form scroll context.
@@ -339,7 +331,9 @@ defmodule RokiWeb.MangaHTML do
 
     views =
       for {kind, items} <- [arcs: assigns.arcs, volumes: assigns.volumes], items != [] do
-        {folded, shown} = fold_read(arc_segments(items, assigns.chapters), read_through, current_num)
+        {folded, shown} =
+          fold_read(arc_segments(items, assigns.chapters), read_through, current_num)
+
         %{kind: kind, count: length(items), folded: folded, shown: shown}
       end
 
@@ -376,24 +370,46 @@ defmodule RokiWeb.MangaHTML do
           class="min-w-0 truncate rounded-full bg-base-content/5 px-1.5 sm:px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold text-base-content/60"
         >
           <span class="sm:hidden">{v.count}{if v.kind == :arcs, do: "a", else: "v"}·{length(@chapters)}ch</span>
-          <span class="hidden sm:inline">{v.count} {if v.kind == :arcs, do: "arcs", else: "volumes"} · {length(@chapters)} chapters</span>
+          <span class="hidden sm:inline">{v.count} {if v.kind == :arcs, do: "arcs", else: "volumes"} · {length(
+            @chapters
+          )} chapters</span>
         </span>
         <%!-- This section replaces the chapter list, so it carries the
              list's Refresh button: re-scrapes the source's chapters and
              re-pulls fabledex arcs + volumes (also in the ⋮ menu). --%>
-        <form :if={@saved} method="post" action={~p"/manga/#{@source}/#{@slug}/refresh"} class="shrink-0">
+        <form
+          :if={@saved}
+          method="post"
+          action={~p"/manga/#{@source}/#{@slug}/refresh"}
+          class="shrink-0"
+        >
           <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
           <button
             type="submit"
             class="btn btn-sm btn-circle sm:w-auto sm:px-3 sm:rounded-full bg-base-content/5 hover:bg-base-content/10 border-0 gap-1.5"
             title="Refresh chapters, arcs and volumes"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            ><path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            /></svg>
             <span class="hidden sm:inline">Refresh</span>
           </button>
         </form>
         <div class="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <div :if={length(@views) > 1} role="tablist" class="flex rounded-full bg-base-content/5 p-0.5 text-xs font-semibold">
+          <div
+            :if={length(@views) > 1}
+            role="tablist"
+            class="flex rounded-full bg-base-content/5 p-0.5 text-xs font-semibold"
+          >
             <button
               :for={{v, i} <- Enum.with_index(@views)}
               type="button"
@@ -402,7 +418,11 @@ defmodule RokiWeb.MangaHTML do
               aria-selected={to_string(i == 0)}
               class="rounded-full px-2 sm:px-3 py-1 text-base-content/60 aria-selected:bg-base-100 aria-selected:text-base-content aria-selected:shadow-sm"
             >
-              <%= if v.kind == :arcs do %>Arcs<% else %><span class="sm:hidden">Vols</span><span class="hidden sm:inline">Volumes</span><% end %>
+              <%= if v.kind == :arcs do %>
+                Arcs
+              <% else %>
+                <span class="sm:hidden">Vols</span><span class="hidden sm:inline">Volumes</span>
+              <% end %>
             </button>
           </div>
           <span class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider sm:tracking-widest text-base-content/40">
@@ -410,16 +430,43 @@ defmodule RokiWeb.MangaHTML do
           </span>
         </div>
       </div>
-      <ol :for={{v, i} <- Enum.with_index(@views)} data-story-view={v.kind} hidden={i > 0} class="flex flex-col gap-2">
+      <ol
+        :for={{v, i} <- Enum.with_index(@views)}
+        data-story-view={v.kind}
+        hidden={i > 0}
+        class="flex flex-col gap-2"
+      >
         <li :if={v.folded != []}>
           <%!-- Read arcs / volumes before the current one fold away like
                read chapters do; the chevron row opens them in place. --%>
           <details class="group/read">
             <summary class="arc-ch is-read is-row justify-center gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden group-open/read:hidden">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              ><path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              /></svg>
               <span>{folded_label(v.folded, v.kind)}</span>
               <span class="text-xs font-normal opacity-70">{length(v.folded)} read</span>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4 opacity-50"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              ><path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+              /></svg>
             </summary>
             <ol class="flex flex-col gap-2">
               <li :for={{seg, view} <- v.folded}>
@@ -457,7 +504,10 @@ defmodule RokiWeb.MangaHTML do
   # nothing to save.
   defp fold_read(segments, read_through, current_num) do
     viewed = Enum.map(segments, &{&1, segment_view(&1, read_through, current_num)})
-    {done, rest} = Enum.split_while(viewed, fn {seg, view} -> segment_done?(seg, view, read_through) end)
+
+    {done, rest} =
+      Enum.split_while(viewed, fn {seg, view} -> segment_done?(seg, view, read_through) end)
+
     if length(done) >= 2, do: {done, rest}, else: {[], viewed}
   end
 
@@ -550,17 +600,39 @@ defmodule RokiWeb.MangaHTML do
           class={["h-11 w-8 rounded object-cover shrink-0", @view.badge == :read && "opacity-60"]}
         />
         <span class={["min-w-0 flex-1", @view.badge == :read && "opacity-60"]}>
-          <span class={["block font-semibold text-sm sm:text-base truncate", @hide_title && "arc-spoiler"]}>
+          <span class={[
+            "block font-semibold text-sm sm:text-base truncate",
+            @hide_title && "arc-spoiler"
+          ]}>
             {@seg.arc.title}
           </span>
           <span class="block text-[11px] text-base-content/50">
-            <span class={@hide_shape && "arc-spoiler"}>Ch. {@seg.arc.from}–{@seg.arc.to}</span><span :if={@seg.arc[:released_on]}> · {String.slice(@seg.arc.released_on, 0, 4)}</span><span :if={@seg.arc.ongoing}> · ongoing</span><span :if={@seg.chapters == []}> · not on this source</span>
+            <span class={@hide_shape && "arc-spoiler"}>Ch. {@seg.arc.from}–{@seg.arc.to}</span><span :if={
+              @seg.arc[:released_on]
+            }> · {String.slice(@seg.arc.released_on, 0, 4)}</span><span :if={@seg.arc.ongoing}> · ongoing</span><span :if={
+              @seg.chapters == []
+            }> · not on this source</span>
           </span>
         </span>
         <span :if={@view.badge == :read} class="badge badge-sm badge-ghost shrink-0">✓ Read</span>
         <span :if={@view.badge == :current} class="badge badge-sm badge-primary shrink-0">Reading</span>
-        <span :if={@hide_title} class="shrink-0 text-base-content/40" title="Spoilers hidden until you get here">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        <span
+          :if={@hide_title}
+          class="shrink-0 text-base-content/40"
+          title="Spoilers hidden until you get here"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          ><path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+          /></svg>
         </span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -578,11 +650,13 @@ defmodule RokiWeb.MangaHTML do
           class="progress progress-primary w-full h-1.5"
           value={@current_num - @seg.arc.from}
           max={@seg.arc.to - @seg.arc.from + 1}
-        >
-        </progress>
+        ></progress>
         <p
           :if={@seg.arc && @seg.arc.description}
-          class={["text-sm text-base-content/70 leading-relaxed max-w-prose", @view.hide_description && "arc-spoiler"]}
+          class={[
+            "text-sm text-base-content/70 leading-relaxed max-w-prose",
+            @view.hide_description && "arc-spoiler"
+          ]}
         >
           {@seg.arc.description}
         </p>
@@ -617,7 +691,12 @@ defmodule RokiWeb.MangaHTML do
   # Chapter tiles (or title rows, once any chapter has a fabledex title)
   # for one arc / stray run. `locked` blurs the numbers too.
   defp arc_chapter_grid(assigns) do
-    assigns = assign(assigns, :rows?, Enum.any?(assigns.chapters, &chapter_title(assigns.chapter_titles, &1)))
+    assigns =
+      assign(
+        assigns,
+        :rows?,
+        Enum.any?(assigns.chapters, &chapter_title(assigns.chapter_titles, &1))
+      )
 
     ~H"""
     <div
@@ -632,12 +711,18 @@ defmodule RokiWeb.MangaHTML do
         :for={ch <- @chapters}
         href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
         class={["arc-ch", @rows? && "is-row", "is-#{chapter_state(ch, @last_chapter, @max_chapter)}"]}
-        style={if ch == @last_chapter && @current_chapter_percent, do: "--progress: #{@current_chapter_percent}%"}
+        style={
+          if ch == @last_chapter && @current_chapter_percent,
+            do: "--progress: #{@current_chapter_percent}%"
+        }
       >
         <span class={["shrink-0", @locked && "arc-spoiler"]}>{ch}</span>
         <span
           :if={@rows? && chapter_title(@chapter_titles, ch)}
-          class={["truncate font-normal opacity-80", chapter_spoiler?(ch, @read_through) && "arc-spoiler"]}
+          class={[
+            "truncate font-normal opacity-80",
+            chapter_spoiler?(ch, @read_through) && "arc-spoiler"
+          ]}
         >
           {chapter_title(@chapter_titles, ch)}
         </span>
@@ -686,7 +771,9 @@ defmodule RokiWeb.MangaHTML do
 
     # Arcs before a stray run that starts at the same number; numberless
     # runs (extras, specials) go last.
-    Enum.sort_by(arc_segs ++ stray_segs, fn s -> {s.start || :infinity, if(s.arc, do: 0, else: 1)} end)
+    Enum.sort_by(arc_segs ++ stray_segs, fn s ->
+      {s.start || :infinity, if(s.arc, do: 0, else: 1)}
+    end)
   end
 
   # Spoiler / badge state for one segment.
@@ -908,13 +995,6 @@ defmodule RokiWeb.MangaHTML do
     {weeks, max_seconds}
   end
 
-  @doc """
-  Cover thumbnails for a calendar day cell: the day's series in
-  longest-read-first order (the entries are already sorted), plus any
-  milestone-only series (completed without reading that day), capped
-  at `limit`. A cover carrying a milestone badge is never cut off —
-  it displaces the last badge-less cover instead.
-  """
   @doc """
   Sized cover URL for a series on the history page: the stored file's
   `variant` when we have one, else the source image via the proxy,
@@ -1830,25 +1910,11 @@ defmodule RokiWeb.MangaHTML do
     "data:image/svg+xml;utf8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%2F%3E"
   end
 
-  def fresco_image_window_radius, do: @window
-
   defp page_width(%{width: w}) when is_number(w) and w > 0, do: trunc(w)
   defp page_width(_), do: 1000
 
   defp page_height(%{height: h}) when is_number(h) and h > 0, do: trunc(h)
   defp page_height(_), do: 1500
-
-  # Same white-aspect-matched SVG production uses for cover-facing
-  # blanks — used by fresco_canvas/4 above.
-  defp blank_data_uri(%{width: w, height: h}) when is_number(w) and is_number(h) do
-    svg =
-      "<svg xmlns='http://www.w3.org/2000/svg' width='#{trunc(w)}' height='#{trunc(h)}'>" <>
-        "<rect width='100%' height='100%' fill='white'/></svg>"
-
-    "data:image/svg+xml;utf8," <> URI.encode(svg)
-  end
-
-  defp blank_data_uri(_), do: blank_data_uri(%{width: 1000, height: 1500})
 
   @doc """
   Build a URL for the same chapter+page with overridden flags. Used by

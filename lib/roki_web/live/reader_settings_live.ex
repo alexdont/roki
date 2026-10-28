@@ -25,7 +25,6 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
     {:noreply, assign(socket, :show_account_settings, !socket.assigns.show_account_settings)}
   end
 
-
   @impl true
   def handle_info({:phoenix_kit_user_updated, updated_user}, socket) do
     {:noreply, assign(socket, :user, updated_user)}
@@ -40,7 +39,9 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
         <div class="flex items-center gap-2">
           <%= if @resume_manga do %>
             <a
-              href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+              href={
+                ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
+              }
               class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
             >
               ▶ Resume
@@ -48,14 +49,31 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
           <% end %>
           <RokiWeb.Layouts.theme_toggle />
           <RokiWeb.Layouts.notifications_bell parent={@socket} scope={@phoenix_kit_current_scope} />
-          <RokiWeb.Layouts.user_menu scope={@phoenix_kit_current_scope} current_path="/manga/settings" />
+          <RokiWeb.Layouts.user_menu
+            scope={@phoenix_kit_current_scope}
+            current_path="/manga/settings"
+          />
           <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </div>
-            <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+            <ul
+              tabindex="0"
+              class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+            >
               <li><a href="/manga">Home</a></li>
               <li><a href="/manga/explore">Explore</a></li>
               <li><a href="/manga/history">History</a></li>
@@ -84,7 +102,13 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
             </p>
           </div>
           <%!-- Chevron indicator --%>
-          <svg xmlns="http://www.w3.org/2000/svg" class={"h-5 w-5 text-base-content/40 transition-transform #{if @show_account_settings, do: "rotate-180"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class={"h-5 w-5 text-base-content/40 transition-transform #{if @show_account_settings, do: "rotate-180"}"}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
@@ -107,12 +131,23 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
       <h2 class="text-lg font-semibold mb-4">Reader Preferences</h2>
 
       <div class="space-y-4">
-        <a href={~p"/manga/extensions"} class="flex items-center justify-between bg-base-200 rounded-xl p-4 hover:bg-base-300 transition-colors">
+        <a
+          href={~p"/manga/extensions"}
+          class="flex items-center justify-between bg-base-200 rounded-xl p-4 hover:bg-base-300 transition-colors"
+        >
           <div>
             <p class="font-medium">Source extensions</p>
-            <p class="text-sm text-base-content/60">Pick which external manga sources appear in Search and Explore (1,000+ community-maintained sites).</p>
+            <p class="text-sm text-base-content/60">
+              Pick which external manga sources appear in Search and Explore (1,000+ community-maintained sites).
+            </p>
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5 text-base-content/40"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
         </a>
@@ -123,7 +158,7 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
               <div class="flex items-center gap-2 mb-1">
                 <p class="font-medium">MyAnimeList</p>
                 <span :if={@mal_token} class="badge badge-success badge-sm">
-                  Connected<%= if @mal_token.remote_username, do: " · #{@mal_token.remote_username}" %>
+                  Connected{if @mal_token.remote_username, do: " · #{@mal_token.remote_username}"}
                 </span>
               </div>
               <p class="text-sm text-base-content/60">
@@ -153,7 +188,9 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
         <div class="flex items-center justify-between bg-base-200 rounded-xl p-4">
           <div>
             <p class="font-medium">Auto-resume</p>
-            <p class="text-sm text-base-content/60">When you open the Reader home page, automatically redirect to your last-read manga after a countdown.</p>
+            <p class="text-sm text-base-content/60">
+              When you open the Reader home page, automatically redirect to your last-read manga after a countdown.
+            </p>
           </div>
           <input
             type="checkbox"
@@ -165,12 +202,14 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
         <div class="flex items-center justify-between bg-base-200 rounded-xl p-4">
           <div>
             <p class="font-medium">Auto-resume timer</p>
-            <p class="text-sm text-base-content/60">How long to wait before auto-resuming your last read.</p>
+            <p class="text-sm text-base-content/60">
+              How long to wait before auto-resuming your last read.
+            </p>
           </div>
           <select id="auto-resume-timer-select" class="select select-bordered select-sm w-24">
             <% timer_val = (@user.custom_fields || %{})["auto_resume_timer"] || 5 %>
             <%= for s <- 2..10 do %>
-              <option value={s} selected={timer_val == s}><%= s %>s</option>
+              <option value={s} selected={timer_val == s}>{s}s</option>
             <% end %>
           </select>
         </div>
@@ -178,7 +217,9 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
           <div class="flex items-center justify-between mb-2">
             <div>
               <p class="font-medium">Auto-resume backdrop</p>
-              <p class="text-sm text-base-content/60">Custom image shown behind the auto-resume popup.</p>
+              <p class="text-sm text-base-content/60">
+                Custom image shown behind the auto-resume popup.
+              </p>
             </div>
           </div>
           <% art_uuid = (@user.custom_fields || %{})["auto_resume_art"] %>
@@ -190,17 +231,29 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
                   src={PhoenixKit.Modules.Storage.URLSigner.signed_url(art_uuid, "original")}
                   class="w-24 h-16 object-cover rounded-lg border border-base-content/10"
                 />
-                <button type="button" id="auto-resume-art-remove" class="btn btn-sm btn-error btn-outline">Remove</button>
+                <button
+                  type="button"
+                  id="auto-resume-art-remove"
+                  class="btn btn-sm btn-error btn-outline"
+                >Remove</button>
               </div>
             <% else %>
               <div id="auto-resume-art-preview-wrap" class="hidden flex items-center gap-3 mb-2">
-                <img id="auto-resume-art-preview" src="" class="w-24 h-16 object-cover rounded-lg border border-base-content/10" />
-                <button type="button" id="auto-resume-art-remove" class="btn btn-sm btn-error btn-outline">Remove</button>
+                <img
+                  id="auto-resume-art-preview"
+                  src=""
+                  class="w-24 h-16 object-cover rounded-lg border border-base-content/10"
+                />
+                <button
+                  type="button"
+                  id="auto-resume-art-remove"
+                  class="btn btn-sm btn-error btn-outline"
+                >Remove</button>
               </div>
             <% end %>
             <input type="file" id="auto-resume-art-input" accept="image/*" class="hidden" />
             <button type="button" id="auto-resume-art-upload" class="btn btn-sm btn-outline">
-              <%= if art_uuid, do: "Change Image", else: "Upload Image" %>
+              {if art_uuid, do: "Change Image", else: "Upload Image"}
             </button>
           </div>
         </div>
@@ -209,31 +262,78 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
           <p class="text-sm text-base-content/60 mb-3">Global default for all manga.</p>
           <% default_tap = (@user.custom_fields || %{})["default_tap_zone"] || "default" %>
           <div class="flex flex-row gap-3" id="default-tap-zone-presets">
-            <label class={"cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 #{if default_tap == "default", do: "border-primary bg-primary/5", else: "border-base-content/20 bg-transparent"} default-tap-zone-card"} data-preset="default">
-              <input type="radio" name="default_tap_zone" value="default" class="hidden" checked={default_tap == "default"} />
+            <label
+              class={"cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 #{if default_tap == "default", do: "border-primary bg-primary/5", else: "border-base-content/20 bg-transparent"} default-tap-zone-card"}
+              data-preset="default"
+            >
+              <input
+                type="radio"
+                name="default_tap_zone"
+                value="default"
+                class="hidden"
+                checked={default_tap == "default"}
+              />
               <div class="relative w-20 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-                <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-                <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-                <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">M</div>
-                <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">P</div>
+                <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                  N
+                </div>
+                <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                  N
+                </div>
+                <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">
+                  M
+                </div>
+                <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">
+                  P
+                </div>
               </div>
               <span class="text-xs font-medium">Default</span>
             </label>
-            <label class={"cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 #{if default_tap == "left_right", do: "border-primary bg-primary/5", else: "border-base-content/20 bg-transparent"} default-tap-zone-card"} data-preset="left_right">
-              <input type="radio" name="default_tap_zone" value="left_right" class="hidden" checked={default_tap == "left_right"} />
+            <label
+              class={"cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 #{if default_tap == "left_right", do: "border-primary bg-primary/5", else: "border-base-content/20 bg-transparent"} default-tap-zone-card"}
+              data-preset="left_right"
+            >
+              <input
+                type="radio"
+                name="default_tap_zone"
+                value="left_right"
+                class="hidden"
+                checked={default_tap == "left_right"}
+              />
               <div class="relative w-20 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-                <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">P</div>
-                <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
-                <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+                <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">
+                  P
+                </div>
+                <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">
+                  N
+                </div>
+                <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                  M
+                </div>
               </div>
               <span class="text-xs font-medium">Left / Right</span>
             </label>
-            <label class={"cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 #{if default_tap == "right_left", do: "border-primary bg-primary/5", else: "border-base-content/20 bg-transparent"} default-tap-zone-card"} data-preset="right_left">
-              <input type="radio" name="default_tap_zone" value="right_left" class="hidden" checked={default_tap == "right_left"} />
+            <label
+              class={"cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 #{if default_tap == "right_left", do: "border-primary bg-primary/5", else: "border-base-content/20 bg-transparent"} default-tap-zone-card"}
+              data-preset="right_left"
+            >
+              <input
+                type="radio"
+                name="default_tap_zone"
+                value="right_left"
+                class="hidden"
+                checked={default_tap == "right_left"}
+              />
               <div class="relative w-20 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
-                <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
-                <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">P</div>
-                <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+                <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">
+                  N
+                </div>
+                <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">
+                  P
+                </div>
+                <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">
+                  M
+                </div>
               </div>
               <span class="text-xs font-medium">Right / Left</span>
             </label>
@@ -241,17 +341,29 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
         </div>
         <div class="bg-base-200 rounded-xl p-4">
           <p class="font-medium mb-1">Default reading direction</p>
-          <p class="text-sm text-base-content/60 mb-3">Global default for new manga without a saved direction.</p>
+          <p class="text-sm text-base-content/60 mb-3">
+            Global default for new manga without a saved direction.
+          </p>
           <% default_dir = (@user.custom_fields || %{})["default_reading_direction"] || "rtl" %>
           <div class="flex flex-row gap-3" id="default-reading-direction-buttons">
-            <button type="button" data-direction="rtl" class={"btn btn-sm flex-1 #{if default_dir == "rtl", do: "btn-primary", else: "btn-ghost border-base-content/20"} default-dir-btn"}>RTL ←</button>
-            <button type="button" data-direction="ltr" class={"btn btn-sm flex-1 #{if default_dir == "ltr", do: "btn-primary", else: "btn-ghost border-base-content/20"} default-dir-btn"}>LTR →</button>
+            <button
+              type="button"
+              data-direction="rtl"
+              class={"btn btn-sm flex-1 #{if default_dir == "rtl", do: "btn-primary", else: "btn-ghost border-base-content/20"} default-dir-btn"}
+            >RTL ←</button>
+            <button
+              type="button"
+              data-direction="ltr"
+              class={"btn btn-sm flex-1 #{if default_dir == "ltr", do: "btn-primary", else: "btn-ghost border-base-content/20"} default-dir-btn"}
+            >LTR →</button>
           </div>
         </div>
         <div class="flex items-center justify-between bg-base-200 rounded-xl p-4">
           <div>
             <p class="font-medium">Default panel snap</p>
-            <p class="text-sm text-base-content/60">Enable panel snap (smart scroll) by default for new manga. Can be toggled per-manga in the reader.</p>
+            <p class="text-sm text-base-content/60">
+              Enable panel snap (smart scroll) by default for new manga. Can be toggled per-manga in the reader.
+            </p>
           </div>
           <input
             type="checkbox"
@@ -262,8 +374,12 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
         </div>
         <div class="flex items-center justify-between bg-base-200 rounded-xl p-4">
           <div>
-            <p class="font-medium">Smart panels <span class="badge badge-sm badge-warning align-middle">test</span></p>
-            <p class="text-sm text-base-content/60">Paged reader: Next zooms to each panel in reading order, centered and fully visible, and turns the page after the last one. Art and balloons spilling out of a panel stay in view.</p>
+            <p class="font-medium">
+              Smart panels <span class="badge badge-sm badge-warning align-middle">test</span>
+            </p>
+            <p class="text-sm text-base-content/60">
+              Paged reader: Next zooms to each panel in reading order, centered and fully visible, and turns the page after the last one. Art and balloons spilling out of a panel stay in view.
+            </p>
           </div>
           <input
             type="checkbox"
@@ -279,7 +395,9 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
         <div class="bg-base-200 rounded-xl p-4 space-y-4" id="default-page-padding-section">
           <div>
             <p class="font-medium">Default page padding</p>
-            <p class="text-sm text-base-content/60">Global default for the scroll (manhwa) reader. Shrinks the strip by this much, split evenly left and right. Can be overridden per-manga in the reader.</p>
+            <p class="text-sm text-base-content/60">
+              Global default for the scroll (manhwa) reader. Shrinks the strip by this much, split evenly left and right. Can be overridden per-manga in the reader.
+            </p>
           </div>
           <div :for={{form_factor, label} <- [{:desktop, "Desktop"}, {:mobile, "Mobile"}]}>
             <div class="flex items-center justify-between mb-1">
@@ -300,18 +418,28 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
             />
           </div>
         </div>
-        <% ssc = ((@user.custom_fields || %{})["smart_scroll_config"]) || %{} %>
+        <% ssc = (@user.custom_fields || %{})["smart_scroll_config"] || %{} %>
         <div class="bg-base-200 rounded-xl p-4 space-y-4" id="smart-scroll-config-section">
           <div>
             <p class="font-medium">Panel snap settings</p>
-            <p class="text-sm text-base-content/60">Global defaults for panel snap behavior. Can be overridden per-manga in the reader settings.</p>
+            <p class="text-sm text-base-content/60">
+              Global defaults for panel snap behavior. Can be overridden per-manga in the reader settings.
+            </p>
           </div>
           <div class="flex items-center justify-between">
             <p class="text-sm">Jump style</p>
             <% jump_val = ssc["jump_style"] || "smooth" %>
             <div class="flex flex-row gap-3" id="ssc-jump-style-buttons">
-              <button type="button" data-value="smooth" class={"btn btn-sm flex-1 #{if jump_val == "smooth", do: "btn-primary", else: "btn-ghost border-base-content/20"} ssc-jump-btn"}>Smooth</button>
-              <button type="button" data-value="instant" class={"btn btn-sm flex-1 #{if jump_val == "instant", do: "btn-primary", else: "btn-ghost border-base-content/20"} ssc-jump-btn"}>Instant</button>
+              <button
+                type="button"
+                data-value="smooth"
+                class={"btn btn-sm flex-1 #{if jump_val == "smooth", do: "btn-primary", else: "btn-ghost border-base-content/20"} ssc-jump-btn"}
+              >Smooth</button>
+              <button
+                type="button"
+                data-value="instant"
+                class={"btn btn-sm flex-1 #{if jump_val == "instant", do: "btn-primary", else: "btn-ghost border-base-content/20"} ssc-jump-btn"}
+              >Instant</button>
             </div>
           </div>
           <div class="flex items-center justify-between">
@@ -319,7 +447,7 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
             <% scan_val = ssc["scan_distance"] || 3 %>
             <select id="ssc-scan-distance" class="select select-bordered select-sm w-24">
               <%= for n <- 1..5 do %>
-                <option value={n} selected={scan_val == n}><%= n %>x</option>
+                <option value={n} selected={scan_val == n}>{n}x</option>
               <% end %>
             </select>
           </div>
@@ -351,7 +479,9 @@ defmodule RokiWeb.Live.ReaderSettingsLive do
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm">Min gutter width</p>
-              <p id="ssc-gutter-width-hint" class="text-xs text-base-content/50">Standard gutter width</p>
+              <p id="ssc-gutter-width-hint" class="text-xs text-base-content/50">
+                Standard gutter width
+              </p>
             </div>
             <% gutter_width_val = ssc["min_gutter_width"] || 50 %>
             <select id="ssc-min-gutter-width" class="select select-bordered select-sm w-32">

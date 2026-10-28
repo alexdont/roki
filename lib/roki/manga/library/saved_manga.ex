@@ -53,7 +53,29 @@ defmodule Roki.Manga.Library.SavedManga do
 
   def changeset(saved_manga, attrs) do
     saved_manga
-    |> cast(attrs, [:user_id, :source, :slug, :title, :cover_url, :reading_mode, :reading_mode_desktop, :reading_mode_mobile, :reading_direction, :last_chapter, :last_page, :last_page_fraction, :last_chapter_total_pages, :total_chapters, :last_chapter_number, :category_id, :tap_zone_preset, :tap_zone_preset_desktop, :tap_zone_preset_mobile, :completed, :newest_chapter_at])
+    |> cast(attrs, [
+      :user_id,
+      :source,
+      :slug,
+      :title,
+      :cover_url,
+      :reading_mode,
+      :reading_mode_desktop,
+      :reading_mode_mobile,
+      :reading_direction,
+      :last_chapter,
+      :last_page,
+      :last_page_fraction,
+      :last_chapter_total_pages,
+      :total_chapters,
+      :last_chapter_number,
+      :category_id,
+      :tap_zone_preset,
+      :tap_zone_preset_desktop,
+      :tap_zone_preset_mobile,
+      :completed,
+      :newest_chapter_at
+    ])
     |> validate_required([:user_id, :source, :slug, :title, :cover_url, :reading_mode])
     |> validate_inclusion(:reading_mode, @reading_modes)
     |> validate_inclusion(:reading_mode_desktop, @reading_modes ++ [nil])

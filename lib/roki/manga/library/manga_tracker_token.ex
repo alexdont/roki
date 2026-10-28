@@ -20,7 +20,14 @@ defmodule Roki.Manga.Library.MangaTrackerToken do
 
   def changeset(token, attrs) do
     token
-    |> cast(attrs, [:user_id, :provider, :access_token, :refresh_token, :expires_at, :remote_username])
+    |> cast(attrs, [
+      :user_id,
+      :provider,
+      :access_token,
+      :refresh_token,
+      :expires_at,
+      :remote_username
+    ])
     |> validate_required([:user_id, :provider, :access_token])
     |> unique_constraint([:user_id, :provider])
   end

@@ -67,7 +67,8 @@ defmodule Roki.Manga.WeebCentral do
   end
 
   defp fetch_chapter_images(chapter_id) do
-    url = "#{@base_url}/chapters/#{chapter_id}/images?is_prev=False&current_page=1&reading_style=long_strip"
+    url =
+      "#{@base_url}/chapters/#{chapter_id}/images?is_prev=False&current_page=1&reading_style=long_strip"
 
     case Req.get(url, headers: headers()) do
       {:ok, %{status: 200, body: body}} ->
@@ -161,6 +162,7 @@ defmodule Roki.Manga.WeebCentral do
     type = extract_meta_link(doc, "Type:")
     status = extract_meta_link(doc, "Status:")
     authors = extract_meta_links(doc, "Author(s):")
+
     year =
       doc
       |> Floki.find("span")
@@ -214,6 +216,7 @@ defmodule Roki.Manga.WeebCentral do
         |> Floki.find("span")
         |> Enum.find_value(fn span ->
           text = Floki.text(span) |> String.trim()
+
           case Regex.run(~r/^Chapter\s+(.+)$/, text) do
             [_, num] -> num
             _ -> nil
@@ -230,6 +233,7 @@ defmodule Roki.Manga.WeebCentral do
     t = String.downcase(type)
     if t in ["manhwa", "manhua"], do: "scroll", else: "paged"
   end
+
   defp detect_reading_mode(_), do: "paged"
 
   defp extract_meta_link(doc, label) do
@@ -240,7 +244,10 @@ defmodule Roki.Manga.WeebCentral do
         li |> Floki.find("strong") |> Floki.text() |> String.trim()
 
       if strong_text == label do
-        li |> Floki.find("a") |> List.first() |> then(fn
+        li
+        |> Floki.find("a")
+        |> List.first()
+        |> then(fn
           nil -> nil
           a -> Floki.text(a) |> String.trim()
         end)

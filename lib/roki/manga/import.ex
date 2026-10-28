@@ -34,7 +34,9 @@ defmodule Roki.Manga.Import do
   @doc "Whether the staging schema is loaded."
   def staged? do
     %{rows: [[n]]} =
-      Repo.query!("select count(*) from information_schema.tables where table_schema = 'reader_import'")
+      Repo.query!(
+        "select count(*) from information_schema.tables where table_schema = 'reader_import'"
+      )
 
     n > 0
   end
@@ -48,10 +50,16 @@ defmodule Roki.Manga.Import do
     rows =
       for {from, to} <- @pairs do
         %{rows: reader} =
-          Repo.query!("select uuid::text from reader_import.reader_users where lower(username) = $1", [from])
+          Repo.query!(
+            "select uuid::text from reader_import.reader_users where lower(username) = $1",
+            [from]
+          )
 
         %{rows: roki} =
-          Repo.query!("select uuid::text from phoenix_kit_users where lower(username::text) = $1", [to])
+          Repo.query!(
+            "select uuid::text from phoenix_kit_users where lower(username::text) = $1",
+            [to]
+          )
 
         %{from: from, to: to, reader_uuid: first(reader), roki_uuid: first(roki)}
       end
@@ -192,10 +200,12 @@ defmodule Roki.Manga.Import do
 
   defp copy_owned(table, people) do
     cols = columns(table)
-    select = Enum.map_join(cols, ", ", fn
-      "user_id" -> "m.roki"
-      c -> "t.#{quoted(c)}"
-    end)
+
+    select =
+      Enum.map_join(cols, ", ", fn
+        "user_id" -> "m.roki"
+        c -> "t.#{quoted(c)}"
+      end)
 
     exec(
       "insert into #{table} (#{Enum.map_join(cols, ", ", &quoted/1)}) " <>

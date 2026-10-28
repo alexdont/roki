@@ -4,7 +4,9 @@
     <div class="flex items-center gap-2">
       <%= if @resume_manga do %>
         <a
-          href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+          href={
+            ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
+          }
           class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
         >
           ▶ Resume
@@ -15,11 +17,25 @@
       <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
       <div class="dropdown dropdown-end">
         <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </div>
-        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+        <ul
+          tabindex="0"
+          class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+        >
           <li><a href="/manga">Home</a></li>
           <li><a href="/manga/explore">Explore</a></li>
           <li><a href="/manga/history">History</a></li>
@@ -37,11 +53,24 @@
   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
     <h2 class="text-lg font-semibold">Tierlist</h2>
     <div style="display: flex; gap: 0.5rem; align-items: center;">
-      <label :if={@mal_sync != %{}} class="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Show MyAnimeList rating badges">
-        <input type="checkbox" id="mal-badge-toggle" class="toggle toggle-xs toggle-success" checked />
+      <label
+        :if={@mal_sync != %{}}
+        class="flex items-center gap-1.5 text-xs cursor-pointer select-none"
+        title="Show MyAnimeList rating badges"
+      >
+        <input
+          type="checkbox"
+          id="mal-badge-toggle"
+          class="toggle toggle-xs toggle-success"
+          checked
+        />
         <span class="font-semibold">MAL</span>
       </label>
-      <select :if={@categories != []} id="tierlist-category" class="select select-sm select-bordered">
+      <select
+        :if={@categories != []}
+        id="tierlist-category"
+        class="select select-sm select-bordered"
+      >
         <option value="">All categories</option>
         <option :for={c <- @categories} value={c.id}>{c.name}</option>
       </select>
@@ -95,7 +124,9 @@
           class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
           data-id={"#{manga.source}:#{manga.slug}"}
           data-mode={tierlist_kind(manga)}
-          data-categories={@category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")}
+          data-categories={
+            @category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")
+          }
           title={manga.title}
         >
           <.mal_sync_badge sync={@mal_sync[{manga.source, manga.slug}]} />
@@ -121,7 +152,9 @@
       class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
       data-id={"#{manga.source}:#{manga.slug}"}
       data-mode={tierlist_kind(manga)}
-      data-categories={@category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")}
+      data-categories={
+        @category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")
+      }
       title={manga.title}
     >
       <.mal_sync_badge sync={@mal_sync[{manga.source, manga.slug}]} />
