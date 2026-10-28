@@ -208,6 +208,12 @@ config :roki,
   mal_client_id: System.get_env("MAL_CLIENT_ID"),
   mal_client_secret: System.get_env("MAL_CLIENT_SECRET")
 
+# fabledex.com: the arcs, volumes and chapter titles a manga page shows. Optional — without the
+# token the saved copy still renders and nothing tries to refresh it.
+if (fabledex = System.get_env("FABLEDEX_TOKEN")) not in [nil, ""] do
+  config :roki, fabledex_token: fabledex
+end
+
 # ============================================
 # Test
 # ============================================
