@@ -1456,7 +1456,7 @@ export const StudySidebar = {
         v = document.createElement("video"); v.id = "fresh-video"; v.setAttribute("playsinline", ""); v.setAttribute("controls", "")
         v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain"
         document.body.appendChild(v)
-        if (flags.get("strip") === "1") { this.el.remove(); document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style") }
+        if (flags.get("strip") === "1") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style") }
       }
       this.showDiag(v)
       try {
