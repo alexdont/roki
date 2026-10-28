@@ -15,7 +15,7 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b6" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b7" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -1448,7 +1448,17 @@ export const StudySidebar = {
       if (flags.get("mute") === "1") v.muted = true // so a frame may start it without a tap
       // `bare=1`: the element taken out of the player's markup altogether, straight under <body>.
       if (flags.get("bare") === "1") { document.body.appendChild(v); v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain" }
-      this.showDiag(p)
+      // `fresh=1`: a new <video> of the lab page's shape, under <body>, played instead of the
+      // page's own (which the hook leaves idle); `strip=1` also takes the player's markup away
+      // and the page's classes off, so what is left is the document itself.
+      let v = this.video
+      if (flags.get("fresh") === "1") {
+        v = document.createElement("video"); v.id = "fresh-video"; v.setAttribute("playsinline", ""); v.setAttribute("controls", "")
+        v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain"
+        document.body.appendChild(v)
+        if (flags.get("strip") === "1") { this.el.remove(); document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style") }
+      }
+      this.showDiag(v)
       try {
         this.local = await startLocalPlayer(v, p.url, {
           resume: p.resume,
@@ -1754,9 +1764,8 @@ export const StudySidebar = {
 
   // With `?diag=1`, the same numbers on the page itself, once a second, for a device whose
   // report cannot reach the server.
-  showDiag() {
+  showDiag(v) {
     if (!this.flags || this.flags.get("diag") !== "1" || this.diagBadge) return
-    const v = this.video
     const b = this.diagBadge = document.createElement("div")
     b.id = "diag-badge"
     b.style.cssText = "position:fixed;top:4rem;left:0.5rem;z-index:1000;max-width:90vw;padding:0.3rem 0.5rem;border-radius:0.4rem;background:rgb(0 0 0/0.7);color:#0f0;font:12px/1.3 monospace;pointer-events:none;white-space:pre-wrap"

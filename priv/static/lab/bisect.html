@@ -9,7 +9,7 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px} td,th{border:1px 
 #note{padding:0 12px 12px;color:#aaa}
 </style></head>
 <body>
-<header><button id="go">Run every case</button><span id="status">9 cases, about 25 s each. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
+<header><button id="go">Run every case</button><span id="status">8 cases, about 25 s each. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
 <iframe id="f" allow="autoplay; fullscreen" title="case"></iframe>
 <table id="t"><thead><tr><th>#</th><th>case</th><th>frames</th><th>t</th><th>rs</th><th>size</th><th>state</th></tr></thead><tbody></tbody></table>
 <div id="note"></div>
@@ -18,15 +18,14 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px} td,th{border:1px 
 // the frame above, with one thing changed; muted, so that one tap here starts them all.
 const W = "/watch/tv/278043/1/13?diag=1"
 const CASES = [
-  ["bare page, site pipeline, controls", "/lab/local.html?auto=1&link=0", "v"],
-  ["bare page, site pipeline, no controls", "/lab/local.html?auto=1&link=0&controls=0", "v"],
+  ["bare page, site pipeline, controls (muted)", "/lab/local.html?auto=1&mute=1&link=0", "v"],
+  ["bare page, no controls (muted)", "/lab/local.html?auto=1&mute=1&link=0&controls=0", "v"],
+  ["bare page in the watch page's box (muted)", "/lab/local.html?auto=1&mute=1&link=0&fixed=1", "v"],
   ["watch page as it is", W, "study-video"],
-  ["watch page, video moved under <body>", W + "&bare=1", "study-video"],
-  ["watch page, video under <body>, controls on", W + "&bare=1&controls=1", "study-video"],
+  ["watch page, a fresh <video> under <body>", W + "&fresh=1", "fresh-video"],
+  ["watch page, fresh <video>, player markup removed", W + "&fresh=1&strip=1", "fresh-video"],
+  ["watch page, its video moved under <body>, controls on", W + "&bare=1&controls=1", "study-video"],
   ["watch page, controls on", W + "&controls=1", "study-video"],
-  ["watch page, no MediaSource duration", W + "&plain=1", "study-video"],
-  ["watch page, no subtitle scan", W + "&noscan=1", "study-video"],
-  ["watch page, grain + header kept", W + "&keep=all", "study-video"],
 ]
 // What a decoded frame looks like, read back through a canvas: a mean brightness of 0 on a
 // frame the decoder has produced says the picture is black in the data, not just on the screen.

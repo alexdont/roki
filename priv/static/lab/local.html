@@ -11,6 +11,18 @@ const $ = (id) => document.getElementById(id), log = (m) => { $("log").textConte
 const params = new URLSearchParams(location.search)
 if (params.get("controls") === "0") $("v").removeAttribute("controls")
 if (params.get("mute") === "1") $("v").muted = true
+// `fixed=1`: the watch page's box around the video — fixed, full screen, html/body overflow
+// hidden, a display:contents wrapper (LiveView's root), the element's own attributes.
+if (params.get("fixed") === "1") {
+  const v = $("v")
+  document.documentElement.style.overflow = document.body.style.overflow = "hidden"
+  const root = document.createElement("div"); root.style.display = "contents"
+  const box = document.createElement("div"); box.style.cssText = "position:fixed;inset:0;z-index:60;height:100dvh;overflow:hidden;background:#000"
+  const stage = document.createElement("div"); stage.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden"
+  v.setAttribute("controlslist", "nofullscreen"); v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:contain;background:#000"
+  document.body.appendChild(root); root.appendChild(box); box.appendChild(stage); stage.appendChild(v)
+  const back = document.createElement("button"); back.textContent = "✕"; back.style.cssText = "position:absolute;top:8px;right:8px;z-index:2;font-size:14px;padding:4px 8px"; back.onclick = () => box.remove(); stage.appendChild(back)
+}
 $("go").onclick = async () => {
   $("go").disabled = true
   const v = $("v")
