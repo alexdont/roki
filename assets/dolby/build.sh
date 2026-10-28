@@ -11,7 +11,7 @@ if [ ! -f libavcodec/libavcodec.a ]; then
     --disable-programs --disable-doc --disable-everything --disable-network \
     --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale --disable-postproc --disable-swresample \
     --enable-avcodec --enable-avutil \
-    --enable-decoder=ac3,eac3,dca --enable-parser=ac3,dca \
+    --enable-decoder=ac3,eac3,dca,flac --enable-parser=ac3,dca,flac \
     --disable-pthreads --disable-debug --disable-autodetect \
     --extra-cflags="-O3 -fno-exceptions" > /src/configure.log 2>&1
   emmake make -j"$(nproc)" libavcodec/libavcodec.a libavutil/libavutil.a > /src/make.log 2>&1

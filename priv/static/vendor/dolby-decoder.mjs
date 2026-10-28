@@ -15,7 +15,7 @@ function loadModule() {
   return modulePromise
 }
 
-const NAMES = {ac3: "ac3", eac3: "eac3", dts: "dca"}
+const NAMES = {ac3: "ac3", eac3: "eac3", dts: "dca", flac: "flac"}
 
 export function makeDolbyDecoder(MB) {
   return class DolbyDecoder extends MB.CustomAudioDecoder {

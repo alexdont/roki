@@ -1,6 +1,6 @@
 # dolby.wasm — Dolby AC-3 / E-AC-3 and DTS decoding in the browser
 
-`/vendor/dolby.wasm` (+ `dolby.mjs`, the Emscripten glue) is FFmpeg 7.1.1's `ac3`, `eac3` and
+`/vendor/dolby.wasm` (+ `dolby.mjs`, the Emscripten glue) is FFmpeg 7.1.1's `ac3`, `eac3`, `flac` and
 `dca` decoders and nothing else, behind `shim.c`: open a decoder by name, feed it the packets a
 Matroska/MP4 file holds, get interleaved 32-bit float stereo back (the decoders mix down
 themselves). 757 KB; decodes at ~300× realtime in Node. LGPL 2.1+ (FFmpeg) — the source is
