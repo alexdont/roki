@@ -42,7 +42,10 @@ defmodule Roki.MixProject do
   defp deps do
     [
       {:finch, "~> 0.18"},
-      {:phoenix_kit, "~> 2.0"},
+      # Pinned at 2.63 rather than 2.0: the manga reader's viewer packages below want
+      # fresco 0.14 and etcher 0.22, and PhoenixKit itself depends on both — 2.54 holds them
+      # at 0.13 and 0.18, so the two sets cannot resolve together below 2.63.
+      {:phoenix_kit, "~> 2.63"},
       {:phoenix_kit_user_connections, "~> 0.1"},
       {:phoenix_kit_comments, "~> 0.1"},
       # Terminal cinema as a library: per-user watchlist, stats, settings, playback.
@@ -59,6 +62,17 @@ defmodule Roki.MixProject do
       # container environment is the only source, and it wins regardless
       # (server-agents1/adrs/0009 insets).
       {:dotenvy, "~> 1.2.0"},
+      # The manga reader, as packages rather than ported code: `manga` routes and dispatches on
+      # reading mode, `manhwa` is the reader itself, `fresco`/`fresco_strip` the paged and
+      # scrolling viewers, `etcher` the drawing layer over them. See
+      # dev_docs/manga-migration-plan.md.
+      {:manga, "~> 0.1.4"},
+      {:manhwa, "~> 0.1.9"},
+      {:fresco, "~> 0.14.0"},
+      {:fresco_strip, "~> 0.3.0"},
+      {:etcher, "~> 0.22.0"},
+      {:chapter, "~> 0.1"},
+      {:dims, "~> 0.1"},
       {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},

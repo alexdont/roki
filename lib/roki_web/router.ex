@@ -2,6 +2,7 @@ defmodule RokiWeb.Router do
   use RokiWeb, :router
 
   import PhoenixKitWeb.Integration
+  import Manga.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -20,6 +21,18 @@ defmodule RokiWeb.Router do
   pipeline :session_user do
     plug :fetch_session
     plug PhoenixKitWeb.Users.Auth, :fetch_phoenix_kit_current_user
+  end
+
+  # The Phase 1 spike (dev_docs/manga-migration-plan.md): the packaged reader on stub data. Its
+  # own scope, not RokiWeb's, because the macro names `Manga.ReaderController` in full. Goes with
+  # RokiWeb.MangaSpike.
+  scope "/" do
+    # `:session_user` as well as `:browser`: the reader asks the host for the current user, and on
+    # a controller route PhoenixKit's browser plug does not assign one — without it the reader
+    # reads nothing saved and silently falls back to its defaults.
+    pipe_through [:browser, :session_user]
+
+    manga_reader("/manga/_spike")
   end
 
   scope "/", RokiWeb do

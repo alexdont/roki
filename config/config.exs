@@ -14,6 +14,13 @@ config :phoenix, :filter_parameters, ["password", "token"]
 
 # Who is told when something is said in a comment thread, and how a thread is named in the
 # moderation list (Roki.CommentHandler).
+# The Phase 1 spike of dev_docs/manga-migration-plan.md: the packaged manga reader mounted on
+# stub data (RokiWeb.MangaSpike) to prove it hosts here. Goes when the real store lands.
+config :manhwa,
+  store: RokiWeb.MangaSpike,
+  current_user: {RokiWeb.MangaSpike, :current_user},
+  series_url: {RokiWeb.MangaSpike, :series_url}
+
 config :phoenix_kit, :comment_resource_handlers, %{
   "profile" => Roki.CommentHandler.Profile,
   "title" => Roki.CommentHandler.Title
