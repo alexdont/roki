@@ -14,8 +14,10 @@ defmodule RokiWeb.MangaController do
 
   defp profile_page(%{params: %{"username" => username}} = conn, _opts) do
     # The site's routes run the plain browser pipeline, which does not look up who is signed in
-    # — the reader's own scope does that with :require_auth. Ask here instead.
-    conn = PhoenixKitWeb.Users.Auth.fetch_phoenix_kit_current_user(conn, [])
+    # — the reader's own scope does that with :require_auth. Ask here instead, for the scope as
+    # well as the user: the header above the page is drawn from the scope, and without it the
+    # page renders as though nobody were signed in.
+    conn = PhoenixKitWeb.Users.Auth.fetch_phoenix_kit_current_scope(conn, [])
     user = conn.assigns[:phoenix_kit_current_user]
 
     cond do
@@ -2797,7 +2799,10 @@ defmodule RokiWeb.MangaController do
     mal_sync = Library.tierlist_mal_sync(user.uuid, tier_index)
     mal_connected = Library.get_tracker_token(user.uuid, "mal") != nil
 
+    {roki, _placed} = Roki.Tiers.board(user.uuid)
+
     render(conn, :tierlist,
+      roki: roki,
       saved_manga: saved_manga,
       cover_paths: cover_paths,
       buckets: buckets,
@@ -2808,26 +2813,56 @@ defmodule RokiWeb.MangaController do
     )
   end
 
+  @doc """
+  The board, as it was left. One board holds two kinds of thing, so what comes back is split:
+  manga goes to the reader's own table, which is what the MyAnimeList sync writes through, and
+  everything else to this site's (`Roki.Tiers`), which rates what moved.
+  """
   def update_tierlist(conn, %{"tiers" => tiers}) when is_map(tiers) do
     user = conn.assigns[:phoenix_kit_current_user]
+    by_id = Map.new(Library.list_saved_manga(user.uuid), &{&1.id, {&1.source, &1.slug}})
 
-    parsed =
+    split =
       Enum.into(tiers, %{}, fn {tier, ids} ->
-        pairs =
-          (ids || [])
-          |> Enum.map(&to_string/1)
-          |> Enum.flat_map(fn id ->
-            case String.split(id, ":", parts: 2) do
-              [src, slug] when src != "" and slug != "" -> [{src, slug}]
-              _ -> []
-            end
-          end)
-
-        {to_string(tier), pairs}
+        {to_string(tier),
+         (ids || []) |> Enum.map(&to_string/1) |> Enum.flat_map(&parse_tier_item(&1, by_id))}
       end)
 
-    Library.replace_tierlist(user.uuid, parsed)
+    manga = for {tier, items} <- split, into: %{}, do: {tier, for({:manga, p} <- items, do: p)}
+    roki = for {tier, items} <- split, into: %{}, do: {tier, for({:roki, k} <- items, do: k)}
+
+    Library.replace_tierlist(user.uuid, manga)
+
+    titles =
+      roki
+      |> Enum.flat_map(fn {_tier, keys} -> keys end)
+      |> Roki.Titles.cards()
+      |> Map.new(fn {key, card} -> {key, card[:title]} end)
+
+    Roki.Tiers.replace(user.uuid, roki, titles)
     json(conn, %{ok: true})
+  end
+
+  # `"manga:12"` is the reader's own id for a saved series; `"movie:603"`, `"tv:1399"` and
+  # `"mal:5114"` are this site's keys, the same ones the shelves use.
+  defp parse_tier_item("manga:" <> id, by_id) do
+    with {n, ""} <- Integer.parse(id),
+         {_, _} = pair <- by_id[n],
+         do: [{:manga, pair}],
+         else: (_ -> [])
+  end
+
+  defp parse_tier_item(item, _by_id) do
+    case String.split(item, ":", parts: 2) do
+      [type, id] when type in ["movie", "tv", "mal"] ->
+        case Integer.parse(id) do
+          {n, ""} -> [{:roki, {type, n}}]
+          _ -> []
+        end
+
+      _ ->
+        []
+    end
   end
 
   @annotations_page_size 50

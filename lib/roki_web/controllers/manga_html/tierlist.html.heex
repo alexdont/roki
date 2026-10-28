@@ -23,8 +23,11 @@
         <option value="">All categories</option>
         <option :for={c <- @categories} value={c.id}>{c.name}</option>
       </select>
-      <div id="tierlist-filter" style="display: flex; gap: 0.25rem;">
+      <div id="tierlist-filter" style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
         <button type="button" data-filter="all" class="btn btn-sm btn-primary">All</button>
+        <button type="button" data-filter="movie" class="btn btn-sm btn-outline">Movies</button>
+        <button type="button" data-filter="tv" class="btn btn-sm btn-outline">Shows</button>
+        <button type="button" data-filter="anime" class="btn btn-sm btn-outline">Anime</button>
         <button type="button" data-filter="manga" class="btn btn-sm btn-outline">Manga</button>
         <button type="button" data-filter="manhwa" class="btn btn-sm btn-outline">Manhwa</button>
       </div>
@@ -44,7 +47,7 @@
     {"d", "D", "#bfff7f"},
     {"e", "E", "#7fdfff"},
     {"unknown", "Don't Know", "#bfbfbf"},
-    {"want", "Want to Read", "#c79fff"}
+    {"want", "Want to Try", "#c79fff"}
   ] %>
 
   <div class="rounded-lg overflow-hidden border border-base-300">
@@ -71,7 +74,7 @@
         <div
           :for={manga <- Map.get(@buckets, slug, [])}
           class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
-          data-id={"#{manga.source}:#{manga.slug}"}
+          data-id={"manga:#{manga.id}"}
           data-mode={tierlist_kind(manga)}
           data-categories={
             @category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")
@@ -86,11 +89,27 @@
             draggable="false"
           />
         </div>
+        <%!-- Films, shows and anime sit in the same tiers, from this site's own table. --%>
+        <div
+          :for={item <- Map.get(@roki, slug, [])}
+          class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
+          data-id={item.key_string}
+          data-mode={item.mode}
+          title={item.title}
+        >
+          <img
+            :if={item.poster}
+            src={Roki.Images.local(item.poster)}
+            alt={item.title}
+            class="w-full aspect-[3/4] object-cover rounded shadow-sm"
+            draggable="false"
+          />
+        </div>
       </div>
     </div>
   </div>
 
-  <h3 class="text-base font-semibold mt-6 mb-2">Saved</h3>
+  <h3 class="text-base font-semibold mt-6 mb-2">Not placed yet</h3>
   <div
     id="tierlist-pool"
     data-tier="pool"
@@ -99,7 +118,7 @@
     <div
       :for={manga <- Map.get(@buckets, "pool", [])}
       class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
-      data-id={"#{manga.source}:#{manga.slug}"}
+      data-id={"manga:#{manga.id}"}
       data-mode={tierlist_kind(manga)}
       data-categories={
         @category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")
@@ -110,6 +129,22 @@
       <img
         src={cover_image_src(manga, @cover_paths, "small")}
         alt={manga.title}
+        class="w-full aspect-[3/4] object-cover rounded shadow-sm"
+        draggable="false"
+      />
+    </div>
+    <%!-- Films, shows and anime sit in the same tiers, from this site's own table. --%>
+    <div
+      :for={item <- Map.get(@roki, "pool", [])}
+      class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
+      data-id={item.key_string}
+      data-mode={item.mode}
+      title={item.title}
+    >
+      <img
+        :if={item.poster}
+        src={Roki.Images.local(item.poster)}
+        alt={item.title}
         class="w-full aspect-[3/4] object-cover rounded shadow-sm"
         draggable="false"
       />
@@ -166,7 +201,8 @@
         var cats = (el.dataset.categories || "").split(",").filter(Boolean);
         var modeOK = activeMode === "all"
           || (activeMode === "manga" && m === "paged")
-          || (activeMode === "manhwa" && m === "scroll");
+          || (activeMode === "manhwa" && m === "scroll")
+          || activeMode === m;
         var catOK = activeCategory === "" || cats.indexOf(activeCategory) !== -1;
         el.style.display = (modeOK && catOK) ? "" : "none";
       });
