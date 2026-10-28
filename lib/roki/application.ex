@@ -22,6 +22,10 @@ defmodule Roki.Application do
       Roki.TTLCache,
       # The manga sources' own cache, carried over with them (Roki.Manga.Cache).
       Roki.Manga.Cache,
+      # One fetch at a time per source per reader, so a binge does not hammer a site. Both of
+      # these are what Roki.Manga.SourceThrottle registers its per-source workers in.
+      {Registry, keys: :unique, name: Roki.Manga.SourceThrottle.Registry},
+      {DynamicSupervisor, name: Roki.Manga.SourceThrottle.Supervisor, strategy: :one_for_one},
       # Which pictures the media library holds, in memory (see Roki.Images).
       Roki.Images,
       # Where work that can crash (searching other sites) runs, apart from whoever asked for it.

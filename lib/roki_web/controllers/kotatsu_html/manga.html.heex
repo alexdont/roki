@@ -1,0 +1,61 @@
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga/search"} class="btn btn-ghost btn-sm gap-1">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      Search
+    </a>
+    <span class="badge badge-outline">{@source}</span>
+  </div>
+
+  <%= if @error do %>
+    <div class="alert alert-warning">{@error}</div>
+  <% else %>
+    <div class="flex flex-col sm:flex-row gap-6 mb-8">
+      <%= if @manga.cover_url do %>
+        <img
+          src={kotatsu_image(@source, @manga.cover_url)}
+          alt={@manga.title}
+          class="w-40 rounded-xl aspect-[3/4] object-cover flex-shrink-0"
+        />
+      <% end %>
+      <div class="min-w-0">
+        <h1 class="text-2xl font-bold mb-2">{@manga.title}</h1>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <%= if @manga.state do %>
+            <span class="badge badge-primary badge-outline">{@manga.state}</span>
+          <% end %>
+          <span :for={author <- Enum.take(@manga.authors, 3)} class="text-sm text-base-content/60">{author}</span>
+        </div>
+        <div class="flex flex-wrap gap-1 mb-3">
+          <span :for={tag <- Enum.take(@manga.tags, 10)} class="badge badge-ghost badge-sm">{tag}</span>
+        </div>
+        <%= if @manga.description do %>
+          <%!-- Description may contain source-site HTML — strip to text. --%>
+          <p class="text-sm text-base-content/70 line-clamp-6 mb-3">{description_text(@manga.description)}</p>
+        <% end %>
+        <%= if @manga.public_url not in [nil, ""] do %>
+          <a href={@manga.public_url} target="_blank" rel="noopener" class="link link-primary text-sm">
+            Open on site ↗
+          </a>
+        <% end %>
+      </div>
+    </div>
+
+    <h2 class="text-lg font-semibold mb-3">{length(@chapters)} chapters</h2>
+    <div class="flex flex-col divide-y divide-base-300 border border-base-300 rounded-xl overflow-hidden">
+      <a
+        :for={ch <- Enum.reverse(@chapters)}
+        href={~p"/manga/kotatsu/#{@source}/read?#{%{url: @manga.ref.url, chapter: ch.url}}"}
+        class="flex items-center justify-between px-4 py-3 hover:bg-base-200 transition-colors"
+      >
+        <span class="text-sm truncate">{chapter_label(ch)}</span>
+        <span class="text-xs text-base-content/40 flex-shrink-0 ml-3">
+          <%= if ch.uploaded_at do %>{Calendar.strftime(ch.uploaded_at, "%b %-d, %Y")}<% end %>
+          <%= if ch.scanlator do %> · {ch.scanlator}<% end %>
+        </span>
+      </a>
+    </div>
+  <% end %>
+</div>

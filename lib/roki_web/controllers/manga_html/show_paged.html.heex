@@ -1,0 +1,2116 @@
+<div
+  id="reader"
+  phx-update="ignore"
+  class="h-dvh overflow-hidden flex flex-col"
+  data-slug={@slug}
+  data-chapter={@chapter}
+  data-images={Jason.encode!(@images)}
+  data-start-page={@start_page}
+  data-source={@source}
+  data-prev-chapter={@prev_chapter}
+  data-next-chapter={@next_chapter}
+  data-title={@manga_title}
+  data-user-uuid={@current_user && @current_user.uuid}
+  data-comments-visible={to_string(@comments_visible)}
+  data-annotation-counts={Jason.encode!(@chapter_annotation_counts)}
+  data-chapters={Jason.encode!(@chapters)}
+  data-search-query={URI.encode_query(@search_params)}
+  data-mode={@mode}
+  data-mode-desktop={@mode_desktop}
+  data-mode-mobile={@mode_mobile}
+  data-tap-zone-preset={@tap_zone_preset}
+  data-reading-direction={@reading_direction}
+  data-smart-crop={to_string(@smart_crop)}
+>
+  <%!-- Mobile top bar --%>
+  <div class="reader-nav-mobile hidden flex-col fixed top-0 left-0 right-0 z-20 bg-base-100 px-3 py-2 gap-2">
+    <div class="flex items-center justify-between">
+      <a href={@search_back_url || "/manga"} class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Home">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" />
+        </svg>
+      </a>
+      <div class="flex items-center gap-1">
+        <a :if={@prev_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@prev_chapter}?#{@search_params}"} class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Previous chapter">«</a>
+        <span class="font-bold text-sm px-1">Ch. {@chapter}</span>
+        <a :if={@next_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@next_chapter}?#{@search_params}"} class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Next chapter">»</a>
+      </div>
+      <div class="flex items-center gap-0">
+        <a href={~p"/manga/#{@source}/#{@slug}?#{@search_params}"} class="btn btn-ghost min-h-[44px]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+        </a>
+      </div>
+    </div>
+    <div class="flex items-center justify-center gap-3">
+      <button id="tap-zone-settings-mobile" class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      </button>
+      <span class="w-px h-6 bg-base-content/20"></span>
+      <button id="annotate-toggle-mobile" class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Draw comment">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+      </button>
+      <button id="comments-visible-toggle-mobile" class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Show/hide comments">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      </button>
+    </div>
+  </div>
+
+  <%!-- Mobile bottom bar --%>
+  <%!-- Mobile bottom bar: visible on nav toggle --%>
+  <div id="mobile-bottom-bar" class="reader-nav-mobile hidden lg:hidden fixed left-1/2 -translate-x-1/2 bottom-4 z-20 items-center gap-1">
+    <button id="btn-prev" class="btn btn-ghost bg-base-300/70 backdrop-blur-sm rounded-full min-h-[44px] min-w-[44px] text-lg">←</button>
+    <span id="page-indicator-mobile" class="px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none">1 / {length(@images)}</span>
+    <button id="btn-next" class="btn btn-ghost bg-base-300/70 backdrop-blur-sm rounded-full min-h-[44px] min-w-[44px] text-lg">→</button>
+  </div>
+
+  <%!-- Page display --%>
+  <div class="flex flex-1 min-h-0 justify-center items-center">
+    <div id="page-container" class="flex justify-center items-center min-h-0 h-full cursor-pointer select-none">
+      <div id="annotation-wrapper" class="relative inline-block max-h-full annotation-container" style="display:inline-block;" data-chapter={@chapter} data-page={@start_page}>
+        <img
+          id="page-image"
+          src={~p"/manga/proxy/image?#{%{url: clean_image_url(List.first(@images).url)}}"}
+          class="max-w-full max-h-dvh"
+          data-scramble-offset={scramble_offset(List.first(@images).url)}
+        />
+      </div>
+      <div id="annotation-wrapper-right" class="relative inline-block max-h-full annotation-container" style="display:none;" data-chapter={@chapter} data-page="">
+        <img
+          id="page-image-right"
+          class="max-w-full max-h-dvh"
+        />
+      </div>
+    </div>
+  </div>
+  <%!-- Tap zone overlay (shown on preset change) --%>
+  <div id="tap-zone-overlay" class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500" style="opacity:0;"></div>
+
+  <%!-- Settings modal --%>
+  <dialog id="tap-zone-modal" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Settings</h3>
+
+      <%!-- Reader (Legacy vs Fresco). This template is the LEGACY paged
+           reader (rendered by MangaReaderLive at /manga/legacy/...).
+           The Fresco link points at the canonical URL — for paged users
+           the dispatch controller will land them on the Fresco reader. --%>
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm font-medium">Reader</p>
+        <div class="flex gap-1">
+          <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Legacy</span>
+          <a
+            href={~p"/manga/#{@source}/#{@slug}/#{@chapter}"}
+            class="btn btn-sm btn-outline"
+            title="Switch to the Fresco paged reader"
+          >Fresco</a>
+        </div>
+      </div>
+
+      <div class="border-t border-base-content/20 my-3"></div>
+
+      <%!-- Reading mode --%>
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm font-medium">Reading mode</p>
+        <div class="flex gap-1">
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_mode"} class="mode-switch-form contents">
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            <input type="hidden" name="mode" value="scroll" />
+            <input type="hidden" name="device" value="" />
+            <input type="hidden" name="redirect_to" value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"} />
+            <button type="submit" class="btn btn-sm btn-outline">Scroll</button>
+          </form>
+          <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Paged</span>
+        </div>
+      </div>
+
+      <%!-- Double page toggle --%>
+      <div class="mb-4">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium">Double page</p>
+          <input type="checkbox" id="double-page-toggle-modal" class="toggle toggle-sm" />
+        </div>
+      </div>
+
+      <%!-- Smart crop toggle --%>
+      <div class="mb-4">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium">Smart crop</p>
+          <input type="checkbox" id="smart-crop-toggle" class="toggle toggle-sm"
+            checked={@smart_crop} />
+        </div>
+        <p class="text-xs text-base-content/50 mt-1">Remove white margins</p>
+      </div>
+
+      <%!-- Reading direction --%>
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm font-medium">Reading direction</p>
+        <div class="flex gap-1">
+          <button id="dir-rtl-btn" class="btn btn-sm btn-outline">RTL ←</button>
+          <button id="dir-ltr-btn" class="btn btn-sm btn-outline">LTR →</button>
+        </div>
+      </div>
+
+      <%!-- Page rotation --%>
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm font-medium">Page rotation</p>
+        <div class="flex gap-1">
+          <button type="button" data-rotation="-90" class="btn btn-xs btn-outline rotation-btn">↶ 90°</button>
+          <button type="button" data-rotation="0" class="btn btn-xs btn-outline btn-active rotation-btn">0°</button>
+          <button type="button" data-rotation="90" class="btn btn-xs btn-outline rotation-btn">90° ↷</button>
+        </div>
+      </div>
+
+      <%!-- Page padding --%>
+      <div class="mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-sm font-medium">Page padding</p>
+          <span id="page-padding-label" class="text-xs font-mono">0%</span>
+        </div>
+        <input type="range" id="page-padding-slider" min="0" max="90" step="1" value="0" class="range range-xs range-primary w-full" />
+      </div>
+
+      <%!-- Tap zone layout --%>
+      <div class="mb-2">
+        <p class="text-sm font-medium mb-2">Tap zones</p>
+        <div class="flex flex-row gap-2">
+          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-primary bg-primary/5 tap-zone-preset-card" data-preset="default">
+            <input type="radio" name="tap_zone_preset" value="default" class="hidden" checked />
+            <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
+              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">M</div>
+              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">P</div>
+            </div>
+            <span class="text-xs font-medium">Default</span>
+          </label>
+          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-base-content/20 bg-transparent tap-zone-preset-card" data-preset="left_right">
+            <input type="radio" name="tap_zone_preset" value="left_right" class="hidden" />
+            <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">P</div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+            </div>
+            <span class="text-xs font-medium">Left / Right</span>
+          </label>
+          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 border-base-content/20 bg-transparent tap-zone-preset-card" data-preset="right_left">
+            <input type="radio" name="tap_zone_preset" value="right_left" class="hidden" />
+            <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">P</div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+            </div>
+            <span class="text-xs font-medium">Right / Left</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-action">
+        <button class="btn btn-sm" onclick="document.getElementById('tap-zone-modal').close()">Close</button>
+      </div>
+    </div>
+    <div class="modal-backdrop" onclick="document.getElementById('tap-zone-modal').close()"></div>
+  </dialog>
+
+  <%!-- Bottom page indicator --%>
+  <div id="page-indicator-bottom" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none">
+    {@start_page} / {length(@images)}
+  </div>
+  <%!-- Desktop sidebar --%>
+  <div id="desktop-sidebar" class="reader-nav-desktop hidden flex-col gap-2 items-center justify-center px-2 fixed top-1/2 -translate-y-1/2 z-20 bg-base-200/80 backdrop-blur-sm rounded-xl py-2">
+      <a href={@search_back_url || "/manga"} class="btn btn-sm btn-ghost" title="Home">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+      </a>
+      <a href={~p"/manga/#{@source}/#{@slug}?#{@search_params}"} class="btn btn-sm btn-ghost" title="All Chapters">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+      </a>
+      <div class="w-6 border-t border-base-content/20 my-1"></div>
+      <a :if={@prev_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@prev_chapter}?#{@search_params}"} class="btn btn-sm btn-ghost" title="Previous chapter">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 20l7-7 7 7" /></svg>
+      </a>
+      <span class="text-xs font-bold text-base-content/60">Ch. {@chapter}</span>
+      <a :if={@next_chapter} href={~p"/manga/legacy/#{@source}/#{@slug}/#{@next_chapter}?#{@search_params}"} class="btn btn-sm btn-ghost" title="Next chapter">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 4l-7 7-7-7" /></svg>
+      </a>
+      <div class="w-6 border-t border-base-content/20 my-1"></div>
+      <button id="btn-prev-side" class="btn btn-sm btn-ghost" title="Previous page">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+      </button>
+      <span id="page-indicator" class="text-xs font-bold text-base-content/60">
+        1 / {length(@images)}
+      </span>
+      <button id="btn-next-side" class="btn btn-sm btn-ghost" title="Next page">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      <button id="tap-zone-settings-desktop" class="btn btn-sm btn-ghost" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      </button>
+      <div class="w-6 border-t border-base-content/20 my-1"></div>
+      <button id="annotate-toggle" class="btn btn-sm btn-ghost" title="Draw comment">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+      </button>
+      <button id="comments-visible-toggle" class="btn btn-sm btn-ghost" title="Show/hide comments">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      </button>
+    </div>
+</div>
+
+<script>
+  (() => {
+    // Redirect if this device should use scroll mode
+    {
+      const r = document.getElementById("reader");
+      const isMob = window.innerWidth < 1024;
+      const myMode = isMob ? r.dataset.modeMobile : r.dataset.modeDesktop;
+      if (myMode === "scroll") {
+        const url = new URL(window.location);
+        url.searchParams.set("device", isMob ? "mobile" : "desktop");
+        window.location.replace(url);
+        return;
+      }
+    }
+
+    function descrambleImage(img) {
+      const offset = parseInt(img.dataset.scrambleOffset);
+      if (!offset || !img.naturalWidth) return;
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      const pw = Math.min(200, Math.ceil(w / 5));
+      const ph = Math.min(200, Math.ceil(h / 5));
+      const xMax = Math.ceil(w / pw), yMax = Math.ceil(h / ph);
+      for (let y = 0; y < yMax; y++) {
+        for (let x = 0; x < xMax; x++) {
+          const sx = x < xMax - 1 ? (x + offset) % (xMax - 1) : x;
+          const sy = y < yMax - 1 ? (y + offset) % (yMax - 1) : y;
+          ctx.drawImage(img, sx*pw, sy*ph, Math.min(pw,w-sx*pw), Math.min(ph,h-sy*ph),
+                              x*pw, y*ph, Math.min(pw,w-x*pw), Math.min(ph,h-y*ph));
+        }
+      }
+      img.src = canvas.toDataURL("image/jpeg", 0.95);
+      delete img.dataset.scrambleOffset;
+    }
+
+    // Lock page scroll to prevent bounce on mobile
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    const reader = document.getElementById("reader");
+    const pageImage = document.getElementById("page-image");
+    const pageImageRight = document.getElementById("page-image-right");
+    const wrapperRight = document.getElementById("annotation-wrapper-right");
+    const pageIndicator = document.getElementById("page-indicator");
+    const pageIndicatorMobile = document.getElementById("page-indicator-mobile");
+    const pageIndicatorBottom = document.getElementById("page-indicator-bottom");
+    const container = document.getElementById("page-container");
+    const sidebar = document.getElementById("desktop-sidebar");
+    const isMobile = window.innerWidth < 1024;
+    const deviceType = isMobile ? "mobile" : "desktop";
+    const effectiveMode = isMobile ? reader.dataset.modeMobile : reader.dataset.modeDesktop;
+    let doublePageEnabled = effectiveMode === "double_page";
+    let isRTL = reader.dataset.readingDirection !== "ltr";
+    let smartCropEnabled = reader.dataset.smartCrop === "true";
+
+    // Page rotation — rotate the whole container with swapped dimensions
+    let currentRotation = 0;
+    function applyRotation(deg) {
+      currentRotation = deg;
+      if (deg) {
+        container.style.position = "fixed";
+        container.style.top = "50%";
+        container.style.left = "50%";
+        container.style.transform = `translate(-50%, -50%) rotate(${deg}deg)`;
+        container.style.width = "100dvh";
+        container.style.height = "100vw";
+        container.style.zIndex = "10";
+        pageImage.style.maxHeight = "100vw";
+        if (pageImageRight) pageImageRight.style.maxHeight = "100vw";
+      } else {
+        container.style.position = "";
+        container.style.top = "";
+        container.style.left = "";
+        container.style.transform = "";
+        container.style.width = "";
+        container.style.height = "";
+        container.style.zIndex = "";
+        pageImage.style.maxHeight = "";
+        if (pageImageRight) pageImageRight.style.maxHeight = "";
+      }
+      document.querySelectorAll(".rotation-btn").forEach(btn => {
+        btn.classList.toggle("btn-active", parseInt(btn.dataset.rotation) === deg);
+      });
+    }
+    document.querySelectorAll(".rotation-btn").forEach(btn => {
+      btn.addEventListener("click", () => applyRotation(parseInt(btn.dataset.rotation)));
+    });
+
+    // Page padding controls
+    const paddingKey = `reader-padding-pct-${reader.dataset.slug}`;
+    const paddingSlider = document.getElementById("page-padding-slider");
+    const paddingLabel = document.getElementById("page-padding-label");
+    const paddingWrapper = container.parentElement;
+
+    const paddingDefault = window.innerWidth < 1024 ? 0 : 70;
+    let currentPadding = localStorage.getItem(paddingKey) !== null ? parseInt(localStorage.getItem(paddingKey)) : paddingDefault;
+    if (isNaN(currentPadding) || currentPadding < 0 || currentPadding > 90) currentPadding = paddingDefault;
+
+    function applyPadding(pct, init) {
+      pct = Math.max(0, Math.min(90, Math.round(pct)));
+      currentPadding = pct;
+      const sidePad = pct / 2;
+      paddingWrapper.style.paddingLeft = sidePad + "vw";
+      paddingWrapper.style.paddingRight = sidePad + "vw";
+      if (paddingSlider) paddingSlider.value = pct;
+      if (paddingLabel) paddingLabel.textContent = pct + "%";
+      localStorage.setItem(paddingKey, pct);
+      if (!init) resetZoom();
+    }
+    applyPadding(currentPadding, true);
+
+    paddingSlider?.addEventListener("input", (e) => applyPadding(parseInt(e.target.value)));
+
+    // Zoom state
+    let zoomScale = 1, zoomX = 0, zoomY = 0;
+    let isPinching = false, lastPinchDist = 0, pinchCenterX = 0, pinchCenterY = 0;
+    let lastTapTime = 0;
+
+    function rotationTransform() {
+      if (!currentRotation) return "";
+      return `translate(-50%, -50%) rotate(${currentRotation}deg)`;
+    }
+
+    function applyZoom() {
+      container.style.transformOrigin = "center center";
+      const rot = rotationTransform();
+      container.style.transform = rot
+        ? `${rot} scale(${zoomScale}) translate(${zoomX}px, ${zoomY}px)`
+        : `scale(${zoomScale}) translate(${zoomX}px, ${zoomY}px)`;
+    }
+
+    function resetZoom() {
+      zoomScale = 1; zoomX = 0; zoomY = 0;
+      container.style.transform = rotationTransform();
+    }
+
+    function clampPan() {
+      if (zoomScale <= 1) { zoomX = 0; zoomY = 0; return; }
+      const rect = container.getBoundingClientRect();
+      const maxPanX = (rect.width * (zoomScale - 1)) / (2 * zoomScale);
+      const maxPanY = (rect.height * (zoomScale - 1)) / (2 * zoomScale);
+      zoomX = Math.max(-maxPanX, Math.min(maxPanX, zoomX));
+      zoomY = Math.max(-maxPanY, Math.min(maxPanY, zoomY));
+    }
+
+    function cropWhiteMargins(img) {
+      if (!smartCropEnabled || !img.naturalWidth) return null;
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+
+      const threshold = 240;
+      const step = 2;
+
+      let top = 0, bottom = h, left = 0, right = w;
+
+      // Scan top
+      outer_top: for (let y = 0; y < h; y += step) {
+        const row = ctx.getImageData(0, y, w, 1).data;
+        for (let x = 0; x < w * 4; x += step * 4) {
+          if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+            top = y; break outer_top;
+          }
+        }
+      }
+
+      // Scan bottom
+      outer_bottom: for (let y = h - 1; y >= top; y -= step) {
+        const row = ctx.getImageData(0, y, w, 1).data;
+        for (let x = 0; x < w * 4; x += step * 4) {
+          if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+            bottom = y + 1; break outer_bottom;
+          }
+        }
+      }
+
+      // Scan left
+      outer_left: for (let x = 0; x < w; x += step) {
+        const col = ctx.getImageData(x, top, 1, bottom - top).data;
+        for (let i = 0; i < col.length; i += step * 4) {
+          if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+            left = x; break outer_left;
+          }
+        }
+      }
+
+      // Scan right
+      outer_right: for (let x = w - 1; x >= left; x -= step) {
+        const col = ctx.getImageData(x, top, 1, bottom - top).data;
+        for (let i = 0; i < col.length; i += step * 4) {
+          if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+            right = x + 1; break outer_right;
+          }
+        }
+      }
+
+      // Center-outward scan with gap detection to ignore watermarks
+      // Only sample the center 50% strip to avoid detecting edge watermarks
+      const gapY = Math.max(20, Math.floor(h * 0.03));
+      const gapX = Math.max(20, Math.floor(w * 0.03));
+      const stripX0 = Math.floor(w * 0.25) * 4, stripX1 = Math.floor(w * 0.75) * 4;
+      const stripY0 = Math.floor(h * 0.25), stripY1 = Math.floor(h * 0.75);
+
+      // Scan downward from center — only check center 50% of width
+      let contentBottom = Math.floor(h / 2);
+      let whiteRun = 0;
+      for (let y = Math.floor(h / 2); y < h; y += step) {
+        const row = ctx.getImageData(0, y, w, 1).data;
+        let hasContent = false;
+        for (let x = stripX0; x < stripX1; x += step * 4) {
+          if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+            hasContent = true; break;
+          }
+        }
+        if (hasContent) { contentBottom = y + 1; whiteRun = 0; }
+        else { whiteRun += step; if (whiteRun >= gapY) break; }
+      }
+
+      // Scan upward from center — only check center 50% of width
+      let contentTop = Math.floor(h / 2);
+      whiteRun = 0;
+      for (let y = Math.floor(h / 2); y >= 0; y -= step) {
+        const row = ctx.getImageData(0, y, w, 1).data;
+        let hasContent = false;
+        for (let x = stripX0; x < stripX1; x += step * 4) {
+          if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+            hasContent = true; break;
+          }
+        }
+        if (hasContent) { contentTop = y; whiteRun = 0; }
+        else { whiteRun += step; if (whiteRun >= gapY) break; }
+      }
+
+      // Scan rightward from center — only check center 50% of height
+      const colH = stripY1 - stripY0;
+      let contentRight = Math.floor(w / 2);
+      whiteRun = 0;
+      for (let x = Math.floor(w / 2); x < w; x += step) {
+        const col = ctx.getImageData(x, stripY0, 1, colH).data;
+        let hasContent = false;
+        for (let i = 0; i < col.length; i += step * 4) {
+          if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+            hasContent = true; break;
+          }
+        }
+        if (hasContent) { contentRight = x + 1; whiteRun = 0; }
+        else { whiteRun += step; if (whiteRun >= gapX) break; }
+      }
+
+      // Scan leftward from center — only check center 50% of height
+      let contentLeft = Math.floor(w / 2);
+      whiteRun = 0;
+      for (let x = Math.floor(w / 2); x >= 0; x -= step) {
+        const col = ctx.getImageData(x, stripY0, 1, colH).data;
+        let hasContent = false;
+        for (let i = 0; i < col.length; i += step * 4) {
+          if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+            hasContent = true; break;
+          }
+        }
+        if (hasContent) { contentLeft = x; whiteRun = 0; }
+        else { whiteRun += step; if (whiteRun >= gapX) break; }
+      }
+
+      // Use center-outward boundary if tighter than edge-inward
+      if (contentTop > top) top = contentTop;
+      if (contentBottom < bottom) bottom = contentBottom;
+      if (contentLeft > left) left = contentLeft;
+      if (contentRight < right) right = contentRight;
+
+      // Skip crop if result area is too small (title/splash pages)
+      const cropArea = (right - left) * (bottom - top);
+      if (cropArea < w * h * 0.05) return null;
+
+      // Only crop if at least 2% removed per side
+      const minCropX = w * 0.02, minCropY = h * 0.02;
+      if (left < minCropX && right > w - minCropX &&
+          top < minCropY && bottom > h - minCropY) return null;
+
+      // Add 1% padding
+      const pad = Math.max(Math.round(w * 0.01), Math.round(h * 0.01));
+      const cx = Math.max(0, left - pad);
+      const cy = Math.max(0, top - pad);
+      const cw = Math.min(w, right + pad) - cx;
+      const ch = Math.min(h, bottom + pad) - cy;
+
+      const out = document.createElement("canvas");
+      out.width = cw; out.height = ch;
+      out.getContext("2d").drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
+      return out.toDataURL("image/jpeg", 0.92);
+    }
+
+    // Position desktop sidebar next to the rightmost visible page
+    function positionSidebar() {
+      if (!sidebar || !pageImage) return;
+      const rightVisible = wrapperRight && wrapperRight.style.display !== "none";
+      const ref = rightVisible ? pageImageRight : pageImage;
+      const rect = ref.getBoundingClientRect();
+      sidebar.style.left = (rect.right + 4) + "px";
+    }
+    pageImage.addEventListener("load", positionSidebar);
+    pageImage.addEventListener("load", () => {
+      if (currentRotation) {
+        pageImage.style.maxHeight = "100vw";
+        if (pageImageRight) pageImageRight.style.maxHeight = "100vw";
+      }
+    });
+    window.addEventListener("resize", positionSidebar);
+
+    const slug = reader.dataset.slug;
+    const source = reader.dataset.source;
+    const chapter = reader.dataset.chapter;
+    const images = JSON.parse(reader.dataset.images);
+    const total = images.length;
+    const csrfToken = document.querySelector("meta[name='csrf-token']").content;
+    let current = 0;
+
+    // Annotation visit: defer progress saving for 60s
+    const targetAnnotationParam = new URLSearchParams(window.location.search).get("ann");
+    const isAnnotationVisit = !!targetAnnotationParam;
+    let progressEnabled = !isAnnotationVisit;
+    let annotationStartPage = null;
+
+    // Reading time tracking (idle-aware, 45s timeout)
+    let lastActivityTime = Date.now();
+    let activeSeconds = 0;
+
+    function recordActivity() {
+      const now = Date.now();
+      const gap = (now - lastActivityTime) / 1000;
+      activeSeconds += Math.min(45, gap);
+      lastActivityTime = now;
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        recordActivity();
+      } else {
+        lastActivityTime = Date.now();
+      }
+    });
+
+    function getElapsed() {
+      const secs = Math.min(300, Math.round(activeSeconds));
+      activeSeconds = 0;
+      return secs;
+    }
+
+    let startPage = Math.max(0, Math.min(parseInt(reader.dataset.startPage || "1") - 1, total - 1));
+
+    function saveProgress(page) {
+      if (!progressEnabled) {
+        if (isAnnotationVisit && annotationStartPage !== null && (page + 1) > annotationStartPage + 1) {
+          progressEnabled = true;
+        } else {
+          return;
+        }
+      }
+      const elapsed = getElapsed();
+      fetch(`/manga/${source}/${slug}/progress`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ chapter, page: page + 1, elapsed, total_pages: total })
+      }).catch(() => {});
+    }
+
+    window.addEventListener("beforeunload", () => {
+      recordActivity();
+      const elapsed = getElapsed();
+      if (elapsed > 0 && progressEnabled) {
+        fetch(`/manga/${source}/${slug}/progress`, {
+          method: "PUT",
+          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+          body: JSON.stringify({ chapter, page: current + 1, elapsed, total_pages: total }),
+          keepalive: true
+        }).catch(() => {});
+      }
+    });
+
+    function imgUrl(entry) {
+      return typeof entry === "string" ? entry : entry.url;
+    }
+
+    function proxyUrl(entry) {
+      const u = imgUrl(entry);
+      return `/manga/proxy/image?url=${encodeURIComponent(u.replace(/#scrambled_\d+$/, ""))}`;
+    }
+
+    function getScrambleOffset(entry) {
+      const u = imgUrl(entry);
+      const m = u.match(/#scrambled_(\d+)$/);
+      return m ? parseInt(m[1]) : 0;
+    }
+
+    const prevChapter = reader.dataset.prevChapter || "";
+    const nextChapter = reader.dataset.nextChapter || "";
+    const searchQuery = reader.dataset.searchQuery || "";
+    const sqSuffix = searchQuery ? `?${searchQuery}` : "";
+
+    let prevChapterTotalPromise = prevChapter
+      ? fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(prevChapter)}/images`)
+          .then(r => r.json())
+          .then(data => data.images.length)
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    function loadImage(img, n) {
+      const scrambleOff = getScrambleOffset(images[n]);
+      img.src = proxyUrl(images[n]);
+      if (scrambleOff > 0) {
+        img.dataset.scrambleOffset = String(scrambleOff);
+        img.addEventListener("load", () => descrambleImage(img), { once: true });
+      }
+    }
+
+    function loadAndCrop(targetImg, n, callback) {
+      if (!smartCropEnabled) {
+        loadImage(targetImg, n);
+        targetImg.addEventListener("load", () => {
+          cacheImageDims(targetImg, n);
+          if (callback) callback();
+        }, { once: true });
+        return;
+      }
+      const off = new Image();
+      const scrambleOff = getScrambleOffset(images[n]);
+
+      const onReady = () => {
+        cacheImageDims(off, n);
+        const cropped = cropWhiteMargins(off);
+        targetImg.addEventListener("load", () => {
+          if (callback) callback();
+        }, { once: true });
+        targetImg.src = cropped || off.src;
+      };
+
+      if (scrambleOff > 0) {
+        off.addEventListener("load", () => {
+          off.dataset.scrambleOffset = String(scrambleOff);
+          descrambleImage(off);
+          off.addEventListener("load", onReady, { once: true });
+        }, { once: true });
+      } else {
+        off.addEventListener("load", onReady, { once: true });
+      }
+      off.src = proxyUrl(images[n]);
+    }
+
+    function hideRightPage() {
+      wrapperRight.style.display = "none";
+      pageImageRight.removeAttribute("src");
+    }
+
+    function showRightPage(n) {
+      if (doublePageEnabled && n >= 0 && n < total) {
+        loadImage(pageImageRight, n);
+        wrapperRight.style.display = "inline-block";
+        wrapperRight.dataset.page = n + 1;
+      } else {
+        hideRightPage();
+      }
+    }
+
+    // Wide image detection: cache dimensions as images load
+    const imageDims = {};
+    function cacheImageDims(img, n) {
+      if (img.naturalWidth) {
+        const wasWide = isWide(n);
+        imageDims[n] = { w: img.naturalWidth, h: img.naturalHeight };
+        if (doublePageEnabled && isWide(n) !== wasWide) {
+          computeSpreadStarts();
+        }
+      }
+    }
+    function isWide(n) {
+      const d = imageDims[n];
+      return d && d.w > d.h * 1.2;
+    }
+
+    const spreadsKey = `spreads_${source}_${slug}_${chapter}`;
+    let cachedStarts = null;
+
+    function loadCachedStarts() {
+      try {
+        cachedStarts = JSON.parse(localStorage.getItem(spreadsKey));
+      } catch(e) {}
+    }
+    loadCachedStarts();
+
+    function saveCachedStarts(starts) {
+      try {
+        localStorage.setItem(spreadsKey, JSON.stringify(starts));
+        cachedStarts = starts;
+      } catch(e) {}
+    }
+
+    // Book-style spread navigation with wide image support:
+    // Spread 0: [blank | page 0]  (cover page alone on right — unless page 0 is wide, then full-width solo)
+    // Normal pairs: [page N | page N+1]
+    // Wide images always shown solo (they already contain two pages)
+    // Compute all spread start positions from image dimensions
+    function computeSpreadStarts() {
+      const starts = [0];
+      let i = 1;
+      while (i < total) {
+        starts.push(i);
+        if (isWide(i) || i + 1 >= total || isWide(i + 1)) {
+          i += 1;
+        } else {
+          i += 2;
+        }
+      }
+      if (!cachedStarts || starts.length !== cachedStarts.length || starts.some((s, idx) => s !== cachedStarts[idx])) {
+        saveCachedStarts(starts);
+      }
+      return starts;
+    }
+
+    function nextSpread() {
+      if (!doublePageEnabled) return current + 1;
+      // Solo pages (cover or wide) advance by 1, normal spreads by 2
+      if (current === 0 || isWide(current)) return current + 1;
+      return current + 2;
+    }
+    function prevSpread() {
+      if (!doublePageEnabled) return current - 1;
+      // If previous page is wide or is cover, step back 1; otherwise 2
+      const prev = current - 1;
+      if (prev <= 0 || isWide(prev)) return prev;
+      return current - 2;
+    }
+
+    function setLabel(label) {
+      if (pageIndicator) pageIndicator.textContent = label;
+      if (pageIndicatorMobile) pageIndicatorMobile.textContent = label;
+      if (pageIndicatorBottom) pageIndicatorBottom.textContent = label;
+    }
+
+    function showPage(n) {
+      recordActivity();
+      if (n < 0) {
+        window.showLoading?.();
+        if (prevChapter) {
+          prevChapterTotalPromise.then(total => {
+            const pg = total ? `/${total}` : "";
+            window.location = `/manga/legacy/${source}/${slug}/${encodeURIComponent(prevChapter)}${pg}${sqSuffix}`;
+          });
+        } else {
+          window.location = `/manga/${source}/${slug}${sqSuffix}`;
+        }
+        return;
+      }
+      if (n >= total) {
+        window.showLoading?.();
+        if (nextChapter) {
+          window.location = `/manga/legacy/${source}/${slug}/${encodeURIComponent(nextChapter)}${sqSuffix}`;
+        } else {
+          window.location = `/manga/${source}/${slug}${sqSuffix}`;
+        }
+        return;
+      }
+      current = n;
+      resetZoom();
+      const chapter = reader.dataset.chapter;
+      const newPath = `/manga/legacy/${source}/${slug}/${encodeURIComponent(chapter)}/${n + 1}`;
+      history.replaceState(null, "", newPath);
+
+      if (!doublePageEnabled) {
+        // Single page mode
+        pageImage.style.maxWidth = "";
+        loadAndCrop(pageImage, n, () => { positionSidebar(); });
+        hideRightPage();
+        setLabel(`${n + 1} / ${total}`);
+      } else if (n === 0) {
+        // First spread: page 0 on left + white blank on right (RTL: cover opens from right)
+        pageImage.style.visibility = "";
+        loadAndCrop(pageImage, 0, () => {
+          if (isWide(0)) {
+            // Wide first page: show it full-width solo
+            pageImage.style.maxWidth = "";
+            hideRightPage();
+          } else {
+            // Normal first page on left, white blank on right
+            pageImage.style.maxWidth = "50vw";
+            const lh = pageImage.naturalHeight || 1400;
+            const lw = pageImage.naturalWidth || 900;
+            const c = document.createElement("canvas");
+            c.width = lw; c.height = lh;
+            const ctx = c.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, lw, lh);
+            pageImageRight.src = c.toDataURL("image/png");
+            pageImageRight.style.maxWidth = "50vw";
+            wrapperRight.style.display = "inline-block";
+            wrapperRight.dataset.page = "";
+          }
+          positionSidebar();
+        });
+        setLabel(`1 / ${total}`);
+      } else {
+        // Normal double-page spread (RTL: right side = page N, left side = page N+1)
+        // First load page N on the right side to check if it's wide
+        pageImage.style.visibility = "";
+        loadAndCrop(pageImageRight, n, () => {
+          if (isWide(n)) {
+            // Page N is wide: show it solo full-width as the main image
+            pageImage.style.maxWidth = "";
+            loadAndCrop(pageImage, n, () => { positionSidebar(); });
+            hideRightPage();
+            setLabel(`${n + 1} / ${total}`);
+          } else {
+            // Page N is normal — show it on the right side
+            pageImageRight.style.maxWidth = "50vw";
+            wrapperRight.style.display = "inline-block";
+            wrapperRight.dataset.page = String(n + 1);
+            const leftIdx = n + 1;
+            if (leftIdx < total) {
+              loadAndCrop(pageImage, leftIdx, () => {
+                if (isWide(leftIdx)) {
+                  // Left page is wide: show right (page N) solo, wide page will be its own spread
+                  pageImage.style.maxWidth = "";
+                  loadAndCrop(pageImage, n, () => { positionSidebar(); });
+                  hideRightPage();
+                  setLabel(`${n + 1} / ${total}`);
+                } else {
+                  // Normal pair: two pages side by side
+                  pageImage.style.maxWidth = "50vw";
+                  setLabel(isRTL ? `${leftIdx + 1}-${n + 1} / ${total}` : `${n + 1}-${leftIdx + 1} / ${total}`);
+                }
+                positionSidebar();
+              });
+            } else {
+              // Last page, no left partner — show solo
+              pageImage.style.maxWidth = "";
+              loadAndCrop(pageImage, n, () => { positionSidebar(); });
+              hideRightPage();
+              setLabel(`${n + 1} / ${total}`);
+            }
+          }
+          positionSidebar();
+        });
+        // Set initial label (will be updated on load if needed)
+        setLabel(`${n + 1} / ${total}`);
+      }
+
+      window.scrollTo({ top: 0, behavior: "instant" });
+      saveProgress(n);
+      const nn = nextSpread();
+      preload(nn);
+      if (doublePageEnabled && nn + 1 < total) preload(nn + 1);
+    }
+
+    function preload(n) {
+      if (n >= 0 && n < total && !imageDims[n]) {
+        const img = new Image();
+        img.addEventListener("load", () => cacheImageDims(img, n), { once: true });
+        img.src = proxyUrl(images[n]);
+      }
+    }
+
+    // Double-page toggle (modal checkbox)
+    const doublePageCheckbox = document.getElementById("double-page-toggle-modal");
+    function updateDoublePageUI() {
+      if (doublePageCheckbox) doublePageCheckbox.checked = doublePageEnabled;
+    }
+    updateDoublePageUI();
+
+    function toggleDoublePage() {
+      const newMode = doublePageEnabled ? "paged" : "double_page";
+      doublePageEnabled = !doublePageEnabled;
+      updateDoublePageUI();
+      // Persist preference per device
+      fetch(`/manga/${source}/${slug}/reading_mode`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ mode: newMode, device: deviceType })
+      }).catch(() => {});
+      // Re-render current spread
+      showPage(current);
+    }
+
+    doublePageCheckbox?.addEventListener("change", toggleDoublePage);
+
+    // Smart crop toggle
+    const smartCropCheckbox = document.getElementById("smart-crop-toggle");
+    smartCropCheckbox?.addEventListener("change", () => {
+      smartCropEnabled = smartCropCheckbox.checked;
+      fetch(`/manga/${source}/${slug}/smart_crop`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ enabled: smartCropEnabled })
+      }).catch(() => {});
+      showPage(current);
+    });
+
+    // Reading direction toggle
+    const dirRtlBtn = document.getElementById("dir-rtl-btn");
+    const dirLtrBtn = document.getElementById("dir-ltr-btn");
+
+    function updateDirectionUI() {
+      if (dirRtlBtn) {
+        dirRtlBtn.classList.toggle("btn-active", isRTL);
+        dirRtlBtn.classList.toggle("no-animation", isRTL);
+        dirRtlBtn.classList.toggle("pointer-events-none", isRTL);
+      }
+      if (dirLtrBtn) {
+        dirLtrBtn.classList.toggle("btn-active", !isRTL);
+        dirLtrBtn.classList.toggle("no-animation", !isRTL);
+        dirLtrBtn.classList.toggle("pointer-events-none", !isRTL);
+      }
+      // Update page container flex direction for double-page spread ordering
+      container.style.flexDirection = isRTL ? "row" : "row-reverse";
+    }
+    updateDirectionUI();
+
+    function setDirection(dir) {
+      isRTL = dir === "rtl";
+      reader.dataset.readingDirection = dir;
+      updateDirectionUI();
+      fetch(`/manga/${source}/${slug}/reading_direction`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ direction: dir })
+      }).catch(() => {});
+      showPage(current);
+    }
+
+    dirRtlBtn?.addEventListener("click", () => setDirection("rtl"));
+    dirLtrBtn?.addEventListener("click", () => setDirection("ltr"));
+
+    // Populate device field in all mode-switch forms
+    document.querySelectorAll(".mode-switch-form").forEach(form => {
+      const deviceInput = form.querySelector('input[name="device"]');
+      if (deviceInput) deviceInput.value = deviceType;
+    });
+
+    // Keyboard navigation (direction-aware: RTL left=next, LTR left=prev)
+    document.addEventListener("keydown", (e) => {
+      if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "ArrowRight" || e.key === "l") { e.preventDefault(); showPageWithAnnotations(isRTL ? prevSpread() : nextSpread()); }
+      if (e.key === "ArrowLeft" || e.key === "h") { e.preventDefault(); showPageWithAnnotations(isRTL ? nextSpread() : prevSpread()); }
+      if (e.key === " ") { e.preventDefault(); showPageWithAnnotations(nextSpread()); }
+      if (e.key === "j" && nextChapter) { window.showLoading?.(); window.location = `/manga/legacy/${source}/${slug}/${encodeURIComponent(nextChapter)}${sqSuffix}`; }
+      if (e.key === "k" && prevChapter) { window.showLoading?.(); window.location = `/manga/legacy/${source}/${slug}/${encodeURIComponent(prevChapter)}${sqSuffix}`; }
+    });
+
+    // Toggle nav elements (desktop: sidebars, mobile: top bar)
+    let navVisible = false;
+    function toggleNav() {
+      navVisible = !navVisible;
+      document.querySelectorAll(".reader-nav-desktop").forEach(el => {
+        el.classList.toggle("lg:flex", navVisible);
+      });
+      document.querySelectorAll(".reader-nav-mobile").forEach(el => {
+        el.classList.toggle("hidden", !navVisible);
+        el.classList.toggle("flex", navVisible);
+        el.classList.toggle("lg:hidden", navVisible);
+      });
+      // Hide floating pill on mobile when bottom bar is visible
+      if (pageIndicatorBottom && window.innerWidth < 1024) {
+        pageIndicatorBottom.style.display = navVisible ? "none" : "";
+      }
+    }
+
+    // Click zones driven by tap zone preset
+    function pagedAction(action) {
+      if (action === "next") showPageWithAnnotations(nextSpread());
+      else if (action === "prev") showPageWithAnnotations(prevSpread());
+      else if (action === "menu") toggleNav();
+    }
+
+    function handlePageClick(x, y) {
+      const preset = getTapZonePreset();
+      const rect = container.getBoundingClientRect();
+      const third = rect.width / 3;
+      const inLeft = x < rect.left + third;
+      const inRight = x > rect.right - third;
+      if (inLeft) { pagedAction(preset.leftThird); return; }
+      if (inRight) { pagedAction(preset.rightThird); return; }
+      if (y < window.innerHeight / 2) pagedAction(preset.midTop);
+      else pagedAction(preset.midBottom);
+    }
+
+    // Container clicks
+    container.addEventListener("click", (e) => {
+      if (e.target.closest("#annotation-form, #annotation-popover")) return;
+      if (annotationMode) return;
+      handlePageClick(e.clientX, e.clientY);
+    });
+
+    // Desktop: extend click zones to full page width
+    document.addEventListener("click", (e) => {
+      if (window.innerWidth < 1024) return;
+      if (container.contains(e.target)) return;
+      if (e.target.closest("a, button, form, #desktop-sidebar, #annotation-form, #annotation-popover, #tap-zone-modal, #comment-modal-root, #comment-modal-backdrop")) return;
+      if (annotationMode) return;
+      handlePageClick(e.clientX, e.clientY);
+    });
+
+    // Swipe navigation (mobile)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let panStartX = 0, panStartY = 0;
+    container.addEventListener("touchstart", (e) => {
+      touchStartX = e.changedTouches[0].clientX;
+      touchStartY = e.changedTouches[0].clientY;
+      panStartX = zoomX;
+      panStartY = zoomY;
+
+      // Pinch start
+      if (e.touches.length === 2) {
+        isPinching = true;
+        const t0 = e.touches[0], t1 = e.touches[1];
+        lastPinchDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        pinchCenterX = (t0.clientX + t1.clientX) / 2;
+        pinchCenterY = (t0.clientY + t1.clientY) / 2;
+      }
+    }, { passive: true });
+
+    // Pinch-to-zoom and pan while zoomed
+    container.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        isPinching = true;
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        if (lastPinchDist > 0) {
+          const ratio = dist / lastPinchDist;
+          const newScale = Math.max(1, Math.min(5, zoomScale * ratio));
+          zoomScale = newScale;
+          clampPan();
+          applyZoom();
+        }
+        lastPinchDist = dist;
+      } else if (e.touches.length === 1 && zoomScale > 1) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        zoomX = panStartX + dx / zoomScale;
+        zoomY = panStartY + dy / zoomScale;
+        clampPan();
+        applyZoom();
+      }
+    }, { passive: false });
+
+    container.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2) {
+        isPinching = false;
+        lastPinchDist = 0;
+      }
+
+      // Swipe navigation (only when not zoomed)
+      if (e.changedTouches.length === 1 && e.touches.length === 0 && !isPinching) {
+        if (annotationMode) return;
+        if (zoomScale > 1) return;
+
+        // Double-tap to zoom
+        const now = Date.now();
+        if (now - lastTapTime < 300) {
+          lastTapTime = 0;
+          const touch = e.changedTouches[0];
+          if (zoomScale > 1) {
+            resetZoom();
+          } else {
+            zoomScale = 2.5;
+            // Pan to center on tap point
+            const rect = container.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            zoomX = (cx - touch.clientX) / zoomScale;
+            zoomY = (cy - touch.clientY) / zoomScale;
+            clampPan();
+            applyZoom();
+          }
+          return;
+        }
+        lastTapTime = now;
+
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return; // too short or vertical
+        if (dx > 0) { showPageWithAnnotations(isRTL ? nextSpread() : prevSpread()); }
+        else { showPageWithAnnotations(isRTL ? prevSpread() : nextSpread()); }
+      }
+    }, { passive: true });
+
+    // Button navigation (mobile)
+    const btnPrev = document.getElementById("btn-prev");
+    const btnNext = document.getElementById("btn-next");
+    if (btnPrev) btnPrev.addEventListener("click", () => showPageWithAnnotations(isRTL ? nextSpread() : prevSpread()));
+    if (btnNext) btnNext.addEventListener("click", () => showPageWithAnnotations(isRTL ? prevSpread() : nextSpread()));
+
+    // Button navigation (sidebar)
+    const btnPrevSide = document.getElementById("btn-prev-side");
+    const btnNextSide = document.getElementById("btn-next-side");
+    if (btnPrevSide) btnPrevSide.addEventListener("click", () => showPageWithAnnotations(prevSpread()));
+    if (btnNextSide) btnNextSide.addEventListener("click", () => showPageWithAnnotations(nextSpread()));
+
+
+
+    // Start on saved page and preload next
+    if (startPage > 0 || doublePageEnabled) {
+      showPage(startPage);
+    } else {
+      if (pageImage.dataset.scrambleOffset) {
+        if (pageImage.complete) descrambleImage(pageImage);
+        else pageImage.addEventListener("load", () => descrambleImage(pageImage), { once: true });
+      }
+      if (smartCropEnabled) {
+        const doCrop = () => {
+          cacheImageDims(pageImage, 0);
+          const cropped = cropWhiteMargins(pageImage);
+          if (cropped) pageImage.src = cropped;
+        };
+        if (pageImage.complete && !pageImage.dataset.scrambleOffset) doCrop();
+        else pageImage.addEventListener("load", doCrop, { once: true });
+      }
+    }
+    preload(current + 1);
+    if (doublePageEnabled) preload(current + 2);
+
+
+
+    const tapOverlay = document.getElementById("tap-zone-overlay");
+    const ZONE_STYLES = {
+      next:  { bg: "rgba(34,197,94,0.3)", border: "rgba(34,197,94,0.4)", color: "#14532d" },
+      prev:  { bg: "rgba(239,68,68,0.3)", border: "rgba(239,68,68,0.4)", color: "#7f1d1d" },
+      menu:  { bg: "rgba(59,130,246,0.3)", border: "rgba(59,130,246,0.4)", color: "#1e3a5f" }
+    };
+    function zonePositions(rect) {
+      const t = Math.max(0, rect.top), l = rect.left, w = rect.width;
+      const h = Math.min(rect.bottom, window.innerHeight) - t;
+      const third = w / 3;
+      const vw = window.innerWidth;
+      return {
+        leftThird:  `top:${t}px;left:0;width:${l + third}px;height:${h}px`,
+        rightThird: `top:${t}px;left:${l + third * 2}px;width:${vw - l - third * 2}px;height:${h}px`,
+        midTop:     `top:${t}px;left:${l + third}px;width:${third}px;height:${h / 2}px`,
+        midBottom:  `top:${t + h / 2}px;left:${l + third}px;width:${third}px;height:${h / 2}px`
+      };
+    }
+    function buildOverlayHTML(preset, rect) {
+      const p = TAP_ZONE_PRESETS[preset] || TAP_ZONE_PRESETS["default"];
+      const positions = zonePositions(rect);
+      return Object.entries(positions).map(([key, pos]) => {
+        const action = p[key];
+        const s = ZONE_STYLES[action];
+        const label = action.charAt(0).toUpperCase() + action.slice(1);
+        return `<div style="position:fixed;${pos};background:${s.bg};border:1px solid ${s.border};color:${s.color};display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.125rem">${label}</div>`;
+      }).join("");
+    }
+    function flashTapZoneOverlay() {
+      if (!tapOverlay) return;
+      const rect = container.getBoundingClientRect();
+      tapOverlay.innerHTML = buildOverlayHTML(reader.dataset.tapZonePreset, rect);
+      setTimeout(() => {
+        tapOverlay.style.opacity = "1";
+        setTimeout(() => { tapOverlay.style.opacity = "0"; }, 1500);
+      }, 300);
+    }
+
+    // Tap zone presets
+    const TAP_ZONE_PRESETS = {
+      default: { leftThird: "next", rightThird: "next", midTop: "menu", midBottom: "prev" },
+      left_right: { leftThird: "prev", rightThird: "next", midTop: "menu", midBottom: "menu" },
+      right_left: { leftThird: "next", rightThird: "prev", midTop: "menu", midBottom: "menu" }
+    };
+
+    function getTapZonePreset() {
+      return TAP_ZONE_PRESETS[reader.dataset.tapZonePreset] || TAP_ZONE_PRESETS["default"];
+    }
+
+    // Tap zone settings modal
+    const tapZoneModal = document.getElementById("tap-zone-modal");
+    document.getElementById("tap-zone-settings-mobile")?.addEventListener("click", () => {
+      if (tapZoneModal) tapZoneModal.showModal();
+    });
+    document.getElementById("tap-zone-settings-desktop")?.addEventListener("click", () => {
+      if (tapZoneModal) tapZoneModal.showModal();
+    });
+
+    if (tapZoneModal) {
+      tapZoneModal.querySelectorAll('input[name="tap_zone_preset"]').forEach(radio => {
+        radio.checked = radio.value === reader.dataset.tapZonePreset;
+        radio.addEventListener("change", () => {
+          const preset = radio.value;
+          reader.dataset.tapZonePreset = preset;
+          tapZoneModal.close();
+          flashTapZoneOverlay();
+
+          tapZoneModal.querySelectorAll(".tap-zone-preset-card").forEach(card => {
+            const isActive = card.dataset.preset === preset;
+            card.classList.toggle("border-primary", isActive);
+            card.classList.toggle("bg-primary/5", isActive);
+            card.classList.toggle("border-base-content/20", !isActive);
+            card.classList.toggle("bg-transparent", !isActive);
+          });
+
+          fetch(`/manga/${source}/${slug}/tap_zone_preset`, {
+            method: "PUT",
+            headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+            body: JSON.stringify({ preset: preset, device: window.innerWidth < 1024 ? "mobile" : "desktop" })
+          }).catch(() => {});
+        });
+      });
+    }
+
+    // --- Annotations ---
+    let annotationMode = false;
+    let commentsVisible = reader.dataset.commentsVisible === "true";
+    const annotationCache = {};
+    const detailCache = {};
+    const replyCache = {};
+    const mangaTitle = reader.dataset.title || slug;
+    const annotationWrapper = document.getElementById("annotation-wrapper");
+    let selectedColor = "blue";
+    const targetAnnotationId = targetAnnotationParam;
+    let annotationScrolled = false;
+    const annotationCounts = JSON.parse(reader.dataset.annotationCounts || "{}");
+    const chapters = JSON.parse(reader.dataset.chapters || "[]");
+
+    function nextAnnotatedChapter(currentCh) {
+      const idx = chapters.indexOf(currentCh);
+      for (let i = idx + 1; i < chapters.length; i++) {
+        if (annotationCounts[chapters[i]]) return chapters[i];
+      }
+      return null;
+    }
+
+    function prevAnnotatedChapter(currentCh) {
+      const idx = chapters.indexOf(currentCh);
+      for (let i = idx - 1; i >= 0; i--) {
+        if (annotationCounts[chapters[i]]) return chapters[i];
+      }
+      return null;
+    }
+
+    const colorMap = {
+      blue:   { border: "rgba(59,130,246,0.7)",  fill: "rgba(59,130,246,0.15)" },
+      pink:   { border: "rgba(236,72,153,0.7)",  fill: "rgba(236,72,153,0.15)" },
+      green:  { border: "rgba(74,222,128,0.7)",  fill: "rgba(74,222,128,0.15)" },
+      purple: { border: "rgba(168,85,247,0.7)",  fill: "rgba(168,85,247,0.15)" }
+    };
+
+    // Apply initial toggle button state
+    document.querySelectorAll("#comments-visible-toggle, #comments-visible-toggle-mobile").forEach(btn => {
+      btn.classList.toggle("btn-active", commentsVisible);
+    });
+
+    function toggleAnnotationMode() {
+      annotationMode = !annotationMode;
+      document.querySelectorAll("#annotate-toggle, #annotate-toggle-mobile").forEach(btn => {
+        btn.classList.toggle("btn-active", annotationMode);
+      });
+      if (annotationWrapper) annotationWrapper.style.cursor = annotationMode ? "crosshair" : "";
+      if (wrapperRight) wrapperRight.style.cursor = annotationMode ? "crosshair" : "";
+      if (annotationMode && !commentsVisible) toggleCommentsVisible();
+    }
+
+    function toggleCommentsVisible() {
+      commentsVisible = !commentsVisible;
+      document.querySelectorAll("#comments-visible-toggle, #comments-visible-toggle-mobile").forEach(btn => {
+        btn.classList.toggle("btn-active", commentsVisible);
+      });
+      if (commentsVisible) {
+        const renderBoth = () => {
+          const n = current;
+          const twoPage = doublePageEnabled && n > 0 && !isWide(n) && n + 1 < total && !isWide(n + 1);
+          if (twoPage) {
+            renderPageAnnotations(chapter, n + 2, annotationWrapper);
+            renderPageAnnotations(chapter, n + 1, wrapperRight);
+          } else {
+            renderPageAnnotations(chapter, n + 1, annotationWrapper);
+          }
+        };
+        if (!annotationCache[chapter]) {
+          loadAnnotations(chapter).then(renderBoth);
+        } else {
+          renderBoth();
+        }
+      } else {
+        document.querySelectorAll(".annotation-rect").forEach(el => { el.style.display = "none"; });
+      }
+      fetch(`/manga/${source}/${slug}/comments_visible`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ visible: commentsVisible })
+      }).catch(() => {});
+    }
+
+    document.getElementById("annotate-toggle")?.addEventListener("click", toggleAnnotationMode);
+    document.getElementById("annotate-toggle-mobile")?.addEventListener("click", toggleAnnotationMode);
+    document.getElementById("comments-visible-toggle")?.addEventListener("click", toggleCommentsVisible);
+    document.getElementById("comments-visible-toggle-mobile")?.addEventListener("click", toggleCommentsVisible);
+
+    async function loadAnnotations(ch) {
+      if (annotationCache[ch]) return;
+      try {
+        const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        annotationCache[ch] = data.annotations || [];
+      } catch(e) {}
+    }
+
+    function renderPageAnnotations(ch, page, wrapper) {
+      wrapper = wrapper || annotationWrapper;
+      if (!wrapper) return;
+      wrapper.querySelectorAll(".annotation-rect").forEach(el => el.remove());
+      wrapper.dataset.chapter = ch;
+      wrapper.dataset.page = page;
+      const anns = (annotationCache[ch] || []).filter(a => a.page === page);
+      anns.forEach((a, i) => {
+        const c = colorMap[a.color] || colorMap.blue;
+        const rect = document.createElement("div");
+        rect.className = "annotation-rect";
+        rect.dataset.annotationId = a.id;
+        const isPrivate = a.visibility === "private";
+        rect.style.cssText = `position:absolute;left:${a.x_pct}%;top:${a.y_pct}%;width:${a.w_pct}%;height:${a.h_pct}%;border:2px ${isPrivate ? 'dashed' : 'solid'} ${c.border};background:${c.fill};cursor:pointer;z-index:5;pointer-events:auto;box-sizing:border-box;${isPrivate ? 'opacity:0.6;' : ''}`;
+        rect.style.animationDelay = `${i * 0.07}s`;
+        if (!commentsVisible) rect.style.display = "none";
+        rect.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const isOwn = String(a.user_id || "") === String(reader.dataset.userUuid || "");
+          window.openCommentModal(
+            container.dataset.chapter,
+            container.dataset.page,
+            a.resource_uuid || a.comment_uuid,
+            { annotation_id: a.id, color: a.color, visibility: a.visibility, is_own: isOwn }
+          );
+        });
+        wrapper.appendChild(rect);
+      });
+      if (targetAnnotationId && !annotationScrolled) {
+        if (targetAnnotationId === "first" || targetAnnotationId === "last") {
+          const sorted = getSortedAnnotations(ch);
+          if (sorted.length > 0) {
+            annotationScrolled = true;
+            const ann = targetAnnotationId === "first" ? sorted[0] : sorted[sorted.length - 1];
+            if (isAnnotationVisit) { annotationStartPage = ann.page; setTimeout(() => { progressEnabled = true; }, 60000); }
+            showPageWithAnnotations(ann.page - 1);
+            setTimeout(() => {
+              const rectEl = findAnnotationRect(ann.id);
+              if (rectEl) showAnnotationPopover(ann, rectEl);
+            }, 150);
+          }
+        } else {
+          const target = findAnnotationRect(targetAnnotationId);
+          if (target) {
+            annotationScrolled = true;
+            if (isAnnotationVisit) { annotationStartPage = current + 1; setTimeout(() => { progressEnabled = true; }, 60000); }
+            target.style.display = "";
+            const wrapper = target.closest(".annotation-container");
+            const img = wrapper ? wrapper.querySelector("img") : annotationWrapper.querySelector("img");
+            const ann = (annotationCache[ch] || []).find(a => String(a.id) === String(targetAnnotationId));
+            function doScroll() {
+              target.scrollIntoView({ behavior: "smooth", block: "center" });
+              target.style.animation = "ann-flash 1.5s ease-in-out";
+              target.addEventListener("animationend", () => { target.style.animation = ""; }, { once: true });
+              if (ann) setTimeout(() => showAnnotationPopover(ann, target), 150);
+            }
+            if (img && !img.complete) {
+              img.addEventListener("load", () => setTimeout(doScroll, 50), { once: true });
+            } else {
+              setTimeout(doScroll, 50);
+            }
+          }
+        }
+      }
+    }
+
+    function showPageWithAnnotations(n) {
+      showPage(n);
+      if (!commentsVisible || n < 0 || n >= total) return;
+      const ch = chapter;
+      const doRender = () => {
+        const twoPage = doublePageEnabled && n > 0 && !isWide(n) && n + 1 < total && !isWide(n + 1);
+        if (twoPage) {
+          renderPageAnnotations(ch, n + 2, annotationWrapper);
+          renderPageAnnotations(ch, n + 1, wrapperRight);
+        } else {
+          renderPageAnnotations(ch, n + 1, annotationWrapper);
+          if (wrapperRight) wrapperRight.querySelectorAll(".annotation-rect").forEach(el => el.remove());
+        }
+      };
+      if (annotationCache[ch]) doRender();
+      else loadAnnotations(ch).then(doRender);
+    }
+
+    function getSortedAnnotations(ch) {
+      return (annotationCache[ch] || []).slice().sort((a, b) => a.page - b.page || a.y_pct - b.y_pct || a.x_pct - b.x_pct);
+    }
+
+    function findAnnotationRect(id) {
+      return annotationWrapper.querySelector(`.annotation-rect[data-annotation-id="${id}"]`)
+        || (wrapperRight && wrapperRight.querySelector(`.annotation-rect[data-annotation-id="${id}"]`));
+    }
+
+    function navigateToAnnotation(sorted, idx) {
+      const target = sorted[idx];
+      closeAnnotationPopover();
+      const currentPage = current + 1;
+      if (target.page !== currentPage) {
+        showPageWithAnnotations(target.page - 1);
+        setTimeout(() => {
+          const rectEl = findAnnotationRect(target.id);
+          if (rectEl) {
+            rectEl.style.animation = "ann-flash 1.5s ease-in-out";
+            rectEl.addEventListener("animationend", () => { rectEl.style.animation = ""; }, { once: true });
+            showAnnotationPopover(target, rectEl);
+          }
+        }, 100);
+      } else {
+        const rectEl = findAnnotationRect(target.id);
+        if (!rectEl) return;
+        rectEl.style.animation = "ann-flash 1.5s ease-in-out";
+        rectEl.addEventListener("animationend", () => { rectEl.style.animation = ""; }, { once: true });
+        showAnnotationPopover(target, rectEl);
+      }
+    }
+
+    async function showAnnotationPopover(a, rectEl) {
+      const container = rectEl.closest(".annotation-container") || rectEl.closest("[data-chapter]");
+      if (container && (a.resource_uuid || a.comment_uuid)) {
+        const isOwn = String(a.user_id || "") === String(reader.dataset.userUuid || "");
+        window.openCommentModal(
+          container.dataset.chapter,
+          container.dataset.page || "1",
+          a.resource_uuid || a.comment_uuid,
+          { annotation_id: a.id, color: a.color, visibility: a.visibility, is_own: isOwn }
+        );
+        return;
+      }
+      closeAnnotationPopover();
+      const r = rectEl.getBoundingClientRect();
+      const pop = document.createElement("div");
+      pop.id = "annotation-popover";
+      pop.style.cssText = `position:fixed;z-index:100;background:var(--color-base-200);border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);border-radius:0.75rem;padding:0.75rem;max-width:20rem;box-shadow:0 4px 12px rgba(0,0,0,0.3);overflow-y:auto;max-height:80vh;`;
+      pop.style.left = Math.min(r.left, window.innerWidth - 330) + "px";
+      pop.style.top = (r.bottom + 8) + "px";
+      if (r.bottom + 200 > window.innerHeight) pop.style.top = Math.max(8, r.top - 200) + "px";
+
+      const popWrapper = rectEl.closest(".annotation-container") || annotationWrapper;
+      const ch = popWrapper.dataset.chapter;
+      const commentUuid = a.comment_uuid;
+
+      pop.innerHTML = `<div style="text-align:center;padding:0.5rem;"><span class="loading loading-spinner loading-sm"></span></div>`;
+      document.body.appendChild(pop);
+      setTimeout(() => document.addEventListener("click", closeOnOutsideClick), 0);
+
+      try {
+        let d;
+        if (detailCache[commentUuid]) {
+          d = detailCache[commentUuid];
+        } else {
+          const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${commentUuid}/detail`);
+          if (!resp.ok || !document.getElementById("annotation-popover")) return;
+          d = await resp.json();
+          detailCache[commentUuid] = d;
+        }
+
+        const sorted = getSortedAnnotations(ch);
+        const curIdx = sorted.findIndex(x => x.id === a.id);
+
+        // Compute global annotation position across all chapters
+        let globalIdx = curIdx + 1;
+        let globalTotal = 0;
+        const hasPrevCh = !!prevAnnotatedChapter(ch);
+        const hasNextCh = !!nextAnnotatedChapter(ch);
+        for (let i = 0; i < chapters.length; i++) {
+          const cnt = annotationCounts[chapters[i]] || 0;
+          if (chapters[i] === ch) globalIdx += globalTotal;
+          globalTotal += cnt;
+        }
+        const prevDisabled = curIdx <= 0 && !hasPrevCh;
+        const nextDisabled = curIdx >= sorted.length - 1 && !hasNextCh;
+
+        const navHtml = globalTotal > 1 ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;"><button class="btn btn-xs btn-ghost pop-prev-btn" ${prevDisabled ? 'disabled' : ''}>Prev</button><span style="font-size:0.7rem;color:color-mix(in oklch, var(--color-base-content) 40%, transparent);">${globalIdx} of ${globalTotal}</span><button class="btn btn-xs btn-ghost pop-next-btn" ${nextDisabled ? 'disabled' : ''}>Next</button></div>` : '';
+
+        const date = new Date(d.inserted_at + (String(d.inserted_at).endsWith("Z") ? "" : "Z"));
+        const timeAgo = formatTimeAgo(date);
+        const privateBadge = d.visibility === "private" ? ' <span style="font-size:0.6rem;background:color-mix(in oklch, var(--color-base-content) 15%, transparent);padding:0.1rem 0.35rem;border-radius:0.25rem;vertical-align:middle;">&#128274; Private</span>' : '';
+        const avatarHtml = d.avatar_url
+          ? `<img src="${d.avatar_url}" style="width:1.5rem;height:1.5rem;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+          : `<div style="width:1.5rem;height:1.5rem;border-radius:50%;background:color-mix(in oklch, var(--color-primary) 20%, transparent);display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:bold;color:var(--color-primary);flex-shrink:0;">${escapeHtml((d.username || "U")[0]).toUpperCase()}</div>`;
+        let html = navHtml;
+        html += `<div style="display:flex;align-items:center;gap:0.375rem;font-size:0.75rem;color:color-mix(in oklch, var(--color-base-content) 60%, transparent);margin-bottom:0.25rem;">${avatarHtml}<span><strong>${escapeHtml(d.username || "User")}</strong>${privateBadge} &middot; ${timeAgo}</span></div>`;
+        html += `<div style="font-size:0.875rem;white-space:pre-wrap;word-break:break-word;">${escapeHtml(d.content)}</div>`;
+        html += `<div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">`;
+        html += `<button class="btn btn-xs btn-ghost pop-like-btn" style="gap:0.25rem;">${d.liked ? '♥' : '♡'} <span class="pop-like-count">${d.like_count || 0}</span></button>`;
+        html += `<button class="btn btn-xs btn-ghost pop-reply-btn">Reply</button>`;
+        if (d.is_own) {
+          html += `<button class="btn btn-xs btn-info pop-edit-btn">Edit</button>`;
+          html += `<button class="btn btn-xs btn-error pop-delete-btn">Delete</button>`;
+        }
+        html += `</div>`;
+        html += `<div class="pop-reply-form" style="display:none;margin-top:0.5rem;"><textarea class="textarea textarea-bordered w-full text-base pop-reply-text" rows="2" placeholder="Write a reply..."></textarea><div style="display:flex;gap:0.25rem;margin-top:0.25rem;"><button class="btn btn-xs btn-primary pop-reply-post">Post</button><button class="btn btn-xs btn-ghost pop-reply-cancel">Cancel</button></div></div>`;
+        html += `<div class="pop-replies" style="margin-top:0.5rem;"></div>`;
+        pop.innerHTML = html;
+
+        // Prev/Next navigation
+        const prevBtn = pop.querySelector(".pop-prev-btn");
+        const nextBtn = pop.querySelector(".pop-next-btn");
+        if (prevBtn) prevBtn.addEventListener("click", () => {
+          if (curIdx > 0) {
+            navigateToAnnotation(sorted, curIdx - 1);
+          } else {
+            const prevCh = prevAnnotatedChapter(ch);
+            if (prevCh) {
+              window.showLoading?.();
+              window.location = `/manga/legacy/${source}/${slug}/${encodeURIComponent(prevCh)}?ann=last`;
+            }
+          }
+        });
+        if (nextBtn) nextBtn.addEventListener("click", () => {
+          if (curIdx < sorted.length - 1) {
+            navigateToAnnotation(sorted, curIdx + 1);
+          } else {
+            const nextCh = nextAnnotatedChapter(ch);
+            if (nextCh) {
+              window.showLoading?.();
+              window.location = `/manga/legacy/${source}/${slug}/${encodeURIComponent(nextCh)}?ann=first`;
+            }
+          }
+        });
+
+        // Like button
+        pop.querySelector(".pop-like-btn").addEventListener("click", async () => {
+          const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${commentUuid}/like`, {
+            method: "POST", headers: { "x-csrf-token": csrfToken }
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            d.liked = data.liked;
+            d.like_count = data.like_count;
+            delete detailCache[commentUuid];
+            const btn = pop.querySelector(".pop-like-btn");
+            btn.innerHTML = `${data.liked ? '♥' : '♡'} <span class="pop-like-count">${data.like_count}</span>`;
+          }
+        });
+
+        // Reply toggle
+        pop.querySelector(".pop-reply-btn").addEventListener("click", () => {
+          const form = pop.querySelector(".pop-reply-form");
+          form.style.display = form.style.display === "none" ? "block" : "none";
+          if (form.style.display === "block") form.querySelector(".pop-reply-text").focus();
+        });
+        pop.querySelector(".pop-reply-cancel").addEventListener("click", () => {
+          pop.querySelector(".pop-reply-form").style.display = "none";
+        });
+        pop.querySelector(".pop-reply-post").addEventListener("click", async () => {
+          const text = pop.querySelector(".pop-reply-text").value.trim();
+          if (!text) return;
+          const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${commentUuid}/replies`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+            body: JSON.stringify({ content: text })
+          });
+          if (resp.ok) {
+            const reply = await resp.json();
+            pop.querySelector(".pop-reply-text").value = "";
+            pop.querySelector(".pop-reply-form").style.display = "none";
+            delete replyCache[commentUuid];
+            appendReply(pop.querySelector(".pop-replies"), reply, ch, commentUuid);
+          }
+        });
+
+        // Edit button
+        if (d.is_own) {
+          pop.querySelector(".pop-edit-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            showEditForm(pop, a, d, rectEl, ch);
+          });
+        }
+
+        // Delete button
+        if (d.is_own) {
+          pop.querySelector(".pop-delete-btn").addEventListener("click", async () => {
+            await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${a.id}`, {
+              method: "DELETE", headers: { "x-csrf-token": csrfToken }
+            });
+            rectEl.remove();
+            if (annotationCache[ch]) annotationCache[ch] = annotationCache[ch].filter(x => x.id !== a.id);
+            delete detailCache[commentUuid];
+            delete replyCache[commentUuid];
+            closeAnnotationPopover();
+          });
+        }
+
+        // Load replies
+        loadReplies(pop.querySelector(".pop-replies"), commentUuid, ch, commentUuid);
+      } catch(e) {}
+    }
+
+    // --- Edit annotation ---
+    let editDrawState = null;
+
+    // Expose reader internals so app.js helpers (LiveView comment modal panel) can read/mutate them.
+    window.__annotationCache = annotationCache;
+    window.__colorMap = colorMap;
+    window.__toggleAnnotationMode = toggleAnnotationMode;
+    Object.defineProperty(window, "__annotationMode", { configurable: true, get: () => annotationMode });
+    window.__getEditDrawState = () => editDrawState;
+    window.__setEditDrawState = (v) => { editDrawState = v; };
+
+    function showEditForm(pop, a, detail, rectEl, ch) {
+      const swatchColors = ["blue", "pink", "green", "purple"];
+      const swatchBorders = { blue: "rgb(59,130,246)", pink: "rgb(236,72,153)", green: "rgb(74,222,128)", purple: "rgb(168,85,247)" };
+      let editColor = a.color || "blue";
+      let editVisibility = a.visibility || "public";
+      let editCoords = { x_pct: a.x_pct, y_pct: a.y_pct, w_pct: a.w_pct, h_pct: a.h_pct };
+
+      const swatchHtml = swatchColors.map(c => {
+        return `<button type="button" data-color="${c}" class="edit-color-swatch" style="width:1.25rem;height:1.25rem;border-radius:9999px;background:${swatchBorders[c]};border:2px solid ${c === editColor ? 'var(--color-base-content)' : 'transparent'};cursor:pointer;flex-shrink:0;" title="${c}"></button>`;
+      }).join("");
+
+      pop.innerHTML = `
+        <div style="font-size:0.75rem;font-weight:bold;margin-bottom:0.5rem;">Edit Comment</div>
+        <textarea class="textarea textarea-bordered w-full text-base edit-text" rows="3">${escapeHtml(detail.content)}</textarea>
+        <div class="edit-error" style="display:none;color:#f87171;font-size:0.75rem;margin-top:0.25rem;"></div>
+        <div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.375rem;">
+          <span style="font-size:0.7rem;color:color-mix(in oklch, var(--color-base-content) 60%, transparent);">Color:</span>
+          ${swatchHtml}
+        </div>
+        <label style="display:flex;align-items:center;gap:0.375rem;margin-top:0.375rem;cursor:pointer;font-size:0.75rem;color:color-mix(in oklch, var(--color-base-content) 60%, transparent);">
+          <input type="checkbox" class="checkbox checkbox-xs edit-private-toggle" ${editVisibility === "private" ? "checked" : ""} />
+          <span style="display:flex;align-items:center;gap:0.25rem;">&#128274; Private</span>
+        </label>
+        <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;">
+          <button class="btn btn-xs btn-primary edit-save-btn">Save</button>
+          <button class="btn btn-xs btn-ghost edit-redraw-btn">Redraw</button>
+          <button class="btn btn-xs btn-ghost edit-cancel-btn">Cancel</button>
+        </div>
+      `;
+
+      // Color swatches
+      pop.querySelectorAll(".edit-color-swatch").forEach(btn => {
+        btn.addEventListener("click", () => {
+          editColor = btn.dataset.color;
+          pop.querySelectorAll(".edit-color-swatch").forEach(b => {
+            b.style.border = b.dataset.color === editColor ? "2px solid var(--color-base-content)" : "2px solid transparent";
+          });
+          const c = colorMap[editColor] || colorMap.blue;
+          rectEl.style.borderColor = c.border;
+          rectEl.style.background = c.fill;
+        });
+      });
+
+      // Private toggle
+      pop.querySelector(".edit-private-toggle").addEventListener("change", (e) => {
+        editVisibility = e.target.checked ? "private" : "public";
+      });
+
+      // Save
+      pop.querySelector(".edit-save-btn").addEventListener("click", async () => {
+        const content = pop.querySelector(".edit-text").value.trim();
+        if (!content) return;
+        const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${a.id}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+          body: JSON.stringify({ content, color: editColor, visibility: editVisibility, x_pct: editCoords.x_pct, y_pct: editCoords.y_pct, w_pct: editCoords.w_pct, h_pct: editCoords.h_pct })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (annotationCache[ch]) {
+            const idx = annotationCache[ch].findIndex(x => x.id === a.id);
+            if (idx !== -1) {
+              annotationCache[ch][idx] = { ...annotationCache[ch][idx], color: data.color, visibility: data.visibility, x_pct: data.x_pct, y_pct: data.y_pct, w_pct: data.w_pct, h_pct: data.h_pct };
+            }
+          }
+          delete detailCache[a.comment_uuid];
+          renderPageAnnotations(ch, current + 1);
+          closeAnnotationPopover();
+        } else {
+          const err = pop.querySelector(".edit-error");
+          if (err) { err.textContent = "Failed to save. Try again."; err.style.display = "block"; }
+        }
+      });
+
+      // Redraw
+      pop.querySelector(".edit-redraw-btn").addEventListener("click", () => {
+        const content = pop.querySelector(".edit-text").value.trim();
+        editDrawState = { annotationId: a.id, ch, content, color: editColor, oldCoords: { x_pct: a.x_pct, y_pct: a.y_pct, w_pct: a.w_pct, h_pct: a.h_pct }, rectEl };
+        rectEl.style.display = "none";
+        closeAnnotationPopover();
+        if (!annotationMode) toggleAnnotationMode();
+      });
+
+      // Cancel
+      pop.querySelector(".edit-cancel-btn").addEventListener("click", () => {
+        const c = colorMap[a.color] || colorMap.blue;
+        rectEl.style.borderColor = c.border;
+        rectEl.style.background = c.fill;
+        closeAnnotationPopover();
+      });
+    }
+
+    async function loadReplies(container, commentUuid, ch, parentCommentUuid) {
+      try {
+        let data;
+        if (replyCache[commentUuid]) {
+          data = replyCache[commentUuid];
+        } else {
+          const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${commentUuid}/replies`);
+          if (!resp.ok) return;
+          data = await resp.json();
+          replyCache[commentUuid] = data;
+        }
+        container.innerHTML = "";
+        if (data.replies && data.replies.length > 0) {
+          data.replies.forEach(r => appendReply(container, r, ch, parentCommentUuid));
+        }
+      } catch(e) {}
+    }
+
+    function appendReply(container, r, ch, parentCommentUuid) {
+      const div = document.createElement("div");
+      div.style.cssText = "border-top:1px solid color-mix(in oklch, var(--color-base-content) 13%, transparent);padding-top:0.375rem;margin-top:0.375rem;";
+      const date = new Date(r.inserted_at + (String(r.inserted_at).endsWith("Z") ? "" : "Z"));
+      const timeAgo = formatTimeAgo(date);
+      let actionsHtml = `<button class="btn btn-xs btn-ghost reply-like-btn" style="gap:0.25rem;margin-top:0.125rem;">${r.liked ? '♥' : '♡'} <span>${r.like_count || 0}</span></button>`;
+      if (r.is_own) {
+        actionsHtml += `<button class="btn btn-xs btn-error reply-delete-btn" style="margin-top:0.125rem;">Delete</button>`;
+      }
+      const replyAvatar = r.avatar_url
+        ? `<img src="${r.avatar_url}" style="width:1.25rem;height:1.25rem;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+        : `<div style="width:1.25rem;height:1.25rem;border-radius:50%;background:color-mix(in oklch, var(--color-primary) 20%, transparent);display:flex;align-items:center;justify-content:center;font-size:0.5rem;font-weight:bold;color:var(--color-primary);flex-shrink:0;">${escapeHtml((r.username || "U")[0]).toUpperCase()}</div>`;
+      div.innerHTML = `<div style="display:flex;align-items:center;gap:0.3rem;font-size:0.7rem;color:color-mix(in oklch, var(--color-base-content) 60%, transparent);">${replyAvatar}<span><strong>${escapeHtml(r.username || "User")}</strong> &middot; ${timeAgo}</span></div><div style="font-size:0.8rem;white-space:pre-wrap;word-break:break-word;">${escapeHtml(r.content)}</div><div style="display:flex;gap:0.25rem;align-items:center;">${actionsHtml}</div>`;
+      div.querySelector(".reply-like-btn").addEventListener("click", async () => {
+        const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${r.uuid}/like`, {
+          method: "POST", headers: { "x-csrf-token": csrfToken }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          r.liked = data.liked;
+          r.like_count = data.like_count;
+          delete replyCache[parentCommentUuid];
+          const btn = div.querySelector(".reply-like-btn");
+          btn.innerHTML = `${data.liked ? '♥' : '♡'} <span>${data.like_count}</span>`;
+        }
+      });
+      if (r.is_own) {
+        div.querySelector(".reply-delete-btn").addEventListener("click", async () => {
+          const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations/${parentCommentUuid}/replies/${r.uuid}`, {
+            method: "DELETE", headers: { "x-csrf-token": csrfToken }
+          });
+          if (resp.ok) {
+            delete replyCache[parentCommentUuid];
+            div.remove();
+          }
+        });
+      }
+      container.appendChild(div);
+    }
+
+    function closeAnnotationPopover() {
+      document.getElementById("annotation-popover")?.remove();
+      document.removeEventListener("click", closeOnOutsideClick);
+    }
+
+    function closeOnOutsideClick(e) {
+      const pop = document.getElementById("annotation-popover");
+      if (pop && !pop.contains(e.target)) closeAnnotationPopover();
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement("div"); d.textContent = s; return d.innerHTML;
+    }
+
+    function formatTimeAgo(date) {
+      const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (secs < 60) return "just now";
+      if (secs < 3600) return Math.floor(secs / 60) + "m ago";
+      if (secs < 86400) return Math.floor(secs / 3600) + "h ago";
+      return Math.floor(secs / 86400) + "d ago";
+    }
+
+    // Drawing
+    let activeWrapper = annotationWrapper;
+    let drawState = null;
+
+    annotationWrapper?.addEventListener("mousedown", (e) => {
+      if (!annotationMode) return;
+      if (e.target.closest("#annotation-form, #annotation-popover, .annotation-rect")) return;
+      e.preventDefault();
+      activeWrapper = annotationWrapper;
+      startDraw(e.clientX, e.clientY);
+    });
+
+    annotationWrapper?.addEventListener("touchstart", (e) => {
+      if (!annotationMode) return;
+      if (e.target.closest("#annotation-form, #annotation-popover, .annotation-rect")) return;
+      activeWrapper = annotationWrapper;
+      const t = e.touches[0];
+      startDraw(t.clientX, t.clientY);
+    }, { passive: true });
+
+    wrapperRight?.addEventListener("mousedown", (e) => {
+      if (!annotationMode) return;
+      if (e.target.closest("#annotation-form, #annotation-popover, .annotation-rect")) return;
+      e.preventDefault();
+      activeWrapper = wrapperRight;
+      startDraw(e.clientX, e.clientY);
+    });
+
+    wrapperRight?.addEventListener("touchstart", (e) => {
+      if (!annotationMode) return;
+      if (e.target.closest("#annotation-form, #annotation-popover, .annotation-rect")) return;
+      activeWrapper = wrapperRight;
+      const t = e.touches[0];
+      startDraw(t.clientX, t.clientY);
+    }, { passive: true });
+
+    function startDraw(clientX, clientY) {
+      closeAnnotationPopover();
+      removeAnnotationForm();
+      const rect = activeWrapper.getBoundingClientRect();
+      drawState = {
+        startClientX: clientX,
+        startClientY: clientY,
+        el: null
+      };
+      const startX = ((clientX - rect.left) / rect.width) * 100;
+      const startY = ((clientY - rect.top) / rect.height) * 100;
+      const sel = document.createElement("div");
+      sel.id = "annotation-selection";
+      const sc = colorMap[selectedColor] || colorMap.blue;
+      sel.style.cssText = `position:absolute;border:2px dashed ${sc.border};background:${sc.fill};z-index:10;pointer-events:none;box-sizing:border-box;`;
+      sel.style.left = startX + "%";
+      sel.style.top = startY + "%";
+      sel.style.width = "0%";
+      sel.style.height = "0%";
+      activeWrapper.appendChild(sel);
+      drawState.el = sel;
+    }
+
+    document.addEventListener("mousemove", (e) => { if (drawState) updateDraw(e.clientX, e.clientY); });
+    document.addEventListener("touchmove", (e) => { if (drawState) { e.preventDefault(); const t = e.touches[0]; updateDraw(t.clientX, t.clientY); } }, { passive: false });
+
+    function updateDraw(clientX, clientY) {
+      const rect = activeWrapper.getBoundingClientRect();
+      const startX = Math.max(0, Math.min(100, ((drawState.startClientX - rect.left) / rect.width) * 100));
+      const startY = Math.max(0, Math.min(100, ((drawState.startClientY - rect.top) / rect.height) * 100));
+      const curX = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+      const curY = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+      const x = Math.min(startX, curX);
+      const y = Math.min(startY, curY);
+      const w = Math.abs(curX - startX);
+      const h = Math.abs(curY - startY);
+      drawState.el.style.left = x + "%";
+      drawState.el.style.top = y + "%";
+      drawState.el.style.width = w + "%";
+      drawState.el.style.height = h + "%";
+    }
+
+    document.addEventListener("mouseup", finishDraw);
+    document.addEventListener("touchend", finishDraw);
+
+    function finishDraw() {
+      if (!drawState) return;
+      let x = parseFloat(drawState.el.style.left);
+      let y = parseFloat(drawState.el.style.top);
+      let w = parseFloat(drawState.el.style.width);
+      let h = parseFloat(drawState.el.style.height);
+      const selEl = drawState.el;
+      drawState = null;
+
+      // Give tiny/point selections a minimum visible size (~30px)
+      const rect = activeWrapper.getBoundingClientRect();
+      const minW = Math.max(0.1, (3 / rect.width) * 100);
+      const minH = Math.max(0.1, (3 / rect.height) * 100);
+      if (w < minW) { x = Math.max(0, x - (minW - w) / 2); w = minW; }
+      if (h < minH) { y = Math.max(0, y - (minH - h) / 2); h = minH; }
+      selEl.style.left = x + "%";
+      selEl.style.top = y + "%";
+      selEl.style.width = w + "%";
+      selEl.style.height = h + "%";
+
+      // Handle edit-redraw mode
+      if (editDrawState) {
+        const eds = editDrawState;
+        editDrawState = null;
+        selEl.remove();
+        if (annotationMode) toggleAnnotationMode();
+        eds.rectEl.style.left = x + "%";
+        eds.rectEl.style.top = y + "%";
+        eds.rectEl.style.width = w + "%";
+        eds.rectEl.style.height = h + "%";
+        eds.rectEl.style.display = "";
+
+        if (eds.reopenModal) {
+          // Suppress the click that the browser synthesizes after mouseup/touchend,
+          // so it doesn't trigger tap-zone scrolling on the reader.
+          const suppressClick = (ev) => { ev.stopImmediatePropagation(); ev.preventDefault(); };
+          document.addEventListener("click", suppressClick, { capture: true, once: true });
+          setTimeout(() => document.removeEventListener("click", suppressClick, { capture: true }), 500);
+
+          const chNew = eds.ch;
+          fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(chNew)}/annotations/${eds.annotationId}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+            body: JSON.stringify({ x_pct: x, y_pct: y, w_pct: w, h_pct: h })
+          }).then(r => r.ok ? r.json() : null).then(data => {
+            if (data && annotationCache[chNew]) {
+              const existing = annotationCache[chNew].find(a => a.id === eds.annotationId);
+              if (existing) Object.assign(existing, { x_pct: data.x_pct, y_pct: data.y_pct, w_pct: data.w_pct, h_pct: data.h_pct });
+            }
+            const ann = (annotationCache[chNew] || []).find(a => a.id === eds.annotationId) || {};
+            window.openCommentModal(chNew, eds.page, eds.resourceUuid, {
+              annotation_id: eds.annotationId,
+              color: ann.color || eds.color,
+              visibility: ann.visibility || eds.visibility,
+              is_own: true
+            });
+          });
+          return;
+        }
+
+        const updatedA = { ...((annotationCache[eds.ch] || []).find(ann => ann.id === eds.annotationId) || {}), x_pct: x, y_pct: y, w_pct: w, h_pct: h };
+        showEditPopoverAfterRedraw(eds, updatedA, x, y, w, h);
+        return;
+      }
+
+      showAnnotationForm(selEl, x, y, w, h);
+    }
+
+    function showEditPopoverAfterRedraw(eds, a, x, y, w, h) {
+      closeAnnotationPopover();
+      const r = eds.rectEl.getBoundingClientRect();
+      const pop = document.createElement("div");
+      pop.id = "annotation-popover";
+      pop.style.cssText = `position:fixed;z-index:100;background:var(--color-base-200);border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);border-radius:0.75rem;padding:0.75rem;max-width:20rem;box-shadow:0 4px 12px rgba(0,0,0,0.3);overflow-y:auto;max-height:80vh;`;
+      pop.style.left = Math.min(r.left, window.innerWidth - 330) + "px";
+      pop.style.top = (r.bottom + 8) + "px";
+      if (r.bottom + 200 > window.innerHeight) pop.style.top = Math.max(8, r.top - 200) + "px";
+      document.body.appendChild(pop);
+      setTimeout(() => document.addEventListener("click", closeOnOutsideClick), 0);
+
+      const detail = { content: eds.content };
+      const fakeA = { ...a, color: eds.color, x_pct: x, y_pct: y, w_pct: w, h_pct: h };
+      showEditForm(pop, fakeA, detail, eds.rectEl, eds.ch);
+    }
+
+    function showAnnotationForm(selEl, x, y, w, h) {
+      removeAnnotationForm();
+      const form = document.createElement("div");
+      form.id = "annotation-form";
+      form.style.cssText = `position:absolute;left:${x + w / 2}%;top:${y + h / 2}%;transform:translate(-50%,-50%);z-index:20;background:var(--color-base-200);border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);border-radius:0.75rem;padding:0.75rem;width:16rem;box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
+      const swatchColors = ["blue", "pink", "green", "purple"];
+      const swatchBorders = { blue: "rgb(59,130,246)", pink: "rgb(236,72,153)", green: "rgb(74,222,128)", purple: "rgb(168,85,247)" };
+      let formColor = selectedColor;
+      const swatchHtml = swatchColors.map(c => {
+        const active = c === formColor ? "ring-2 ring-white ring-offset-1 ring-offset-black" : "";
+        return `<button type="button" data-color="${c}" class="color-swatch ${active}" style="width:1.25rem;height:1.25rem;border-radius:9999px;background:${swatchBorders[c]};border:2px solid ${c === formColor ? '#fff' : 'transparent'};cursor:pointer;flex-shrink:0;" title="${c}"></button>`;
+      }).join("");
+      let formPrivate = false;
+      form.innerHTML = `
+        <textarea id="annotation-text" rows="3" class="textarea textarea-bordered w-full text-base" placeholder="Add a comment..."></textarea>
+        <div class="annotation-error" style="display:none;color:#f87171;font-size:0.75rem;margin-top:0.25rem;"></div>
+        <div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.375rem;">
+          <span style="font-size:0.7rem;color:color-mix(in oklch, var(--color-base-content) 60%, transparent);">Color:</span>
+          ${swatchHtml}
+        </div>
+        <label style="display:flex;align-items:center;gap:0.375rem;margin-top:0.375rem;cursor:pointer;font-size:0.75rem;color:color-mix(in oklch, var(--color-base-content) 60%, transparent);">
+          <input type="checkbox" class="checkbox checkbox-xs ann-private-toggle" />
+          <span style="display:flex;align-items:center;gap:0.25rem;">&#128274; Private</span>
+        </label>
+        <div class="flex gap-2 mt-2">
+          <button id="annotation-post" class="btn btn-sm btn-primary flex-1">Post</button>
+          <button id="annotation-cancel" class="btn btn-sm btn-ghost flex-1">Cancel</button>
+        </div>
+      `;
+      activeWrapper.appendChild(form);
+
+      form.querySelector(".ann-private-toggle").addEventListener("change", (e) => {
+        formPrivate = e.target.checked;
+      });
+
+      form.querySelectorAll(".color-swatch").forEach(btn => {
+        btn.addEventListener("click", () => {
+          formColor = btn.dataset.color;
+          selectedColor = formColor;
+          form.querySelectorAll(".color-swatch").forEach(b => {
+            const isActive = b.dataset.color === formColor;
+            b.style.border = isActive ? "2px solid var(--color-base-content)" : "2px solid transparent";
+          });
+          const sc = colorMap[formColor] || colorMap.blue;
+          selEl.style.borderColor = sc.border;
+          selEl.style.background = sc.fill;
+        });
+      });
+
+      document.getElementById("annotation-cancel").addEventListener("click", () => {
+        selEl.remove(); form.remove();
+        if (annotationMode) toggleAnnotationMode();
+      });
+
+      document.getElementById("annotation-post").addEventListener("click", async () => {
+        const content = document.getElementById("annotation-text").value.trim();
+        if (!content) return;
+        const ch = activeWrapper.dataset.chapter;
+        const page = parseInt(activeWrapper.dataset.page);
+        const resp = await fetch(`/manga/api/${source}/${slug}/${encodeURIComponent(ch)}/annotations`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+          body: JSON.stringify({ page, x_pct: x, y_pct: y, w_pct: w, h_pct: h, content, title: mangaTitle, color: formColor, visibility: formPrivate ? "private" : "public" })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (!annotationCache[ch]) annotationCache[ch] = [];
+          annotationCache[ch].push(data);
+          renderPageAnnotations(ch, page, activeWrapper);
+          selEl.remove(); form.remove();
+          if (annotationMode) toggleAnnotationMode();
+          if (data.resource_uuid || data.comment_uuid) setTimeout(() => window.openCommentModal(ch, page, data.resource_uuid || data.comment_uuid), 300);
+        } else {
+          const err = form.querySelector(".annotation-error");
+          if (err) { err.textContent = "Failed to post comment. Try again."; err.style.display = "block"; }
+        }
+      });
+    }
+
+    function removeAnnotationForm() {
+      document.getElementById("annotation-form")?.remove();
+      document.getElementById("annotation-selection")?.remove();
+    }
+
+    // Guard container click handler
+    container.addEventListener("click", (e) => {
+      if (annotationMode && !e.target.closest("#annotation-form, #annotation-popover")) { e.stopImmediatePropagation(); }
+    }, true);
+
+    // Force comments visible when deep-linking to annotation
+    if (targetAnnotationId && !commentsVisible) {
+      commentsVisible = true;
+      document.querySelectorAll("#comments-visible-toggle, #comments-visible-toggle-mobile").forEach(btn => {
+        btn.classList.toggle("btn-active", true);
+      });
+    }
+    // Initial load (only if comments are visible)
+    if (commentsVisible) {
+      const n = startPage > 0 ? startPage : 0;
+      loadAnnotations(chapter).then(() => {
+        const twoPage = doublePageEnabled && n > 0 && !isWide(n) && n + 1 < total && !isWide(n + 1);
+        if (twoPage) {
+          renderPageAnnotations(chapter, n + 2, annotationWrapper);
+          renderPageAnnotations(chapter, n + 1, wrapperRight);
+        } else {
+          renderPageAnnotations(chapter, n + 1, annotationWrapper);
+        }
+      });
+    }
+  })();
+</script>

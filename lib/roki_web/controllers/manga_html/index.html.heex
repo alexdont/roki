@@ -1,0 +1,1168 @@
+<div :if={@manga} class="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+  <div class="flex items-center justify-between mb-2 sm:mb-4">
+    <a href={@search_back_url || "/manga"} class="btn btn-ghost gap-1">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      <%= if @search_back_url, do: "Search", else: "Home" %>
+    </a>
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-square" title="More">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+      </div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-48 p-2 shadow-lg">
+        <li :if={@saved}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/completed"}>
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit">
+              <%= if @completed do %>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                Unmark Completed
+              <% else %>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                Mark as Completed
+              <% end %>
+            </button>
+          </form>
+        </li>
+        <li :if={@saved && @categories != []}>
+          <button type="button" onclick="document.getElementById('category-modal-index').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+            Add to Category
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('adjust-time-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Adjust Time Read
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.activeElement.blur(); setTimeout(() => document.getElementById('cover-upload-input').click(), 100);">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            Change Cover
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('reading-mode-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+            Reading Mode
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('migrate-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+            Migrate Source
+          </button>
+        </li>
+        <li :if={@saved && @max_chapter && @max_chapter != @last_chapter}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reset_max_chapter"}>
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Reset Max Chapter
+            </button>
+          </form>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <%!-- Hero section with cover + info --%>
+  <div class="flex flex-row gap-4 sm:gap-6 mb-4 sm:mb-8">
+    <%!-- Cover + desktop buttons --%>
+    <div class="flex-shrink-0 flex flex-col items-center gap-2">
+      <img
+        id="manga-cover-img"
+        src={@cover_img_src}
+        alt={@manga.title}
+        class="rounded-lg shadow-lg w-32 sm:w-56"
+      />
+      <input :if={@saved} type="file" id="cover-upload-input" accept="image/*" class="hidden" />
+      <%!-- Save/source buttons --%>
+      <div class="flex flex-col gap-1.5 sm:gap-2 w-full">
+        <%= if @saved do %>
+          <%!-- Destructive — opens the confirm modal instead of
+               submitting directly (unsave hard-deletes progress). --%>
+          <button
+            type="button"
+            onclick="document.getElementById('unsave-modal').showModal()"
+            class="btn btn-error btn-outline btn-lg sm:btn-md w-full"
+          >
+            Unsave
+          </button>
+        <% else %>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/save"}>
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit" class="btn btn-primary btn-lg sm:btn-md w-full">Save</button>
+          </form>
+        <% end %>
+        <a href={@source_url} target="_blank" rel="noopener" class="btn btn-ghost btn-outline btn-lg sm:btn-md w-full">
+          {@source_label}
+        </a>
+        <%= if @saved do %>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/refresh"}>
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit" class="btn btn-ghost btn-sm w-full gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Refresh
+            </button>
+          </form>
+        <% end %>
+      </div>
+    </div>
+
+    <%!-- Info column --%>
+    <div class="flex-1 min-w-0">
+      <h1 class="text-xl sm:text-3xl font-bold mb-2 sm:mb-3 line-clamp-2 sm:line-clamp-none">{@manga.title}</h1>
+
+      <%!-- Some sources ship dozens of tags — cap the row and put the
+           full list behind a modal. --%>
+      <% genres = @manga.genres || [] %>
+      <div class="flex gap-1.5 sm:gap-2 mb-3 sm:mb-4 overflow-x-auto sm:flex-wrap">
+        <span :for={genre <- Enum.take(genres, 8)} class="badge badge-primary badge-sm sm:badge-md whitespace-nowrap">
+          {genre}
+        </span>
+        <button
+          :if={length(genres) > 8}
+          type="button"
+          onclick="document.getElementById('genres-modal').showModal()"
+          class="badge badge-outline badge-sm sm:badge-md whitespace-nowrap cursor-pointer hover:badge-primary"
+        >
+          +{length(genres) - 8} …
+        </button>
+      </div>
+      <dialog :if={length(genres) > 8} id="genres-modal" class="modal">
+        <div class="modal-box max-w-md">
+          <h3 class="font-bold text-base mb-3">Tags ({length(genres)})</h3>
+          <div class="flex flex-wrap gap-1.5">
+            <span :for={g <- genres} class="badge badge-primary badge-sm">{g}</span>
+          </div>
+          <form method="dialog" class="mt-4">
+            <button class="btn btn-sm w-full">Close</button>
+          </form>
+        </div>
+        <form method="dialog" class="modal-backdrop"><button>close</button></form>
+      </dialog>
+
+      <%!-- Desktop metadata. Site-tracked fields (time read, rank,
+           last read) sit on top in a fixed location so they're easy to
+           find regardless of how many scraped fields the source supplied.
+           A divider separates them from the upstream scraped metadata
+           when both groups have content. --%>
+      <div class="hidden sm:block">
+        <% on_site = @reading_seconds_adjusted || @reading_seconds || 0 %>
+        <% off_site = @reading_seconds_offsite || 0 %>
+        <% off_site_approx = !!@reading_seconds_offsite_approximate && off_site > 0 %>
+        <% total_time = on_site + off_site %>
+        <% tier = tier_display(@user_tier) %>
+        <% has_site? = total_time > 0 || @reading_rank || format_last_read(@last_read_at) || tier %>
+        <% has_scraped? = @manga.status || @manga.written_by || @manga.illustrated_by || @manga.year || @manga.reading_direction %>
+        <div class="grid grid-cols-1 gap-1 text-sm text-base-content/80 mb-4">
+          <%!-- Site info --%>
+          <p :if={total_time > 0} class="flex items-center gap-2 flex-wrap">
+            <span>
+              <span class="font-semibold text-base-content">Time Read:</span>
+              {format_reading_time(total_time, off_site_approx)}
+              <span :if={off_site > 0} class="text-base-content/50">
+                · {format_reading_time(off_site, off_site_approx)} off site
+              </span>
+            </span>
+            <span :if={@reading_estimate}>{@reading_estimate.percent_read}%</span>
+            <%!-- Trigger button. Opens the single `#time-stats-modal`
+                 dialog below — shared by both the desktop and mobile
+                 metadata blocks, since only one is ever visible at a
+                 time. --%>
+            <button :if={@reading_estimate} type="button" onclick="document.getElementById('time-stats-modal').showModal()" class="btn btn-ghost btn-xs btn-circle" title="Time stats">
+              <.icon name="hero-information-circle" class="w-4 h-4" />
+            </button>
+          </p>
+          <%!-- Leaderboard rank from /manga/stats. Same podium accent
+               (gold / silver / bronze) for the top 3 so it reads as
+               a peer of that page's ranking. --%>
+          <p :if={@reading_rank}>
+            <span class="font-semibold text-base-content">Time Read Rank:</span>
+            <% {rank, total} = @reading_rank %>
+            <span class={
+              cond do
+                rank == 1 -> "text-yellow-500 font-bold"
+                rank == 2 -> "text-zinc-400 font-bold"
+                rank == 3 -> "text-amber-700 font-bold"
+                true -> ""
+              end
+            }>#{rank}</span>
+            <span class="text-base-content/50">/ {total}</span>
+          </p>
+          <%!-- User's tierlist placement — same palette as the tierlist
+               legend so a glance at the color matches the row they'd
+               see on /manga/tierlist. --%>
+          <p :if={tier}>
+            <span class="font-semibold text-base-content">Your Tier:</span>
+            <span class="font-bold">{tier.label}</span>
+          </p>
+          <p :if={format_last_read(@last_read_at)}>
+            <span class="font-semibold text-base-content">Last Read:</span>
+            {format_last_read(@last_read_at)}
+          </p>
+          <%!-- Divider — only when we actually have both groups to split. --%>
+          <hr :if={has_site? && has_scraped?} class="my-1 border-base-content/15" />
+          <%!-- Scraped info --%>
+          <p :if={@manga.status}>
+            <span class="font-semibold text-base-content">Status:</span>
+            {String.replace(@manga.status, "This is ", "") |> String.replace(" series", "")}
+          </p>
+          <p :if={@manga.written_by}>
+            <span class="font-semibold text-base-content">Author:</span>
+            {String.replace(@manga.written_by, "Written By: ", "")}
+          </p>
+          <p :if={@manga.illustrated_by}>
+            <span class="font-semibold text-base-content">Artist:</span>
+            {String.replace(@manga.illustrated_by, "Illustrated By: ", "")}
+          </p>
+          <p :if={@manga.year}>
+            <span class="font-semibold text-base-content">Year:</span>
+            {String.replace(@manga.year, "Year Published: ", "")}
+          </p>
+          <p :if={@manga.reading_direction}>
+            <span class="font-semibold text-base-content">Reading:</span>
+            {String.replace(@manga.reading_direction, "Type: ", "")}
+          </p>
+        </div>
+
+        <a :if={@comment_count > 0} href={~p"/manga/#{@source}/#{@slug}/comments"} class="btn btn-outline btn-sm gap-2 mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+          {@comment_count} Comments
+        </a>
+
+        <p :if={@manga.synopsis != ""} class="text-sm text-base-content/70 leading-relaxed">
+          {@manga.synopsis}
+        </p>
+
+        <p :if={@manga.alt_titles} class="text-xs text-base-content/50 mt-3 leading-relaxed">
+          {String.replace(@manga.alt_titles, "Alternative Title: ", "")}
+        </p>
+      </div>
+
+      <%!-- Mobile metadata. Same site-first / divider / scraped layout
+           as desktop, but in a 2-column grid; the divider spans both
+           columns via col-span-2. --%>
+      <div class="sm:hidden">
+        <% on_site = @reading_seconds_adjusted || @reading_seconds || 0 %>
+        <% off_site = @reading_seconds_offsite || 0 %>
+        <% off_site_approx = !!@reading_seconds_offsite_approximate && off_site > 0 %>
+        <% total_time = on_site + off_site %>
+        <% tier = tier_display(@user_tier) %>
+        <% has_site? = total_time > 0 || @reading_rank || format_last_read(@last_read_at) || tier %>
+        <% has_scraped? = @manga.status || @manga.written_by || @manga.illustrated_by || @manga.year || @manga.reading_direction %>
+        <div class="grid grid-cols-2 gap-1 text-xs text-base-content/80 mb-3">
+          <%!-- Site info. Always col-span-2 so Time Read / Time Read Rank /
+               Last Read stack one-per-row regardless of viewport width,
+               instead of pairing up at random with the next field. --%>
+          <p :if={total_time > 0} class="col-span-2 flex items-center gap-2 flex-wrap">
+            <span>
+              <span class="font-semibold text-base-content">Time Read:</span>
+              {format_reading_time(total_time, off_site_approx)}
+              <span :if={off_site > 0} class="text-base-content/50">
+                · {format_reading_time(off_site, off_site_approx)} off site
+              </span>
+            </span>
+            <span :if={@reading_estimate}>{@reading_estimate.percent_read}%</span>
+            <button :if={@reading_estimate} type="button" onclick="document.getElementById('time-stats-modal').showModal()" class="btn btn-ghost btn-xs btn-circle" title="Time stats">
+              <.icon name="hero-information-circle" class="w-4 h-4" />
+            </button>
+          </p>
+          <%!-- Leaderboard rank from /manga/stats. Same podium accent
+               (gold / silver / bronze) for the top 3 so it reads as
+               a peer of that page's ranking. --%>
+          <p :if={@reading_rank} class="col-span-2">
+            <span class="font-semibold text-base-content">Time Read Rank:</span>
+            <% {rank, total} = @reading_rank %>
+            <span class={
+              cond do
+                rank == 1 -> "text-yellow-500 font-bold"
+                rank == 2 -> "text-zinc-400 font-bold"
+                rank == 3 -> "text-amber-700 font-bold"
+                true -> ""
+              end
+            }>#{rank}</span>
+            <span class="text-base-content/50">/ {total}</span>
+          </p>
+          <p :if={tier} class="col-span-2">
+            <span class="font-semibold text-base-content">Your Tier:</span>
+            <span class="font-bold">{tier.label}</span>
+          </p>
+          <p :if={format_last_read(@last_read_at)} class="col-span-2">
+            <span class="font-semibold text-base-content">Last Read:</span>
+            {format_last_read(@last_read_at)}
+          </p>
+          <%!-- Divider spans both columns. --%>
+          <hr :if={has_site? && has_scraped?} class="col-span-2 my-1 border-base-content/15" />
+          <%!-- Scraped info --%>
+          <p :if={@manga.status}>
+            <span class="font-semibold text-base-content">Status:</span>
+            {String.replace(@manga.status, "This is ", "") |> String.replace(" series", "")}
+          </p>
+          <p :if={@manga.written_by}>
+            <span class="font-semibold text-base-content">Author:</span>
+            {String.replace(@manga.written_by, "Written By: ", "")}
+          </p>
+          <p :if={@manga.illustrated_by}>
+            <span class="font-semibold text-base-content">Artist:</span>
+            {String.replace(@manga.illustrated_by, "Illustrated By: ", "")}
+          </p>
+          <p :if={@manga.year}>
+            <span class="font-semibold text-base-content">Year:</span>
+            {String.replace(@manga.year, "Year Published: ", "")}
+          </p>
+          <p :if={@manga.reading_direction}>
+            <span class="font-semibold text-base-content">Reading:</span>
+            {String.replace(@manga.reading_direction, "Type: ", "")}
+          </p>
+        </div>
+
+        <a :if={@comment_count > 0} href={~p"/manga/#{@source}/#{@slug}/comments"} class="btn btn-outline btn-sm gap-2 mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+          {@comment_count} Comments
+        </a>
+
+        <p :if={@manga.synopsis != ""} class="text-xs text-base-content/70 leading-relaxed line-clamp-6">
+          {@manga.synopsis}
+        </p>
+
+        <p :if={@manga.alt_titles} class="text-xs text-base-content/50 mt-2 leading-relaxed">
+          {String.replace(@manga.alt_titles, "Alternative Title: ", "")}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <%!-- Unsave confirmation — unsave_manga hard-deletes the SavedManga
+       row, taking chapter progress and time-read with it, so a
+       mis-tap here is genuinely costly. --%>
+  <dialog :if={@saved} id="unsave-modal" class="modal">
+    <div class="modal-box max-w-sm">
+      <h3 class="text-lg font-bold mb-2">Unsave this manga?</h3>
+      <p class="text-sm text-base-content/70 mb-1">
+        <span class="font-semibold">{@manga.title}</span> will be removed from your library.
+      </p>
+      <p class="text-sm text-error/80 mb-4">
+        Your chapter progress and time-read stats for it will be deleted too. This can't be undone.
+      </p>
+      <div class="flex gap-2">
+        <form method="dialog" class="flex-1">
+          <button class="btn btn-ghost w-full">Cancel</button>
+        </form>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/save"} class="flex-1">
+          <input type="hidden" name="_method" value="delete" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <button type="submit" class="btn btn-error w-full">Unsave</button>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Single shared modal driven by both the desktop and mobile
+       "Time stats" info buttons. Only rendered when there's
+       something to show, matching the buttons' `:if`. v1 carries
+       just the time-left estimate; more per-time stats land here
+       (per-chapter average, pace trend, …) as they're built. --%>
+  <dialog :if={@reading_estimate} id="time-stats-modal" class="modal">
+    <div class="modal-box">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+      </form>
+      <h3 class="text-lg font-bold mb-4">Time stats</h3>
+      <div class="space-y-4 text-sm">
+        <p>
+          <span class="font-semibold text-base-content">Estimated time left:</span><br />
+          <span class="text-lg">~{format_reading_time(@reading_estimate.seconds_remaining, false)}</span>
+          <span class="text-base-content/60">
+            ({@reading_estimate.chapters_remaining} chapter<%= if @reading_estimate.chapters_remaining != 1, do: "s" %> remaining)
+          </span>
+        </p>
+        <p>
+          <span class="font-semibold text-base-content">Percent read:</span>
+          <span class="text-lg">{@reading_estimate.percent_read}%</span>
+          <span class="text-base-content/60">
+            ({@reading_estimate.chapters_read} / {@reading_estimate.chapters_total} chapters)
+          </span>
+          <%!-- Progress bar mirrors the percent for a quick visual cue,
+               since "37%" doesn't pop on its own. daisyUI `progress`
+               accepts value/max and renders the fill automatically. --%>
+          <progress class="progress progress-primary w-full mt-2" value={@reading_estimate.chapters_read} max={@reading_estimate.chapters_total}></progress>
+        </p>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Continue / Start reading — mobile full-width --%>
+  <div class="sm:hidden mt-3">
+    <%= if @completed do %>
+      <div class="btn btn-success btn-lg w-full no-animation cursor-default">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+        Completed
+      </div>
+    <% else %>
+      <%= if @last_chapter do %>
+        <%
+          strip? = strip_mode?(@reading_mode)
+          pct_left = strip? && percent_left(@last_page, @last_page_fraction, @last_chapter_total_pages)
+          resume_suffix =
+            cond do
+              pct_left -> " · #{pct_left}% left"
+              !strip? && @last_page -> " p.#{@last_page}"
+              true -> ""
+            end
+        %>
+        <a href={~p"/manga/#{@source}/#{@slug}/#{@last_chapter}?#{@search_params}"} class="btn btn-primary btn-lg w-full btn-progress" style={if @percent_read, do: "--progress: #{@percent_read}%"}>
+          Continue Ch. {@last_chapter}{resume_suffix}
+        </a>
+        <%!-- `from_max=1` tells the chapter `show` controller to snap
+             `last_chapter` to this URL on entry, so jumping back to the
+             user's actual progress reseats the resume pointer in one
+             click. Library-side gate is forward-only + idempotent. --%>
+        <a :if={@max_chapter && @max_chapter != @last_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@max_chapter}?#{Map.put(@search_params, :from_max, "1")}"} class="btn btn-accent btn-sm w-full mt-2">
+          Continue from Ch. {@max_chapter}
+        </a>
+      <% else %>
+        <a :if={@manga.chapters != []} href={~p"/manga/#{@source}/#{@slug}/#{List.first(@manga.chapters)}?#{@search_params}"} class="btn btn-primary btn-lg w-full">
+          Start Reading
+        </a>
+      <% end %>
+    <% end %>
+  </div>
+
+  <%!-- Continue / Start reading — desktop inline --%>
+  <div class="hidden sm:block mt-6">
+    <%= if @completed do %>
+      <div class="btn btn-success btn-lg text-lg w-full no-animation cursor-default">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+        Completed
+      </div>
+    <% else %>
+      <%= if @last_chapter do %>
+        <%
+          strip_d? = strip_mode?(@reading_mode)
+          pct_left_d = strip_d? && percent_left(@last_page, @last_page_fraction, @last_chapter_total_pages)
+          resume_suffix_d =
+            cond do
+              pct_left_d -> " · #{pct_left_d}% left"
+              !strip_d? && @last_page -> ", Page #{@last_page}"
+              true -> ""
+            end
+        %>
+        <a href={~p"/manga/#{@source}/#{@slug}/#{@last_chapter}?#{@search_params}"} class="btn btn-primary btn-lg text-lg w-full btn-progress" style={if @percent_read, do: "--progress: #{@percent_read}%"}>
+          Continue Chapter {@last_chapter}{resume_suffix_d}
+        </a>
+        <%!-- `from_max=1` snap — see desktop block above. --%>
+        <a :if={@max_chapter && @max_chapter != @last_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@max_chapter}?#{Map.put(@search_params, :from_max, "1")}"} class="btn btn-accent btn-sm w-full mt-2">
+          Continue from Chapter {@max_chapter}
+        </a>
+      <% else %>
+        <a :if={@manga.chapters != []} href={~p"/manga/#{@source}/#{@slug}/#{List.first(@manga.chapters)}?#{@search_params}"} class="btn btn-primary btn-lg text-lg w-full">
+          Start Reading
+        </a>
+      <% end %>
+    <% end %>
+  </div>
+
+  <%!-- Other readers --%>
+  <div :if={@manga_readers != []} class="mt-4">
+    <h3 class="text-sm font-semibold text-base-content/60 mb-2">Also reading</h3>
+    <div class="flex flex-wrap gap-3">
+      <%= for r <- @manga_readers do %>
+        <div class="flex items-center gap-2">
+          <%= if r.avatar_url do %>
+            <img src={r.avatar_url} class="w-7 h-7 rounded-full object-cover" />
+          <% else %>
+            <div class="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">
+              {String.first(r.username || "?")}
+            </div>
+          <% end %>
+          <div class="text-sm">
+            <span class="font-medium">{r.username}</span>
+            <span :if={r.last_chapter} class="text-base-content/50">
+              Ch.{r.last_chapter}<span :if={r.last_page}> p.{r.last_page}</span>
+            </span>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%!-- Fabledex story arcs / volumes — when present, replaces the flat
+       chapter list below (chapters fold into their arcs or volumes).
+       Renders nothing when there are neither. --%>
+  <.story_arcs
+    arcs={@story_arcs}
+    volumes={@story_volumes}
+    chapters={@manga.chapters}
+    source={@source}
+    slug={@slug}
+    search_params={@search_params}
+    last_chapter={@last_chapter}
+    max_chapter={@max_chapter}
+    completed={!!@completed}
+    current_chapter_percent={@current_chapter_percent}
+    chapter_titles={@chapter_titles}
+    finished_chapters={@finished_chapters}
+    saved={@saved}
+  />
+
+  <%= if @story_arcs == [] and @story_volumes == [] do %>
+  <%!-- Chapter list --%>
+  <div class="divider my-2 sm:my-4"></div>
+  <div class="flex items-center gap-3 mb-4">
+    <%
+      total_chapters = length(@manga.chapters)
+      last_ch_num = last_chapter_number(@manga.chapters)
+      display_count = last_ch_num || total_chapters
+    %>
+    <h2 class="text-lg sm:text-xl font-bold">
+      {display_count} Chapters<span :if={last_ch_num && last_ch_num != total_chapters} class="text-sm font-normal text-base-content/60"> ({total_chapters} total)</span>
+    </h2>
+    <button id="sort-toggle" class="btn btn-xs btn-ghost" title="Reverse order">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
+    </button>
+    <button id="search-toggle" class="btn btn-xs btn-ghost" title="Search chapters">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+    </button>
+  </div>
+  <div id="chapter-search" class="hidden mb-4">
+    <input
+      id="chapter-search-input"
+      type="text"
+      placeholder="Search chapters..."
+      class="input input-sm input-bordered w-full"
+      autocomplete="off"
+    />
+  </div>
+  <%
+    {collapsed_chapters, rest} = Enum.split_with(@manga.chapters, &chapter_read?(&1, @last_chapter))
+    {reread_chapters, unread_chapters} = if @max_chapter && @max_chapter != @last_chapter do
+      Enum.split_with(rest, &chapter_read?(&1, @max_chapter))
+    else
+      {[], rest}
+    end
+  %>
+  <div id="chapter-grid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+    <%= if collapsed_chapters != [] do %>
+      <button
+        id="read-toggle"
+        class="btn btn-sm btn-ghost opacity-40 flex flex-col h-auto py-2 sm:py-1.5 gap-0 col-span-2"
+        title="Show read chapters"
+      >
+        <span>{List.first(collapsed_chapters)} – {List.last(collapsed_chapters)}</span>
+        <span class="text-[10px] font-normal">{length(collapsed_chapters)} read</span>
+      </button>
+      <div id="read-chapters" class="hidden contents">
+        <a
+          :for={ch <- collapsed_chapters}
+          href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
+          title={chapter_title(@chapter_titles, ch)}
+          class="btn btn-sm btn-ghost opacity-40 flex flex-col h-auto py-2 sm:py-1.5 gap-0 relative"
+        >
+          <span>{ch}</span>
+          <span :if={@manga.chapter_dates[ch]} class="text-[10px] font-normal text-base-content/40">
+            {@manga.chapter_dates[ch]}
+          </span>
+          <span :if={@chapter_comment_counts[ch]} class="absolute -top-1 -right-1 badge badge-xs badge-primary flex items-center gap-0.5 text-[9px] px-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+            {@chapter_comment_counts[ch]}
+          </span>
+        </a>
+      </div>
+    <% end %>
+    <a
+      :for={ch <- reread_chapters}
+      href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
+          title={chapter_title(@chapter_titles, ch)}
+      class="btn btn-sm btn-accent opacity-60 flex flex-col h-auto py-2 sm:py-1.5 gap-0 relative"
+    >
+      <span>{ch}</span>
+      <span :if={@manga.chapter_dates[ch]} class="text-[10px] font-normal text-base-content/40">
+        {@manga.chapter_dates[ch]}
+      </span>
+      <span :if={@chapter_comment_counts[ch]} class="absolute -top-1 -right-1 badge badge-xs badge-primary flex items-center gap-0.5 text-[9px] px-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+        {@chapter_comment_counts[ch]}
+      </span>
+    </a>
+    <a
+      :for={ch <- unread_chapters}
+      href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
+          title={chapter_title(@chapter_titles, ch)}
+      class={[
+        "btn btn-sm flex flex-col h-auto py-2 sm:py-1.5 gap-0 relative",
+        if(ch == @last_chapter, do: "btn-primary btn-progress", else: "btn-outline")
+      ]}
+      style={if ch == @last_chapter && @current_chapter_percent, do: "--progress: #{@current_chapter_percent}%"}
+    >
+      <span>{ch}</span>
+      <span :if={@manga.chapter_dates[ch]} class="text-[10px] font-normal text-base-content/40">
+        {@manga.chapter_dates[ch]}
+      </span>
+      <span :if={@chapter_comment_counts[ch]} class="absolute -top-1 -right-1 badge badge-xs badge-primary flex items-center gap-0.5 text-[9px] px-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+        {@chapter_comment_counts[ch]}
+      </span>
+    </a>
+  </div>
+  <script>
+    (() => {
+      const toggle = document.getElementById("read-toggle");
+      const readChapters = document.getElementById("read-chapters");
+      if (toggle && readChapters) {
+        toggle.addEventListener("click", () => {
+          const hidden = readChapters.classList.toggle("hidden");
+          toggle.classList.toggle("hidden", !hidden);
+        });
+      }
+
+      document.getElementById("sort-toggle").addEventListener("click", () => {
+        const grid = document.getElementById("chapter-grid");
+        const items = Array.from(grid.children);
+        items.reverse();
+        grid.append(...items);
+      });
+
+      const searchToggle = document.getElementById("search-toggle");
+      const searchBar = document.getElementById("chapter-search");
+      const searchInput = document.getElementById("chapter-search-input");
+
+      searchToggle.addEventListener("click", () => {
+        const hidden = searchBar.classList.toggle("hidden");
+        if (!hidden) {
+          searchInput.focus();
+        } else {
+          searchInput.value = "";
+          filterChapters("");
+        }
+      });
+
+      searchInput.addEventListener("input", (e) => {
+        filterChapters(e.target.value);
+      });
+
+      function filterChapters(query) {
+        const grid = document.getElementById("chapter-grid");
+        const q = query.trim().toLowerCase();
+        Array.from(grid.children).forEach(el => {
+          if (!q) {
+            el.style.display = "";
+            return;
+          }
+          const text = (el.textContent || "").toLowerCase();
+          el.style.display = text.includes(q) ? "" : "none";
+        });
+      }
+    })();
+  </script>
+  <% end %>
+
+  <%!-- Category modal --%>
+  <dialog :if={@saved && @categories != []} id="category-modal-index" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Add to Category</h3>
+      <div class="flex flex-col gap-2" id="category-list-index">
+        <label :for={cat <- @categories} class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-base-200">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm checkbox-primary category-checkbox-index"
+            data-category-id={cat.id}
+            checked={cat.id in @manga_category_ids}
+          />
+          <span class="text-sm font-medium">{cat.name}</span>
+        </label>
+      </div>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-sm">Close</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+  <script :if={@saved && @categories != []}>
+    document.querySelectorAll('.category-checkbox-index').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        const catId = this.dataset.categoryId;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch('<%= ~p"/manga/#{@source}/#{@slug}/toggle_category" %>', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+          body: JSON.stringify({ category_id: parseInt(catId) })
+        });
+      });
+    });
+  </script>
+
+  <%!-- Cover upload handler --%>
+  <script :if={@saved}>
+    (() => {
+      const input = document.getElementById('cover-upload-input');
+      if (!input) return;
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        try {
+          const form = new FormData();
+          form.append('file', file);
+          const uploadRes = await fetch('/phoenix_kit/api/upload', {
+            method: 'POST',
+            headers: { 'x-csrf-token': csrfToken },
+            body: form
+          });
+          if (!uploadRes.ok) throw new Error('Upload failed');
+          const uploadData = await uploadRes.json();
+
+          const coverRes = await fetch('<%= ~p"/manga/#{@source}/#{@slug}/custom_cover" %>', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: JSON.stringify({ file_uuid: uploadData.file_uuid })
+          });
+          if (!coverRes.ok) throw new Error('Save failed');
+          const coverData = await coverRes.json();
+
+          document.getElementById('manga-cover-img').src = coverData.cover_url;
+        } catch (e) {
+          alert('Failed to update cover: ' + e.message);
+        }
+        input.value = '';
+      });
+    })();
+  </script>
+
+  <%!-- Migrate Source modal --%>
+  <dialog :if={@saved} id="migrate-modal" class="modal">
+    <div class="modal-box max-w-lg">
+      <h3 class="font-bold text-lg mb-4">Migrate Source</h3>
+      <%!-- Step 1: Search --%>
+      <div id="migrate-step-search">
+        <div class="flex gap-2 mb-4">
+          <input
+            id="migrate-search-input"
+            type="text"
+            value={@manga.title}
+            placeholder="Search for manga..."
+            class="input input-bordered w-full"
+            autocomplete="off"
+          />
+          <button id="migrate-search-btn" class="btn btn-primary btn-square" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </button>
+        </div>
+        <div id="migrate-results" class="max-h-80 overflow-y-auto space-y-2"></div>
+        <p id="migrate-loading" class="hidden text-center text-sm text-base-content/60 py-4">Searching...</p>
+        <p id="migrate-empty" class="hidden text-center text-sm text-base-content/60 py-4">No results found</p>
+      </div>
+      <%!-- Step 2: Confirm --%>
+      <div id="migrate-step-confirm" class="hidden">
+        <div class="flex items-center gap-3 mb-4 p-3 bg-base-200 rounded-lg">
+          <img id="migrate-target-cover" class="w-12 h-16 rounded object-cover" src="" alt="" />
+          <div class="min-w-0">
+            <p id="migrate-target-title" class="font-semibold text-sm line-clamp-2"></p>
+            <p id="migrate-target-source" class="text-xs text-base-content/60"></p>
+          </div>
+        </div>
+        <p class="text-sm mb-3">Select data to migrate:</p>
+        <div class="flex flex-col gap-2 mb-4">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="migrate-opt-progress" class="checkbox checkbox-sm checkbox-primary" checked />
+            <span class="text-sm">Chapter progress</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="migrate-opt-categories" class="checkbox checkbox-sm checkbox-primary" checked />
+            <span class="text-sm">Categories</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="migrate-opt-time" class="checkbox checkbox-sm checkbox-primary" checked />
+            <span class="text-sm">Time spent reading</span>
+          </label>
+        </div>
+        <div class="flex gap-2">
+          <button id="migrate-back-btn" class="btn btn-ghost flex-1" type="button">Back</button>
+          <button id="migrate-confirm-btn" class="btn btn-primary flex-1" type="button">Migrate</button>
+        </div>
+      </div>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-sm">Cancel</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+  <script :if={@saved}>
+    (() => {
+      const modal = document.getElementById('migrate-modal');
+      const searchInput = document.getElementById('migrate-search-input');
+      const searchBtn = document.getElementById('migrate-search-btn');
+      const resultsEl = document.getElementById('migrate-results');
+      const loadingEl = document.getElementById('migrate-loading');
+      const emptyEl = document.getElementById('migrate-empty');
+      const stepSearch = document.getElementById('migrate-step-search');
+      const stepConfirm = document.getElementById('migrate-step-confirm');
+      const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+      let debounceTimer = null;
+      let selectedTarget = null;
+
+      function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+      let searchGen = 0;
+
+      function resultCardsHtml(s, results) {
+        if (!results.length) return '<p class="text-sm text-base-content/50">No results</p>';
+        return '<div class="flex overflow-x-auto gap-3 pb-2">' + results.map(r => `
+          <button type="button" class="migrate-result flex-shrink-0 w-28 text-left"
+            data-source="${esc(s.source)}" data-slug="${esc(r.slug)}" data-title="${esc(r.title)}"
+            data-cover="${esc(r.cover_url)}" data-source-label="${esc(s.label)}">
+            <img src="/manga/proxy/image?url=${encodeURIComponent(r.cover_url || '')}"
+              class="rounded-lg w-full aspect-[3/4] object-cover" alt="" onerror="this.style.visibility='hidden'" />
+            <p class="text-sm mt-1 line-clamp-2">${esc(r.title)}</p>
+          </button>
+        `).join('') + '</div>';
+      }
+
+      function doSearch() {
+        const q = searchInput.value.trim();
+        if (!q) return;
+        const gen = ++searchGen;
+        resultsEl.innerHTML = '';
+        emptyEl.classList.add('hidden');
+        loadingEl.classList.remove('hidden');
+        // Skeleton first (no live searches server-side), then one
+        // request per source in parallel — rows fill in as sources
+        // answer, the slowest site never blocks the modal.
+        fetch(`<%= ~p"/manga/#{@source}/#{@slug}/migrate/search" %>?q=${encodeURIComponent(q)}`, {
+          headers: { 'x-csrf-token': csrfToken }
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (gen !== searchGen) return;
+            loadingEl.classList.add('hidden');
+            if (!data.groups || !data.groups.length) { emptyEl.classList.remove('hidden'); return; }
+            const spinner = '<span class="loading loading-spinner loading-xs"></span>';
+            resultsEl.innerHTML = data.groups.map((g, gi) => `
+              <div class="border border-base-300 rounded-xl p-3 mb-4">
+                <p class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-3">${esc(g.lang)}</p>
+                ${g.sources.map((s, si) => `
+                  <div class="mb-4 last:mb-0">
+                    <p class="text-base font-semibold mb-2">${esc(s.label)}</p>
+                    <div id="msrc-${gen}-${gi}-${si}">${spinner}</div>
+                  </div>
+                `).join('')}
+              </div>
+            `).join('');
+            let pending = 0, found = 0;
+            data.groups.forEach((g, gi) => g.sources.forEach((s, si) => {
+              pending++;
+              const which = s.ext ? `ext=${encodeURIComponent(s.ext)}` : `native=${encodeURIComponent(s.source)}`;
+              fetch(`<%= ~p"/manga/#{@source}/#{@slug}/migrate/search_one" %>?q=${encodeURIComponent(q)}&${which}`, {
+                headers: { 'x-csrf-token': csrfToken }
+              })
+                .then(r => r.json())
+                .then(d => {
+                  if (gen !== searchGen) return;
+                  const el = document.getElementById(`msrc-${gen}-${gi}-${si}`);
+                  if (!el) return;
+                  const results = d.results || [];
+                  found += results.length;
+                  el.innerHTML = resultCardsHtml(s, results);
+                  el.querySelectorAll('.migrate-result').forEach(btn => {
+                    btn.addEventListener('click', () => selectTarget(btn.dataset));
+                  });
+                })
+                .catch(() => {
+                  if (gen !== searchGen) return;
+                  const el = document.getElementById(`msrc-${gen}-${gi}-${si}`);
+                  if (el) el.innerHTML = '<p class="text-sm text-base-content/50">Unavailable</p>';
+                })
+                .finally(() => {
+                  if (gen !== searchGen) return;
+                  pending--;
+                  if (pending === 0 && found === 0) emptyEl.classList.remove('hidden');
+                });
+            }));
+          })
+          .catch(() => { if (gen === searchGen) loadingEl.classList.add('hidden'); });
+      }
+
+      searchBtn.addEventListener('click', doSearch);
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+      });
+      searchInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(doSearch, 500);
+      });
+
+      function selectTarget(ds) {
+        selectedTarget = { source: ds.source, slug: ds.slug, title: ds.title, cover_url: ds.cover, source_label: ds.sourceLabel };
+        document.getElementById('migrate-target-title').textContent = ds.title;
+        document.getElementById('migrate-target-source').textContent = ds.sourceLabel;
+        const coverImg = document.getElementById('migrate-target-cover');
+        if (ds.cover) {
+          coverImg.src = '/manga/proxy/image?url=' + encodeURIComponent(ds.cover);
+          coverImg.style.display = '';
+        } else {
+          coverImg.style.display = 'none';
+        }
+        stepSearch.classList.add('hidden');
+        stepConfirm.classList.remove('hidden');
+      }
+
+      document.getElementById('migrate-back-btn').addEventListener('click', () => {
+        stepConfirm.classList.add('hidden');
+        stepSearch.classList.remove('hidden');
+      });
+
+      document.getElementById('migrate-confirm-btn').addEventListener('click', () => {
+        if (!selectedTarget) return;
+        const btn = document.getElementById('migrate-confirm-btn');
+        btn.disabled = true;
+        btn.textContent = 'Migrating...';
+
+        fetch('<%= ~p"/manga/#{@source}/#{@slug}/migrate" %>', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+          body: JSON.stringify({
+            target_source: selectedTarget.source,
+            target_slug: selectedTarget.slug,
+            target_title: selectedTarget.title,
+            target_cover_url: selectedTarget.cover_url,
+            migrate_progress: document.getElementById('migrate-opt-progress').checked,
+            migrate_categories: document.getElementById('migrate-opt-categories').checked,
+            migrate_time: document.getElementById('migrate-opt-time').checked
+          })
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok && data.redirect_to) {
+              window.location.href = data.redirect_to;
+            } else {
+              alert('Migration failed: ' + (data.error || 'Unknown error'));
+              btn.disabled = false;
+              btn.textContent = 'Migrate';
+            }
+          })
+          .catch(() => {
+            alert('Migration failed');
+            btn.disabled = false;
+            btn.textContent = 'Migrate';
+          });
+      });
+
+      modal.addEventListener('close', () => {
+        stepConfirm.classList.add('hidden');
+        stepSearch.classList.remove('hidden');
+        selectedTarget = null;
+      });
+    })();
+  </script>
+
+  <%!-- Adjust Time Read modal --%>
+  <dialog :if={@saved} id="reading-mode-modal" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Reading Mode</h3>
+      <div class="flex flex-col gap-2">
+        <form
+          :for={{mode, label} <- [{"paged", "Manga"}, {"scroll", "Manhwa"}]}
+          method="post"
+          action={~p"/manga/#{@source}/#{@slug}/reading_mode"}
+        >
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="device" value="all" />
+          <button
+            type="submit"
+            class={"btn w-full justify-start " <> if(@reading_mode == mode, do: "btn-primary", else: "btn-outline")}
+          >
+            {label}
+            <span :if={@reading_mode == mode} class="ml-auto">✓</span>
+          </button>
+        </form>
+      </div>
+      <div class="modal-action">
+        <form method="dialog">
+          <button class="btn btn-ghost">Close</button>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+
+  <dialog :if={@saved} id="adjust-time-modal" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Adjust Time Read</h3>
+      <form id="adjust-time-form" method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"}>
+        <input type="hidden" name="_method" value="put" />
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <% on_site = @reading_seconds_adjusted || @reading_seconds || 0 %>
+        <% off_site = @reading_seconds_offsite || 0 %>
+        <% total_time = on_site + off_site %>
+        <div class="label pt-0"><span class="label-text font-semibold">On-Site Time</span></div>
+        <div class="flex gap-3 mb-3">
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Hours</span></div>
+            <input
+              type="number"
+              name="hours"
+              min="0"
+              value={div(on_site, 3600)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Minutes</span></div>
+            <input
+              type="number"
+              name="minutes"
+              min="0"
+              max="59"
+              value={div(rem(on_site, 3600), 60)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+        </div>
+        <div class="label pt-2"><span class="label-text font-semibold">Off-Site Time</span></div>
+        <div class="flex gap-3 mb-3">
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Hours</span></div>
+            <input
+              type="number"
+              name="offsite_hours"
+              min="0"
+              value={div(off_site, 3600)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Minutes</span></div>
+            <input
+              type="number"
+              name="offsite_minutes"
+              min="0"
+              max="59"
+              value={div(rem(off_site, 3600), 60)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+        </div>
+        <label class="label cursor-pointer justify-start gap-2 py-1 mb-2">
+          <input
+            id="adjust-time-approx"
+            type="checkbox"
+            name="offsite_approximate"
+            value="true"
+            checked={!!@reading_seconds_offsite_approximate}
+            class="checkbox checkbox-sm"
+          />
+          <span class="label-text text-xs">Off-site time is approximate (show <span class="font-mono">~</span> in stats)</span>
+        </label>
+        <label class="form-control w-full mb-3">
+          <div class="label py-1"><span class="label-text text-xs">Date started (▶ on the calendar)</span></div>
+          <input
+            type="date"
+            name="date_started"
+            value={@date_started && Date.to_iso8601(@date_started)}
+            class="input input-bordered w-full"
+          />
+        </label>
+        <p class="text-center text-sm text-base-content/70 mb-4">
+          Total: <span id="adjust-time-total" class="font-semibold text-base-content tabular-nums">{format_reading_time(total_time, !!@reading_seconds_offsite_approximate && off_site > 0) || "0m"}</span>
+        </p>
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-primary flex-1">Save</button>
+        </div>
+      </form>
+      <%!-- Reset On-Site Time: zeroes the raw tracker + manual on-site
+           override + the daily/hourly activity log. Off-site preserved.
+           Shown when there's any on-site time to clear. --%>
+      <%= if (@reading_seconds && @reading_seconds > 0) || @reading_seconds_adjusted do %>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2"
+          onsubmit="return confirm('Zero the on-site reading time and clear the daily activity log for this manga? Off-site time is preserved.')">
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="reset" value="true" />
+          <button type="submit" class="btn btn-warning btn-outline btn-sm w-full">Reset On-Site Time</button>
+        </form>
+      <% end %>
+
+      <%!-- Reset Off-Site Time: clears just the off-site bucket. --%>
+      <%= if @reading_seconds_offsite && @reading_seconds_offsite > 0 do %>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2">
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="reset_offsite" value="true" />
+          <button type="submit" class="btn btn-warning btn-outline btn-sm w-full">Reset Off-Site Time</button>
+        </form>
+      <% end %>
+
+      <%!-- Reset All Time Read: nukes everything (on-site + off-site +
+           activity log). Shown when there's any time to clear. --%>
+      <%= if (@reading_seconds && @reading_seconds > 0) || @reading_seconds_adjusted ||
+             (@reading_seconds_offsite && @reading_seconds_offsite > 0) do %>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2"
+          onsubmit="return confirm('Wipe all time read (on-site, off-site, and the daily activity log) for this manga?')">
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="reset_all" value="true" />
+          <button type="submit" class="btn btn-error btn-outline btn-sm w-full">Reset All Time Read</button>
+        </form>
+      <% end %>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-sm">Cancel</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Live total in the Adjust Time Read modal: recompute the four
+       fields' sum and reformat as "Xh Ym" / "Xm" on any input change.
+       Mirrors `format_reading_time/1` from Elixir so the displayed
+       total stays consistent with the server-rendered baseline. --%>
+  <script>
+    (function() {
+      const form = document.getElementById("adjust-time-form");
+      const out = document.getElementById("adjust-time-total");
+      if (!form || !out) return;
+
+      const fmt = (sec) => {
+        sec = Math.max(0, Math.floor(sec));
+        if (sec < 60) return sec + "s";
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        if (h === 0) return m + "m";
+        if (m === 0) return h + "h";
+        return h + "h " + m + "m";
+      };
+
+      const numVal = (name) => {
+        const el = form.querySelector(`[name="${name}"]`);
+        const n = parseInt(el && el.value, 10);
+        return isNaN(n) ? 0 : Math.max(0, n);
+      };
+
+      function recompute() {
+        const offsite = numVal("offsite_hours") * 3600 + numVal("offsite_minutes") * 60;
+        const total = numVal("hours") * 3600 + numVal("minutes") * 60 + offsite;
+        const approxBox = document.getElementById("adjust-time-approx");
+        const approx = !!(approxBox && approxBox.checked) && offsite > 0;
+        out.textContent = total > 0 ? (approx ? "~" : "") + fmt(total) : "0m";
+      }
+
+      form.querySelectorAll(".adjust-time-field").forEach((el) => {
+        el.addEventListener("input", recompute);
+      });
+      const approxBox = document.getElementById("adjust-time-approx");
+      if (approxBox) approxBox.addEventListener("change", recompute);
+    })();
+  </script>
+</div>
+
+<div :if={is_nil(@manga)} class="max-w-4xl mx-auto px-4 py-8">
+  <p class="text-error">Failed to load manga info.</p>
+</div>

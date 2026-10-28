@@ -1,0 +1,228 @@
+<div id="tierlist-root" class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">📖 Reader</a>
+    <div class="flex items-center gap-2">
+      <%= if @resume_manga do %>
+        <a
+          href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+          class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
+        >
+          ▶ Resume
+        </a>
+      <% end %>
+      <Layouts.theme_toggle />
+      <Layouts.notifications_bell parent={@conn} scope={@phoenix_kit_current_scope} />
+      <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+          <li><a href="/manga">Home</a></li>
+          <li><a href="/manga/explore">Explore</a></li>
+          <li><a href="/manga/history">History</a></li>
+          <li><a href="/manga/stats">Stats</a></li>
+          <li><a href="/manga/comments">Comments</a></li>
+          <li><a href="/manga/categories">Categories</a></li>
+          <li><a href="/manga/tierlist" class="font-semibold">Tierlist</a></li>
+          <li><a href="/manga/grid">Grid</a></li>
+          <li><a href="/manga/settings">Settings</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+    <h2 class="text-lg font-semibold">Tierlist</h2>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <label :if={@mal_sync != %{}} class="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Show MyAnimeList rating badges">
+        <input type="checkbox" id="mal-badge-toggle" class="toggle toggle-xs toggle-success" checked />
+        <span class="font-semibold">MAL</span>
+      </label>
+      <select :if={@categories != []} id="tierlist-category" class="select select-sm select-bordered">
+        <option value="">All categories</option>
+        <option :for={c <- @categories} value={c.id}>{c.name}</option>
+      </select>
+      <div id="tierlist-filter" style="display: flex; gap: 0.25rem;">
+        <button type="button" data-filter="all" class="btn btn-sm btn-primary">All</button>
+        <button type="button" data-filter="manga" class="btn btn-sm btn-outline">Manga</button>
+        <button type="button" data-filter="manhwa" class="btn btn-sm btn-outline">Manhwa</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    #tierlist-root.mal-badges-hidden .mal-badge { display: none; }
+  </style>
+
+  <% tiers = [
+    {"sp", "S+", "#ff66cc"},
+    {"s", "S", "#ff7f7f"},
+    {"a", "A", "#ffbf7f"},
+    {"b", "B", "#ffdf80"},
+    {"c", "C", "#ffff7f"},
+    {"d", "D", "#bfff7f"},
+    {"e", "E", "#7fdfff"},
+    {"unknown", "Don't Know", "#bfbfbf"},
+    {"want", "Want to Read", "#c79fff"}
+  ] %>
+
+  <div class="rounded-lg overflow-hidden border border-base-300">
+    <div
+      :for={{slug, label, color} <- tiers}
+      class="flex items-stretch border-b border-base-300 last:border-b-0"
+    >
+      <div
+        class="flex flex-col items-center justify-center w-20 sm:w-28 min-h-[88px] text-black/80 px-2 text-center shrink-0"
+        style={"background-color: #{color}"}
+      >
+        <span class="font-bold text-lg sm:text-xl leading-none">{label}</span>
+        <span
+          :if={@mal_connected && tier_mal_score(slug)}
+          class="text-[11px] font-bold text-black/35 leading-none mt-1"
+          title="MyAnimeList score for this tier"
+        >{tier_mal_score(slug)}</span>
+      </div>
+      <div
+        id={"tier-#{slug}"}
+        data-tier={slug}
+        class="tierlist-zone flex-1 bg-base-200 min-h-[88px] flex flex-wrap content-start gap-2 p-2"
+      >
+        <div
+          :for={manga <- Map.get(@buckets, slug, [])}
+          class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
+          data-id={"#{manga.source}:#{manga.slug}"}
+          data-mode={tierlist_kind(manga)}
+          data-categories={@category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")}
+          title={manga.title}
+        >
+          <.mal_sync_badge sync={@mal_sync[{manga.source, manga.slug}]} />
+          <img
+            src={cover_image_src(manga, @cover_paths, "small")}
+            alt={manga.title}
+            class="w-full aspect-[3/4] object-cover rounded shadow-sm"
+            draggable="false"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="text-base font-semibold mt-6 mb-2">Saved</h3>
+  <div
+    id="tierlist-pool"
+    data-tier="pool"
+    class="tierlist-zone bg-base-200 rounded-lg min-h-[120px] flex flex-wrap content-start gap-2 p-3 border border-base-300"
+  >
+    <div
+      :for={manga <- Map.get(@buckets, "pool", [])}
+      class="tierlist-item relative w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
+      data-id={"#{manga.source}:#{manga.slug}"}
+      data-mode={tierlist_kind(manga)}
+      data-categories={@category_memberships |> Map.get({manga.source, manga.slug}, []) |> Enum.join(",")}
+      title={manga.title}
+    >
+      <.mal_sync_badge sync={@mal_sync[{manga.source, manga.slug}]} />
+      <img
+        src={cover_image_src(manga, @cover_paths, "small")}
+        alt={manga.title}
+        class="w-full aspect-[3/4] object-cover rounded shadow-sm"
+        draggable="false"
+      />
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const csrfToken = document.querySelector("meta[name=csrf-token]")?.content;
+    let saveTimer = null;
+
+    // MAL rating-badge visibility toggle (persisted client-side).
+    (function() {
+      const root = document.getElementById("tierlist-root");
+      const toggle = document.getElementById("mal-badge-toggle");
+      if (!root || !toggle) return;
+      const shown = localStorage.getItem("tierlist-mal-badges") !== "off";
+      toggle.checked = shown;
+      root.classList.toggle("mal-badges-hidden", !shown);
+      toggle.addEventListener("change", function() {
+        root.classList.toggle("mal-badges-hidden", !toggle.checked);
+        localStorage.setItem("tierlist-mal-badges", toggle.checked ? "on" : "off");
+      });
+    })();
+
+    function collectAndSave() {
+      const tiers = {};
+      document.querySelectorAll(".tierlist-zone").forEach(function(zone) {
+        const tier = zone.dataset.tier;
+        if (!tier) return;
+        tiers[tier] = Array.from(zone.querySelectorAll(".tierlist-item")).map(function(el) {
+          return el.dataset.id;
+        });
+      });
+      fetch("/manga/tierlist", {
+        method: "PUT",
+        headers: {"content-type": "application/json", "x-requested-with": "XMLHttpRequest", "x-csrf-token": csrfToken},
+        body: JSON.stringify({tiers: tiers})
+      }).catch(function() {});
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(collectAndSave, 500);
+    }
+
+    var activeMode = "all";
+    var activeCategory = "";
+
+    function applyFilters() {
+      document.querySelectorAll(".tierlist-item").forEach(function(el) {
+        var m = el.dataset.mode;
+        var cats = (el.dataset.categories || "").split(",").filter(Boolean);
+        var modeOK = activeMode === "all"
+          || (activeMode === "manga" && m === "paged")
+          || (activeMode === "manhwa" && m === "scroll");
+        var catOK = activeCategory === "" || cats.indexOf(activeCategory) !== -1;
+        el.style.display = (modeOK && catOK) ? "" : "none";
+      });
+      document.querySelectorAll("#tierlist-filter button").forEach(function(b) {
+        var active = b.dataset.filter === activeMode;
+        b.classList.toggle("btn-primary", active);
+        b.classList.toggle("btn-outline", !active);
+      });
+    }
+
+    document.querySelectorAll("#tierlist-filter button").forEach(function(b) {
+      b.addEventListener("click", function() { activeMode = b.dataset.filter; applyFilters(); });
+    });
+
+    var catSelect = document.getElementById("tierlist-category");
+    if (catSelect) {
+      catSelect.addEventListener("change", function(e) {
+        activeCategory = e.target.value;
+        applyFilters();
+      });
+    }
+
+    var script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js";
+    script.onload = function() {
+      document.querySelectorAll(".tierlist-zone").forEach(function(el) {
+        Sortable.create(el, {
+          group: "tierlist",
+          animation: 150,
+          draggable: ".tierlist-item",
+          ghostClass: "opacity-40",
+          chosenClass: "ring-2",
+          forceFallback: true,
+          fallbackOnBody: true,
+          onEnd: scheduleSave
+        });
+      });
+    };
+    document.head.appendChild(script);
+  })();
+</script>

@@ -1,0 +1,107 @@
+<div class="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+  <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost gap-1 mb-2 sm:mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+    Back
+  </a>
+
+  <h1 class="text-xl sm:text-2xl font-bold mb-1">{@manga_title}</h1>
+  <p class="text-sm text-base-content/60 mb-4 sm:mb-6">{length(@annotations)} comments</p>
+
+  <%= if @annotations != [] do %>
+    <input id="ann-search" type="text" placeholder="Search comments..." class="input input-bordered input-lg w-full mb-3" autocomplete="off" />
+    <div class="flex items-center justify-between mb-3">
+      <div id="ann-colors" class="flex gap-2">
+        <button data-color="blue" class="w-7 h-7 rounded-full cursor-pointer ring-2 ring-offset-2 ring-transparent transition-all hover:scale-110" style="background-color: rgb(59,130,246)" title="Blue"></button>
+        <button data-color="pink" class="w-7 h-7 rounded-full cursor-pointer ring-2 ring-offset-2 ring-transparent transition-all hover:scale-110" style="background-color: rgb(236,72,153)" title="Pink"></button>
+        <button data-color="green" class="w-7 h-7 rounded-full cursor-pointer ring-2 ring-offset-2 ring-transparent transition-all hover:scale-110" style="background-color: rgb(74,222,128)" title="Green"></button>
+        <button data-color="purple" class="w-7 h-7 rounded-full cursor-pointer ring-2 ring-offset-2 ring-transparent transition-all hover:scale-110" style="background-color: rgb(168,85,247)" title="Purple"></button>
+      </div>
+      <% users = @annotations |> Enum.map(& &1.username) |> Enum.uniq() %>
+      <select :if={length(users) > 1} id="ann-user-filter" class="select select-bordered select-sm max-w-[120px] sm:max-w-none">
+        <option value="">All users</option>
+        <option :for={user <- users} value={user}>{user}</option>
+      </select>
+    </div>
+    <div id="ann-list" class="flex flex-col gap-2">
+      <a :for={a <- @annotations} href={comment_reader_url(a)} data-color={a.color || "blue"} data-user={a.username} class="block rounded-lg px-4 py-3 transition-opacity hover:opacity-80" style={"background-color: #{annotation_bg(a.color)}"}>
+        <div class="flex items-center justify-between gap-2">
+          <span class="font-semibold text-sm">Chapter {a.chapter}<%= if a.page do %>, Page {a.page}<% end %></span>
+          <time datetime={NaiveDateTime.to_iso8601(a.inserted_at) <> "Z"} class="local-time text-xs text-base-content/40 whitespace-nowrap"></time>
+        </div>
+        <p :if={a.content != ""} class="text-sm mt-1.5 mb-1.5 pl-2.5 border-l-2 border-current/20 line-clamp-2">{a.content}</p>
+        <img :if={a.gif_url} src={a.gif_url} loading="lazy" alt="GIF" class="mt-1.5 mb-1.5 rounded-lg max-h-40 w-auto" />
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-base-content/40">
+            {a.username}
+            <span :if={Map.get(a, :visibility) == "private"} title="Private" style="margin-left:0.25rem;">&#128274;</span>
+          </span>
+          <div class="flex items-center gap-3">
+            <span :if={a.like_count > 0} class="flex items-center gap-1 text-xs text-base-content/40">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+              {a.like_count}
+            </span>
+            <span :if={a.reply_count > 0} class="flex items-center gap-1 text-xs text-base-content/40">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+              {a.reply_count}
+            </span>
+          </div>
+        </div>
+      </a>
+    </div>
+  <% else %>
+    <div class="text-center py-16">
+      <p class="text-base-content/70">
+        No comments yet. Open a chapter and use the comment tool to add comments to pages.
+      </p>
+    </div>
+  <% end %>
+</div>
+<script>
+  {
+    let t, activeColor = null, activeUser = null;
+    const colorMap = { blue: "rgb(59,130,246)", pink: "rgb(236,72,153)", green: "rgb(74,222,128)", purple: "rgb(168,85,247)" };
+
+    function filterAnnotations() {
+      const q = (document.getElementById("ann-search")?.value || "").toLowerCase();
+      document.querySelectorAll("#ann-list > a").forEach(el => {
+        const matchText = !q || el.textContent.toLowerCase().includes(q);
+        const matchColor = !activeColor || el.dataset.color === activeColor;
+        const matchUser = !activeUser || el.dataset.user === activeUser;
+        el.style.display = matchText && matchColor && matchUser ? "" : "none";
+      });
+    }
+
+    document.getElementById("ann-search")?.addEventListener("input", () => {
+      clearTimeout(t);
+      t = setTimeout(filterAnnotations, 250);
+    });
+
+    document.querySelectorAll("#ann-colors button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const color = btn.dataset.color;
+        if (activeColor === color) {
+          activeColor = null;
+          document.querySelectorAll("#ann-colors button").forEach(b => b.style.outline = "");
+        } else {
+          activeColor = color;
+          document.querySelectorAll("#ann-colors button").forEach(b => b.style.outline = "");
+          btn.style.outline = `2px solid ${colorMap[color]}`;
+        }
+        filterAnnotations();
+      });
+    });
+
+    document.getElementById("ann-user-filter")?.addEventListener("change", (e) => {
+      activeUser = e.target.value || null;
+      filterAnnotations();
+    });
+
+    document.querySelectorAll(".local-time").forEach(el => {
+      const d = new Date(el.getAttribute("datetime"));
+      el.textContent = d.toLocaleString(undefined, {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit"
+      });
+    });
+  }
+</script>

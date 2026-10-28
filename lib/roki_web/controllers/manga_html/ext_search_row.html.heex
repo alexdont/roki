@@ -1,0 +1,32 @@
+<%!-- Async fragment: one kotatsu extension's search-results row.
+     Injected into the search page's .ext-async placeholder. --%>
+<%= case @outcome do %>
+  <% {:ok, []} -> %>
+    <p class="text-sm text-base-content/50">No results</p>
+  <% {:ok, results} -> %>
+    <div class="flex overflow-x-auto gap-3 pb-2">
+      <a
+        :for={result <- Enum.take(results, 10)}
+        href={~p"/manga/kotatsu/#{Roki.Manga.KotatsuSource.build_slug(@ext_name, result.ref.url)}?#{%{st: result.title}}"}
+        class="flex-shrink-0 w-32"
+      >
+        <figure>
+          <%= if result.cover_url do %>
+            <img
+              src={~p"/manga/kotatsu/image?#{%{source: @ext_name, url: result.cover_url}}"}
+              alt={result.title}
+              loading="lazy"
+              class="rounded-lg w-full aspect-[3/4] object-cover"
+            />
+          <% else %>
+            <div class="rounded-lg w-full aspect-[3/4] bg-base-300"></div>
+          <% end %>
+        </figure>
+        <p class="text-sm mt-1 line-clamp-2">{result.title}</p>
+      </a>
+    </div>
+  <% {:error, {:cloudflare, _}} -> %>
+    <p class="text-sm text-warning">Behind a Cloudflare challenge right now</p>
+  <% {:error, reason} -> %>
+    <p class="text-sm text-base-content/50">Unavailable ({error_note(reason)})</p>
+<% end %>

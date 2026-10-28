@@ -1,0 +1,1404 @@
+<div :if={@manga} class="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+  <div class="flex items-center justify-between mb-2 sm:mb-4">
+    <a href={@search_back_url || "/manga"} class="btn btn-ghost gap-1">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      <%= if @search_back_url, do: "Search", else: "Home" %>
+    </a>
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-square" title="More">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+      </div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-48 p-2 shadow-lg">
+        <%!-- Save / Unsave + open the source site — moved here from
+             under the cover. --%>
+        <li :if={!@saved}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/save"}>
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit" class="text-primary font-semibold">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+              Save
+            </button>
+          </form>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('unsave-modal').showModal(); document.activeElement.blur();" class="text-error">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            Unsave
+          </button>
+        </li>
+        <li>
+          <a href={@source_url} target="_blank" rel="noopener">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+            {@source_label}
+          </a>
+        </li>
+        <li :if={@saved}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/refresh"}>
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Refresh chapters
+            </button>
+          </form>
+        </li>
+        <li :if={@manga.mal}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/mal/refresh"}>
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Update MyAnimeList info
+            </button>
+          </form>
+        </li>
+        <li><div class="divider my-0"></div></li>
+        <li :if={@saved}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/completed"}>
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit">
+              <%= if @completed do %>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                Unmark Completed
+              <% else %>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                Mark as Completed
+              <% end %>
+            </button>
+          </form>
+        </li>
+        <li :if={@saved && @categories != []}>
+          <button type="button" onclick="document.getElementById('category-modal-index').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+            Add to Category
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('adjust-time-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Adjust Time Read
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('cover-picker-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            Change Cover
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('title-picker-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7M11 6l-2 12" /></svg>
+            Change Title
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('reading-mode-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+            Reading Mode
+          </button>
+        </li>
+        <li :if={@saved}>
+          <button type="button" onclick="document.getElementById('migrate-modal').showModal(); document.activeElement.blur();">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+            Migrate Source
+          </button>
+        </li>
+        <li :if={@saved && @max_chapter && @max_chapter != @last_chapter}>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reset_max_chapter"}>
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button type="submit">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Reset Max Chapter
+            </button>
+          </form>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <%!-- v2 hero: blurred cover backdrop, sharp cover, title + genres +
+       stat chips + actions in one banner (home2 visual language).
+       Site-tracked stats render as glass chips here; the synopsis and
+       scraped metadata live in the About card below. --%>
+  <style>
+    .hero-stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      flex-shrink: 0;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.30);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(4px);
+      padding: 0.25rem 0.625rem;
+      color: rgba(255, 255, 255, 0.85);
+      white-space: nowrap;
+    }
+  </style>
+  <%
+    on_site = @reading_seconds_adjusted || @reading_seconds || 0
+    off_site = @reading_seconds_offsite || 0
+    off_site_approx = !!@reading_seconds_offsite_approximate && off_site > 0
+    total_time = on_site + off_site
+    tier = tier_display(@user_tier)
+    has_scraped? = @manga.status || @manga.written_by || @manga.illustrated_by || @manga.year || @manga.reading_direction
+    strip? = strip_mode?(@reading_mode)
+    pct_left = strip? && percent_left(@last_page, @last_page_fraction, @last_chapter_total_pages)
+    resume_suffix =
+      cond do
+        pct_left -> " · #{pct_left}% left"
+        !strip? && @last_page -> " · p.#{@last_page}"
+        true -> ""
+      end
+  %>
+  <div class="v2-hero relative rounded-2xl overflow-hidden shadow-lg mb-6">
+    <img
+      src={@cover_img_src}
+      alt=""
+      aria-hidden="true"
+      decoding="async"
+      class="v2-hero-backdrop absolute inset-0 w-full h-full object-cover scale-110 blur-xl brightness-[0.35] saturate-150"
+    />
+    <div class="v2-hero-overlay absolute inset-0 bg-gradient-to-r from-black/60 via-black/25 to-transparent"></div>
+    <div class="relative p-4 sm:p-6 flex gap-4 sm:gap-6 items-start">
+      <div class="flex-shrink-0 w-28 sm:w-48">
+        <img
+          id="manga-cover-img"
+          src={@cover_img_src}
+          alt={@manga.title}
+          class="w-full aspect-[3/4] object-cover rounded-xl ring-1 ring-white/20 shadow-2xl"
+        />
+        <input :if={@saved} type="file" id="cover-upload-input" accept="image/*" class="hidden" />
+        <%!-- Our tracker data — one coherent block under the cover
+             (time read, % read, reader rank, tier, last read,
+             comments). The MAL box lives up by the title. --%>
+        <% has_tracker? = total_time > 0 || @reading_estimate || @reading_rank || tier || @last_read_at || @comment_count > 0 || @saved %>
+        <div :if={has_tracker?} class="rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm px-2 py-2 mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 text-[10px] sm:text-[11px] text-white/85 leading-none">
+          <span :if={total_time > 0} class="inline-flex items-center gap-1" title="Time read">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-55" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span class="font-semibold">{format_reading_time(total_time, off_site_approx)}</span>
+          </span>
+          <button :if={@reading_estimate} type="button" onclick="document.getElementById('time-stats-modal').showModal()" class="inline-flex items-center gap-1 hover:text-white transition-colors" title="Progress">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-55" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            <span class="font-semibold">{@reading_estimate.percent_read}%</span>
+          </button>
+          <span :if={@reading_rank} class="inline-flex items-center gap-1" title="Reader rank">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-55" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8m-4-4v4m5-16h2a1 1 0 011 1v1a4 4 0 01-4 4m-8 0a4 4 0 01-4-4V6a1 1 0 011-1h2m10 0V4a1 1 0 00-1-1H8a1 1 0 00-1 1v1m10 0v4a5 5 0 01-10 0V5m10 0H7" /></svg>
+            <% {rank, total} = @reading_rank %>
+            <span>
+              <span class="font-bold">#{rank}</span><span class="text-white/45">/{total}</span>
+            </span>
+          </span>
+          <a
+            :if={tier || @saved}
+            href={~p"/manga/tierlist"}
+            class="inline-flex items-center gap-1 font-bold hover:text-white transition-colors"
+            title="Edit your rating in the tierlist"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-55" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4L12 17l-6.3 4.4L8 14 2 9.4h7.6z" /></svg>
+            <%= if tier do %>
+              {tier.label}<span
+                :if={@manga.mal && tier_mal_score(@user_tier)}
+                class="font-bold ml-0.5"
+                title="Your MyAnimeList score"
+              >→{tier_mal_score(@user_tier)}</span>
+            <% else %>
+              <span class="text-white/60">Unranked</span>
+            <% end %>
+          </a>
+          <a :if={@comment_count > 0} href={~p"/manga/#{@source}/#{@slug}/comments"} class="inline-flex items-center gap-1 hover:text-white transition-colors" title="Comments">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-55" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+            <span class="font-semibold">{@comment_count}</span>
+          </a>
+          <span :if={format_last_read(@last_read_at)} class="text-white/50" title="Last read">{format_last_read(@last_read_at)}</span>
+        </div>
+      </div>
+      <div class="flex-1 min-w-0 text-white">
+        <h1 class="text-xl sm:text-4xl font-extrabold drop-shadow-md">{@display_title || @manga.title}</h1>
+        <%!-- Not linked: scraper status/year + a prompt to link MAL.
+             When linked, all this info lives in the MAL box under the
+             cover instead. --%>
+        <div :if={is_nil(@manga.mal)} class="flex flex-wrap items-center gap-1.5 mt-2">
+          <span :if={@manga.status} class="hero-stat font-semibold text-[11px] sm:text-xs">
+            {String.replace(@manga.status, "This is ", "") |> String.replace(" series", "")}
+          </span>
+          <span :if={@manga.year} class="hero-stat text-[11px] sm:text-xs">
+            {String.replace(@manga.year, "Year Published: ", "")}
+          </span>
+          <button
+            type="button"
+            onclick="document.getElementById('mal-link-modal').showModal()"
+            class="hero-stat hover:bg-black/50 transition-colors cursor-pointer text-[11px] sm:text-xs"
+          >
+            + MyAnimeList
+          </button>
+        </div>
+        <%!-- MyAnimeList box — all MAL data as icon+value items (same
+             logic as the reader box under the cover). Links to MAL. --%>
+        <% mal_years = @manga.mal && Roki.Manga.Trackers.MAL.year_range(@manga.mal["year_start"], @manga.mal["year_end"]) %>
+        <% mal_status = @manga.mal && Roki.Manga.Trackers.MAL.status_label(@manga.mal["status"]) %>
+        <a
+          :if={@manga.mal && @manga.mal["score"]}
+          href={@manga.mal["url"]}
+          target="_blank"
+          rel="noopener"
+          class="flex items-center justify-between gap-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-sm px-3 py-2.5 mt-2 transition-colors"
+        >
+          <%!-- LEFT: series info (status · years). --%>
+          <div class="min-w-0">
+            <div class="flex flex-col gap-1.5 text-[11px] sm:text-xs text-white/85 leading-none">
+              <span :if={mal_status} class="inline-flex items-center gap-1.5" title="Status">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-55 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span class="font-semibold">{mal_status}</span>
+              </span>
+              <span :if={mal_years} class="inline-flex items-center gap-1.5" title="Published">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-55 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <span class="font-semibold">{mal_years}</span>
+              </span>
+            </div>
+          </div>
+          <%!-- RIGHT: rating + rank (the old chip look). --%>
+          <div class="flex-shrink-0 flex items-center gap-2.5">
+            <div class="flex flex-col items-center leading-none">
+              <span class="text-xl sm:text-2xl font-black text-white tabular-nums drop-shadow">{@manga.mal["score"]}</span>
+              <span class="text-[9px] font-bold tracking-wider text-white/60 mt-0.5">★ MAL</span>
+            </div>
+            <div :if={@manga.mal["rank"]} class="text-xs font-semibold text-white/90 border-l border-white/10 pl-2.5 whitespace-nowrap">
+              #{@manga.mal["rank"]}
+            </div>
+          </div>
+        </a>
+        <%!-- Description + genres in one clickable box — the box itself
+             is the affordance (no chip); opens the full About modal. --%>
+        <% genres = @manga.genres || [] %>
+        <div
+          :if={@manga.synopsis != "" || genres != [] || has_scraped? || @manga.alt_titles}
+          class="mt-3 sm:mt-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-sm p-3 cursor-pointer select-none transition-colors"
+          role="button"
+          title="About this manga"
+          onclick="document.getElementById('about-modal').showModal()"
+        >
+          <p :if={@manga.synopsis != ""} class="text-xs sm:text-sm text-white/65 leading-relaxed line-clamp-3 sm:line-clamp-5">
+            {@manga.synopsis}
+          </p>
+          <div :if={genres != []} class={["flex flex-wrap items-center gap-1", @manga.synopsis != "" && "mt-2"]}>
+            <span :for={genre <- Enum.take(genres, 3)} class="text-[10px] sm:text-[11px] text-white/45 bg-white/5 rounded px-1.5 py-0.5">
+              {genre}
+            </span>
+            <span :if={length(genres) > 3} class="text-[10px] sm:text-[11px] text-white/40">…</span>
+          </div>
+        </div>
+        <%!-- Other readers — compact glass pills tucked under the
+             description preview; there's room here thanks to the
+             cover-column buttons. --%>
+        <div :if={@manga_readers != []} class="mt-3 flex flex-wrap items-center gap-1.5">
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-white/40 mr-0.5">Also reading</span>
+          <%= for r <- @manga_readers do %>
+            <div class="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/10 backdrop-blur-sm pl-0.5 pr-2.5 py-0.5">
+              <%= if r.avatar_url do %>
+                <img src={r.avatar_url} class="w-5 h-5 rounded-full object-cover ring-1 ring-white/20" />
+              <% else %>
+                <div class="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold text-white/90">
+                  {String.first(r.username || "?")}
+                </div>
+              <% end %>
+              <span class="text-xs font-medium text-white/85">{r.username}</span>
+              <span :if={r.last_chapter} class="text-[10px] text-white/50 whitespace-nowrap">
+                Ch. {r.last_chapter}<span :if={r.last_page}> · p.{r.last_page}</span>
+              </span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    <%!-- Continue / Start — incorporated as the hero card's bottom
+         section (no floating gap): full-width action bar over the same
+         blurred backdrop, with its own progress fill. --%>
+    <div class="relative px-3 sm:px-4 pb-3 sm:pb-4">
+    <%= if !@saved do %>
+      <%!-- Not in your library yet: the primary action is Save. The
+           reading buttons take over once it's saved — browse the
+           chapters below to preview quality first. --%>
+      <form method="post" action={~p"/manga/#{@source}/#{@slug}/save"}>
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <button
+          type="submit"
+          class="group relative block w-full rounded-2xl overflow-hidden bg-primary text-primary-content shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/35 hover:-translate-y-0.5 transition-all duration-200 text-left"
+        >
+          <div class="relative flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4">
+            <span class="flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary-content/15 group-hover:scale-110 transition-transform flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+            </span>
+            <span class="flex flex-col items-start min-w-0">
+              <span class="text-base sm:text-lg font-extrabold leading-tight">Save to Library</span>
+              <span :if={@manga.chapters != []} class="text-xs sm:text-sm opacity-80">{length(@manga.chapters)} chapters</span>
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-5 w-5 opacity-60 group-hover:scale-110 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+          </div>
+        </button>
+      </form>
+    <% else %>
+    <%= if @completed do %>
+      <div class="relative block w-full rounded-2xl overflow-hidden bg-success text-success-content shadow-lg">
+        <div class="relative flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4">
+          <span class="flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-success-content/15 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+          </span>
+          <span class="flex flex-col items-start min-w-0">
+            <span class="text-base sm:text-lg font-extrabold leading-tight">Completed</span>
+            <span class="text-xs sm:text-sm opacity-80">You've finished this one</span>
+          </span>
+        </div>
+      </div>
+    <% else %>
+      <%= if @last_chapter do %>
+        <a
+          href={~p"/manga/#{@source}/#{@slug}/#{@last_chapter}?#{@search_params}"}
+          class="group relative block w-full rounded-2xl overflow-hidden bg-primary text-primary-content shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/35 hover:-translate-y-0.5 transition-all duration-200 btn-progress"
+          style={if @percent_read, do: "--progress: #{@percent_read}%"}
+        >
+          <div class="relative flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4">
+            <span class="flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary-content/15 group-hover:scale-110 transition-transform flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+            <span class="flex flex-col items-start min-w-0">
+              <span class="text-base sm:text-lg font-extrabold leading-tight">Continue Reading</span>
+              <span class="text-xs sm:text-sm opacity-80 truncate">Chapter {@last_chapter}{resume_suffix}</span>
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-5 w-5 opacity-60 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+          </div>
+        </a>
+        <%!-- `from_max=1` snaps last_chapter forward to this URL on
+             entry — forward-only + idempotent server-side. --%>
+        <a :if={@max_chapter && @max_chapter != @last_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@max_chapter}?#{Map.put(@search_params, :from_max, "1")}"} class="btn btn-sm w-full rounded-full mt-2 bg-accent/15 hover:bg-accent/30 border-0 text-accent gap-1">
+          Jump to Ch. {@max_chapter}
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+        </a>
+      <% else %>
+        <a
+          :if={@manga.chapters != []}
+          href={~p"/manga/#{@source}/#{@slug}/#{List.first(@manga.chapters)}?#{@search_params}"}
+          class="group relative block w-full rounded-2xl overflow-hidden bg-primary text-primary-content shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/35 hover:-translate-y-0.5 transition-all duration-200"
+        >
+          <div class="relative flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4">
+            <span class="flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary-content/15 group-hover:scale-110 transition-transform flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+            <span class="flex flex-col items-start min-w-0">
+              <span class="text-base sm:text-lg font-extrabold leading-tight">Start Reading</span>
+              <span class="text-xs sm:text-sm opacity-80">Chapter {List.first(@manga.chapters)}</span>
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="ml-auto h-5 w-5 opacity-60 group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+          </div>
+        </a>
+      <% end %>
+    <% end %>
+    <% end %>
+    </div>
+  </div>
+
+  <%!-- Unsave confirmation — unsave_manga hard-deletes the SavedManga
+       row, taking chapter progress and time-read with it, so a
+       mis-tap here is genuinely costly. --%>
+  <dialog :if={@saved} id="unsave-modal" class="modal">
+    <div class="modal-box max-w-sm">
+      <h3 class="text-lg font-bold mb-2">Unsave this manga?</h3>
+      <p class="text-sm text-base-content/70 mb-1">
+        <span class="font-semibold">{@manga.title}</span> will be removed from your library.
+      </p>
+      <p class="text-sm text-error/80 mb-4">
+        Your chapter progress and time-read stats for it will be deleted too. This can't be undone.
+      </p>
+      <div class="flex gap-2">
+        <form method="dialog" class="flex-1">
+          <button class="btn btn-ghost w-full rounded-full">Cancel</button>
+        </form>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/save"} class="flex-1">
+          <input type="hidden" name="_method" value="delete" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <button type="submit" class="btn btn-error w-full rounded-full">Unsave</button>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- About modal: full synopsis + genres + scraped/MAL metadata,
+       opened by the description preview in the hero. --%>
+  <dialog :if={(@manga.genres || []) != [] || @manga.synopsis != "" || has_scraped? || @manga.alt_titles} id="about-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+      </form>
+      <h3 class="text-lg font-bold mb-3">{@manga.title}</h3>
+      <p :if={@manga.synopsis != ""} class="text-sm text-base-content/80 leading-relaxed whitespace-pre-line">
+        {@manga.synopsis}
+      </p>
+      <div :if={(@manga.genres || []) != []} class={["flex flex-wrap gap-1.5", @manga.synopsis != "" && "mt-4"]}>
+        <span :for={g <- @manga.genres} class="badge badge-primary badge-sm">{g}</span>
+      </div>
+      <div :if={@manga.written_by || @manga.illustrated_by || @manga.reading_direction} class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-base-content/10">
+        <div :if={@manga.written_by}>
+          <span class="block text-[11px] uppercase tracking-wide text-base-content/45">Author</span>
+          <span class="font-medium">{String.replace(@manga.written_by, "Written By: ", "")}</span>
+        </div>
+        <div :if={@manga.illustrated_by}>
+          <span class="block text-[11px] uppercase tracking-wide text-base-content/45">Artist</span>
+          <span class="font-medium">{String.replace(@manga.illustrated_by, "Illustrated By: ", "")}</span>
+        </div>
+        <div :if={@manga.reading_direction}>
+          <span class="block text-[11px] uppercase tracking-wide text-base-content/45">Reading</span>
+          <span class="font-medium">{String.replace(@manga.reading_direction, "Type: ", "")}</span>
+        </div>
+      </div>
+      <div :if={@manga.alt_titles} class="mt-4 pt-4 border-t border-base-content/10">
+        <span class="block text-[11px] uppercase tracking-wide text-base-content/45 mb-1">Alternative titles</span>
+        <p class="text-xs text-base-content/50 leading-relaxed">{String.replace(@manga.alt_titles, "Alternative Title: ", "")}</p>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- MyAnimeList link modal: search MAL by title, click a result to
+       link. Enrichment (synopsis/genres/rating/cover) then flows from
+       the linked entry. Uses the app client id — no login needed. --%>
+  <dialog id="mal-link-modal" class="modal">
+    <div class="modal-box max-w-lg">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-lg">Link to MyAnimeList</h3>
+        <%= if @manga.mal do %>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/mal/unlink"}>
+            <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+            <button class="btn btn-xs btn-ghost text-error">Unlink</button>
+          </form>
+        <% end %>
+      </div>
+      <input
+        type="text"
+        id="mal-search-input"
+        value={@manga.title}
+        placeholder="Search MyAnimeList…"
+        class="input input-bordered w-full mb-3"
+        autocomplete="off"
+      />
+      <div id="mal-search-results" class="flex flex-col gap-2 max-h-96 overflow-y-auto"></div>
+      <form method="dialog" class="modal-action">
+        <button class="btn btn-sm btn-ghost">Close</button>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+  <form id="mal-link-form" method="post" action={~p"/manga/#{@source}/#{@slug}/mal/link"} class="hidden">
+    <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+    <input type="hidden" name="mal_id" id="mal-link-id" />
+  </form>
+  <script>
+    (() => {
+      const input = document.getElementById("mal-search-input");
+      const results = document.getElementById("mal-search-results");
+      if (!input) return;
+      const searchUrl = "<%= ~p"/manga/#{@source}/#{@slug}/mal/search" %>";
+      const linkForm = document.getElementById("mal-link-form");
+      const linkId = document.getElementById("mal-link-id");
+      let timer = null, gen = 0;
+      function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+      function run() {
+        const q = input.value.trim();
+        if (!q) { results.innerHTML = ""; return; }
+        const g = ++gen;
+        results.innerHTML = '<div class="text-sm text-base-content/40 py-3 flex items-center gap-2"><span class="loading loading-spinner loading-xs"></span> Searching MyAnimeList…</div>';
+        fetch(searchUrl + "?q=" + encodeURIComponent(q), {credentials:"same-origin"})
+          .then(r => r.json())
+          .then(d => {
+            if (g !== gen) return;
+            const rs = d.results || [];
+            if (!rs.length) { results.innerHTML = '<p class="text-sm text-base-content/50 py-3">No matches on MyAnimeList.</p>'; return; }
+            results.innerHTML = rs.map(r => `
+              <button type="button" class="mal-pick flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left" data-id="${r.id}">
+                ${r.cover_url ? `<img src="${esc(r.cover_url)}" class="w-10 h-14 object-cover rounded flex-shrink-0" />` : '<div class="w-10 h-14 rounded bg-base-300 flex-shrink-0"></div>'}
+                <div class="min-w-0">
+                  <p class="text-sm font-medium truncate">${esc(r.title)}</p>
+                  <p class="text-xs text-base-content/50">${r.score ? "★ " + r.score : ""}${r.year ? " · " + r.year : ""}</p>
+                </div>
+              </button>`).join("");
+            results.querySelectorAll(".mal-pick").forEach(b =>
+              b.addEventListener("click", () => { linkId.value = b.dataset.id; linkForm.submit(); }));
+          })
+          .catch(() => { if (g===gen) results.innerHTML = '<p class="text-sm text-error py-3">Search failed.</p>'; });
+      }
+      input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 400); });
+      document.getElementById("mal-link-modal").addEventListener("close", () => { results.innerHTML = ""; });
+    })();
+  </script>
+
+  <%!-- Single shared modal driven by both the desktop and mobile
+       "Time stats" info buttons. Only rendered when there's
+       something to show, matching the buttons' `:if`. v1 carries
+       just the time-left estimate; more per-time stats land here
+       (per-chapter average, pace trend, …) as they're built. --%>
+  <dialog :if={@reading_estimate} id="time-stats-modal" class="modal">
+    <div class="modal-box">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+      </form>
+      <h3 class="text-lg font-bold mb-4">Time stats</h3>
+      <div class="space-y-4 text-sm">
+        <p>
+          <span class="font-semibold text-base-content">Estimated time left:</span><br />
+          <span class="text-lg">~{format_reading_time(@reading_estimate.seconds_remaining, false)}</span>
+          <span class="text-base-content/60">
+            ({@reading_estimate.chapters_remaining} chapter<%= if @reading_estimate.chapters_remaining != 1, do: "s" %> remaining)
+          </span>
+        </p>
+        <p>
+          <span class="font-semibold text-base-content">Percent read:</span>
+          <span class="text-lg">{@reading_estimate.percent_read}%</span>
+          <span class="text-base-content/60">
+            ({@reading_estimate.chapters_read} / {@reading_estimate.chapters_total} chapters)
+          </span>
+          <%!-- Progress bar mirrors the percent for a quick visual cue,
+               since "37%" doesn't pop on its own. daisyUI `progress`
+               accepts value/max and renders the fill automatically. --%>
+          <progress class="progress progress-primary w-full mt-2" value={@reading_estimate.chapters_read} max={@reading_estimate.chapters_total}></progress>
+        </p>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Fabledex story arcs / volumes — when present, replaces the flat
+       chapter list below (chapters fold into their arcs or volumes).
+       Renders nothing when there are neither. --%>
+  <.story_arcs
+    arcs={@story_arcs}
+    volumes={@story_volumes}
+    chapters={@manga.chapters}
+    source={@source}
+    slug={@slug}
+    search_params={@search_params}
+    last_chapter={@last_chapter}
+    max_chapter={@max_chapter}
+    completed={!!@completed}
+    current_chapter_percent={@current_chapter_percent}
+    chapter_titles={@chapter_titles}
+    finished_chapters={@finished_chapters}
+    saved={@saved}
+  />
+
+  <%= if @story_arcs == [] and @story_volumes == [] do %>
+  <%!-- Chapters — v2: list rows instead of the tile grid. One column
+       on mobile, two on desktop. Read chapters stay collapsed behind
+       the summary row; current chapter is the filled primary row with
+       its in-chapter progress fill; reread range gets the accent tint.
+       All IDs preserved so the sort / search / collapse script below
+       keeps working unchanged. --%>
+  <%
+    total_chapters = length(@manga.chapters)
+    last_ch_num = last_chapter_number(@manga.chapters)
+    display_count = last_ch_num || total_chapters
+  %>
+  <style>
+    .ch-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      padding: 0.625rem 0.875rem;
+      border-radius: 0.875rem;
+      font-size: 0.875rem;
+      overflow: hidden;
+      background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s, opacity 0.15s;
+    }
+    .ch-row:hover {
+      background: color-mix(in oklab, var(--color-primary) 15%, transparent);
+      transform: translateX(2px);
+    }
+    .ch-row:active { transform: scale(0.98); }
+    .ch-row .ch-date {
+      margin-left: auto;
+      padding-left: 0.5rem;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+      color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+    }
+    .ch-row.ch-read { opacity: 0.45; background: transparent; }
+    .ch-row.ch-read:hover {
+      opacity: 0.85;
+      background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+    }
+    .ch-row.ch-reread { background: color-mix(in oklab, var(--color-accent) 14%, transparent); }
+    .ch-row.ch-current {
+      background: var(--color-primary);
+      color: var(--color-primary-content);
+      box-shadow: 0 4px 14px color-mix(in oklab, var(--color-primary) 35%, transparent);
+    }
+    .ch-row.ch-current .ch-date {
+      color: color-mix(in oklab, var(--color-primary-content) 70%, transparent);
+    }
+  </style>
+  <div class="flex items-center gap-2 mt-8 mb-3">
+    <h2 class="text-lg sm:text-xl font-extrabold">Chapters</h2>
+    <span class="inline-flex items-center rounded-full bg-base-content/5 px-2.5 py-0.5 text-xs font-semibold text-base-content/60">
+      {display_count}<span :if={last_ch_num && last_ch_num != total_chapters} class="font-normal">&nbsp;· {total_chapters} total</span>
+    </span>
+    <%!-- Refresh here next to the count (also in the ⋮ burger menu). --%>
+    <form :if={@saved} method="post" action={~p"/manga/#{@source}/#{@slug}/refresh"}>
+      <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+      <button type="submit" class="btn btn-sm rounded-full bg-base-content/5 hover:bg-base-content/10 border-0 gap-1.5" title="Refresh chapters">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        Refresh
+      </button>
+    </form>
+    <div class="ml-auto flex items-center gap-1.5">
+      <button id="sort-toggle" class="btn btn-sm btn-circle btn-ghost bg-base-content/5" title="Reverse order">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
+      </button>
+      <button id="search-toggle" class="btn btn-sm btn-circle btn-ghost bg-base-content/5" title="Search chapters">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+      </button>
+    </div>
+  </div>
+  <div id="chapter-search" class="hidden mb-3">
+    <input
+      id="chapter-search-input"
+      type="text"
+      placeholder="Search chapters..."
+      class="input input-sm input-bordered rounded-full w-full"
+      autocomplete="off"
+    />
+  </div>
+  <%
+    {collapsed_chapters, rest} = Enum.split_with(@manga.chapters, &chapter_read?(&1, @last_chapter))
+    {reread_chapters, unread_chapters} = if @max_chapter && @max_chapter != @last_chapter do
+      Enum.split_with(rest, &chapter_read?(&1, @max_chapter))
+    else
+      {[], rest}
+    end
+  %>
+  <div id="chapter-grid" class="flex flex-col gap-1.5 sm:grid sm:grid-cols-2 sm:gap-2">
+    <%= if collapsed_chapters != [] do %>
+      <button
+        id="read-toggle"
+        class="ch-row ch-read sm:col-span-2 justify-center gap-2"
+        title="Show read chapters"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+        <span class="font-semibold">{List.first(collapsed_chapters)} – {List.last(collapsed_chapters)}</span>
+        <span class="text-xs font-normal opacity-70">{length(collapsed_chapters)} read</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      <div id="read-chapters" class="hidden contents">
+        <a
+          :for={ch <- collapsed_chapters}
+          href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
+          class="ch-row ch-read"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+          <span class="font-semibold truncate">{ch}</span>
+      <span :if={chapter_title(@chapter_titles, ch)} class="truncate opacity-70">{chapter_title(@chapter_titles, ch)}</span>
+          <span :if={@chapter_comment_counts[ch]} class="badge badge-xs badge-primary gap-0.5 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+            {@chapter_comment_counts[ch]}
+          </span>
+          <span :if={@manga.chapter_dates[ch]} class="ch-date">{@manga.chapter_dates[ch]}</span>
+        </a>
+      </div>
+    <% end %>
+    <a
+      :for={ch <- reread_chapters}
+      href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
+      class="ch-row ch-reread"
+    >
+      <span class="font-semibold truncate">{ch}</span>
+      <span :if={chapter_title(@chapter_titles, ch)} class="truncate opacity-70">{chapter_title(@chapter_titles, ch)}</span>
+      <span :if={@chapter_comment_counts[ch]} class="badge badge-xs badge-primary gap-0.5 flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+        {@chapter_comment_counts[ch]}
+      </span>
+      <span :if={@manga.chapter_dates[ch]} class="ch-date">{@manga.chapter_dates[ch]}</span>
+    </a>
+    <a
+      :for={ch <- unread_chapters}
+      href={~p"/manga/#{@source}/#{@slug}/#{ch}?#{@search_params}"}
+      class={[
+        "ch-row",
+        if(ch == @last_chapter, do: "ch-current btn-progress", else: "")
+      ]}
+      style={if ch == @last_chapter && @current_chapter_percent, do: "--progress: #{@current_chapter_percent}%"}
+    >
+      <svg :if={ch == @last_chapter} xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+      <span class="font-semibold truncate">{ch}</span>
+      <span :if={chapter_title(@chapter_titles, ch)} class="truncate opacity-70">{chapter_title(@chapter_titles, ch)}</span>
+      <span :if={@chapter_comment_counts[ch]} class="badge badge-xs badge-primary gap-0.5 flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+        {@chapter_comment_counts[ch]}
+      </span>
+      <span :if={@manga.chapter_dates[ch]} class="ch-date">{@manga.chapter_dates[ch]}</span>
+    </a>
+  </div>
+  <script>
+    (() => {
+      const toggle = document.getElementById("read-toggle");
+      const readChapters = document.getElementById("read-chapters");
+      if (toggle && readChapters) {
+        toggle.addEventListener("click", () => {
+          const hidden = readChapters.classList.toggle("hidden");
+          toggle.classList.toggle("hidden", !hidden);
+        });
+      }
+
+      document.getElementById("sort-toggle").addEventListener("click", () => {
+        const grid = document.getElementById("chapter-grid");
+        const items = Array.from(grid.children);
+        items.reverse();
+        grid.append(...items);
+      });
+
+      const searchToggle = document.getElementById("search-toggle");
+      const searchBar = document.getElementById("chapter-search");
+      const searchInput = document.getElementById("chapter-search-input");
+
+      searchToggle.addEventListener("click", () => {
+        const hidden = searchBar.classList.toggle("hidden");
+        if (!hidden) {
+          searchInput.focus();
+        } else {
+          searchInput.value = "";
+          filterChapters("");
+        }
+      });
+
+      searchInput.addEventListener("input", (e) => {
+        filterChapters(e.target.value);
+      });
+
+      function filterChapters(query) {
+        const grid = document.getElementById("chapter-grid");
+        const q = query.trim().toLowerCase();
+        Array.from(grid.children).forEach(el => {
+          if (!q) {
+            el.style.display = "";
+            return;
+          }
+          const text = (el.textContent || "").toLowerCase();
+          el.style.display = text.includes(q) ? "" : "none";
+        });
+      }
+    })();
+  </script>
+  <% end %>
+
+  <%!-- Category modal --%>
+  <dialog :if={@saved && @categories != []} id="category-modal-index" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Add to Category</h3>
+      <div class="flex flex-col gap-2" id="category-list-index">
+        <label :for={cat <- @categories} class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-base-200">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm checkbox-primary category-checkbox-index"
+            data-category-id={cat.id}
+            checked={cat.id in @manga_category_ids}
+          />
+          <span class="text-sm font-medium">{cat.name}</span>
+        </label>
+      </div>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-sm">Close</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+  <script :if={@saved && @categories != []}>
+    document.querySelectorAll('.category-checkbox-index').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        const catId = this.dataset.categoryId;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch('<%= ~p"/manga/#{@source}/#{@slug}/toggle_category" %>', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+          body: JSON.stringify({ category_id: parseInt(catId) })
+        });
+      });
+    });
+  </script>
+
+  <%!-- Cover upload handler --%>
+  <script :if={@saved}>
+    (() => {
+      const input = document.getElementById('cover-upload-input');
+      if (!input) return;
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        try {
+          const form = new FormData();
+          form.append('file', file);
+          const uploadRes = await fetch('/phoenix_kit/api/upload', {
+            method: 'POST',
+            headers: { 'x-csrf-token': csrfToken },
+            body: form
+          });
+          if (!uploadRes.ok) throw new Error('Upload failed');
+          const uploadData = await uploadRes.json();
+
+          const coverRes = await fetch('<%= ~p"/manga/#{@source}/#{@slug}/custom_cover" %>', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: JSON.stringify({ file_uuid: uploadData.file_uuid })
+          });
+          if (!coverRes.ok) throw new Error('Save failed');
+          const coverData = await coverRes.json();
+
+          document.getElementById('manga-cover-img').src = coverData.cover_url;
+        } catch (e) {
+          alert('Failed to update cover: ' + e.message);
+        }
+        input.value = '';
+      });
+    })();
+  </script>
+
+  <%!-- Cover picker: source cover / MyAnimeList cover / upload, with
+       previews. Picking downloads + stores the chosen cover (sized
+       variants) as this user's custom cover. --%>
+  <dialog :if={@saved} id="cover-picker-modal" class="modal">
+    <div class="modal-box max-w-md">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+      </form>
+      <h3 class="font-bold text-lg mb-4">Choose cover</h3>
+      <div class="grid grid-cols-3 gap-3">
+        <%!-- Source (scraper) cover — clears the override. --%>
+        <form :if={@manga.cover_url} method="post" action={~p"/manga/#{@source}/#{@slug}/cover"}>
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="which" value="scraper" />
+          <button type="submit" class="group w-full text-left">
+            <img
+              src={~p"/manga/proxy/image?#{%{url: @manga.cover_url}}"}
+              alt="Source cover"
+              class="w-full aspect-[3/4] object-cover rounded-lg ring-1 ring-base-content/10 group-hover:ring-2 group-hover:ring-primary transition-all"
+            />
+            <span class="block text-center text-xs mt-1 text-base-content/70">Source</span>
+          </button>
+        </form>
+        <%!-- MyAnimeList cover (only when linked). --%>
+        <form :if={@manga.mal && @manga.mal["cover_url"]} method="post" action={~p"/manga/#{@source}/#{@slug}/cover"}>
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="which" value="mal" />
+          <button type="submit" class="group w-full text-left">
+            <img
+              src={@manga.mal["cover_url"]}
+              alt="MyAnimeList cover"
+              onerror="this.style.visibility='hidden'"
+              class="w-full aspect-[3/4] object-cover rounded-lg ring-1 ring-base-content/10 group-hover:ring-2 group-hover:ring-primary transition-all"
+            />
+            <span class="block text-center text-xs mt-1 text-base-content/70">MyAnimeList</span>
+          </button>
+        </form>
+        <%!-- Upload your own — reuses the existing upload flow. --%>
+        <button type="button" onclick="document.getElementById('cover-picker-modal').close(); setTimeout(() => document.getElementById('cover-upload-input').click(), 100);" class="group">
+          <div class="w-full aspect-[3/4] rounded-lg ring-1 ring-base-content/10 group-hover:ring-2 group-hover:ring-primary transition-all bg-base-200 flex flex-col items-center justify-center gap-1 text-base-content/50">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+          </div>
+          <span class="block text-center text-xs mt-1 text-base-content/70">Upload</span>
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Title picker: source title / MyAnimeList title / custom. Sets
+       the saved title shown in the library and on this page. --%>
+  <dialog :if={@saved} id="title-picker-modal" class="modal">
+    <div class="modal-box max-w-md">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+      </form>
+      <h3 class="font-bold text-lg mb-4">Change title</h3>
+      <div class="flex flex-col gap-2">
+        <%!-- Source (scraper) title --%>
+        <form :if={@manga.title} method="post" action={~p"/manga/#{@source}/#{@slug}/title"}>
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="title" value={@manga.title} />
+          <button type="submit" class="w-full text-left rounded-lg bg-base-200 hover:bg-base-300 transition-colors px-3 py-2">
+            <span class="block text-[10px] uppercase tracking-wide text-base-content/50">Source</span>
+            <span class="block text-sm font-medium">{@manga.title}</span>
+          </button>
+        </form>
+        <%!-- MyAnimeList title (only when linked) --%>
+        <form :if={@manga.mal && @manga.mal["title"]} method="post" action={~p"/manga/#{@source}/#{@slug}/title"}>
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="title" value={@manga.mal["title"]} />
+          <button type="submit" class="w-full text-left rounded-lg bg-base-200 hover:bg-base-300 transition-colors px-3 py-2">
+            <span class="block text-[10px] uppercase tracking-wide text-base-content/50">MyAnimeList</span>
+            <span class="block text-sm font-medium">{@manga.mal["title"]}</span>
+          </button>
+        </form>
+        <%!-- Custom title --%>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/title"} class="rounded-lg bg-base-200 px-3 py-2">
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <span class="block text-[10px] uppercase tracking-wide text-base-content/50 mb-1">Custom</span>
+          <div class="flex gap-2">
+            <input
+              type="text"
+              name="title"
+              value={@display_title || @manga.title}
+              maxlength="500"
+              required
+              class="input input-sm input-bordered flex-1"
+              placeholder="Enter a title"
+            />
+            <button type="submit" class="btn btn-sm btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Migrate Source modal --%>
+  <dialog :if={@saved} id="migrate-modal" class="modal">
+    <div class="modal-box max-w-lg">
+      <h3 class="font-bold text-lg mb-4">Migrate Source</h3>
+      <%!-- Step 1: Search --%>
+      <div id="migrate-step-search">
+        <div class="flex gap-2 mb-4">
+          <input
+            id="migrate-search-input"
+            type="text"
+            value={@manga.title}
+            placeholder="Search for manga..."
+            class="input input-bordered w-full"
+            autocomplete="off"
+          />
+          <button id="migrate-search-btn" class="btn btn-primary btn-square" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </button>
+        </div>
+        <div id="migrate-results" class="max-h-80 overflow-y-auto space-y-2"></div>
+        <p id="migrate-loading" class="hidden text-center text-sm text-base-content/60 py-4">Searching...</p>
+        <p id="migrate-empty" class="hidden text-center text-sm text-base-content/60 py-4">No results found</p>
+      </div>
+      <%!-- Step 2: Confirm --%>
+      <div id="migrate-step-confirm" class="hidden">
+        <div class="flex items-center gap-3 mb-4 p-3 bg-base-200 rounded-lg">
+          <img id="migrate-target-cover" class="w-12 h-16 rounded object-cover" src="" alt="" />
+          <div class="min-w-0">
+            <p id="migrate-target-title" class="font-semibold text-sm line-clamp-2"></p>
+            <p id="migrate-target-source" class="text-xs text-base-content/60"></p>
+          </div>
+        </div>
+        <p class="text-sm mb-3">Select data to migrate:</p>
+        <div class="flex flex-col gap-2 mb-4">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="migrate-opt-progress" class="checkbox checkbox-sm checkbox-primary" checked />
+            <span class="text-sm">Chapter progress</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="migrate-opt-categories" class="checkbox checkbox-sm checkbox-primary" checked />
+            <span class="text-sm">Categories</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="migrate-opt-time" class="checkbox checkbox-sm checkbox-primary" checked />
+            <span class="text-sm">Time spent reading</span>
+          </label>
+        </div>
+        <div class="flex gap-2">
+          <button id="migrate-back-btn" class="btn btn-ghost flex-1" type="button">Back</button>
+          <button id="migrate-confirm-btn" class="btn btn-primary flex-1" type="button">Migrate</button>
+        </div>
+      </div>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-sm">Cancel</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+  <script :if={@saved}>
+    (() => {
+      const modal = document.getElementById('migrate-modal');
+      const searchInput = document.getElementById('migrate-search-input');
+      const searchBtn = document.getElementById('migrate-search-btn');
+      const resultsEl = document.getElementById('migrate-results');
+      const loadingEl = document.getElementById('migrate-loading');
+      const emptyEl = document.getElementById('migrate-empty');
+      const stepSearch = document.getElementById('migrate-step-search');
+      const stepConfirm = document.getElementById('migrate-step-confirm');
+      const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+      let debounceTimer = null;
+      let selectedTarget = null;
+
+      function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+      let searchGen = 0;
+
+      function resultCardsHtml(s, results) {
+        if (!results.length) return '<p class="text-sm text-base-content/50">No results</p>';
+        return '<div class="flex overflow-x-auto gap-3 pb-2">' + results.map(r => `
+          <button type="button" class="migrate-result flex-shrink-0 w-28 text-left"
+            data-source="${esc(s.source)}" data-slug="${esc(r.slug)}" data-title="${esc(r.title)}"
+            data-cover="${esc(r.cover_url)}" data-source-label="${esc(s.label)}">
+            <img src="/manga/proxy/image?url=${encodeURIComponent(r.cover_url || '')}"
+              class="rounded-lg w-full aspect-[3/4] object-cover" alt="" onerror="this.style.visibility='hidden'" />
+            <p class="text-sm mt-1 line-clamp-2">${esc(r.title)}</p>
+          </button>
+        `).join('') + '</div>';
+      }
+
+      function doSearch() {
+        const q = searchInput.value.trim();
+        if (!q) return;
+        const gen = ++searchGen;
+        resultsEl.innerHTML = '';
+        emptyEl.classList.add('hidden');
+        loadingEl.classList.remove('hidden');
+        // Skeleton first (no live searches server-side), then one
+        // request per source in parallel — rows fill in as sources
+        // answer, the slowest site never blocks the modal.
+        fetch(`<%= ~p"/manga/#{@source}/#{@slug}/migrate/search" %>?q=${encodeURIComponent(q)}`, {
+          headers: { 'x-csrf-token': csrfToken }
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (gen !== searchGen) return;
+            loadingEl.classList.add('hidden');
+            if (!data.groups || !data.groups.length) { emptyEl.classList.remove('hidden'); return; }
+            const spinner = '<span class="loading loading-spinner loading-xs"></span>';
+            resultsEl.innerHTML = data.groups.map((g, gi) => `
+              <div class="border border-base-300 rounded-xl p-3 mb-4">
+                <p class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-3">${esc(g.lang)}</p>
+                ${g.sources.map((s, si) => `
+                  <div class="mb-4 last:mb-0">
+                    <p class="text-base font-semibold mb-2">${esc(s.label)}</p>
+                    <div id="msrc-${gen}-${gi}-${si}">${spinner}</div>
+                  </div>
+                `).join('')}
+              </div>
+            `).join('');
+            let pending = 0, found = 0;
+            data.groups.forEach((g, gi) => g.sources.forEach((s, si) => {
+              pending++;
+              const which = s.ext ? `ext=${encodeURIComponent(s.ext)}` : `native=${encodeURIComponent(s.source)}`;
+              fetch(`<%= ~p"/manga/#{@source}/#{@slug}/migrate/search_one" %>?q=${encodeURIComponent(q)}&${which}`, {
+                headers: { 'x-csrf-token': csrfToken }
+              })
+                .then(r => r.json())
+                .then(d => {
+                  if (gen !== searchGen) return;
+                  const el = document.getElementById(`msrc-${gen}-${gi}-${si}`);
+                  if (!el) return;
+                  const results = d.results || [];
+                  found += results.length;
+                  el.innerHTML = resultCardsHtml(s, results);
+                  el.querySelectorAll('.migrate-result').forEach(btn => {
+                    btn.addEventListener('click', () => selectTarget(btn.dataset));
+                  });
+                })
+                .catch(() => {
+                  if (gen !== searchGen) return;
+                  const el = document.getElementById(`msrc-${gen}-${gi}-${si}`);
+                  if (el) el.innerHTML = '<p class="text-sm text-base-content/50">Unavailable</p>';
+                })
+                .finally(() => {
+                  if (gen !== searchGen) return;
+                  pending--;
+                  if (pending === 0 && found === 0) emptyEl.classList.remove('hidden');
+                });
+            }));
+          })
+          .catch(() => { if (gen === searchGen) loadingEl.classList.add('hidden'); });
+      }
+
+      searchBtn.addEventListener('click', doSearch);
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+      });
+      searchInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(doSearch, 500);
+      });
+
+      function selectTarget(ds) {
+        selectedTarget = { source: ds.source, slug: ds.slug, title: ds.title, cover_url: ds.cover, source_label: ds.sourceLabel };
+        document.getElementById('migrate-target-title').textContent = ds.title;
+        document.getElementById('migrate-target-source').textContent = ds.sourceLabel;
+        const coverImg = document.getElementById('migrate-target-cover');
+        if (ds.cover) {
+          coverImg.src = '/manga/proxy/image?url=' + encodeURIComponent(ds.cover);
+          coverImg.style.display = '';
+        } else {
+          coverImg.style.display = 'none';
+        }
+        stepSearch.classList.add('hidden');
+        stepConfirm.classList.remove('hidden');
+      }
+
+      document.getElementById('migrate-back-btn').addEventListener('click', () => {
+        stepConfirm.classList.add('hidden');
+        stepSearch.classList.remove('hidden');
+      });
+
+      document.getElementById('migrate-confirm-btn').addEventListener('click', () => {
+        if (!selectedTarget) return;
+        const btn = document.getElementById('migrate-confirm-btn');
+        btn.disabled = true;
+        btn.textContent = 'Migrating...';
+
+        fetch('<%= ~p"/manga/#{@source}/#{@slug}/migrate" %>', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+          body: JSON.stringify({
+            target_source: selectedTarget.source,
+            target_slug: selectedTarget.slug,
+            target_title: selectedTarget.title,
+            target_cover_url: selectedTarget.cover_url,
+            migrate_progress: document.getElementById('migrate-opt-progress').checked,
+            migrate_categories: document.getElementById('migrate-opt-categories').checked,
+            migrate_time: document.getElementById('migrate-opt-time').checked
+          })
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.ok && data.redirect_to) {
+              window.location.href = data.redirect_to;
+            } else {
+              alert('Migration failed: ' + (data.error || 'Unknown error'));
+              btn.disabled = false;
+              btn.textContent = 'Migrate';
+            }
+          })
+          .catch(() => {
+            alert('Migration failed');
+            btn.disabled = false;
+            btn.textContent = 'Migrate';
+          });
+      });
+
+      modal.addEventListener('close', () => {
+        stepConfirm.classList.add('hidden');
+        stepSearch.classList.remove('hidden');
+        selectedTarget = null;
+      });
+    })();
+  </script>
+
+  <%!-- Adjust Time Read modal --%>
+  <dialog :if={@saved} id="reading-mode-modal" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Reading Mode</h3>
+      <div class="flex flex-col gap-2">
+        <form
+          :for={{mode, label} <- [{"paged", "Manga"}, {"scroll", "Manhwa"}]}
+          method="post"
+          action={~p"/manga/#{@source}/#{@slug}/reading_mode"}
+        >
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="device" value="all" />
+          <button
+            type="submit"
+            class={"btn w-full justify-start " <> if(@reading_mode == mode, do: "btn-primary", else: "btn-outline")}
+          >
+            {label}
+            <span :if={@reading_mode == mode} class="ml-auto">✓</span>
+          </button>
+        </form>
+      </div>
+      <div class="modal-action">
+        <form method="dialog">
+          <button class="btn btn-ghost">Close</button>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+
+  <dialog :if={@saved} id="adjust-time-modal" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Adjust Time Read</h3>
+      <form id="adjust-time-form" method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"}>
+        <input type="hidden" name="_method" value="put" />
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <% on_site = @reading_seconds_adjusted || @reading_seconds || 0 %>
+        <% off_site = @reading_seconds_offsite || 0 %>
+        <% total_time = on_site + off_site %>
+        <div class="label pt-0"><span class="label-text font-semibold">On-Site Time</span></div>
+        <div class="flex gap-3 mb-3">
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Hours</span></div>
+            <input
+              type="number"
+              name="hours"
+              min="0"
+              value={div(on_site, 3600)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Minutes</span></div>
+            <input
+              type="number"
+              name="minutes"
+              min="0"
+              max="59"
+              value={div(rem(on_site, 3600), 60)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+        </div>
+        <div class="label pt-2"><span class="label-text font-semibold">Off-Site Time</span></div>
+        <div class="flex gap-3 mb-3">
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Hours</span></div>
+            <input
+              type="number"
+              name="offsite_hours"
+              min="0"
+              value={div(off_site, 3600)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+          <label class="form-control w-full">
+            <div class="label py-1"><span class="label-text text-xs">Minutes</span></div>
+            <input
+              type="number"
+              name="offsite_minutes"
+              min="0"
+              max="59"
+              value={div(rem(off_site, 3600), 60)}
+              class="input input-bordered w-full adjust-time-field"
+            />
+          </label>
+        </div>
+        <label class="label cursor-pointer justify-start gap-2 py-1 mb-2">
+          <input
+            id="adjust-time-approx"
+            type="checkbox"
+            name="offsite_approximate"
+            value="true"
+            checked={!!@reading_seconds_offsite_approximate}
+            class="checkbox checkbox-sm"
+          />
+          <span class="label-text text-xs">Off-site time is approximate (show <span class="font-mono">~</span> in stats)</span>
+        </label>
+        <label class="form-control w-full mb-3">
+          <div class="label py-1"><span class="label-text text-xs">Date started (▶ on the calendar)</span></div>
+          <input
+            type="date"
+            name="date_started"
+            value={@date_started && Date.to_iso8601(@date_started)}
+            class="input input-bordered w-full"
+          />
+        </label>
+        <p class="text-center text-sm text-base-content/70 mb-4">
+          Total: <span id="adjust-time-total" class="font-semibold text-base-content tabular-nums">{format_reading_time(total_time, !!@reading_seconds_offsite_approximate && off_site > 0) || "0m"}</span>
+        </p>
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-primary flex-1">Save</button>
+        </div>
+      </form>
+      <%!-- Clear Start Date: removes the "date started" milestone and
+           its ▶ marker from the history calendar. Only shown when a
+           start date exists. --%>
+      <form :if={@date_started} method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2"
+        onsubmit="return confirm('Clear the start-reading date and remove its ▶ marker from the history calendar?')">
+        <input type="hidden" name="_method" value="put" />
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <input type="hidden" name="date_started" value="" />
+        <button type="submit" class="btn btn-warning btn-outline btn-sm w-full">Clear Start Date</button>
+      </form>
+      <%!-- Reset On-Site Time: zeroes the raw tracker + manual on-site
+           override + the daily/hourly activity log. Off-site preserved.
+           Shown when there's any on-site time to clear. --%>
+      <%= if (@reading_seconds && @reading_seconds > 0) || @reading_seconds_adjusted || @onsite_activity_seconds > 0 do %>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2"
+          onsubmit="return confirm('Zero the on-site reading time and clear the daily activity log for this manga? Off-site time is preserved.')">
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="reset" value="true" />
+          <button type="submit" class="btn btn-warning btn-outline btn-sm w-full">Reset On-Site Time</button>
+        </form>
+      <% end %>
+
+      <%!-- Reset Off-Site Time: clears just the off-site bucket. --%>
+      <%= if @reading_seconds_offsite && @reading_seconds_offsite > 0 do %>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2">
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="reset_offsite" value="true" />
+          <button type="submit" class="btn btn-warning btn-outline btn-sm w-full">Reset Off-Site Time</button>
+        </form>
+      <% end %>
+
+      <%!-- Reset All Time Read: nukes everything (on-site + off-site +
+           activity log). Shown when there's any time to clear. --%>
+      <%= if (@reading_seconds && @reading_seconds > 0) || @reading_seconds_adjusted ||
+             (@reading_seconds_offsite && @reading_seconds_offsite > 0) || @onsite_activity_seconds > 0 do %>
+        <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_time"} class="mt-2"
+          onsubmit="return confirm('Wipe all time read (on-site, off-site, and the daily activity log) for this manga?')">
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <input type="hidden" name="reset_all" value="true" />
+          <button type="submit" class="btn btn-error btn-outline btn-sm w-full">Reset All Time Read</button>
+        </form>
+      <% end %>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-sm">Cancel</button></form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Live total in the Adjust Time Read modal: recompute the four
+       fields' sum and reformat as "Xh Ym" / "Xm" on any input change.
+       Mirrors `format_reading_time/1` from Elixir so the displayed
+       total stays consistent with the server-rendered baseline. --%>
+  <script>
+    (function() {
+      const form = document.getElementById("adjust-time-form");
+      const out = document.getElementById("adjust-time-total");
+      if (!form || !out) return;
+
+      const fmt = (sec) => {
+        sec = Math.max(0, Math.floor(sec));
+        if (sec < 60) return sec + "s";
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        if (h === 0) return m + "m";
+        if (m === 0) return h + "h";
+        return h + "h " + m + "m";
+      };
+
+      const numVal = (name) => {
+        const el = form.querySelector(`[name="${name}"]`);
+        const n = parseInt(el && el.value, 10);
+        return isNaN(n) ? 0 : Math.max(0, n);
+      };
+
+      function recompute() {
+        const offsite = numVal("offsite_hours") * 3600 + numVal("offsite_minutes") * 60;
+        const total = numVal("hours") * 3600 + numVal("minutes") * 60 + offsite;
+        const approxBox = document.getElementById("adjust-time-approx");
+        const approx = !!(approxBox && approxBox.checked) && offsite > 0;
+        out.textContent = total > 0 ? (approx ? "~" : "") + fmt(total) : "0m";
+      }
+
+      form.querySelectorAll(".adjust-time-field").forEach((el) => {
+        el.addEventListener("input", recompute);
+      });
+      const approxBox = document.getElementById("adjust-time-approx");
+      if (approxBox) approxBox.addEventListener("change", recompute);
+    })();
+  </script>
+</div>
+
+<div :if={is_nil(@manga)} class="max-w-4xl mx-auto px-4 py-8">
+  <p class="text-error">Failed to load manga info.</p>
+</div>

@@ -1,0 +1,155 @@
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga/settings"} class="btn btn-ghost btn-sm gap-1">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      Settings
+    </a>
+    <h2 class="text-lg font-semibold">Source extensions</h2>
+    <span class="text-sm text-base-content/50">{MapSet.size(@enabled)} enabled</span>
+  </div>
+
+  <%= if @error do %>
+    <div class="alert alert-warning mb-6">{@error}</div>
+  <% end %>
+
+  <%= if @sources != [] or @native_sources != [] do %>
+    <p class="text-sm text-base-content/60 mb-4">
+      Enabled sources are searched on the Search page; enabled extensions also get a row on Explore.
+      Each search hits the live site, so keep the selection small.
+    </p>
+
+    <input
+      type="text"
+      id="ext-filter"
+      placeholder="Filter sources..."
+      class="input input-bordered w-full mb-3"
+      autocomplete="off"
+    />
+
+    <div class="flex flex-wrap gap-4 mb-6">
+      <label class="label cursor-pointer gap-2">
+        <input type="checkbox" id="ext-hide-broken" class="toggle toggle-sm toggle-primary" checked />
+        <span class="label-text text-sm">Hide broken</span>
+      </label>
+      <label class="label cursor-pointer gap-2">
+        <input type="checkbox" id="ext-hide-adult" class="toggle toggle-sm toggle-primary" checked />
+        <span class="label-text text-sm">Hide 18+</span>
+      </label>
+    </div>
+
+    <form method="post" action={~p"/manga/extensions"}>
+      <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+
+      <div class="sticky top-2 z-20 flex justify-end mb-4">
+        <button type="submit" class="btn btn-primary shadow-lg">Save selection</button>
+      </div>
+
+      <%!-- Built-in scrapers (the app's own source modules) — same
+           toggle mechanics as extensions, own sections on top,
+           grouped by language like the search page. --%>
+      <%= for {lang_label, sources} <- @native_sources, sources != [] do %>
+        <div class="mb-6 ext-locale-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+            Built-in scrapers · {lang_label}
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            <label
+              :for={{key, label} <- sources}
+              class="ext-row flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 cursor-pointer"
+              data-title={String.downcase("#{label} #{key}")}
+            >
+              <input
+                type="checkbox"
+                name="native[]"
+                value={key}
+                checked={MapSet.member?(@native_enabled, key)}
+                class="checkbox checkbox-sm checkbox-secondary"
+              />
+              <span class="text-sm truncate">{label}</span>
+              <span class="badge badge-ghost badge-xs">built-in</span>
+              <span class="text-xs text-base-content/40 truncate ml-auto">{key}</span>
+            </label>
+          </div>
+        </div>
+      <% end %>
+
+      <%= for {locale, sources} <- sources_by_locale(@sources) do %>
+        <div class="mb-6 ext-locale-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-2">{locale}</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            <label
+              :for={s <- sources}
+              class="ext-row flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-base-200 cursor-pointer"
+              data-title={String.downcase("#{s.title} #{s.id}")}
+              data-broken={to_string(Map.get(s, :broken, false))}
+              data-adult={to_string(Map.get(s, :content_type) == "HENTAI")}
+            >
+              <input
+                type="checkbox"
+                name="sources[]"
+                value={s.id}
+                checked={MapSet.member?(@enabled, s.id)}
+                class="checkbox checkbox-sm checkbox-primary"
+              />
+              <span class="text-sm truncate">{s.title}</span>
+              <%= if Map.get(s, :broken) do %>
+                <span class="badge badge-error badge-xs" title="Marked broken by the parser maintainers">broken</span>
+              <% end %>
+              <%= if Map.get(s, :search_supported) == false do %>
+                <span class="badge badge-ghost badge-xs" title="No text search — appears in Explore only">no search</span>
+              <% end %>
+              <span class="text-xs text-base-content/40 truncate ml-auto">{s.id}</span>
+            </label>
+          </div>
+        </div>
+      <% end %>
+    </form>
+
+    <script>
+      (() => {
+        const input = document.getElementById("ext-filter");
+        const hideBroken = document.getElementById("ext-hide-broken");
+        const hideAdult = document.getElementById("ext-hide-adult");
+        const rows = Array.from(document.querySelectorAll(".ext-row"));
+        const groups = Array.from(document.querySelectorAll(".ext-locale-group"));
+
+        // Persist toggle prefs; default = both hidden.
+        try {
+          hideBroken.checked = localStorage.getItem("ext-hide-broken") !== "0";
+          hideAdult.checked = localStorage.getItem("ext-hide-adult") !== "0";
+        } catch (_e) {}
+
+        function apply() {
+          const q = input.value.trim().toLowerCase();
+          rows.forEach((row) => {
+            // A row the user already enabled always stays visible so
+            // an active selection can't be silently hidden.
+            const enabled = row.querySelector("input[type=checkbox]").checked;
+            const hidden =
+              (!enabled && hideBroken.checked && row.dataset.broken === "true") ||
+              (!enabled && hideAdult.checked && row.dataset.adult === "true") ||
+              (q && !row.dataset.title.includes(q));
+            row.style.display = hidden ? "none" : "";
+          });
+          groups.forEach((g) => {
+            const any = Array.from(g.querySelectorAll(".ext-row")).some((r) => r.style.display !== "none");
+            g.style.display = any ? "" : "none";
+          });
+        }
+
+        input.addEventListener("input", apply);
+        [hideBroken, hideAdult].forEach((t) =>
+          t.addEventListener("change", () => {
+            try {
+              localStorage.setItem(t.id, t.checked ? "1" : "0");
+            } catch (_e) {}
+            apply();
+          })
+        );
+        apply();
+      })();
+    </script>
+  <% end %>
+</div>

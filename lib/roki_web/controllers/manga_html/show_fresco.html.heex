@@ -1,0 +1,2937 @@
+<%!--
+  Fresco 0.5 paged-manga reader — TEST ROUTE.
+  Reachable at /manga/:source/:slug/:chapter
+
+  Architecture: ONE Fresco.canvas containing all chapter pages laid
+  out side-by-side in reading-direction order. "Navigation" is a
+  fresco pan-zoom retarget (`handle.fitImage("page-N")`), not a
+  page reload. Client-side state lives in JS; URL `?page=N` is the
+  hash for deep-linking and browser back/forward.
+
+  Single-page vs double-page is a *fit decision*, not a layout one
+  — same canvas, different bounding boxes. The canvas viewer mounts
+  with `:infinite_canvas` so the cover-facing blank area (outside
+  the actual painted canvas content) can be panned into.
+
+  Blank-page detection runs on idle: each image is sampled for
+  luminance variance. Mostly-white pages are added to a Set; the
+  prev/next handlers skip past them. Cached client-side keyed by
+  source+slug+chapter so a re-visit doesn't re-scan.
+
+  Production paged reader (show_paged.html.heex) untouched.
+--%>
+
+<style>
+  [data-nav-hidden="true"] .reader-nav-mobile,
+  [data-nav-hidden="true"] .reader-nav-desktop { display: none !important; }
+
+  /* Hide Etcher's auto-added nav buttons (pencil + eye) in fresco's
+     nav column. We surface annotation-mode and comments-visibility
+     in our own toolbar instead, next to the settings button, so the
+     user has a single consistent place for reader controls. */
+  #fresco-reader .fresco-nav button[title="Annotate"],
+  #fresco-reader .fresco-nav button[title="Hide annotations"],
+  #fresco-reader .fresco-nav button[title="Show annotations"] {
+    display: none !important;
+  }
+
+  /* Highlight the in-bar pencil when annotation mode is on. The mode
+     flag is mirrored on the shell via the etcher:mode-changed listener
+     in the script below. */
+  #fresco-paged-shell[data-annotate-mode="true"] [id^="paged-annotate-toggle"] {
+    background: rgba(59, 130, 246, 0.18);
+    color: rgb(59, 130, 246);
+  }
+
+  /* Fresco's built-in nav overlay (fullscreen / zoom / rotate / home)
+     is collapsed by default — most reading happens with tap-to-page
+     + pinch-zoom, so the overlay just adds clutter. Our injected
+     `.fresco-nav-toggle-btn` (added via handle.appendNavButton then
+     prepended) stays visible; the rest are hidden until the user
+     clicks the toggle, which flips `data-fresco-nav="visible"` on
+     the shell. */
+  #fresco-paged-shell:not([data-fresco-nav="visible"]) #fresco-reader .fresco-nav > button:not(.fresco-nav-toggle-btn) {
+    display: none !important;
+  }
+
+  /* Highlight the toggle when fresco's nav is visible. */
+  #fresco-paged-shell[data-fresco-nav="visible"] #fresco-reader .fresco-nav-toggle-btn {
+    background: rgba(59, 130, 246, 0.35);
+  }
+
+  /* Suppress browser selection/drag on the canvas reader. Rapid taps
+     on the tap zones (double-click on desktop) would otherwise select
+     the underlying <img> elements (the blue highlight) and trigger
+     drag-image previews / iOS long-press callout. Scoped to the
+     canvas host so the settings modal keeps normal selection. */
+  #fresco-reader,
+  #fresco-reader * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Hide the cursor while reading — flips on at the first page change
+     (handled by JS) and back off on the next mousemove. Mirrors the
+     "watching a movie" behavior of video players. Mobile is a no-op
+     (no cursor); desktop benefits when the bar/menu is dismissed. */
+  #fresco-paged-shell[data-cursor-hidden="true"],
+  #fresco-paged-shell[data-cursor-hidden="true"] * {
+    cursor: none !important;
+  }
+</style>
+
+<div
+  id="fresco-paged-shell"
+  class="fixed inset-0 bg-base-100 flex flex-col"
+  data-nav-hidden="true"
+  data-source={@source}
+  data-slug={@slug}
+  data-chapter={@chapter}
+  data-page={@page}
+  data-total-pages={@total_pages}
+  data-double-page={to_string(@double_page)}
+  data-direction={@direction}
+  data-spread-starts={Jason.encode!(@spread_starts)}
+  data-solo-pages={Jason.encode!(@solo_pages)}
+  data-inserted-pages={Jason.encode!(@inserted_pages)}
+  data-reading-rotation={@reading_rotation}
+  data-transient-mode={if @transient_mode, do: "1", else: "0"}
+  data-images={fresco_images_json(@images)}
+  data-prev-chapter-url={if @prev_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}", else: ""}
+  data-next-chapter-url={if @next_chapter, do: ~p"/manga/#{@source}/#{@slug}/#{@next_chapter}", else: ""}
+>
+  <%!-- Tap-zone visualization overlay — flashes the active zones for
+       1.5s after a preset change, matching production. Pointer-events-
+       none so it doesn't intercept reader taps. --%>
+  <div id="paged-tap-zone-overlay" class="fixed inset-0 z-[100] pointer-events-none transition-opacity duration-500" style="opacity:0;"></div>
+
+  <%!-- ───── Mobile top bar — matches production layout + classes ───── --%>
+  <div class="reader-nav-mobile lg:hidden flex flex-col fixed top-0 left-0 right-0 z-30 bg-base-100 px-3 py-2 gap-2">
+    <div class="flex items-center justify-between">
+      <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost min-h-[44px] min-w-[44px]" title="Home">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+      </a>
+      <div class="flex items-center gap-1">
+        <a :if={@prev_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"}
+           class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Previous chapter">«</a>
+        <span class="font-bold text-sm px-1">Ch. {@chapter}</span>
+        <span id="page-progress-mobile" class="text-xs text-base-content/60 px-1">p.{@page}/{@total_pages}</span>
+        <a :if={@next_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"}
+           class="btn btn-soft text-xl min-h-[44px] min-w-[44px]" title="Next chapter">»</a>
+      </div>
+      <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-ghost min-h-[44px]" title="Chapters">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+      </a>
+    </div>
+
+    <div class="flex items-center justify-center gap-2">
+      <button id="paged-prev-page" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Previous page">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+      </button>
+      <button id="paged-annotate-toggle-mobile" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Draw comment">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+      </button>
+      <button id="paged-comments-toggle-mobile" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Show/hide comments">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      </button>
+      <button id="settings-btn-mobile" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      </button>
+      <button id="paged-next-page" class="btn btn-ghost btn-sm min-h-[44px] min-w-[44px]" title="Next page">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+      </button>
+    </div>
+  </div>
+
+  <%!-- ───── Desktop sidebar ───── --%>
+  <div class="reader-nav-desktop hidden lg:flex flex-col gap-2 items-center px-2 fixed top-1/2 right-3 -translate-y-1/2 z-30 bg-base-200/80 backdrop-blur-sm rounded-xl py-2">
+    <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-sm btn-ghost" title="Home">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+    </a>
+    <a href={~p"/manga/#{@source}/#{@slug}"} class="btn btn-sm btn-ghost" title="All Chapters">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+    </a>
+    <a :if={@prev_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@prev_chapter}"} class="btn btn-sm btn-ghost" title="Previous chapter">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 20l7-7 7 7" /></svg>
+    </a>
+    <div class="flex flex-col items-center text-xs font-bold text-base-content/60 leading-tight">
+      <span>Ch. {@chapter}</span>
+      <span id="page-progress-desktop" class="text-[10px] text-base-content/40">p.{@page}/{@total_pages}</span>
+    </div>
+    <a :if={@next_chapter} href={~p"/manga/#{@source}/#{@slug}/#{@next_chapter}"} class="btn btn-sm btn-ghost" title="Next chapter">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 4l-7 7-7-7" /></svg>
+    </a>
+    <div class="w-6 border-t border-base-content/20 my-1"></div>
+    <button id="paged-prev-page-desktop" class="btn btn-sm btn-ghost" title="Previous page">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+    </button>
+    <button id="paged-next-page-desktop" class="btn btn-sm btn-ghost" title="Next page">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+    </button>
+    <button id="paged-annotate-toggle-desktop" class="btn btn-sm btn-ghost" title="Draw comment">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+    </button>
+    <button id="paged-comments-toggle-desktop" class="btn btn-sm btn-ghost" title="Show/hide comments">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+    </button>
+    <button id="settings-btn-desktop" class="btn btn-sm btn-ghost" title="Settings">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+    </button>
+  </div>
+
+  <%!-- ───── Settings modal ───── --%>
+  <dialog id="settings-modal" class="modal">
+    <div class="modal-box max-w-xs">
+      <h3 class="font-bold text-lg mb-4">Settings</h3>
+
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm font-medium">Reader</p>
+        <div class="flex gap-1">
+          <a href={~p"/manga/legacy/#{@source}/#{@slug}/#{@chapter}"} class="btn btn-sm btn-outline" title="Open the legacy reader">Legacy</a>
+          <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Fresco</span>
+        </div>
+      </div>
+
+      <div class="border-t border-base-content/20 my-3"></div>
+
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm font-medium">Reading mode</p>
+        <div class="flex gap-1">
+          <span class="btn btn-sm btn-outline btn-active no-animation pointer-events-none">Paged</span>
+          <form method="post" action={~p"/manga/#{@source}/#{@slug}/reading_mode"} class="contents">
+            <input type="hidden" name="_method" value="put" />
+            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+            <input type="hidden" name="mode" value="scroll" />
+            <input type="hidden" name="device" value="" />
+            <input type="hidden" name="redirect_to" value={~p"/manga/#{@source}/#{@slug}/#{@chapter}"} />
+            <button type="submit" class="btn btn-sm btn-outline">Scroll</button>
+          </form>
+        </div>
+      </div>
+
+      <%!-- Double page toggle — matches production's
+           `#double-page-toggle-modal` checkbox. On change we POST
+           through the existing /reading_mode endpoint with mode=
+           "paged" or "double_page" and redirect back to the
+           current chapter URL so the choice persists via
+           saved_manga.reading_mode. --%>
+      <div class="mb-4">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium">Double page</p>
+          <input type="checkbox" id="paged-double-page-toggle"
+                 class="toggle toggle-sm" checked={@double_page} />
+        </div>
+      </div>
+
+      <%!-- Reading direction — drives spread page order AND keyboard /
+           tap-zone navigation (ArrowLeft / h = next on RTL, prev on
+           LTR). Always interactive: even single-page users may want
+           to flip direction to match keyboard expectations. --%>
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm font-medium">Reading direction</p>
+        <div class="flex gap-1">
+          <button type="button"
+                  data-paged-direction="ltr"
+                  class={paged_btn_class(@direction == "ltr") <> " inline-flex items-center gap-1"}>
+            LTR
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+          </button>
+          <button type="button"
+                  data-paged-direction="rtl"
+                  class={paged_btn_class(@direction == "rtl") <> " inline-flex items-center gap-1"}>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            RTL
+          </button>
+        </div>
+      </div>
+
+      <%!-- Smart crop — auto-detect + hide near-white margins around
+           each page so the visible content fills more of the viewport.
+           Probes once per image on idle; cached per chapter. --%>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-sm font-medium">Smart crop</p>
+          <p class="text-xs text-base-content/50">Trim white margins around pages</p>
+        </div>
+        <input type="checkbox" id="paged-smart-crop" class="toggle toggle-sm toggle-primary" />
+      </div>
+
+      <%!-- Skip blank pages — when on, the prev/next handlers walk past
+           any page detected as "mostly white" instead of stopping on it.
+           Detection runs on idle and is cached per chapter. --%>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-sm font-medium">Skip blank pages</p>
+          <p class="text-xs text-base-content/50">Auto-skip mostly-white pages</p>
+        </div>
+        <input type="checkbox" id="paged-skip-blank" class="toggle toggle-sm toggle-primary" />
+      </div>
+
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm font-medium">Page rotation</p>
+        <div class="flex gap-1">
+          <button type="button" data-paged-rotation-delta="-90"
+                  class="btn btn-sm btn-outline">-90°</button>
+          <button type="button" data-paged-rotation-reset
+                  class={paged_btn_class(@reading_rotation == 0)}>0°</button>
+          <button type="button" data-paged-rotation-delta="90"
+                  class="btn btn-sm btn-outline">+90°</button>
+        </div>
+      </div>
+
+      <%!-- Show comments — toggles all Etcher annotation overlays. --%>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-sm font-medium">Show comments</p>
+          <p class="text-xs text-base-content/50">Hide annotation overlays on pages</p>
+        </div>
+        <input type="checkbox" id="paged-comments-visible" class="toggle toggle-sm toggle-primary" checked />
+      </div>
+
+      <%!-- Page padding — shrinks the rendered page width by `pct`% of
+           the viewport. Production-parity slider; persists per slug. --%>
+      <div class="mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-sm font-medium">Page padding</p>
+          <span id="paged-page-padding-label" class="text-xs font-mono">0%</span>
+        </div>
+        <input type="range" id="paged-page-padding-slider" min="0" max="90" step="1" value="0" class="range range-xs range-primary w-full" />
+      </div>
+
+      <div class="mb-2">
+        <p class="text-sm font-medium mb-2">Tap zones</p>
+        <div class="flex flex-row gap-2">
+          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card" data-preset="default">
+            <input type="radio" name="paged_tap_preset" value="default" class="hidden" />
+            <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
+              <div class="absolute top-0 left-1/3 right-1/3 h-1/2 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px] border-b border-blue-500/40">M</div>
+              <div class="absolute bottom-0 left-1/3 right-1/3 h-1/2 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-t border-red-500/40">P</div>
+            </div>
+            <span class="text-xs font-medium">Default</span>
+          </label>
+          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card" data-preset="left_right">
+            <input type="radio" name="paged_tap_preset" value="left_right" class="hidden" />
+            <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-r border-red-500/40">P</div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-l border-green-500/40">N</div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+            </div>
+            <span class="text-xs font-medium">Left / Right</span>
+          </label>
+          <label class="cursor-pointer flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 flex-1 paged-tap-preset-card" data-preset="right_left">
+            <input type="radio" name="paged_tap_preset" value="right_left" class="hidden" />
+            <div class="relative w-16 aspect-[3/4] rounded border border-base-content/20 overflow-hidden bg-base-300">
+              <div class="absolute top-0 left-0 bottom-0 w-1/3 bg-green-500/30 flex items-center justify-center text-green-900 font-bold text-[7px] border-r border-green-500/40">N</div>
+              <div class="absolute top-0 right-0 bottom-0 w-1/3 bg-red-500/30 flex items-center justify-center text-red-900 font-bold text-[7px] border-l border-red-500/40">P</div>
+              <div class="absolute inset-0 left-1/3 right-1/3 bg-blue-500/30 flex items-center justify-center text-blue-900 font-bold text-[7px]">M</div>
+            </div>
+            <span class="text-xs font-medium">Right / Left</span>
+          </label>
+        </div>
+        <p class="text-xs text-base-content/50 mt-2">N = next page · P = previous · M = menu</p>
+      </div>
+
+      <%!-- Debug section — separated from the user-facing toggles so
+           diagnostic stuff (page-dim overlay, future probes) is
+           clearly out-of-band. --%>
+      <div class="border-t border-base-content/20 my-3"></div>
+      <p class="text-xs font-medium text-base-content/50 mb-2 uppercase tracking-wide">Debug</p>
+
+      <%!-- Diagnostic — show each page's natural dimensions in a
+           fixed corner overlay. Useful for spotting a page that's
+           probed wrong (the dimension probe occasionally falls back
+           to the 1000×1500 default when a CDN blocks the range
+           request, which then shows up as a tiny page in the double
+           spread). --%>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-sm font-medium">Page dimensions overlay</p>
+          <p class="text-xs text-base-content/50">List natural w×h per page</p>
+        </div>
+        <input type="checkbox" id="paged-dims-overlay" class="toggle toggle-sm toggle-primary" />
+      </div>
+
+      <div class="modal-action">
+        <button class="btn btn-sm" onclick="document.getElementById('settings-modal').close()">Close</button>
+      </div>
+    </div>
+    <div class="modal-backdrop" onclick="document.getElementById('settings-modal').close()"></div>
+  </dialog>
+
+  <%!-- ───── The canvas — every chapter page laid out side-by-side ─────
+       TEMP: :initial_fit_image_id and :memory_window from 0.5.2 are
+       disabled while we debug an interaction with our setup that
+       breaks initial position + image loading on this consumer. The
+       JS-side fitToPage + setImageVisible loop covers the case for
+       now; memory windowing reverts to the simple "all imgs load"
+       behavior. Will re-enable per-attr once we isolate the cause.
+       :gestures and :view_tracking are kept (no observed problem).
+  --%>
+  <div class="relative flex-1 min-h-0">
+    <Fresco.canvas
+      id="fresco-reader"
+      canvas={fresco_canvas(@images, @direction, @etcher_annotations, @page, @double_page, @spread_starts)}
+      class="w-full h-full"
+      theme={:inherit}
+      infinite_canvas
+      gestures={[:pan, :pinch, :wheel, :keyboard]}
+      view_tracking
+      view_settle_ms={150}
+      initial_rotation={@reading_rotation}
+    />
+    <%!-- Etcher 0.3 annotation overlay — wrapped in a tiny LiveView
+         (EtcherHostLive) so the `phx-hook="EtcherLayer"` hook gets
+         a LiveView channel (required for `pushEventTo`, which Etcher
+         uses to fire `etcher:annotations-changed` and `etcher:shape-drawn`).
+         Without this wrapper the toolbar would mount but persistence
+         and the composer trigger wouldn't fire. --%>
+    {live_render(@conn, RokiWeb.Live.EtcherHostLive,
+      id: "etcher-host-fresco-reader",
+      session: %{
+        "fresco_id" => "fresco-reader",
+        "source" => @source,
+        "slug" => @slug,
+        "chapter" => @chapter,
+        "user_id" => @current_user && @current_user.uuid,
+        "user_token" => Plug.Conn.get_session(@conn, "user_token")
+      })}
+  </div>
+
+  <%!-- Bottom-center page indicator pill — same classes + position as
+       production paged reader. Updated in JS on every navigateTo. --%>
+  <div id="page-indicator-bottom"
+       class="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-base-300/70 text-xs font-bold text-base-content/70 pointer-events-none">
+    {@page} / {@total_pages}
+  </div>
+
+  <%!-- Pointer-lock gesture mode (desktop only). Click → browser hides
+       the cursor and reports mouse-movement deltas; we synthesize
+       ArrowLeft / ArrowRight on horizontal accumulation past a
+       threshold so the existing keyboard nav (including RTL handling)
+       does the work. Click anywhere or hit Escape to exit. --%>
+  <button id="mouse-gesture-btn" type="button"
+          class="hidden lg:flex fixed bottom-4 right-4 z-30 btn btn-sm btn-circle bg-base-300/70 hover:bg-base-300 border-0"
+          title="Mouse gesture navigation (click here, then move mouse to flip pages — click again to exit)">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+    </svg>
+  </button>
+  <div id="mouse-gesture-banner"
+       class="hidden fixed bottom-14 right-4 z-40 px-2 py-1 rounded-full bg-primary text-primary-content text-[11px] font-semibold shadow-lg pointer-events-none">
+    ← → · click to exit
+  </div>
+
+  <%!-- Page dimensions overlay — populated by JS when the settings
+       toggle is on. Pinned top-left at z-50 so it survives nav toggle. --%>
+  <div id="paged-dims-overlay-panel"
+       class="hidden fixed top-2 left-2 z-50 bg-black/80 text-white text-xs font-mono leading-tight rounded p-2 max-w-[260px] max-h-[80vh] overflow-y-auto pointer-events-none">
+  </div>
+
+  <%!-- Etcher shape-drawn composer — opens when EtcherHostLive pushes
+       `etcher:open-composer` after a shape commit. Matches production's
+       annotation-form layout (textarea + GIF picker + private toggle),
+       minus the title field (etcher already records "kind" + style on
+       the shape, and this app doesn't need a separate annotation title)
+       and the color swatches (etcher's toolbar owns shape color).
+
+       On Post: POST to /marks/etcher-shapes/:uuid/comment, then
+       `window.openCommentModal` opens the comment thread for further
+       interaction — same flow as production. --%>
+  <dialog id="etcher-composer" class="modal" data-shape-uuid="">
+    <div class="modal-box max-w-sm p-3">
+      <%!-- Font ≥16px on mobile so iOS Safari doesn't auto-zoom on
+           focus (and trap us at the zoomed scale). Drops back to
+           text-sm at the lg breakpoint where desktop fits more text. --%>
+      <textarea id="etcher-composer-content"
+                rows="3"
+                class="textarea textarea-bordered w-full text-base lg:text-sm"
+                placeholder="Add a comment..."
+                maxlength="2000"></textarea>
+      <div id="etcher-composer-gif-preview" class="hidden mt-1 relative">
+        <img class="max-w-full rounded-lg" />
+        <button type="button" id="etcher-composer-gif-remove"
+                class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✕</button>
+      </div>
+      <div id="etcher-composer-error" class="hidden text-xs text-error mt-1"></div>
+      <div class="flex items-center gap-2 mt-2">
+        <button type="button" id="etcher-composer-gif-btn"
+                class="btn btn-sm btn-ghost px-2 font-bold min-h-[2rem]"
+                style="border:1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);">GIF</button>
+      </div>
+      <div id="etcher-composer-gif-picker" class="hidden mt-2"></div>
+      <label class="flex items-center gap-2 mt-2 cursor-pointer text-xs text-base-content/60">
+        <input type="checkbox" id="etcher-composer-private" class="checkbox checkbox-xs" />
+        <span class="flex items-center gap-1">🔒 Private</span>
+      </label>
+      <div class="flex gap-2 mt-3">
+        <button type="button" id="etcher-composer-post" class="btn btn-sm btn-primary flex-1">Post</button>
+        <button type="button" id="etcher-composer-cancel" class="btn btn-sm btn-ghost flex-1">Cancel</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <%!-- Per-page override menu — appears on right-click (desktop) or
+       long-press (mobile) on a page. Toggles `insert_blank_before`
+       and `solo` overrides for whichever page was tapped. Hidden by
+       default; positioned absolutely at the pointer when shown. --%>
+  <div
+    id="page-override-menu"
+    class="hidden fixed z-[200] bg-base-100 border border-base-content/20 rounded-lg shadow-xl py-1 min-w-[200px]"
+    style="left:0;top:0;"
+  >
+    <div class="px-3 py-2 text-xs font-semibold text-base-content/60 border-b border-base-content/10">
+      <span id="page-override-menu-target">Page</span>
+    </div>
+    <button
+      type="button"
+      id="page-override-insert-blank"
+      class="block w-full text-left px-3 py-2 text-sm hover:bg-base-200"
+    >Insert blank before</button>
+    <button
+      type="button"
+      id="page-override-mark-solo"
+      class="block w-full text-left px-3 py-2 text-sm hover:bg-base-200"
+    >Mark as solo</button>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const shell  = document.getElementById("fresco-paged-shell");
+    if (!shell) return;
+    const source  = shell.dataset.source;
+    const slug    = shell.dataset.slug;
+    // chapter / total / images / spread layout / chapter-nav URLs all
+    // go `let` so the in-place chapter swap (Fresco 0.7.1+) can roll
+    // them forward without remounting the page.
+    let chapter = shell.dataset.chapter;
+    let total   = parseInt(shell.dataset.totalPages, 10);
+    const direction = shell.dataset.direction || "rtl";
+    let doubleMode = shell.dataset.doublePage === "true";
+    let spreadStarts = JSON.parse(shell.dataset.spreadStarts || "[]");
+    let images = JSON.parse(shell.dataset.images || "[]");
+    // User-marked solo pages (chapter_page_overrides kind="solo") +
+    // synthetic blanks inserted via kind="insert_blank_before". Both
+    // sets are in CURRENT-list coordinates (post-insert numbering).
+    let soloSet = new Set(JSON.parse(shell.dataset.soloPages || "[]"));
+    let insertedSet = new Set(JSON.parse(shell.dataset.insertedPages || "[]"));
+    // Canvas → display number translation. Synthetic inserts don't
+    // get a display number (they're "extra" pages the user added to
+    // fix pairing). `displayTotal` is the count of real pages, what
+    // we show as the "/ N" denominator. `canvasToDisplay[N]` is null
+    // for synthetics, otherwise the 1-based count among real pages.
+    // `canvasToDisplay` / `displayTotal` are `let` so the SPA chapter
+    // swap can recompute them from the new chapter's totals + inserts.
+    let canvasToDisplay = new Array(total + 1);
+    let displayTotal = total - insertedSet.size;
+    function rebuildCanvasToDisplay() {
+      canvasToDisplay = new Array(total + 1);
+      canvasToDisplay[0] = null;
+      let real = 0;
+      for (let i = 1; i <= total; i++) {
+        if (insertedSet.has(i)) {
+          canvasToDisplay[i] = null;
+        } else {
+          real++;
+          canvasToDisplay[i] = real;
+        }
+      }
+      displayTotal = total - insertedSet.size;
+    }
+    rebuildCanvasToDisplay();
+
+    // ── Image window ────────────────────────────────────────────────
+    // Keep src loaded only for a window around the current view —
+    // every other page renders an empty SVG placeholder so the
+    // browser never fetches it. Saves ~80% of initial-load bandwidth
+    // on long chapters and trims decoded-bitmap RAM. Server already
+    // honors the window on first render; this function handles every
+    // navigation afterward.
+    //
+    // Window units differ per mode:
+    //   * Single page: load currentPage ± WINDOW_PAGES (centred on
+    //     the page the user is currently on).
+    //   * Double page: load the current SPREAD ± WINDOW_SPREADS
+    //     anchors. This guarantees Next/Prev always lands on an
+    //     already-loaded spread, even when wide pages make spreads
+    //     irregular — flat page radius doesn't.
+    const WINDOW_PAGES = 2;
+    const WINDOW_SPREADS = 2;
+    const IMG_PLACEHOLDER =
+      "data:image/svg+xml;utf8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%2F%3E";
+
+    function pagesInWindow(centerPage) {
+      if (!doubleMode) {
+        const set = new Set();
+        const lo = Math.max(1, centerPage - WINDOW_PAGES);
+        const hi = Math.min(total, centerPage + WINDOW_PAGES);
+        for (let p = lo; p <= hi; p++) set.add(p);
+        return set;
+      }
+      // Spread-aware: snap centerPage to its anchor, expand
+      // WINDOW_SPREADS anchors each direction, then collect every
+      // page in each spread (anchor + its partner). Honours wide-
+      // page-as-solo, blanks, and synthetic insert overrides via
+      // the same `effectiveSpreadStarts` / `partnerOf` helpers the
+      // navigation uses.
+      const starts = effectiveSpreadStarts();
+      if (starts.length === 0) return new Set([centerPage]);
+      const anchor = spreadAnchorFor(centerPage);
+      let idx = starts.indexOf(anchor);
+      if (idx < 0) idx = 0;
+      const lo = Math.max(0, idx - WINDOW_SPREADS);
+      const hi = Math.min(starts.length - 1, idx + WINDOW_SPREADS);
+      const pages = new Set();
+      for (let i = lo; i <= hi; i++) {
+        const a = starts[i];
+        pages.add(a);
+        const partner = partnerOf(a);
+        if (partner != null) pages.add(partner);
+      }
+      return pages;
+    }
+
+    function applyImageWindow(centerPage) {
+      const inWindow = pagesInWindow(centerPage);
+      const handle = frescoHandle && typeof frescoHandle.setImageSrc === "function" ? frescoHandle : null;
+      for (let n = 1; n <= total; n++) {
+        const id = "page-" + n;
+        const img = document.querySelector(
+          `[data-fresco-canvas-img][data-image-id="${id}"]`
+        );
+        if (!img) continue;
+        const meta = images[n - 1];
+        const want = inWindow.has(n) ? (meta && meta.url) : IMG_PLACEHOLDER;
+        if (!want) continue;
+        if (img.src === want) continue;
+        if (handle) {
+          try { handle.setImageSrc(id, want); continue; } catch (_) {}
+        }
+        img.src = want;
+      }
+    }
+
+    let prevChapterUrl = shell.dataset.prevChapterUrl || "";
+    let nextChapterUrl = shell.dataset.nextChapterUrl || "";
+    const csrfToken =
+      document.querySelector("meta[name='csrf-token']")?.content || "";
+
+    let currentPage = parseInt(shell.dataset.page, 10) || 1;
+
+    const TAP_KEY        = "fresco-test:tap-preset:" + slug;
+    const NAV_KEY        = "fresco-test:nav-visible";
+    const SKIP_BLANK_KEY = "fresco-test:skip-blank:" + slug;
+    const COMMENTS_VISIBLE_KEY = "fresco-test:comments-visible:" + slug;
+    const PAGE_PADDING_KEY     = "fresco-test:page-padding:" + slug;
+    const SMART_CROP_KEY       = "fresco-test:smart-crop:" + slug;
+    // Blank-scan cache is keyed by source/slug/chapter PLUS a
+    // fingerprint of the active overrides — the cached blank-page
+    // positions are canvas-coordinate, and the canvas shifts whenever
+    // an override is added/removed. Including the override state in
+    // the key makes old caches automatically orphan (they remain in
+    // sessionStorage but are no longer consulted) instead of pinning
+    // a now-real page as blank.
+    const _overrideFingerprint =
+      "ins=" + [...insertedSet].sort((a,b) => a-b).join(",") +
+      "|solo=" + [...soloSet].sort((a,b) => a-b).join(",");
+    const BLANK_CACHE_KEY =
+      "fresco-test:blank-cache:" + source + ":" + slug + ":" + chapter +
+      ":" + _overrideFingerprint;
+
+    const TAP_ZONE_PRESETS = {
+      default:    { leftThird: "next", rightThird: "next", midTop: "menu", midBottom: "prev" },
+      left_right: { leftThird: "prev", rightThird: "next", midTop: "menu", midBottom: "menu" },
+      right_left: { leftThird: "next", rightThird: "prev", midTop: "menu", midBottom: "menu" }
+    };
+    let tapPreset = localStorage.getItem(TAP_KEY) || "default";
+    let skipBlank = localStorage.getItem(SKIP_BLANK_KEY) !== "false"; // default ON
+    let commentsVisible = localStorage.getItem(COMMENTS_VISIBLE_KEY) !== "false"; // default ON
+    // Page padding default mirrors production scroll reader: 70% on
+    // desktop (page fills ~30% of the viewport), 0% on mobile.
+    const PAGE_PADDING_DEFAULT = window.innerWidth < 1024 ? 0 : 0;
+    let pagePadding = (function() {
+      const raw = localStorage.getItem(PAGE_PADDING_KEY);
+      if (raw === null) return PAGE_PADDING_DEFAULT;
+      const n = parseInt(raw, 10);
+      return (isNaN(n) || n < 0 || n > 90) ? PAGE_PADDING_DEFAULT : n;
+    })();
+    let smartCrop = localStorage.getItem(SMART_CROP_KEY) === "true"; // default OFF
+
+    // Blank-page cache — persists per chapter. Loaded synchronously
+    // before nav so a re-visit doesn't re-scan; updated when the idle
+    // detector finishes a new page.
+    let blankSet = new Set();
+    try {
+      const raw = sessionStorage.getItem(BLANK_CACHE_KEY);
+      if (raw) JSON.parse(raw).forEach((n) => blankSet.add(n));
+    } catch (_) {}
+    function persistBlankSet() {
+      try {
+        sessionStorage.setItem(BLANK_CACHE_KEY, JSON.stringify(Array.from(blankSet)));
+      } catch (_) {}
+    }
+
+    // ── Spread-aware paging.
+    //
+    // The server precomputes `spreadStarts` (= [1, 2, 4, 6, …] for a
+    // normal chapter) by treating EVERY page as a real page. When the
+    // user has `skipBlank` on AND the idle scanner has marked some
+    // pages as blank, the effective spread layout shifts: blank
+    // pages don't count toward pairing, so [1, 2, 3-blank, 4, 5, 6,…]
+    // pairs (4 with 5) and (6 with 7), not (2 with 3-blank) and
+    // (4 with 5).
+    //
+    // Wide pages (glued-together double-page spreads stored as a
+    // single image, width > height * 1.2) also break pairing — they
+    // get their own solo spread because they ARE the spread. This
+    // mirrors the server's `fresco_spread_starts/1` (manga_html.ex).
+    //
+    // `nonBlankPages()` filters the chapter to non-blanks; spread
+    // starts derive from it: nb[0] solo (cover), then walk pairs
+    // with wide-page detection. partnerOf(anchor) returns the NEXT
+    // non-blank after anchor, or null if either is wide.
+    function nonBlankPages() {
+      if (!skipBlank) {
+        const all = [];
+        for (let i = 1; i <= total; i++) all.push(i);
+        return all;
+      }
+      const list = [];
+      for (let i = 1; i <= total; i++) {
+        // Synthetic blanks (chapter_page_overrides kind=insert_blank_before)
+        // are INTENTIONAL pairing fillers — never skip them. The auto
+        // scanner happily flags them as blank because they really are
+        // white, which would unwind the override.
+        if (!blankSet.has(i) || insertedSet.has(i)) list.push(i);
+      }
+      return list;
+    }
+    // Wide page = horizontal image that's already a glued-together
+    // double-page spread. Shown solo in double-page mode so we don't
+    // pair it with a neighbour. Mirrors `MangaHTML.wide_page?/2`.
+    function isWidePage(n) {
+      const img = images[n - 1];
+      if (!img) return false;
+      const w = img.width, h = img.height;
+      if (typeof w !== "number" || typeof h !== "number" || h <= 0) return false;
+      return w > h * 1.2;
+    }
+    // Page should display solo for any of:
+    //   - wide image (glued-together horizontal spread)
+    //   - user-marked solo via chapter_page_overrides kind="solo"
+    // Inserted blanks (kind="insert_blank_before") deliberately
+    // DON'T short-circuit pairing — the blank's whole purpose is to
+    // fill the missing half of a spread, so it should pair with its
+    // neighbour like a real page would.
+    function isSoloPage(n) {
+      return isWidePage(n) || soloSet.has(n);
+    }
+    function effectiveSpreadStarts() {
+      // Single-page mode doesn't pair, so any "spread start" is just
+      // every non-blank page in sequence.
+      const nb = nonBlankPages();
+      if (!doubleMode) return nb;
+      if (nb.length === 0) return [];
+      // Cover (first non-blank) is solo; walk the rest with wide-aware
+      // pairing: if current OR next is wide, advance by 1 (solo), else
+      // pair them and advance by 2.
+      const starts = [nb[0]];
+      let i = 1;
+      while (i < nb.length) {
+        starts.push(nb[i]);
+        const atLast = i + 1 >= nb.length;
+        const curSolo = isSoloPage(nb[i]);
+        const nextSolo = !atLast && isSoloPage(nb[i + 1]);
+        if (curSolo || atLast || nextSolo) {
+          i += 1;
+        } else {
+          i += 2;
+        }
+      }
+      return starts;
+    }
+    // Partner of a spread anchor in double-page mode (= next non-
+    // blank). Returns null for the cover (solo), for wide anchors,
+    // or when the next non-blank is itself wide (then it's its own
+    // anchor in the next spread).
+    function partnerOf(anchor) {
+      if (!doubleMode) return null;
+      const starts = effectiveSpreadStarts();
+      if (starts.length === 0 || anchor === starts[0]) return null;
+      if (isSoloPage(anchor)) return null;
+      const nb = nonBlankPages();
+      const idx = nb.indexOf(anchor);
+      if (idx < 0 || idx + 1 >= nb.length) return null;
+      const candidate = nb[idx + 1];
+      if (isSoloPage(candidate)) return null;
+      return candidate;
+    }
+
+    function nextPageFor(p) {
+      if (!doubleMode) {
+        // Single-page: walk to next non-blank.
+        const nb = nonBlankPages();
+        const future = nb.filter((n) => n > p);
+        return future.length === 0 ? total + 1 : future[0];
+      }
+      const starts = effectiveSpreadStarts();
+      const future = starts.filter((s) => s > p);
+      return future.length === 0 ? total + 1 : future[0];
+    }
+    function prevPageFor(p) {
+      if (!doubleMode) {
+        const nb = nonBlankPages();
+        const past = nb.filter((n) => n < p);
+        return past.length === 0 ? 0 : past[past.length - 1];
+      }
+      const starts = effectiveSpreadStarts();
+      const past = starts.filter((s) => s < p);
+      return past.length === 0 ? 0 : past[past.length - 1];
+    }
+
+    // When the target page lands on a blank, walk past it. With the
+    // new effective-spread logic, nextPageFor / prevPageFor already
+    // skip blanks for the anchor — this is a safety net for direct
+    // navigation (e.g., URL-based page=N landing on a blank).
+    // Synthetic inserts (chapter_page_overrides insert_blank_before)
+    // are kept even if the scanner cached them as blank in a prior
+    // session — their whole purpose is to occupy a spread slot.
+    function skipBlanks(p, direction) {
+      if (!skipBlank) return p;
+      let candidate = p;
+      let guard = 0;
+      while (blankSet.has(candidate) && !insertedSet.has(candidate) && guard++ < total) {
+        candidate = direction > 0 ? nextPageFor(candidate) : prevPageFor(candidate);
+        if (candidate < 1 || candidate > total) return candidate;
+      }
+      return candidate;
+    }
+
+    function pageUrl(p) {
+      const qs = new URLSearchParams();
+      qs.set("page", String(p));
+      if (doubleMode) qs.set("double", "1");
+      if (direction === "ltr") qs.set("dir", "ltr");
+      return "/manga/" + source + "/" + slug + "/" + chapter + "?" + qs.toString();
+    }
+
+    // ── Fit math ────────────────────────────────────────────────────
+    // Pages are positioned side-by-side in canvas, so a naive contain-
+    // fit on one page's bounds leaves side gaps that show neighbours.
+    // We do two things instead:
+    //   (a) Compute the right TARGET BOUNDS — single-page = one page,
+    //       double-page = anchor + partner (cover stays solo).
+    //   (b) Compute the right FIT STRATEGY — single = fit-by-height
+    //       (page fills viewport vertically; if wider than viewport
+    //       the sides crop), double = fit-by-width (spread fills
+    //       horizontally; if taller, top/bottom crop).
+    //   (c) Hide every non-visible page so the side gaps are empty
+    //       white (canvas background) instead of revealing neighbours.
+
+    function spreadAnchorFor(page) {
+      const starts = effectiveSpreadStarts();
+      if (starts.length === 0) return page;
+      if (starts.includes(page)) return page;
+      // Walk back to the nearest spread start ≤ page.
+      const past = starts.filter((s) => s <= page);
+      return past.length === 0 ? starts[0] : past[past.length - 1];
+    }
+
+    function visiblePagesAt(page) {
+      const set = new Set();
+      if (!doubleMode) { set.add(page); return set; }
+      const anchor = spreadAnchorFor(page);
+      set.add(anchor);
+      // partnerOf returns null for the cover (solo) or when no
+      // non-blank page follows the anchor. Blank pages are skipped
+      // automatically — anchor pairs with the NEXT NON-BLANK page,
+      // not anchor + 1.
+      const partner = partnerOf(anchor);
+      if (partner != null) set.add(partner);
+      return set;
+    }
+
+    // Per-page visibility is delegated to handle.setImageVisible
+    // (fresco 0.5.2+) — see fitToPage. Memory windowing is the
+    // `:memory_window={2}` attr on <Fresco.canvas>. Replaces the
+    // hand-rolled applyVisibility + applyImageWindow we used before
+    // 0.5.2 landed.
+
+    // ── Smart-crop detection ──────────────────────────────────────
+    // Mirrors production's `cropWhiteMargins` (show_paged.html.heex):
+    // scan each page for the content rect (skipping near-white
+    // margins). Cache result per-page in image-natural-px. In
+    // single-page mode we tighten `targetBoundsFor` to the content
+    // rect when the toggle is on, so fitToPage centers on the
+    // drawing instead of including border whitespace.
+    //
+    // Double-page mode keeps the full per-page bbox — combining two
+    // independently-cropped pages would require union math that
+    // changes the spread layout we already publish via canvas dims.
+    const cropCache = new Map(); // pageNumber → {x, y, w, h} | null
+    function pageImgEl(n) {
+      return document.querySelector(`[data-fresco-canvas-img][data-image-id="page-${n}"]`);
+    }
+    function detectCropBounds(n) {
+      if (cropCache.has(n)) return cropCache.get(n);
+      const img = pageImgEl(n);
+      if (!img || !img.complete || !img.naturalWidth) return null;
+      let bounds = null;
+      try {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const threshold = 240;
+        const step = 2;
+        let top = 0, bottom = h, left = 0, right = w;
+        // Edge-inward scan
+        outer_top: for (let y = 0; y < h; y += step) {
+          const row = ctx.getImageData(0, y, w, 1).data;
+          for (let x = 0; x < w * 4; x += step * 4) {
+            if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+              top = y; break outer_top;
+            }
+          }
+        }
+        outer_bottom: for (let y = h - 1; y >= top; y -= step) {
+          const row = ctx.getImageData(0, y, w, 1).data;
+          for (let x = 0; x < w * 4; x += step * 4) {
+            if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+              bottom = y + 1; break outer_bottom;
+            }
+          }
+        }
+        outer_left: for (let x = 0; x < w; x += step) {
+          const col = ctx.getImageData(x, top, 1, bottom - top).data;
+          for (let i = 0; i < col.length; i += step * 4) {
+            if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+              left = x; break outer_left;
+            }
+          }
+        }
+        outer_right: for (let x = w - 1; x >= left; x -= step) {
+          const col = ctx.getImageData(x, top, 1, bottom - top).data;
+          for (let i = 0; i < col.length; i += step * 4) {
+            if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+              right = x + 1; break outer_right;
+            }
+          }
+        }
+
+        const edgeT = top, edgeB = bottom, edgeL = left, edgeR = right;
+
+        // Center-outward scan with gap detection — ignores edge
+        // watermarks / page numbers / chapter-header text that
+        // sit near the margins and prevent the edge-inward scan
+        // from tightening. Only the CENTER 50% strip is checked
+        // for content, and a sustained whiteRun ends the scan
+        // (so watermarks outside the strip don't pollute the
+        // crop). Production does the same: cropWhiteMargins in
+        // show_paged.html.heex. We use whichever of the two
+        // boundaries is tighter.
+        const gapY = Math.max(20, Math.floor(h * 0.03));
+        const gapX = Math.max(20, Math.floor(w * 0.03));
+        const stripX0 = Math.floor(w * 0.25) * 4;
+        const stripX1 = Math.floor(w * 0.75) * 4;
+        const stripY0 = Math.floor(h * 0.25);
+        const stripY1 = Math.floor(h * 0.75);
+        const colH = stripY1 - stripY0;
+
+        // Scan downward from vertical center for the content bottom.
+        let contentBottom = Math.floor(h / 2);
+        let whiteRun = 0;
+        for (let y = Math.floor(h / 2); y < h; y += step) {
+          const row = ctx.getImageData(0, y, w, 1).data;
+          let hasContent = false;
+          for (let x = stripX0; x < stripX1; x += step * 4) {
+            if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+              hasContent = true; break;
+            }
+          }
+          if (hasContent) { contentBottom = y + 1; whiteRun = 0; }
+          else { whiteRun += step; if (whiteRun >= gapY) break; }
+        }
+
+        // Scan upward from vertical center for the content top.
+        let contentTop = Math.floor(h / 2);
+        whiteRun = 0;
+        for (let y = Math.floor(h / 2); y >= 0; y -= step) {
+          const row = ctx.getImageData(0, y, w, 1).data;
+          let hasContent = false;
+          for (let x = stripX0; x < stripX1; x += step * 4) {
+            if (row[x] < threshold || row[x+1] < threshold || row[x+2] < threshold) {
+              hasContent = true; break;
+            }
+          }
+          if (hasContent) { contentTop = y; whiteRun = 0; }
+          else { whiteRun += step; if (whiteRun >= gapY) break; }
+        }
+
+        // Scan rightward from horizontal center for the content right.
+        let contentRight = Math.floor(w / 2);
+        whiteRun = 0;
+        for (let x = Math.floor(w / 2); x < w; x += step) {
+          const col = ctx.getImageData(x, stripY0, 1, colH).data;
+          let hasContent = false;
+          for (let i = 0; i < col.length; i += step * 4) {
+            if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+              hasContent = true; break;
+            }
+          }
+          if (hasContent) { contentRight = x + 1; whiteRun = 0; }
+          else { whiteRun += step; if (whiteRun >= gapX) break; }
+        }
+
+        // Scan leftward from horizontal center for the content left.
+        let contentLeft = Math.floor(w / 2);
+        whiteRun = 0;
+        for (let x = Math.floor(w / 2); x >= 0; x -= step) {
+          const col = ctx.getImageData(x, stripY0, 1, colH).data;
+          let hasContent = false;
+          for (let i = 0; i < col.length; i += step * 4) {
+            if (col[i] < threshold || col[i+1] < threshold || col[i+2] < threshold) {
+              hasContent = true; break;
+            }
+          }
+          if (hasContent) { contentLeft = x; whiteRun = 0; }
+          else { whiteRun += step; if (whiteRun >= gapX) break; }
+        }
+
+        // Use whichever of the two boundaries is tighter per side.
+        if (contentTop > top) top = contentTop;
+        if (contentBottom < bottom) bottom = contentBottom;
+        if (contentLeft > left) left = contentLeft;
+        if (contentRight < right) right = contentRight;
+
+        // Reject sentinel cases — too small (title pages / splashes)
+        // or already nearly-margin-free (less than 2% per side).
+        const area = (right - left) * (bottom - top);
+        if (area < w * h * 0.05) { cropCache.set(n, null); return null; }
+        const minX = w * 0.02, minY = h * 0.02;
+        if (left < minX && right > w - minX &&
+            top < minY && bottom > h - minY) {
+          cropCache.set(n, null); return null;
+        }
+        // 1% padding so the content doesn't kiss the viewport edge.
+        const pad = Math.max(Math.round(w * 0.01), Math.round(h * 0.01));
+        bounds = {
+          x: Math.max(0, left - pad),
+          y: Math.max(0, top - pad),
+          w: Math.min(w, right + pad) - Math.max(0, left - pad),
+          h: Math.min(h, bottom + pad) - Math.max(0, top - pad)
+        };
+      } catch (_) {
+        // Tainted canvas / OOM / etc. — bail and never retry.
+      }
+      cropCache.set(n, bounds);
+      return bounds;
+    }
+    function maybeCropBounds(mine, page) {
+      if (!smartCrop) return mine;
+      const c = detectCropBounds(page);
+      if (!c) return mine;
+      // Hide the detected margins via CSS clip-path on the img
+      // itself. Without this the FIT centers on the cropped bbox
+      // but the IMG element still renders the full natural image —
+      // bottom margin gets clipped by the viewport edge (looking
+      // "cropped") while left / right margins sit inside the
+      // rendered img box and remain fully visible (looking
+      // "uncropped"). With clip-path the margins are visually
+      // hidden, matching production's "set img.src to cropped
+      // data URL" behavior without re-encoding.
+      applyImgClipPath(page, c);
+      return {
+        x: mine.x + c.x,
+        y: mine.y + c.y,
+        width: c.w,
+        height: c.h
+      };
+    }
+
+    function applyImgClipPath(n, c) {
+      const img = pageImgEl(n);
+      if (!img) return;
+      const w = img.naturalWidth || parseFloat(img.dataset.canvasWidth) || 1;
+      const h = img.naturalHeight || parseFloat(img.dataset.canvasHeight) || 1;
+      // inset(top right bottom left) — percentages relative to the
+      // element's own box. Detected bounds are in image-natural-px.
+      const t = (c.y / h) * 100;
+      const l = (c.x / w) * 100;
+      const r = ((w - c.x - c.w) / w) * 100;
+      const b = ((h - c.y - c.h) / h) * 100;
+      img.style.clipPath =
+        `inset(${t.toFixed(3)}% ${r.toFixed(3)}% ${b.toFixed(3)}% ${l.toFixed(3)}%)`;
+    }
+    function clearAllImgClipPaths() {
+      document.querySelectorAll("[data-fresco-canvas-img]").forEach((img) => {
+        img.style.clipPath = "";
+      });
+    }
+
+    function targetBoundsFor(handle, page) {
+      const mine = handle.imageBoundsFor("page-" + page);
+      if (!mine) return null;
+      if (!doubleMode) return maybeCropBounds(mine, page);
+      const anchor = spreadAnchorFor(page);
+      const anchorB = handle.imageBoundsFor("page-" + anchor) || mine;
+      const partner = partnerOf(anchor); // null for cover or end-of-chapter
+      if (partner == null) return maybeCropBounds(anchorB, anchor);
+      const partnerB = handle.imageBoundsFor("page-" + partner);
+      if (!partnerB) return maybeCropBounds(anchorB, anchor);
+      // Apply smart-crop to each page independently, then:
+      //   - Close the horizontal gap between cropped inner margins
+      //     (right page shifts left by the gap width).
+      //   - Center both pages vertically around the spread midpoint
+      //     so a page cropped on top + a page cropped on bottom
+      //     don't sit at offset vertical positions.
+      // Shifts are CSS transforms — fresco's layout coords stay intact,
+      // so etcher's screenToImage / hit-tests aren't disturbed. Shapes
+      // get a parallel transform via syncShapeShifts.
+      const a = maybeCropBounds(anchorB, anchor);
+      const p = maybeCropBounds(partnerB, partner);
+      // Determine which cropped page sits to the LEFT in canvas-x.
+      const [left, leftPage, right, rightPage] = a.x <= p.x
+        ? [a, anchor, p, partner]
+        : [p, partner, a, anchor];
+      const gap = Math.max(0, right.x - (left.x + left.width));
+      const rightShiftX = (smartCrop && gap > 0) ? gap : 0;
+      // Vertical center alignment.
+      const leftCenterY  = left.y  + left.height  / 2;
+      const rightCenterY = right.y + right.height / 2;
+      const targetCenterY = (leftCenterY + rightCenterY) / 2;
+      const leftShiftY  = smartCrop ? (targetCenterY - leftCenterY)  : 0;
+      const rightShiftY = smartCrop ? (targetCenterY - rightCenterY) : 0;
+      applyImgShift(leftPage,  0,           leftShiftY);
+      applyImgShift(rightPage, rightShiftX, rightShiftY);
+      const minX = left.x;
+      const maxX = right.x + right.width - rightShiftX;
+      const maxHeight = Math.max(left.height, right.height);
+      const minY = targetCenterY - maxHeight / 2;
+      const maxY = targetCenterY + maxHeight / 2;
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    // Visually shift an img leftward by `shiftLeftNatural` natural-px
+    // and/or downward by `shiftDownNatural` natural-px via a
+    // percentage CSS transform. Percentages are relative to the
+    // element's own size so the shift auto-tracks fresco's zoom.
+    // fresco overwrites style.left/top/width/height but never touches
+    // style.transform, so this composes cleanly with fresco's own
+    // positioning math.
+    //
+    // Etcher shapes anchored to a shifted page need a parallel shift
+    // in screen-px (etcher's _imageToContainer renders to screen-px,
+    // independent of our img CSS transform). currentShifts tracks
+    // each shifted page's deltas; syncShapeShifts re-applies on every
+    // fresco viewport change.
+    const currentShifts = new Map(); // "page-N" → {x, y} in natural-px
+    function applyImgShift(n, shiftLeftNatural, shiftDownNatural) {
+      shiftLeftNatural = shiftLeftNatural || 0;
+      shiftDownNatural = shiftDownNatural || 0;
+      const img = pageImgEl(n);
+      const id  = "page-" + n;
+      if (!img) {
+        currentShifts.delete(id);
+        return;
+      }
+      if (!shiftLeftNatural && !shiftDownNatural) {
+        img.style.transform = "";
+        currentShifts.delete(id);
+        syncShapeShifts();
+        return;
+      }
+      const w = img.naturalWidth  || parseFloat(img.dataset.canvasWidth)  || 1;
+      const h = img.naturalHeight || parseFloat(img.dataset.canvasHeight) || 1;
+      const pctX = (shiftLeftNatural / w) * 100;
+      const pctY = (shiftDownNatural / h) * 100;
+      img.style.transform =
+        `translate(${(-pctX).toFixed(3)}%, ${pctY.toFixed(3)}%)`;
+      currentShifts.set(id, { x: shiftLeftNatural, y: shiftDownNatural });
+      syncShapeShifts();
+    }
+    function clearAllImgShifts() {
+      document.querySelectorAll("[data-fresco-canvas-img]").forEach((img) => {
+        img.style.transform = "";
+      });
+      currentShifts.clear();
+      syncShapeShifts();
+    }
+    function syncShapeShifts() {
+      // Shape positioning is handled by the patched handle.imageToScreen
+      // (in whenReady), which returns shifted screen-px for canvas-px
+      // points that fall on a shifted page. Clear any leftover CSS
+      // transforms in case earlier versions left them around.
+      document.querySelectorAll(".etcher-shape").forEach((el) => {
+        if (el.style.transform) el.style.transform = "";
+      });
+    }
+
+
+    // ── Navigation (in-place via fresco's fit, push history) ────────
+    let frescoHandle = null;
+    // Minimum scale the user is allowed to reach via pinch/wheel zoom.
+    // Updated on every fit so it tracks the current page/spread —
+    // single-page is gated on page-height, double-page on spread-width.
+    // Enforced natively by fresco via handle.setZoomFloor (0.5.1+).
+    let scaleFloor = 0;
+    // Set true whenever scale === scaleFloor (i.e., page-fits-viewport).
+    // Tap zones only fire navigation while at fit — when zoomed in, taps
+    // are reserved for pan/inspect; tap-to-page-turn would conflict.
+    let atFit = true;
+
+    function fitToPage(page) {
+      if (!frescoHandle) return;
+      // Per-page visibility via fresco's setImageVisible. Fresco 0.5.5+
+      // emits `image-visibility-change` on every toggle, which etcher
+      // 0.4.7+ subscribes to so shapes anchored to non-active pages
+      // hide in lockstep — otherwise they'd ghost into the
+      // page-padding bands surrounding the active page.
+      const visible = visiblePagesAt(page);
+      const host = document.getElementById("fresco-reader");
+      if (host) {
+        const imgs = host.querySelectorAll("[data-fresco-canvas-img]");
+        for (const img of imgs) {
+          const m = (img.dataset.imageId || "").match(/^page-(\d+)$/);
+          if (!m) continue;
+          const n = parseInt(m[1], 10);
+          frescoHandle.setImageVisible("page-" + n, visible.has(n));
+        }
+      }
+      const bbox = targetBoundsFor(frescoHandle, page);
+      if (typeof kbDbg === "function") {
+        kbDbg("fitToPage", {
+          page: page,
+          bbox: bbox && { x: Math.round(bbox.x), y: Math.round(bbox.y), w: Math.round(bbox.width), h: Math.round(bbox.height) },
+          anchor: spreadAnchorFor(page),
+          partner: partnerOf(spreadAnchorFor(page))
+        });
+      }
+      if (!bbox) return;
+      const vp = host ? host.getBoundingClientRect() : { width: 1, height: 1 };
+      // Compute the target scale BEFORE calling fitBounds so we can
+      // set fresco's zoom ceiling first — otherwise fitBounds will
+      // clamp the scale to fresco's default sMax (GPU raster cap of
+      // ~0.27 for our 30,000-px-wide canvas), and our wanted fit
+      // scale would get capped down. Setting ceiling first lifts
+      // the cap before fitBounds runs.
+      //
+      // Fit strategy: CONTAIN (min of width/height ratios — whole
+      // bbox fits with no cropping). Same rule for single page,
+      // double-page spread, and super-wide single images. Earlier
+      // versions forced fit-by-height in double mode so the spread
+      // would always fill the viewport vertically, but on narrow
+      // viewports (phones) the spread runs wider than the screen
+      // and the user can't see both pages at once. Contain-fit:
+      //   - Wide desktop with portrait pages: heightFit wins (same
+      //     as the old fit-by-height behavior).
+      //   - Narrow phone with a 2:1 spread: widthFit wins, whole
+      //     spread visible at a smaller scale.
+      const widthFit  = vp.width  / Math.max(1, bbox.width);
+      const heightFit = vp.height / Math.max(1, bbox.height);
+      scaleFloor = Math.min(widthFit, heightFit);
+      // Page padding: shrink the rendered page by `pagePadding`% so it
+      // sits centered with empty bands either side / above & below.
+      // Matches production's `max-width: (100 - pct)vw` semantic —
+      // pct=70 → page occupies 30% of viewport at fit.
+      if (pagePadding > 0) {
+        scaleFloor = scaleFloor * (100 - pagePadding) / 100;
+      }
+      // Order matters: panBounds FIRST so every subsequent clampPan
+      // (triggered internally by setZoomFloor / setZoomCeiling /
+      // fitBounds → setTransform) reads the NEW page's rect, not the
+      // previous page's. Otherwise fresco's setTransform would clamp
+      // tx/ty back into the stale bounds and the camera lands on the
+      // previous page's region instead of the one we're navigating to.
+      //
+      // Then ceiling > floor > fitBounds so fitBounds isn't capped by
+      // the default raster-cap (~0.27 on our 30,000-px-wide canvas).
+      if (typeof frescoHandle.setPanBounds === "function") {
+        frescoHandle.setPanBounds(bbox);
+      }
+      if (typeof frescoHandle.setZoomCeiling === "function") {
+        frescoHandle.setZoomCeiling(scaleFloor * 4);
+      }
+      if (typeof frescoHandle.setZoomFloor === "function") {
+        frescoHandle.setZoomFloor(scaleFloor);
+      }
+      // Use fresco's native contain-fit. No padded-rect trick needed.
+      frescoHandle.fitBounds(bbox);
+      // Pan-lock policy at fit:
+      //   - If the bbox at fit-scale completely fits the viewport,
+      //     lock pan (the spread is fully visible; nothing to pan to).
+      //   - Else (double-mode fit-by-height with horizontal overflow),
+      //     leave pan unlocked so the user can drag to reach the edges
+      //     of the spread.
+      const fitsViewport =
+        bbox.width  * scaleFloor <= vp.width  + 1 &&
+        bbox.height * scaleFloor <= vp.height + 1;
+      if (typeof frescoHandle.setPanLocked === "function") {
+        frescoHandle.setPanLocked(fitsViewport);
+      }
+    }
+    function pageRangeLabel() {
+      // Synthetic-insert overrides shift the canvas page count but
+      // don't shift the user's mental model of "page N" — the user
+      // labels (and the / N denominator) always work in DISPLAY
+      // numbers (real pages only). Synthetic pages have no display
+      // number, so when only the synthetic is visible we render "—".
+      const fmt = (canvasN) => {
+        const d = canvasToDisplay[canvasN];
+        return d == null ? "—" : String(d);
+      };
+
+      if (!doubleMode) return fmt(currentPage) + " / " + displayTotal;
+      const anchor = spreadAnchorFor(currentPage);
+      const partner = partnerOf(anchor);
+      if (partner == null) return fmt(anchor) + " / " + displayTotal;
+
+      // Filter to real pages in canvas-X order so reading-direction
+      // ordering still works. If only one half of the spread is a
+      // real page (e.g., real page + synthetic blank), show that
+      // single number — the synthetic doesn't count.
+      const da = canvasToDisplay[anchor];
+      const dp = canvasToDisplay[partner];
+      if (da != null && dp == null) return da + " / " + displayTotal;
+      if (da == null && dp != null) return dp + " / " + displayTotal;
+      if (da == null && dp == null) return "— / " + displayTotal;
+
+      const lower = Math.min(da, dp);
+      const higher = Math.max(da, dp);
+      // LTR canvas X order: low page on left, high on right → "low-high"
+      // RTL canvas X order: high page on left, low on right → "high-low"
+      const range = direction === "ltr" ? lower + "-" + higher : higher + "-" + lower;
+      return range + " / " + displayTotal;
+    }
+
+    function updatePageIndicator() {
+      const label = pageRangeLabel();
+      const m = document.getElementById("page-progress-mobile");
+      const d = document.getElementById("page-progress-desktop");
+      const b = document.getElementById("page-indicator-bottom");
+      if (m) m.textContent = "p." + label;
+      if (d) d.textContent = "p." + label;
+      if (b) b.textContent = label;
+    }
+    function navigateTo(page) {
+      if (page < 1) {
+        if (prevChapterUrl) loadChapterInPlace(prevChapterUrl);
+        return;
+      }
+      if (page > total) {
+        if (nextChapterUrl) loadChapterInPlace(nextChapterUrl);
+        return;
+      }
+      // Auto-close the navbar on the first real page change — user
+      // has finished interacting with the toolbar and is back to
+      // reading. Cross-chapter clicks via in-nav links hit
+      // window.location directly and leave NAV_KEY alone, so the
+      // bar reappears on the destination chapter.
+      if (shell.dataset.navHidden !== "true") setNavOpen(false);
+      // Hide the cursor in "movie-player" style — comes back the
+      // moment the user moves the mouse.
+      shell.dataset.cursorHidden = "true";
+      currentPage = page;
+      shell.dataset.page = String(page);
+      // Swap placeholder ↔ real src for the image window before the
+      // fit runs, so the destination page is fetched as soon as the
+      // user starts navigating (not after fit completes).
+      applyImageWindow(page);
+      fitToPage(page);
+      updatePageIndicator();
+      // Use replaceState for in-page nav so back-button still leaves
+      // the chapter cleanly. pushState would create a long history
+      // stack from rapid page-flipping.
+      history.replaceState({ page }, "", pageUrl(page));
+    }
+
+    function goPrev() {
+      const target = skipBlanks(prevPageFor(currentPage), -1);
+      navigateTo(target);
+    }
+    function goNext() {
+      const target = skipBlanks(nextPageFor(currentPage), 1);
+      navigateTo(target);
+    }
+
+    // In-place chapter swap — Fresco 0.7.1's `setSources` now resolves
+    // after the first post-swap paint (so `imageBoundsFor` is
+    // measurable on the next line) and clears its internal
+    // `hiddenImageIds` set on the swap (so the new chapter's `page-N`
+    // ids don't inherit the previous chapter's hidden state). Page
+    // session — and Pointer Lock — survives, so gesture-mode reading
+    // crosses chapter boundaries with zero interaction.
+    let chapterSwapInFlight = false;
+    async function loadChapterInPlace(url) {
+      if (chapterSwapInFlight) return;
+      chapterSwapInFlight = true;
+      try {
+        const params = new URLSearchParams({ direction, double_page: String(doubleMode) });
+        const apiUrl = url.replace("/manga/", "/manga/api/") + "/images?" + params;
+        const resp = await fetch(apiUrl, { credentials: "same-origin" });
+        if (!resp.ok) { window.location.href = url; return; }
+        const data = await resp.json();
+        const newSources = Array.isArray(data.sources) ? data.sources : null;
+        if (!newSources || newSources.length === 0) { window.location.href = url; return; }
+
+        const handle = window.Fresco?.viewerFor?.("fresco-reader") || frescoHandle;
+        if (!handle || typeof handle.setSources !== "function") {
+          window.location.href = url;
+          return;
+        }
+
+        await handle.setSources(newSources, {
+          reset_view: false,
+          canvasWidth: data.canvas_width,
+          canvasHeight: data.canvas_height,
+          extensions: { etcher: { annotations: data.etcher_shapes || [] } }
+        });
+        frescoHandle = handle;
+
+        // Roll the closure's chapter state forward. `images[]` mirrors
+        // the initial-mount payload (`{url, width, height, synthetic?}`)
+        // — `data.images` carries the proxied URL for every page,
+        // independent of which ones the server actually placed on the
+        // canvas with a real src (pages 1-3 only on chapter swap).
+        // `applyImageWindow` then swaps placeholder ↔ real src per page
+        // as the user navigates into out-of-initial-window territory.
+        chapter = data.chapter;
+        total = newSources.length;
+        // `paged_window_images` carries the SAME proxied URL the server
+        // placed on the canvas — see chapter_images/2 for the
+        // strip-vs-paged shape split.
+        images = Array.isArray(data.paged_window_images) ? data.paged_window_images : [];
+        spreadStarts = [];
+        soloSet = new Set();
+        insertedSet = new Set();
+        blankSet = new Set();
+        rebuildCanvasToDisplay();
+        prevChapterUrl = data.prev_chapter
+          ? "/manga/" + encodeURIComponent(source) + "/" + encodeURIComponent(slug) + "/" + encodeURIComponent(data.prev_chapter)
+          : "";
+        nextChapterUrl = data.next_chapter
+          ? "/manga/" + encodeURIComponent(source) + "/" + encodeURIComponent(slug) + "/" + encodeURIComponent(data.next_chapter)
+          : "";
+        currentPage = 1;
+        shell.dataset.chapter = data.chapter;
+        shell.dataset.totalPages = String(total);
+        shell.dataset.images = JSON.stringify(data.images || []);
+        shell.dataset.prevChapterUrl = prevChapterUrl;
+        shell.dataset.nextChapterUrl = nextChapterUrl;
+        shell.dataset.page = "1";
+        history.pushState({ chapter: data.chapter, page: 1 }, "", url);
+
+        try { fitToPage(1); } catch (_) {}
+        try { updatePageIndicator(); } catch (_) {}
+
+        // Sync EtcherHostLive so the next annotation save targets the
+        // new chapter's row.
+        const lvHost = document.getElementById("etcher-host-fresco-reader");
+        if (lvHost && window.liveSocket) {
+          const lv = window.liveSocket.getViewByEl?.(lvHost);
+          lv?.pushEvent?.("set_chapter", { source, slug, chapter: data.chapter });
+        }
+      } catch (err) {
+        console.warn("[chapter-swap] fell back to full navigation", err);
+        window.location.href = url;
+      } finally {
+        chapterSwapInFlight = false;
+      }
+    }
+
+    // Globals for the desktop mouse-gesture handler — it lives in a
+    // separate IIFE and needs to drive navigation directly (not via
+    // synthesized keydowns) so the trusted user-activation chain
+    // survives the chapter-boundary `window.location.href` and the
+    // next page can auto-re-engage pointer lock.
+    window.__pagedGoPrev    = goPrev;
+    window.__pagedGoNext    = goNext;
+    window.__pagedDirection = direction;
+    function openSettings() { document.getElementById("settings-modal")?.showModal(); }
+
+    // Movie-player-style cursor hide: page navigation flips
+    // `data-cursor-hidden="true"` (in navigateTo) → CSS rule applies
+    // `cursor: none` site-wide. The next mousemove flips it back.
+    // mobile is a no-op (no cursor); desktop benefits.
+    window.addEventListener("mousemove", () => {
+      if (shell.dataset.cursorHidden === "true") shell.dataset.cursorHidden = "false";
+    }, { passive: true });
+    // Navbar behavior:
+    //   * Default hidden (so the chapter art isn't always cropped).
+    //   * Menu tap-zone toggles it.
+    //   * State persists across chapter loads in sessionStorage so a
+    //     user clicking "next chapter" in the nav doesn't have to
+    //     re-open it on the destination page (the common "rapid
+    //     chapter-flip" flow).
+    //   * Auto-closes the moment the user starts *reading* — i.e.,
+    //     any page change. Reading and the nav don't need to share
+    //     the screen, so we hide the bar once the user signals
+    //     they're past the nav and into the content.
+    // NAV_KEY = "1" means open, "0"/absent means closed.
+    function setNavOpen(open) {
+      shell.dataset.navHidden = open ? "false" : "true";
+      try { sessionStorage.setItem(NAV_KEY, open ? "1" : "0"); } catch (_) {}
+    }
+    function toggleNav() {
+      setNavOpen(shell.dataset.navHidden === "true");
+    }
+    // Restore the previously-saved state (default = closed).
+    if (sessionStorage.getItem(NAV_KEY) === "1") setNavOpen(true);
+
+    function performAction(action) {
+      if (action === "next") goNext();
+      else if (action === "prev") goPrev();
+      else if (action === "menu") toggleNav();
+    }
+
+    document.getElementById("settings-btn-mobile")?.addEventListener("click", openSettings);
+    document.getElementById("settings-btn-desktop")?.addEventListener("click", openSettings);
+    document.getElementById("paged-prev-page")?.addEventListener("click", goPrev);
+    document.getElementById("paged-next-page")?.addEventListener("click", goNext);
+    document.getElementById("paged-prev-page-desktop")?.addEventListener("click", goPrev);
+    document.getElementById("paged-next-page-desktop")?.addEventListener("click", goNext);
+
+    // ── Annotate mode toggle (delegates to Etcher's layer API) ─────
+    // Etcher's pencil button in fresco's nav column is CSS-hidden;
+    // we drive `layer.toggleMode()` from our own toolbar instead so
+    // all reader controls live in one row next to the settings button.
+    function openEtcherAnnotateMode() {
+      const layer = window.Etcher?.layerFor?.("fresco-reader");
+      if (!layer) {
+        console.warn("[paged] Etcher layer not ready yet");
+        return;
+      }
+      layer.toggleMode();
+    }
+    document.getElementById("paged-annotate-toggle-mobile")?.addEventListener("click", openEtcherAnnotateMode);
+    document.getElementById("paged-annotate-toggle-desktop")?.addEventListener("click", openEtcherAnnotateMode);
+    // Mirror Etcher's mode flag on the shell so the CSS can highlight
+    // our active button. Etcher emits this CustomEvent on its layer
+    // host whenever annotation mode flips.
+    document.getElementById("etcher-host-fresco-reader")?.addEventListener("etcher:mode-changed", (e) => {
+      shell.dataset.annotateMode = e.detail?.annotationMode ? "true" : "false";
+    });
+
+    // ── Fresco nav overlay visibility toggle ───────────────────────
+    // Fresco renders fullscreen / zoom-in / zoom-out / rotate / home
+    // as a vertical stack at top-left of the canvas. The reader's
+    // tap zones + pinch zoom cover those actions, so the stack just
+    // adds clutter by default. We inject a sliders-icon TOGGLE button
+    // at the top of the stack via `handle.appendNavButton` and a
+    // post-mount DOM prepend; CSS hides the rest until the toggle
+    // flips `data-fresco-nav="visible"` on the shell. Choice persists.
+    const FRESCO_NAV_KEY = "fresco_nav_visible";
+    function setFrescoNavVisible(visible) {
+      shell.dataset.frescoNav = visible ? "visible" : "hidden";
+      try { localStorage.setItem(FRESCO_NAV_KEY, visible ? "1" : "0"); } catch (_) {}
+    }
+    // Seed default = hidden BEFORE the toggle mounts so first paint
+    // shows just the toggle, not the full stack flashing then
+    // collapsing. Restoring happens here too.
+    try {
+      setFrescoNavVisible(localStorage.getItem(FRESCO_NAV_KEY) === "1");
+    } catch (_) {
+      setFrescoNavVisible(false);
+    }
+
+    // ── Settings UI sync ───────────────────────────────────────────
+    function syncSettingsUI() {
+      document.querySelectorAll(".paged-tap-preset-card").forEach((card) => {
+        const active = card.dataset.preset === tapPreset;
+        card.classList.toggle("border-primary",         active);
+        card.classList.toggle("bg-primary/5",           active);
+        card.classList.toggle("border-base-content/20", !active);
+        const radio = card.querySelector('input[type="radio"]');
+        if (radio) radio.checked = active;
+      });
+      const cv = document.getElementById("paged-comments-visible");
+      if (cv) cv.checked = commentsVisible;
+      const padSlider = document.getElementById("paged-page-padding-slider");
+      const padLabel  = document.getElementById("paged-page-padding-label");
+      if (padSlider) padSlider.value = String(pagePadding);
+      if (padLabel)  padLabel.textContent = pagePadding + "%";
+      const sc = document.getElementById("paged-smart-crop");
+      if (sc) sc.checked = smartCrop;
+      const sb = document.getElementById("paged-skip-blank");
+      if (sb) sb.checked = skipBlank;
+    }
+    syncSettingsUI();
+
+    // Tap-zone visualization — mirrors production. On preset change we
+    // briefly highlight each tap zone with its action color (next /
+    // prev / menu) so the user can see which area does what before
+    // returning to reading.
+    const PAGED_TAP_OVERLAY = document.getElementById("paged-tap-zone-overlay");
+    const PAGED_ZONE_STYLES = {
+      next: { bg: "rgba(34,197,94,0.3)",  border: "rgba(34,197,94,0.4)",  color: "#14532d" },
+      prev: { bg: "rgba(239,68,68,0.3)",  border: "rgba(239,68,68,0.4)",  color: "#7f1d1d" },
+      menu: { bg: "rgba(59,130,246,0.3)", border: "rgba(59,130,246,0.4)", color: "#1e3a5f" }
+    };
+    function pagedZonePositions(rect) {
+      const t = Math.max(0, rect.top), l = rect.left, w = rect.width;
+      const h = Math.min(rect.bottom, window.innerHeight) - t;
+      const third = w / 3;
+      const vw = window.innerWidth;
+      return {
+        leftThird:  `top:${t}px;left:0;width:${l + third}px;height:${h}px`,
+        rightThird: `top:${t}px;left:${l + third * 2}px;width:${vw - l - third * 2}px;height:${h}px`,
+        midTop:     `top:${t}px;left:${l + third}px;width:${third}px;height:${h / 2}px`,
+        midBottom:  `top:${t + h / 2}px;left:${l + third}px;width:${third}px;height:${h / 2}px`
+      };
+    }
+    function flashPagedTapZoneOverlay() {
+      if (!PAGED_TAP_OVERLAY) return;
+      const host = document.getElementById("fresco-reader");
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const preset = TAP_ZONE_PRESETS[tapPreset] || TAP_ZONE_PRESETS.default;
+      const positions = pagedZonePositions(rect);
+      PAGED_TAP_OVERLAY.innerHTML = Object.entries(positions).map(([key, pos]) => {
+        const action = preset[key];
+        const s = PAGED_ZONE_STYLES[action];
+        const label = action.charAt(0).toUpperCase() + action.slice(1);
+        return `<div style="position:fixed;${pos};background:${s.bg};border:1px solid ${s.border};color:${s.color};display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.125rem">${label}</div>`;
+      }).join("");
+      // Brief delay so the user can see the modal close first, then flash.
+      setTimeout(() => {
+        PAGED_TAP_OVERLAY.style.opacity = "1";
+        setTimeout(() => { PAGED_TAP_OVERLAY.style.opacity = "0"; }, 1500);
+      }, 300);
+    }
+
+    document.querySelectorAll(".paged-tap-preset-card").forEach((card) => {
+      card.addEventListener("click", () => {
+        tapPreset = card.dataset.preset;
+        localStorage.setItem(TAP_KEY, tapPreset);
+        syncSettingsUI();
+        // Close the modal so the overlay flash is visible on the page.
+        document.getElementById("settings-modal")?.close();
+        flashPagedTapZoneOverlay();
+        // Persist to backend so the preset follows the user across
+        // devices. Production reader does the same — device key lets
+        // the server keep per-device presets in sync.
+        fetch(`/manga/${source}/${slug}/tap_zone_preset`, {
+          method: "PUT",
+          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            preset: tapPreset,
+            device: window.innerWidth < 1024 ? "mobile" : "desktop"
+          })
+        }).catch(() => {});
+      });
+    });
+    document.getElementById("paged-skip-blank")?.addEventListener("change", (e) => {
+      skipBlank = !!e.target.checked;
+      localStorage.setItem(SKIP_BLANK_KEY, skipBlank ? "true" : "false");
+    });
+
+    // ── Comments-visible toggle ────────────────────────────────────
+    // Hides/shows all Etcher annotation overlays via the layer API and
+    // mirrors the active state across every control that drives it:
+    // the nav-bar buttons (mobile + desktop) and the settings-modal
+    // checkbox. All three call `setCommentsVisible(next)` so the state
+    // and UI stay in lockstep.
+    function applyCommentsVisible() {
+      const layer = window.Etcher?.layerFor?.("fresco-reader");
+      if (layer?.setVisible) layer.setVisible(commentsVisible);
+      document.querySelectorAll(
+        "#paged-comments-toggle-mobile, #paged-comments-toggle-desktop"
+      ).forEach((btn) => btn.classList.toggle("btn-active", commentsVisible));
+      const cv = document.getElementById("paged-comments-visible");
+      if (cv) cv.checked = commentsVisible;
+    }
+    function setCommentsVisible(next) {
+      const val = !!next;
+      if (val === commentsVisible) return;
+      commentsVisible = val;
+      localStorage.setItem(COMMENTS_VISIBLE_KEY, val ? "true" : "false");
+      applyCommentsVisible();
+      fetch(`/manga/${source}/${slug}/comments_visible`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "same-origin",
+        body: JSON.stringify({ visible: val })
+      }).catch(() => {});
+    }
+    document.getElementById("paged-comments-toggle-mobile")?.addEventListener(
+      "click", () => setCommentsVisible(!commentsVisible)
+    );
+    document.getElementById("paged-comments-toggle-desktop")?.addEventListener(
+      "click", () => setCommentsVisible(!commentsVisible)
+    );
+    // ── Double-page toggle ───────────────────────────────────────────
+    // Live: the canvas layout is identical in single + double mode
+    // (every page is laid out side-by-side on the same canvas at
+    // server-render time). Toggling just changes which bbox
+    // `targetBoundsFor` returns (one page vs anchor + partner union).
+    // Flip `doubleMode`, re-fit the current page. Persistence is
+    // fire-and-forget through /reading_mode so future visits open in
+    // the chosen mode.
+    document.getElementById("paged-double-page-toggle")?.addEventListener("change", (e) => {
+      doubleMode = !!e.target.checked;
+      shell.dataset.doublePage = doubleMode ? "true" : "false";
+      // Gap-closing shift only makes sense in double mode — clear any
+      // residual transforms when leaving it.
+      if (!doubleMode) clearAllImgShifts();
+      if (frescoHandle) fitToPage(currentPage);
+      const newMode = doubleMode ? "double_page" : "paged";
+      const fd = new FormData();
+      fd.append("_method", "put");
+      fd.append("_csrf_token", csrfToken);
+      fd.append("mode", newMode);
+      fd.append("device", "");
+      fd.append("redirect_to", `/manga/${source}/${slug}/${chapter}`);
+      fetch(`/manga/${source}/${slug}/reading_mode`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd
+      }).catch(() => {});
+    });
+
+    // ── Page rotation (-90 / 0 / 90) ─────────────────────────────────
+    // Fresco 0.5.7+ exposes `handle.setRotation(deg)`; we wire the
+    // three-state toggle and PUT to backend so the choice persists
+    // per-manga across chapters and refreshes. Fresco auto-rehomes
+    // on rotation change, so the camera lands on the same currentPage
+    // after the rotate without our extra work.
+    // -90/+90 are relative — clicking twice rotates twice. 0° is an
+    // absolute reset (snap to upright). Only the 0° button shows an
+    // active state since the delta buttons aren't a "current value"
+    // affordance, they're actions.
+    let currentRotation = parseInt(shell.dataset.readingRotation, 10) || 0;
+    function syncRotationUI() {
+      const resetBtn = document.querySelector("[data-paged-rotation-reset]");
+      if (resetBtn) {
+        const atZero = currentRotation === 0;
+        resetBtn.classList.toggle("btn-active", atZero);
+        resetBtn.classList.toggle("no-animation", atZero);
+        resetBtn.classList.toggle("pointer-events-none", atZero);
+      }
+    }
+    syncRotationUI();
+    function applyRotation(next) {
+      // Normalize into fresco's [0, 360) range so backend storage
+      // matches fresco.getRotation() exactly.
+      const snapped = ((Math.round(next / 90) * 90) % 360 + 360) % 360;
+      if (snapped === currentRotation) return;
+      currentRotation = snapped;
+      syncRotationUI();
+      if (frescoHandle && typeof frescoHandle.setRotation === "function") {
+        frescoHandle.setRotation(snapped);
+      }
+      fetch(`/manga/${source}/${slug}/reading_rotation`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "same-origin",
+        body: JSON.stringify({ rotation: snapped })
+      }).catch(() => {});
+    }
+    document.querySelectorAll("[data-paged-rotation-delta]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const d = parseInt(btn.dataset.pagedRotationDelta, 10);
+        if (isNaN(d)) return;
+        applyRotation(currentRotation + d);
+      });
+    });
+    document.querySelector("[data-paged-rotation-reset]")?.addEventListener("click", () => {
+      applyRotation(0);
+    });
+
+    // ── Reading direction (LTR/RTL) ──────────────────────────────────
+    // Persists per-manga via PUT, then reloads. The canvas layout
+    // depends on direction (page X positions), so we have to re-render
+    // from the server. The reload drops any `?dir=` query so future
+    // visits pick up the persisted choice without it sticking in the URL.
+    document.querySelectorAll("[data-paged-direction]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const dir = btn.dataset.pagedDirection;
+        if (!dir || dir === direction) return;
+        fetch(`/manga/${source}/${slug}/reading_direction`, {
+          method: "PUT",
+          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "same-origin",
+          body: JSON.stringify({ direction: dir })
+        }).finally(() => {
+          // Reload without a `?dir=` override so the persisted choice
+          // (now in saved_manga.reading_direction) is the source of truth.
+          const qs = new URLSearchParams();
+          qs.set("page", String(currentPage));
+          if (doubleMode) qs.set("double", "1");
+          window.location.href =
+            "/manga/" + source + "/" + slug + "/" + chapter +
+            "?" + qs.toString();
+        });
+      });
+    });
+
+    document.getElementById("paged-comments-visible")?.addEventListener("change", (e) => {
+      setCommentsVisible(!!e.target.checked);
+    });
+    // Apply once Etcher is ready (it mounts after our script runs).
+    function whenEtcherReady(cb, attempts) {
+      attempts = attempts || 0;
+      const layer = window.Etcher?.layerFor?.("fresco-reader");
+      if (layer) cb(layer);
+      else if (attempts < 50) setTimeout(() => whenEtcherReady(cb, attempts + 1), 100);
+    }
+    whenEtcherReady(() => applyCommentsVisible());
+
+    // ── Page padding slider ────────────────────────────────────────
+    document.getElementById("paged-page-padding-slider")?.addEventListener("input", (e) => {
+      const pct = parseInt(e.target.value, 10);
+      pagePadding = isNaN(pct) ? 0 : Math.max(0, Math.min(90, pct));
+      localStorage.setItem(PAGE_PADDING_KEY, String(pagePadding));
+      const lbl = document.getElementById("paged-page-padding-label");
+      if (lbl) lbl.textContent = pagePadding + "%";
+      // Re-fit so the change is visible immediately.
+      if (frescoHandle) fitToPage(currentPage);
+    });
+
+    // ── Smart crop toggle ──────────────────────────────────────────
+    // Tightens the per-page fit bbox to the detected content rect
+    // (skipping near-white margins). Detection runs lazily inside
+    // `detectCropBounds(n)` and is cached per page. Re-fit applies
+    // the change immediately.
+    document.getElementById("paged-smart-crop")?.addEventListener("change", (e) => {
+      smartCrop = !!e.target.checked;
+      localStorage.setItem(SMART_CROP_KEY, smartCrop ? "true" : "false");
+      if (!smartCrop) {
+        clearAllImgClipPaths();
+        clearAllImgShifts();
+      }
+      if (frescoHandle) fitToPage(currentPage);
+    });
+
+    // ── Page dimensions overlay ────────────────────────────────────
+    // Lists every page's natural width × height in a corner panel
+    // so we can spot probe failures (fallback 1000×1500) vs real
+    // source dims at a glance.
+    const DIMS_KEY = "fresco-test:dims-overlay";
+    const dimsPanel = document.getElementById("paged-dims-overlay-panel");
+    const dimsToggle = document.getElementById("paged-dims-overlay");
+    let dimsOn = localStorage.getItem(DIMS_KEY) === "true";
+
+    function renderDimsOverlay() {
+      if (!dimsPanel) return;
+      if (!dimsOn) { dimsPanel.classList.add("hidden"); return; }
+      dimsPanel.classList.remove("hidden");
+      const host = document.getElementById("fresco-reader");
+      if (!host) return;
+      const imgs = host.querySelectorAll("[data-fresco-canvas-img]");
+      const rows = [];
+      imgs.forEach((img) => {
+        const id = img.dataset.imageId || "?";
+        const cw = img.dataset.canvasWidth || "?";
+        const ch = img.dataset.canvasHeight || "?";
+        const nw = img.naturalWidth || "?";
+        const nh = img.naturalHeight || "?";
+        // Flag suspicious dims — the probe-fallback default is
+        // 1000×1500, anything near that on a manga page is likely
+        // a probe failure rather than the real size.
+        const fallback = cw === "1000" && ch === "1500" ? " ⚠fallback" : "";
+        rows.push(`${id.padEnd(8)} canvas=${cw}×${ch} natural=${nw}×${nh}${fallback}`);
+      });
+      dimsPanel.textContent = rows.join("\n") || "(no images)";
+    }
+
+    if (dimsToggle) dimsToggle.checked = dimsOn;
+    dimsToggle?.addEventListener("change", (e) => {
+      dimsOn = !!e.target.checked;
+      localStorage.setItem(DIMS_KEY, dimsOn ? "true" : "false");
+      renderDimsOverlay();
+    });
+    // Initial render + re-render whenever an img loads (natural dims
+    // are 0 before load completes).
+    renderDimsOverlay();
+    setTimeout(renderDimsOverlay, 500);
+    document.getElementById("fresco-reader")?.addEventListener("load", renderDimsOverlay, true);
+
+    // TEMP diagnostic — streams keyboard-nav internals to the server
+    // debug log (/tmp/fresco_debug.log) so we can see what the user's
+    // browser actually does on `h`. Remove once the vim-nav report is
+    // resolved.
+    function kbDbg(step, data) {
+      try {
+        fetch("/manga/api/fresco-debug-log", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "same-origin",
+          body: JSON.stringify(Object.assign({ event: "kb_debug", step: step, ts: Date.now() }, data || {}))
+        }).catch(() => {});
+      } catch (_) {}
+    }
+
+    // TEMP diagnostic 2 — window-level CAPTURE listener fires before
+    // every other handler on the page, so this logs the key even when
+    // something downstream swallows it. Shows the real target + focus.
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "h" || e.key === "l" || e.key.startsWith("Arrow")) {
+        const a = document.activeElement;
+        kbDbg("capture", {
+          key: e.key,
+          targetTag: e.target && e.target.tagName,
+          targetType: e.target && e.target.type,
+          targetId: (e.target && e.target.id) || "",
+          targetCls: e.target ? String(e.target.className).slice(0, 80) : "",
+          active: a ? (a.tagName + "#" + (a.id || "") + "." + String(a.className).slice(0, 40)) : "none",
+          defaultPrevented: e.defaultPrevented,
+          fullscreen: !!document.fullscreenElement,
+          pointerLock: !!document.pointerLockElement
+        });
+      }
+    }, true);
+
+    // ── Keyboard nav ───────────────────────────────────────────────
+    // Page nav (direction-aware so the arrow / `h` / `l` keys feel
+    // right regardless of reading direction):
+    //   - ArrowLeft / h : prev on LTR, next on RTL
+    //   - ArrowRight / l: next on LTR, prev on RTL
+    //   - ArrowDown / Space: always next
+    //   - ArrowUp: always prev
+    // Chapter nav (always direction-agnostic; matches production):
+    //   - j: next chapter
+    //   - k: prev chapter
+    //   - 0: re-fit current page
+    document.addEventListener("keydown", (e) => {
+      const t = e.target;
+      if (t && (t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (t && t.tagName === "INPUT") {
+        // Only real typing targets swallow nav keys. Focus routinely
+        // gets STUCK on the settings toggles (checkbox inputs) when
+        // the modal is closed via Esc/backdrop, which used to kill
+        // h/l/arrows until the next click. Non-text controls keep
+        // Space + arrows (they use them natively: Space toggles,
+        // arrows move range/radio) but letter nav passes through.
+        const type = (t.type || "").toLowerCase();
+        const textLike = !["checkbox", "radio", "range", "button", "submit", "file", "color"].includes(type);
+        if (textLike) return;
+        if (e.key === " " || e.key.startsWith("Arrow")) return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "h" || e.key === "l" || e.key.startsWith("Arrow")) {
+        kbDbg("keydown", {
+          key: e.key,
+          targetTag: t && t.tagName,
+          targetType: t && t.type,
+          currentPage: currentPage,
+          direction: direction,
+          doubleMode: doubleMode,
+          handle: !!frescoHandle
+        });
+      }
+      if (e.key === "ArrowLeft" || e.key === "h") {
+        e.preventDefault();
+        if (direction === "rtl") goNext(); else goPrev();
+      } else if (e.key === "ArrowRight" || e.key === "l") {
+        e.preventDefault();
+        if (direction === "rtl") goPrev(); else goNext();
+      } else if (e.key === "ArrowDown" || e.key === " ") {
+        e.preventDefault();
+        goNext();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        goPrev();
+      } else if (e.key === "j" && nextChapterUrl) {
+        e.preventDefault();
+        loadChapterInPlace(nextChapterUrl);
+      } else if (e.key === "k" && prevChapterUrl) {
+        e.preventDefault();
+        loadChapterInPlace(prevChapterUrl);
+      } else if (e.key === "0") {
+        // Re-fit the current page to viewport (matches production).
+        e.preventDefault();
+        if (frescoHandle) fitToPage(currentPage);
+      }
+    });
+
+    // ── Tap zones + swipe ──────────────────────────────────────────
+    function whenReady(cb) {
+      if (window.Fresco && window.Fresco.onViewerReady) {
+        window.Fresco.onViewerReady("fresco-reader", cb);
+      } else {
+        setTimeout(() => whenReady(cb), 50);
+      }
+    }
+    whenReady((handle) => {
+      frescoHandle = handle;
+      // Initial fit — engine.fit() centered the whole canvas. Our
+      // call overrides with a single-page (or 2-page-spread) fit.
+      // Window + visibility are reapplied here too in case microtask
+      // ran before the imgs were in the DOM.
+      fitToPage(currentPage);
+
+      // Inject the nav-collapse toggle as the FIRST button in
+      // `.fresco-nav`. `appendNavButton` only appends; we move it
+      // to firstChild after creation. The CSS rule above hides
+      // every other button in the nav until shell.dataset.frescoNav
+      // === "visible".
+      const TOGGLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>';
+      const navToggle = handle.appendNavButton(
+        TOGGLE_SVG,
+        "Show/hide controls",
+        () => setFrescoNavVisible(shell.dataset.frescoNav !== "visible")
+      );
+      if (navToggle && navToggle.el) {
+        navToggle.el.classList.add("fresco-nav-toggle-btn");
+        const parent = navToggle.el.parentNode;
+        if (parent && parent.firstChild !== navToggle.el) {
+          parent.insertBefore(navToggle.el, parent.firstChild);
+        }
+      }
+
+      // ── Reading-time + progress persistence ────────────────────────
+      // Same shape as the strip reader's tracking. Fresco fires
+      // `view-blur` with wall-clock durationMs per dominant image;
+      // cap each at 2 min for idle protection, accumulate into the
+      // chapter total, flush on view-focus (page change) and on
+      // beforeunload via keepalive. Paged mode doesn't need a
+      // fractional position — page granularity is what the schema
+      // stores for `last_page`.
+      const PER_IMAGE_CAP_MS = 120_000;
+      const PROGRESS_DEBOUNCE_MS = 500;
+      let chapterElapsedMs = 0;
+      let saveTimer = null;
+      const csrfToken =
+        document.querySelector("meta[name='csrf-token']")?.content || "";
+
+      // ── Transient mode (comment deep-link arrivals) ────────────────
+      // When the user lands here via `?ann=` (notification or
+      // /slug/comments click), they're "just peeking" — we don't save
+      // their progress or reset their resume pointer. The state is
+      // promoted to "actually rereading" only once both thresholds
+      // cross: ≥2 minutes on page AND ≥2 page flips (view-focus events
+      // after the initial landing). Promotion zeroes the accumulated
+      // elapsed time so the reading session starts fresh from that
+      // moment — the minutes spent peeking shouldn't count toward the
+      // session total.
+      let transientMode = shell.dataset.transientMode === "1";
+      const transientStartMs = Date.now();
+      const TRANSIENT_TIME_MS = 120_000;
+      const TRANSIENT_FLIPS = 2;
+      let viewFocusCount = 0;
+
+      function maybePromoteTransient() {
+        if (!transientMode) return;
+        const flips = Math.max(0, viewFocusCount - 1); // first view-focus is landing
+        const elapsed = Date.now() - transientStartMs;
+        if (elapsed >= TRANSIENT_TIME_MS && flips >= TRANSIENT_FLIPS) {
+          transientMode = false;
+          chapterElapsedMs = 0;
+        }
+      }
+
+      handle.on("view-blur", (e) => {
+        chapterElapsedMs += Math.min(e.durationMs || 0, PER_IMAGE_CAP_MS);
+      });
+
+      function flushProgress({ keepalive = false } = {}) {
+        if (transientMode) {
+          chapterElapsedMs = 0; // discard transient time
+          return;
+        }
+        const elapsed = Math.round(chapterElapsedMs / 1000);
+        chapterElapsedMs = 0;
+        fetch(`/manga/${source}/${slug}/progress`, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            chapter,
+            page: currentPage,
+            elapsed,
+            total_pages: total
+          }),
+          keepalive
+        }).catch(() => {});
+      }
+
+      function scheduleProgressSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
+      }
+
+      handle.on("view-focus", () => {
+        viewFocusCount++;
+        maybePromoteTransient();
+        scheduleProgressSave();
+      });
+      window.addEventListener("beforeunload", () => flushProgress({ keepalive: true }));
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushProgress({ keepalive: true });
+      });
+
+      // Smart-crop needs the image to actually be loaded before pixel
+      // scan can run. fresco fires `image-loaded` per image; if the
+      // loaded image is the current page and smart-crop is on, re-fit
+      // so the freshly-detected content bounds take effect.
+      handle.on("image-loaded", (e) => {
+        if (!smartCrop) return;
+        const id = e && e.imageId;
+        if (!id) return;
+        const m = id.match(/^page-(\d+)$/);
+        if (!m) return;
+        const n = parseInt(m[1], 10);
+        // Only re-fit when the loaded image is in the current view.
+        if (visiblePagesAt(currentPage).has(n)) fitToPage(currentPage);
+      });
+
+      // Make fresco's coord helpers shift-aware so etcher sees the
+      // RIGHT canvas-px for shifted pages. Etcher uses these dynamically
+      // (this.handle.screenToImage / imageToScreen), so monkey-patching
+      // the handle after mount routes every etcher operation —
+      // _docPointerDown hit-test, _docMouseMove hover, _renderShape /
+      // _imageToContainer for shape positioning, draft drawing
+      // (screenToImage stores canonical coords), tooltip placement —
+      // through the corrected math automatically.
+      //
+      //   screenToImage(click) for a click on the visual content of a
+      //   shifted page returns the CANONICAL canvas-px (where the
+      //   content lives without shift, matching shape geometry).
+      //
+      //   imageToScreen(canonical_canvas_px) for a point on a shifted
+      //   page returns the SHIFTED screen-px (so the rendered shape
+      //   visually lines up with the shifted img content).
+      const _origScreenToImage = handle.screenToImage.bind(handle);
+      const _origImageToScreen = handle.imageToScreen.bind(handle);
+      handle.screenToImage = function(pt) {
+        const r = _origScreenToImage(pt);
+        // Look for a shifted page whose VISUAL (post-shift) bounds
+        // contain the uncorrected hit point. If found, undo the shift
+        // so the returned canvas-px matches the canonical shape geometry.
+        for (const [imageId, shift] of currentShifts) {
+          const b = handle.imageBoundsFor(imageId);
+          if (!b) continue;
+          const vMinX = b.x - shift.x, vMaxX = b.x + b.width  - shift.x;
+          const vMinY = b.y + shift.y, vMaxY = b.y + b.height + shift.y;
+          if (r.x >= vMinX && r.x <= vMaxX && r.y >= vMinY && r.y <= vMaxY) {
+            return { x: r.x + shift.x, y: r.y - shift.y };
+          }
+        }
+        return r;
+      };
+      handle.imageToScreen = function(pt) {
+        const r = _origImageToScreen(pt);
+        // For canvas-px on a shifted page (canonical bounds contain
+        // the point), apply the inverse shift in screen-px so the
+        // rendered shape sits over the shifted visual content.
+        for (const [imageId, shift] of currentShifts) {
+          const b = handle.imageBoundsFor(imageId);
+          if (!b) continue;
+          if (pt.x >= b.x && pt.x <= b.x + b.width &&
+              pt.y >= b.y && pt.y <= b.y + b.height) {
+            const t = _origImageToScreen({ x: 0, y: 0 });
+            const t1 = _origImageToScreen({ x: 1, y: 1 });
+            const sx = t1.x - t.x; // current screen-px per canvas-px (≈ scale)
+            const sy = t1.y - t.y;
+            return { x: r.x - shift.x * sx, y: r.y + shift.y * sy };
+          }
+        }
+        return r;
+      };
+
+      // syncShapeShifts now only needs to clear leftover CSS transforms
+      // on shape elements (the patched coord helpers do the actual
+      // positioning). Listen for viewport changes so any drift in
+      // etcher's draft preview during an active draw stays accurate.
+      handle.on("update-viewport", syncShapeShifts);
+
+      // ── Pan-lock follow-zoom + tap-zone gate state ───────────────
+      // Zoom-out floor is enforced by fresco itself via
+      // handle.setZoomFloor (called from fitToPage). What's left:
+      //   1. Unlock pan once user zooms in past the floor, re-lock
+      //      on zoom-out back to fit.
+      //   2. Track "are we at fit?" so the click handler can skip
+      //      navigation when the user is mid-zoom (otherwise tapping
+      //      to pan around a zoomed page accidentally turns the page).
+      let prevAtFit = true;
+      handle.on("zoom", (e) => {
+        if (!frescoHandle || typeof e.scale !== "number" || scaleFloor <= 0) return;
+        // 1% tolerance so float-precision jitter at exactly the floor
+        // doesn't flip the lock back-and-forth.
+        const nowAtFit = e.scale <= scaleFloor * 1.01;
+        atFit = nowAtFit;
+        if (typeof frescoHandle.setPanLocked === "function") {
+          frescoHandle.setPanLocked(nowAtFit);
+        }
+        // Transition zoomed-in → at-fit: recenter the page. After a
+        // zoom-out gesture the user can land anywhere (the pinch
+        // pivot might be off-center), and at fit a panned-off-center
+        // page reads as "broken". Snap back to the centered fit pose.
+        // fitToPage uses setTransform which doesn't emit `zoom`, so
+        // this can't re-enter.
+        if (nowAtFit && !prevAtFit) {
+          fitToPage(currentPage);
+        }
+        prevAtFit = nowAtFit;
+        // Scale changed — re-apply the screen-px shift to any
+        // shape that's tracking a shifted page.
+        syncShapeShifts();
+      });
+
+      // Fresco 0.5.6+ setHomeAction: override the nav reset button and
+      // `0` key so they re-fit the current page (not the canvas-wide
+      // default). Falls through silently on older fresco that didn't
+      // expose this on the handle.
+      if (typeof handle.setHomeAction === "function") {
+        handle.setHomeAction(() => fitToPage(currentPage));
+      }
+
+      // Pan clamp is now native via handle.setPanBounds (called in
+      // fitToPage on every nav). The `pan`-event listener that
+      // bounced the viewport back via fitBounds is gone.
+
+      const host = handle.container;
+
+      // Tap zones via fresco 0.5.2's `tap` event — only fires on
+      // non-drag pointerup, so we no longer need our own pointer
+      // movement tracking to filter post-pan clicks. The event also
+      // never fires while a pinch is in progress, so zoom gestures
+      // don't accidentally page-turn either.
+      //
+      // Fresco's :gestures attr drops :double_click so the double-
+      // tap-to-zoom shortcut can't intercept rapid next-page taps.
+      handle.on("tap", (e) => {
+        // Tap-to-navigate only when at fit. When zoomed in, the user
+        // is inspecting page detail — tapping should not turn pages.
+        if (!atFit) return;
+        // Don't navigate while annotation mode is active. fresco 0.6.3's
+        // data-fresco-suppress-tap probe now correctly suppresses taps
+        // landing on .etcher-shape elements (the 0.5.9 implementation
+        // used elementsFromPoint, which doesn't see pointer-events:none
+        // shapes). Toolbar bail still needed — etcher's close-X /
+        // color-picker clicks land on the toolbar, which isn't tagged.
+        if (shell.dataset.annotateMode === "true") return;
+        if (e.target?.closest?.(".etcher-toolbar")) return;
+        const preset = TAP_ZONE_PRESETS[tapPreset] || TAP_ZONE_PRESETS.default;
+        const rect = host.getBoundingClientRect();
+        const xIn = e.x - rect.left;
+        const yIn = e.y - rect.top;
+        const third = rect.width / 3;
+        let zone;
+        if (xIn < third) zone = "leftThird";
+        else if (xIn > rect.width - third) zone = "rightThird";
+        else zone = yIn < rect.height / 2 ? "midTop" : "midBottom";
+        performAction(preset[zone]);
+      });
+
+      let touchStartX = null, touchStartY = null, touchStartT = 0;
+      host.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) { touchStartX = null; return; }
+        // Annotate mode owns the touch — drawing a shape or wiping
+        // with the trash tool would otherwise trigger swipe-to-page.
+        if (shell.dataset.annotateMode === "true") { touchStartX = null; return; }
+        if (e.target?.closest?.(".etcher-toolbar")) { touchStartX = null; return; }
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartT = performance.now();
+      }, { passive: true });
+      host.addEventListener("touchend", (e) => {
+        if (touchStartX == null || e.changedTouches.length !== 1) return;
+        // Annotate mode might have flipped on mid-gesture or the
+        // touchstart-time check missed it; bail again for safety.
+        if (shell.dataset.annotateMode === "true") { touchStartX = null; return; }
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        const dt = performance.now() - touchStartT;
+        touchStartX = null;
+        // Swipe-to-page-turn only at fit — when zoomed in, a single-
+        // pointer drag is a pan gesture (fresco handles it), not a
+        // page-flip.
+        if (!atFit) return;
+        if (Math.abs(dx) < 50 || dt > 600) return;
+        if (Math.abs(dy) > Math.abs(dx)) return;
+        const swipedRight = dx > 0;
+        // RTL: swipe right = next; LTR: swipe left = next.
+        const action = (direction === "rtl" && swipedRight) || (direction === "ltr" && !swipedRight) ? "next" : "prev";
+        performAction(action);
+      }, { passive: true });
+
+      // Re-fit on resize so the page stays framed correctly when the
+      // window changes (rotation, browser-chrome show/hide, etc.).
+      // Re-fit on viewport changes — but NOT while the composer or
+      // comment-thread modal is open. iOS Safari fires `resize` when
+      // the virtual keyboard appears (visual-viewport shift). If we
+      // refit then, scaleFloor recomputes against the smaller vp and
+      // setZoomFloor locks the user at a much-zoomed-in scale; once
+      // the modal closes they can't pinch-out below the (stale)
+      // floor. Guarding here keeps the floor stable across keyboard
+      // appearances. If the user does rotate / change zoom while
+      // typing, the next nav (next/prev page or close-then-open) will
+      // refit anyway.
+      function anyAnnotationModalOpen() {
+        const composer = document.getElementById("etcher-composer");
+        if (composer && composer.open) return true;
+        // EtcherHostLive renders comment-modal-root-* when open.
+        return !!document.querySelector("[id^='comment-modal-root-']");
+      }
+      window.addEventListener("resize", () => {
+        if (anyAnnotationModalOpen()) return;
+        fitToPage(currentPage);
+      });
+
+      // After either modal closes, refit explicitly — the keyboard
+      // may have mucked with the viewport while typing and we
+      // suppressed the resize-driven refit above. This brings the
+      // scale back to the proper floor for the current vp.
+      document.getElementById("etcher-composer")?.addEventListener("close", () => {
+        fitToPage(currentPage);
+      });
+      window.addEventListener("phx:fresco:refit", () => fitToPage(currentPage));
+    });
+
+    // ── Blank-page detection (idle scan) ───────────────────────────
+    // Loads each chapter image into a hidden canvas during idle time
+    // and samples luminance variance. >97% near-white pixels → blank.
+    // Results cached per chapter in sessionStorage so a re-visit
+    // doesn't pay the scan cost again.
+    (function blankScanner() {
+      let nextIdx = 0;
+      function scanOne(idx) {
+        return new Promise((resolve) => {
+          if (blankSet.has(idx + 1)) { resolve(); return; }
+          const meta = images[idx];
+          if (!meta || !meta.url) { resolve(); return; }
+          // Synthetic blanks (override inserts) are blank by construction;
+          // don't pollute `blankSet` with them — that would make the skip-
+          // blanks path collapse the override on the next nav.
+          if (meta.synthetic) { resolve(); return; }
+          const im = new Image();
+          im.crossOrigin = "anonymous";
+          im.onload = () => {
+            try {
+              const w = im.naturalWidth, h = im.naturalHeight;
+              if (!w || !h) { resolve(); return; }
+              // Tiny canvas — 32x48 sample is plenty to flag a blank page.
+              const SCALE_W = 32;
+              const SCALE_H = 48;
+              const c = document.createElement("canvas");
+              c.width = SCALE_W; c.height = SCALE_H;
+              const ctx = c.getContext("2d");
+              ctx.drawImage(im, 0, 0, SCALE_W, SCALE_H);
+              const data = ctx.getImageData(0, 0, SCALE_W, SCALE_H).data;
+              let nearWhite = 0;
+              const total = SCALE_W * SCALE_H;
+              for (let i = 0; i < data.length; i += 4) {
+                const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                if (lum >= 240) nearWhite++;
+              }
+              const ratio = nearWhite / total;
+              if (ratio >= 0.97) {
+                blankSet.add(idx + 1);
+                persistBlankSet();
+              }
+            } catch (_) { /* CORS or decode error — skip */ }
+            resolve();
+          };
+          im.onerror = () => resolve();
+          im.src = meta.url;
+        });
+      }
+      function loop() {
+        const ric = window.requestIdleCallback || ((cb) => setTimeout(cb, 200));
+        ric(async () => {
+          if (nextIdx >= images.length) return;
+          // Skip pages we've already cached. Without this, a re-visit
+          // would still call scanOne for every image (then resolve
+          // immediately) — wasteful even if it doesn't redo the work.
+          while (nextIdx < images.length && blankSet.has(nextIdx + 1)) nextIdx++;
+          if (nextIdx >= images.length) return;
+          const i = nextIdx++;
+          await scanOne(i);
+          // Tail-call ourselves so the next idle slot picks up the
+          // following image. Stops when every page is scanned.
+          loop();
+        });
+      }
+      // Defer the scan a beat so it doesn't compete with initial
+      // page fit / image loads.
+      setTimeout(loop, 800);
+    })();
+
+    // ── Etcher shape-drawn composer ────────────────────────────────
+    // EtcherHostLive (the embedded LiveView wrapping <Etcher.layer>)
+    // forwards Etcher's `etcher:shape-drawn` event to this page via
+    // `push_event("etcher:open-composer", payload)`. The phx event
+    // surface uses the `phx:` prefix on the window listener.
+    //
+    // After a successful post, we also call `window.openCommentModal`
+    // (matches production's flow — opens the comment-thread modal so
+    // the user can reply / view existing comments). The modal itself
+    // lives inside EtcherHostLive and is opened via the CommentBridge
+    // hook listening on the open-comment-modal window event.
+    const composer = document.getElementById("etcher-composer");
+    const composerContent = document.getElementById("etcher-composer-content");
+    const composerPrivate = document.getElementById("etcher-composer-private");
+    const composerPost = document.getElementById("etcher-composer-post");
+    const composerCancel = document.getElementById("etcher-composer-cancel");
+    const composerError = document.getElementById("etcher-composer-error");
+    const composerGifBtn = document.getElementById("etcher-composer-gif-btn");
+    const composerGifPicker = document.getElementById("etcher-composer-gif-picker");
+    const composerGifPreview = document.getElementById("etcher-composer-gif-preview");
+    const composerGifRemove = document.getElementById("etcher-composer-gif-remove");
+    let composerSelectedGif = null;
+    let composerGifLoaded = false;
+
+    function composerSetGif(gif) {
+      composerSelectedGif = gif;
+      if (!composerGifPreview) return;
+      const img = composerGifPreview.querySelector("img");
+      if (gif) {
+        composerGifPreview.classList.remove("hidden");
+        if (img) img.src = gif.preview_url || gif.url;
+      } else {
+        composerGifPreview.classList.add("hidden");
+        if (img) img.src = "";
+      }
+    }
+
+    function composerLoadGifPicker() {
+      if (!composerGifPicker || composerGifLoaded) return;
+      composerGifLoaded = true;
+      composerGifPicker.innerHTML = `
+        <div class="flex gap-1 mb-1">
+          <input type="text" class="input input-bordered input-xs flex-1 text-xs" placeholder="Search GIFs..." />
+          <button type="button" class="btn btn-xs btn-ghost" data-gif-search>🔍</button>
+        </div>
+        <div data-gif-results class="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto" style="overscroll-behavior:contain;touch-action:pan-y;"></div>
+        <div class="text-[10px] text-base-content/40 text-right mt-1">Powered by GIPHY</div>
+      `;
+      const input = composerGifPicker.querySelector("input");
+      const results = composerGifPicker.querySelector("[data-gif-results]");
+      const searchBtn = composerGifPicker.querySelector("[data-gif-search]");
+      let searchTimer = null;
+
+      async function doSearch() {
+        const q = input.value.trim();
+        const url = q
+          ? `/manga/api/giphy/search?q=${encodeURIComponent(q)}&limit=20`
+          : `/manga/api/giphy/trending?limit=20`;
+        results.innerHTML = '<div class="text-center p-2"><span class="loading loading-spinner loading-sm"></span></div>';
+        try {
+          const r = await fetch(url, { credentials: "same-origin" });
+          const data = await r.json();
+          results.innerHTML = "";
+          (data.data || []).forEach((g) => {
+            const im = document.createElement("img");
+            im.src = g.preview_url;
+            im.alt = g.title || "";
+            im.className = "w-full rounded cursor-pointer object-cover aspect-square";
+            im.addEventListener("click", () => {
+              composerSetGif(g);
+              composerGifPicker.classList.add("hidden");
+            });
+            results.appendChild(im);
+          });
+          if ((data.data || []).length === 0) {
+            results.innerHTML = '<div class="text-center p-2 text-xs text-base-content/40 col-span-2">No GIFs found</div>';
+          }
+        } catch (_) {
+          results.innerHTML = '<div class="p-2 text-xs text-error col-span-2">Failed to load GIFs</div>';
+        }
+      }
+
+      input.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(doSearch, 400); });
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } });
+      searchBtn.addEventListener("click", doSearch);
+      doSearch();
+      input.focus();
+    }
+
+    composerGifBtn?.addEventListener("click", () => {
+      if (composerGifPicker.classList.contains("hidden")) {
+        composerGifPicker.classList.remove("hidden");
+        composerLoadGifPicker();
+      } else {
+        composerGifPicker.classList.add("hidden");
+      }
+    });
+
+    composerGifRemove?.addEventListener("click", () => composerSetGif(null));
+
+    window.addEventListener("phx:etcher:open-composer", (e) => {
+      const uuid = e.detail?.uuid;
+      if (!uuid || !composer) return;
+      composer.dataset.shapeUuid = uuid;
+      composerContent.value = "";
+      composerPrivate.checked = false;
+      composerSetGif(null);
+      composerError.classList.add("hidden");
+      composer.showModal();
+      setTimeout(() => composerContent.focus(), 100);
+    });
+
+    composerCancel?.addEventListener("click", () => composer.close());
+
+    composerPost?.addEventListener("click", async () => {
+      const uuid = composer.dataset.shapeUuid;
+      const content = composerContent.value.trim();
+      const gif = composerSelectedGif;
+      if (!uuid || (!content && !gif)) {
+        composerContent.focus();
+        return;
+      }
+      composerPost.disabled = true;
+      composerError.classList.add("hidden");
+      try {
+        const body = {
+          content: content || "",
+          visibility: composerPrivate.checked ? "private" : "public"
+        };
+        if (gif) body.gif_url = gif.downsized_url || gif.original_url || gif.url;
+        const res = await fetch(
+          `/manga/api/${source}/${slug}/${chapter}/marks/etcher-shapes/${uuid}/comment`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-csrf-token": document.querySelector("meta[name='csrf-token']")?.content || ""
+            },
+            credentials: "same-origin",
+            body: JSON.stringify(body)
+          }
+        );
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const data = await res.json();
+        // Patch the etcher shape's metadata with the full tooltip
+        // payload so the hover bubble + tooltip-pin click flow has
+        // the new comment data immediately.
+        const layer = window.Etcher?.layerFor?.("fresco-reader");
+        if (layer?.patchShape) {
+          layer.patchShape(uuid, { metadata: data.tooltip_metadata || { comment_uuid: data.comment_uuid } });
+        }
+        composer.close();
+        // Open the comment-thread modal (same as production after a
+        // successful post). The resource_uuid keys the thread.
+        if (data.resource_uuid && window.openCommentModal) {
+          setTimeout(() => {
+            window.openCommentModal(chapter, currentPage, data.resource_uuid);
+          }, 200);
+        }
+      } catch (err) {
+        console.error("[etcher composer] failed", err);
+        composerError.textContent = "Failed to post comment. Try again.";
+        composerError.classList.remove("hidden");
+      } finally {
+        composerPost.disabled = false;
+      }
+    });
+
+    // ── Click an existing etcher shape → open the comment thread ───
+    // Etcher fires `etcher:tooltip-pin` on the layer host when the
+    // user clicks a shape outside annotation mode. We forward that to
+    // openCommentModal using the shape's persisted resource_uuid.
+    const etcherLayerHost = document.getElementById("etcher-layer-fresco-reader");
+    // New shapes drawn while a page is shifted need the same transform
+    // re-applied (etcher creates a fresh DOM element).
+    etcherLayerHost?.addEventListener("etcher:annotations-changed", () => {
+      syncShapeShifts();
+    });
+    etcherLayerHost?.addEventListener("etcher:tooltip-pin", (e) => {
+      const uuid = e.detail?.uuid;
+      if (!uuid) return;
+      const layer = window.Etcher?.layerFor?.("fresco-reader");
+      const shape = layer?.getShape?.(uuid);
+      const rid = shape?.metadata?.resource_uuid;
+      if (rid && window.openCommentModal) {
+        window.openCommentModal(chapter, currentPage, rid);
+      }
+    });
+
+    // ── EtcherHostLive → patchShape ────────────────────────────────
+    // When a fresh-shape's first comment lands via the CommentsComponent
+    // modal, EtcherHostLive pushes `etcher:patch-shape` with the
+    // rebuilt tooltip metadata so the hover bubble + tooltip-pin click
+    // start working without a page refresh.
+    window.addEventListener("phx:etcher:patch-shape", (e) => {
+      const { shape_uuid, tooltip_metadata } = e.detail || {};
+      if (!shape_uuid) return;
+      const layer = window.Etcher?.layerFor?.("fresco-reader");
+      if (layer?.patchShape) {
+        layer.patchShape(shape_uuid, { metadata: tooltip_metadata || {} });
+      }
+    });
+
+    // ── Deep-link ?ann=<etcher_shape_uuid> ────────────────────────
+    // /comments links a comment back to its shape via ?ann=. We poll
+    // for the shape (etcher 0.5.0 exposes image_id on the descriptor,
+    // so no more DOM scraping), call our own page-aware navigateTo
+    // (keeps page indicator + history + double-page logic in sync —
+    // revealShape's fitBounds would zoom into the shape and skip all
+    // that), then pulse the SVG element via etcher's class hook.
+    const targetAnn = new URLSearchParams(window.location.search).get("ann");
+    if (targetAnn) {
+      const start = Date.now();
+      const poll = () => {
+        // Re-fetch layer each tick — window.Etcher.layerFor returns
+        // null until the LiveView lifecycle wires the layer up.
+        const layer = window.Etcher?.layerFor?.("fresco-reader");
+        const shape = layer?.getShape?.(targetAnn);
+        if (!shape) {
+          if (Date.now() - start < 10000) setTimeout(poll, 200);
+          return;
+        }
+        const imageId = shape.image_id || "";
+        const targetPage = imageId.startsWith("page-")
+          ? parseInt(imageId.slice(5), 10)
+          : NaN;
+        if (!isFinite(targetPage)) return;
+        if (targetPage !== currentPage) navigateTo(targetPage);
+        setTimeout(() => {
+          const el = document.querySelector(
+            '.etcher-shape[data-uuid="' + targetAnn + '"]'
+          );
+          if (el) {
+            // ann-flash (opacity keyframes) renders reliably on SVG
+            // across browsers, unlike etcher 0.5.0's drop-shadow pulse
+            // which can be invisible on WebKit. Apply inline so we
+            // can stack it without fighting any class-based animations.
+            el.style.animation = "none";
+            void el.getBoundingClientRect();
+            el.style.animation = "ann-flash 1.5s ease-in-out";
+            el.addEventListener(
+              "animationend",
+              () => { el.style.animation = ""; },
+              { once: true }
+            );
+          }
+          setTimeout(() => {
+            const rid = shape.metadata?.resource_uuid;
+            if (rid && window.openCommentModal) {
+              window.openCommentModal(chapter, targetPage, rid);
+            }
+          }, 1500);
+        }, 500);
+      };
+      poll();
+    }
+
+    // ── Back/forward nav across our own pushState ──────────────────
+    window.addEventListener("popstate", (e) => {
+      const p = e.state?.page;
+      if (typeof p === "number" && p >= 1 && p <= total) {
+        currentPage = p;
+        shell.dataset.page = String(p);
+        fitToPage(p);
+        updatePageIndicator();
+      }
+    });
+
+    // ── Page-override context menu (right-click / long-press) ──────
+    // Right-clicking a page on desktop, or long-pressing on mobile,
+    // opens a small menu with two actions:
+    //   - "Insert blank before page N" (or remove if N is synthetic)
+    //   - "Mark page N as solo" (or unmark if already solo)
+    // Both fire a POST to /manga/api/.../page_overrides which toggles
+    // the override and returns {ok, state}. On success we reload so
+    // the spread re-renders from the new image list. Full SPA-style
+    // re-render would require rebuilding the canvas dims + image
+    // positions client-side, which isn't worth the complexity.
+    (function pageOverrideMenu() {
+      const menu = document.getElementById("page-override-menu");
+      const targetLabel = document.getElementById("page-override-menu-target");
+      const insertBtn = document.getElementById("page-override-insert-blank");
+      const soloBtn = document.getElementById("page-override-mark-solo");
+      const host = document.getElementById("fresco-reader");
+      if (!menu || !insertBtn || !soloBtn || !host) return;
+
+      function pageAtPoint(x, y) {
+        const els = document.elementsFromPoint(x, y);
+        for (const el of els) {
+          const id = el.dataset && el.dataset.imageId;
+          if (id) {
+            const m = /^page-(\d+)$/.exec(id);
+            if (m) return parseInt(m[1], 10);
+          }
+        }
+        return currentPage;
+      }
+
+      function openMenu(pageN, x, y) {
+        const isInserted = insertedSet.has(pageN);
+        const isSolo = soloSet.has(pageN);
+        targetLabel.textContent = "Page " + pageN +
+          (isInserted ? " (inserted blank)" : "");
+        insertBtn.textContent = isInserted
+          ? "Remove inserted blank"
+          : "Insert blank before page " + pageN;
+        soloBtn.textContent = isSolo
+          ? "Unmark solo (re-pair this page)"
+          : "Mark page " + pageN + " as solo";
+        // The inserted blank itself is BY DEFINITION solo (the
+        // synthetic source is shown alone), so toggling solo on it
+        // is a no-op. Hide the solo row in that case.
+        soloBtn.style.display = isInserted ? "none" : "";
+        // Position; clamp inside viewport.
+        const w = 240, h = 130;
+        const left = Math.max(4, Math.min(x, window.innerWidth - w));
+        const top = Math.max(4, Math.min(y, window.innerHeight - h));
+        menu.style.left = left + "px";
+        menu.style.top = top + "px";
+        menu.classList.remove("hidden");
+        insertBtn.onclick = () => sendOverride(pageN, "insert_blank_before");
+        soloBtn.onclick   = () => sendOverride(pageN, "solo");
+      }
+
+      function closeMenu() {
+        menu.classList.add("hidden");
+        insertBtn.onclick = null;
+        soloBtn.onclick = null;
+      }
+
+      async function sendOverride(pageN, kind) {
+        closeMenu();
+        try {
+          const res = await fetch(
+            "/manga/api/" + source + "/" + slug + "/" + chapter + "/page_overrides",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-csrf-token": csrfToken,
+              },
+              body: JSON.stringify({ page_index: pageN, kind: kind }),
+            }
+          );
+          const data = await res.json();
+          if (data && data.ok) {
+            // Invalidate the per-chapter blank-scan cache. Toggling
+            // an override changes the page count + positions, so any
+            // entry in the cache addressed by canvas position is now
+            // misaligned (e.g. the synthetic at position N gets
+            // removed, but position N is now a real page that the
+            // cache still flags blank → nonBlankPages skips it).
+            // The scanner re-runs on next load and rebuilds.
+            try { sessionStorage.removeItem(BLANK_CACHE_KEY); } catch (_) {}
+            // The override changed the chapter's effective length; the
+            // simplest correct re-render is a full reload. Preserves
+            // double-page / direction / current page (server reads
+            // last_page on remount).
+            window.location.reload();
+          } else {
+            console.warn("[paged] page-override failed:", data);
+          }
+        } catch (err) {
+          console.warn("[paged] page-override error:", err);
+        }
+      }
+
+      // Desktop: right-click opens the menu. preventDefault stops the
+      // browser's native context menu so ours wins.
+      host.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const pageN = pageAtPoint(e.clientX, e.clientY);
+        openMenu(pageN, e.clientX, e.clientY);
+      });
+
+      // Mobile: 600ms touch hold without movement opens the menu.
+      // iOS Safari's `-webkit-touch-callout: none` (set on the host
+      // by fresco) suppresses contextmenu on long-press, so a custom
+      // timer is the only reliable trigger there.
+      let lpTimer = null;
+      let lpStart = null;
+      host.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) return;
+        const t = e.touches[0];
+        lpStart = { x: t.clientX, y: t.clientY };
+        lpTimer = setTimeout(() => {
+          const pageN = pageAtPoint(lpStart.x, lpStart.y);
+          openMenu(pageN, lpStart.x, lpStart.y);
+          lpTimer = null;
+        }, 600);
+      }, { passive: true });
+      host.addEventListener("touchmove", (e) => {
+        if (!lpStart || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const dx = t.clientX - lpStart.x;
+        const dy = t.clientY - lpStart.y;
+        if (dx * dx + dy * dy > 100) {
+          if (lpTimer) clearTimeout(lpTimer);
+          lpTimer = null;
+        }
+      }, { passive: true });
+      const cancelLongPress = () => {
+        if (lpTimer) clearTimeout(lpTimer);
+        lpTimer = null;
+        lpStart = null;
+      };
+      host.addEventListener("touchend", cancelLongPress);
+      host.addEventListener("touchcancel", cancelLongPress);
+
+      // Dismiss on outside click or Escape.
+      document.addEventListener("click", (e) => {
+        if (menu.classList.contains("hidden")) return;
+        if (!menu.contains(e.target)) closeMenu();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeMenu();
+      });
+    })();
+
+    // ── Mouse-gesture (Pointer Lock) navigation ───────────────────
+    // Desktop-only convenience: click the bottom-right button to hand
+    // the cursor to the browser via the Pointer Lock API. While
+    // locked, we accumulate `movementX` and synthesize a keydown for
+    // ArrowLeft / ArrowRight every time the accumulator crosses the
+    // threshold — that reuses the page's existing nav handler (which
+    // already knows about RTL / spread / blank-skip). Click anywhere
+    // (or hit Escape — browser default) to release the pointer.
+    (function setupMouseGestures() {
+      const btn = document.getElementById("mouse-gesture-btn");
+      const banner = document.getElementById("mouse-gesture-banner");
+      if (!btn) return;
+      // Modern browsers expose this on documentElement / body / any
+      // element; pick a stable host that's always in the DOM.
+      const lockTarget = document.documentElement;
+      if (!lockTarget.requestPointerLock) {
+        console.warn("[mouse-gesture] Pointer Lock API unsupported");
+        return;
+      }
+
+      const THRESHOLD_PX = 8;     // horizontal travel before a flip (matches strip's snap threshold)
+      const FLIP_COOLDOWN_MS = 1000; // wait this long after each flip
+      let accumX = 0;
+      let cooldownUntil = 0;
+      // Eat the first click after lock — the click that requested the
+      // lock fires its own document-level click event a moment later,
+      // and we don't want that to immediately exit.
+      let armed = false;
+
+      // Call the reader's navigation functions DIRECTLY (not via
+      // synthetic keydown) so the trusted-user-activation chain that
+      // came from the mousemove inside pointer-lock carries through
+      // `window.location.href = nextChapterUrl` to the new page — the
+      // next chapter's IIFE can then auto-re-engage pointer lock
+      // without a user click. Synthetic events have `isTrusted=false`
+      // and strip the activation.
+      function flip(dir) {
+        // dir < 0 = move left, dir > 0 = move right.
+        // Reader keyboard binding: ArrowLeft → prev on LTR / next on RTL.
+        const rtl = window.__pagedDirection === "rtl";
+        const wantNext = (dir > 0) !== rtl; // XOR
+        if (wantNext) window.__pagedGoNext?.();
+        else          window.__pagedGoPrev?.();
+        cooldownUntil = performance.now() + FLIP_COOLDOWN_MS;
+        accumX = 0;
+      }
+
+      function onMouseMove(e) {
+        // Cooldown after a flip — stops a fast swipe from rifling
+        // through many pages in one motion. Discards accumulated
+        // travel while cooling down so the next flip needs a fresh
+        // gesture, not a leftover from before.
+        if (performance.now() < cooldownUntil) { accumX = 0; return; }
+
+        accumX += e.movementX;
+        if (accumX <= -THRESHOLD_PX) flip(-1);
+        else if (accumX >= THRESHOLD_PX) flip(1);
+      }
+
+      function onClick(e) {
+        if (!armed) { armed = true; return; }
+        if (document.pointerLockElement) {
+          e.preventDefault();
+          e.stopPropagation();
+          document.exitPointerLock();
+        }
+      }
+
+      // Cross-chapter persistence: when the user clicks the gesture
+      // button, set a localStorage flag. When the reader navigates to
+      // the next chapter (same-origin `window.location.href` change),
+      // the new page reads the flag on mount and auto-requests lock
+      // — same-origin nav keeps the user's transient activation alive
+      // long enough for the call to succeed. We clear the flag on any
+      // *intentional* exit (click anywhere, Escape) so explicit exit
+      // doesn't bounce back on the next chapter; a navigation away
+      // skips the clear because beforeunload sets `navigatingAway`
+      // first.
+      const PERSIST_KEY = "reader.gestureMode.paged";
+      let navigatingAway = false;
+      window.addEventListener("beforeunload", () => { navigatingAway = true; });
+
+      function requestLock() {
+        try {
+          const result = lockTarget.requestPointerLock({ unadjustedMovement: true });
+          if (result && typeof result.then === "function") {
+            result.catch((err) => {
+              console.warn("[mouse-gesture] requestPointerLock rejected", err);
+              // Retry without options — some browsers reject the options object.
+              try { lockTarget.requestPointerLock(); } catch (_) {}
+            });
+          }
+        } catch (err) {
+          console.warn("[mouse-gesture] requestPointerLock threw", err);
+        }
+      }
+
+      function onLockChange() {
+        const locked = !!document.pointerLockElement;
+        if (locked) {
+          accumX = 0;
+          armed = false;
+          banner?.classList.remove("hidden");
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("click", onClick, true);
+          // Persist the intent so the next chapter auto-engages.
+          try { localStorage.setItem(PERSIST_KEY, "1"); } catch (_) {}
+        } else {
+          banner?.classList.add("hidden");
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("click", onClick, true);
+          // Only clear if the exit was intentional (click / Escape) —
+          // skipping the clear on `navigatingAway` keeps the flag
+          // alive across chapter loads.
+          if (!navigatingAway) {
+            try { localStorage.removeItem(PERSIST_KEY); } catch (_) {}
+          }
+        }
+      }
+
+      function onLockError(e) {
+        console.warn("[mouse-gesture] pointerlockerror", e);
+      }
+
+      document.addEventListener("pointerlockchange", onLockChange);
+      document.addEventListener("pointerlockerror", onLockError);
+
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        requestLock();
+      });
+
+      // Auto-engage on mount when the previous chapter left the flag
+      // set. Try the immediate path — works on some browsers when
+      // transient activation propagated across the same-origin nav.
+      // If that's denied (Chromium's stricter activation model is the
+      // usual culprit), arm one-shot mousedown / keydown listeners so
+      // the user's *next* interaction — clicking anywhere or hitting
+      // any key — re-engages without needing the gesture button.
+      // Silent: no banner, no UI.
+      try {
+        if (localStorage.getItem(PERSIST_KEY) === "1") {
+          requestLock();
+          Promise.resolve().then(() => {
+            if (document.pointerLockElement) return;
+            const resume = () => {
+              document.removeEventListener("mousedown", resume, true);
+              document.removeEventListener("keydown", resume, true);
+              requestLock();
+            };
+            document.addEventListener("mousedown", resume, true);
+            document.addEventListener("keydown", resume, true);
+          });
+        }
+      } catch (_) {}
+    })();
+  })();
+</script>

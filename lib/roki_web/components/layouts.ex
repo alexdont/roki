@@ -603,4 +603,41 @@ defmodule RokiWeb.Layouts do
     do: current_path == href or String.starts_with?(current_path, href <> "/")
 
   defp active?(_, _), do: false
+
+  # ── the manga reader's header ─────────────────────────────────────
+  # Two components its pages call, copied from the app they came from so those templates need no
+  # change. They sit at the end of the module, where they cannot come between another
+  # component's `attr` block and the function it describes.
+
+  attr :parent, :any, required: true, doc: "@conn (controller pages) or @socket (LiveView pages)"
+  attr :scope, :any, default: nil, doc: "the @phoenix_kit_current_scope assign"
+  def notifications_bell(assigns) do
+    user =
+      case assigns[:scope] do
+        %PhoenixKit.Users.Auth.Scope{user: %{} = u} -> u
+        _ -> nil
+      end
+
+    assigns = assign(assigns, :user, user)
+
+    ~H"""
+    <%= if @user && PhoenixKit.Notifications.enabled?() do %>
+      {live_render(@parent, PhoenixKitWeb.Live.NotificationsBell,
+        id: "pk-notifications-bell",
+        session: %{"user_uuid" => @user.uuid}
+      )}
+    <% end %>
+    """
+  end
+
+  attr :scope, :any, required: true, doc: "the @phoenix_kit_current_scope assign"
+  attr :current_path, :string, default: ""
+  def user_menu(assigns) do
+    ~H"""
+    <PhoenixKitWeb.Components.UserDashboardNav.user_dropdown
+      scope={@scope}
+      current_path={@current_path}
+    />
+    """
+  end
 end

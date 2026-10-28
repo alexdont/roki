@@ -1,0 +1,327 @@
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">📖 Reader</a>
+    <div class="flex items-center gap-2">
+      <%= if @resume_manga do %>
+        <a
+          href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+          class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
+        >
+          ▶ Resume
+        </a>
+      <% end %>
+      <Layouts.theme_toggle />
+      <Layouts.notifications_bell parent={@conn} scope={@phoenix_kit_current_scope} />
+      <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+          <li><a href="/manga">Home</a></li>
+          <li><a href="/manga/explore">Explore</a></li>
+          <li><a href="/manga/history">History</a></li>
+          <li><a href="/manga/stats">Stats</a></li>
+          <li><a href="/manga/comments">Comments</a></li>
+          <li><a href="/manga/categories" class="font-semibold">Categories</a></li>
+          <li><a href="/manga/tierlist">Tierlist</a></li>
+          <li><a href="/manga/grid">Grid</a></li>
+          <li><a href="/manga/settings">Settings</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="text-lg font-semibold mb-4">Categories</h2>
+
+  <%!-- Add new category --%>
+  <form id="add-category-form" class="flex gap-2 mb-6 max-w-md">
+    <input type="text" id="new-cat-name" placeholder="New category name" maxlength="50" class="input input-bordered flex-1" required />
+    <button type="submit" class="btn btn-primary">Add</button>
+  </form>
+
+  <%!-- Built-in (client-side) categories. These don't exist as
+       phoenix_kit category rows — they're filter chips on the home
+       page driven by saved-manga fields. Renderable order + visibility
+       persist in `localStorage["reader:builtin_chips"]`; both this
+       page and the home-page chip strip read the same key. --%>
+  <div class="flex flex-col gap-2 max-w-md mb-6">
+    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-1">Built-in</p>
+    <div class="flex items-center gap-2 bg-base-200 rounded-lg px-4 py-3">
+      <span class="flex-1 font-medium">All</span>
+      <span class="badge badge-sm badge-ghost">Default</span>
+    </div>
+    <div id="builtin-list" class="flex flex-col gap-2">
+      <%= for {id, name, desc} <- [
+            {"reading", "Reading", "Has progress and not yet caught up"},
+            {"caughtup", "Caught Up", "Read up to the latest released chapter"},
+            {"mangatoread", "Manga To Read", "Saved manga (paged) you haven't started"},
+            {"manhwatoread", "Manhwa To Read", "Saved manhwa (scroll) you haven't started"},
+            {"completed", "Completed", "Marked as completed"}
+          ] do %>
+        <div data-builtin-id={id} class="builtin-row sortable-item flex items-center gap-2 bg-base-200 rounded-lg px-4 py-3">
+          <span class="drag-handle cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content/70 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" /></svg>
+          </span>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium truncate">{name}</p>
+            <p class="text-xs text-base-content/50 truncate">{desc}</p>
+          </div>
+          <button type="button" class="builtin-eye btn btn-ghost btn-sm btn-square" title="Show/hide on home page">
+            <%!-- Eye / eye-slash; JS swaps the path on toggle --%>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 builtin-eye-on" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 builtin-eye-off hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+          </button>
+          <span class="badge badge-sm badge-ghost">Built-in</span>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <p :if={@categories != []} class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-1">Your categories</p>
+
+  <%!-- User-created category list --%>
+  <div id="category-list" class="flex flex-col gap-2 max-w-md">
+
+    <div :for={cat <- @categories} id={"cat-row-#{cat.id}"} data-id={cat.id} class="sortable-item flex items-center gap-2 bg-base-200 rounded-lg px-4 py-3">
+      <span class="drag-handle cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content/70 flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+        </svg>
+      </span>
+      <span id={"cat-name-#{cat.id}"} class="flex-1 font-medium truncate">{cat.name}</span>
+
+      <%!-- Inline rename form (hidden by default) --%>
+      <form id={"cat-rename-#{cat.id}"} class="hidden flex-1 flex gap-1" onsubmit={"return renameCategory(event, #{cat.id})"}>
+        <input type="text" name="name" value={cat.name} maxlength="50" class="input input-sm input-bordered flex-1 min-w-0" />
+        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick={"toggleRename(#{cat.id}, false)"}>Cancel</button>
+      </form>
+
+      <%!-- Action buttons --%>
+      <div id={"cat-actions-#{cat.id}"} class="flex items-center gap-1 flex-shrink-0">
+        <button type="button" class="btn btn-ghost btn-sm btn-square" title="Rename" onclick={"toggleRename(#{cat.id}, true)"}>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm btn-square text-error" title="Delete" onclick={"deleteCategory(#{cat.id})"}>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const csrfToken = document.querySelector("meta[name=csrf-token]")?.content;
+
+  function toggleRename(id, show) {
+    document.getElementById("cat-name-" + id).classList.toggle("hidden", show);
+    document.getElementById("cat-actions-" + id).classList.toggle("hidden", show);
+    const form = document.getElementById("cat-rename-" + id);
+    form.classList.toggle("hidden", !show);
+    if (show) form.querySelector("input[name=name]").focus();
+  }
+
+  function categoryRowHTML(id, name) {
+    return `<div id="cat-row-${id}" data-id="${id}" class="sortable-item flex items-center gap-2 bg-base-200 rounded-lg px-4 py-3">
+      <span class="drag-handle cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content/70 flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+        </svg>
+      </span>
+      <span id="cat-name-${id}" class="flex-1 font-medium truncate">${name}</span>
+      <form id="cat-rename-${id}" class="hidden flex-1 flex gap-1" onsubmit="return renameCategory(event, ${id})">
+        <input type="text" name="name" value="${name}" maxlength="50" class="input input-sm input-bordered flex-1 min-w-0" />
+        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="toggleRename(${id}, false)">Cancel</button>
+      </form>
+      <div id="cat-actions-${id}" class="flex items-center gap-1 flex-shrink-0">
+        <button type="button" class="btn btn-ghost btn-sm btn-square" title="Rename" onclick="toggleRename(${id}, true)">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm btn-square text-error" title="Delete" onclick="deleteCategory(${id})">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+    </div>`;
+  }
+
+  document.getElementById("add-category-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("new-cat-name");
+    const name = input.value.trim();
+    if (!name) return;
+
+    const res = await fetch("/manga/categories", {
+      method: "POST",
+      headers: {"content-type": "application/x-www-form-urlencoded", "x-requested-with": "XMLHttpRequest", "x-csrf-token": csrfToken},
+      body: "name=" + encodeURIComponent(name)
+    });
+    const data = await res.json();
+    if (data.ok && data.id) {
+      document.getElementById("category-list").insertAdjacentHTML("beforeend", categoryRowHTML(data.id, data.name));
+      input.value = "";
+    }
+  });
+
+  async function deleteCategory(id) {
+    const row = document.getElementById("cat-row-" + id);
+    row.style.opacity = "0.5";
+    const res = await fetch("/manga/categories/" + id, {
+      method: "DELETE",
+      headers: {"x-requested-with": "XMLHttpRequest", "x-csrf-token": csrfToken}
+    });
+    const data = await res.json();
+    if (data.ok) {
+      row.remove();
+    } else {
+      row.style.opacity = "1";
+    }
+  }
+
+  function renameCategory(e, id) {
+    e.preventDefault();
+    const form = document.getElementById("cat-rename-" + id);
+    const name = form.querySelector("input[name=name]").value.trim();
+    if (!name) return false;
+
+    fetch("/manga/categories/" + id, {
+      method: "PUT",
+      headers: {"content-type": "application/x-www-form-urlencoded", "x-requested-with": "XMLHttpRequest", "x-csrf-token": csrfToken},
+      body: "name=" + encodeURIComponent(name)
+    }).then(r => r.json()).then(data => {
+      if (data.ok) {
+        document.getElementById("cat-name-" + id).textContent = data.name;
+        toggleRename(id, false);
+      }
+    });
+    return false;
+  }
+
+  // ── Built-in chip prefs (order + visibility) ────────────────────
+  // Stored as `reader:builtin_chips` = `[{id, hidden}, ...]` in user
+  // order. Same key is read by the home page chip strip so the two
+  // views stay in sync without a server round-trip.
+  const BUILTIN_PREFS_KEY = "reader:builtin_chips";
+  const BUILTIN_DEFAULTS = ["reading", "caughtup", "mangatoread", "manhwatoread", "completed"];
+
+  function readBuiltinPrefs() {
+    try {
+      const raw = localStorage.getItem(BUILTIN_PREFS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const known = new Set(BUILTIN_DEFAULTS);
+      // Drop unknown ids; append any defaults that aren't in the saved
+      // list yet (= newly-added built-ins after the user persisted).
+      const known_in_saved = parsed.filter((p) => known.has(p.id));
+      const saved_ids = new Set(known_in_saved.map((p) => p.id));
+      const appended = BUILTIN_DEFAULTS
+        .filter((id) => !saved_ids.has(id))
+        .map((id) => ({ id, hidden: false }));
+      return known_in_saved.concat(appended);
+    } catch (_) {
+      return BUILTIN_DEFAULTS.map((id) => ({ id, hidden: false }));
+    }
+  }
+  function writeBuiltinPrefs(prefs) {
+    try { localStorage.setItem(BUILTIN_PREFS_KEY, JSON.stringify(prefs)); } catch (_) {}
+  }
+
+  function applyBuiltinPrefsToManagePage() {
+    const list = document.getElementById("builtin-list");
+    if (!list) return;
+    const prefs = readBuiltinPrefs();
+    // Reorder rows to match saved order
+    prefs.forEach((p) => {
+      const row = list.querySelector(`[data-builtin-id="${p.id}"]`);
+      if (row) list.appendChild(row);
+    });
+    // Sync each row's eye state with the saved hidden flag
+    list.querySelectorAll(".builtin-row").forEach((row) => {
+      const id = row.dataset.builtinId;
+      const pref = prefs.find((p) => p.id === id);
+      const hidden = !!(pref && pref.hidden);
+      row.classList.toggle("opacity-50", hidden);
+      row.querySelector(".builtin-eye-on").classList.toggle("hidden", hidden);
+      row.querySelector(".builtin-eye-off").classList.toggle("hidden", !hidden);
+    });
+  }
+
+  function persistBuiltinFromDOM() {
+    const list = document.getElementById("builtin-list");
+    if (!list) return;
+    const prefs = Array.from(list.querySelectorAll(".builtin-row")).map((row) => {
+      const off = row.querySelector(".builtin-eye-off");
+      return { id: row.dataset.builtinId, hidden: off && !off.classList.contains("hidden") };
+    });
+    writeBuiltinPrefs(prefs);
+  }
+
+  // Eye toggle on each built-in row
+  document.querySelectorAll(".builtin-row .builtin-eye").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest(".builtin-row");
+      const on  = row.querySelector(".builtin-eye-on");
+      const off = row.querySelector(".builtin-eye-off");
+      const isHidden = off.classList.contains("hidden");
+      // Currently visible → now hide; currently hidden → now show
+      on.classList.toggle("hidden", isHidden);
+      off.classList.toggle("hidden", !isHidden);
+      row.classList.toggle("opacity-50", isHidden);
+      persistBuiltinFromDOM();
+    });
+  });
+
+  applyBuiltinPrefsToManagePage();
+
+  // Drag-to-reorder using SortableJS (same CDN as PhoenixKit). Two
+  // independent instances: one for the user's saved categories
+  // (server-persisted), one for the built-in chips (localStorage-
+  // persisted via persistBuiltinFromDOM).
+  (function() {
+    var script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js";
+    script.onload = function() {
+      Sortable.create(document.getElementById("category-list"), {
+        animation: 150,
+        handle: ".drag-handle",
+        draggable: ".sortable-item",
+        ghostClass: "opacity-50",
+        forceFallback: true,
+        fallbackOnBody: true,
+        onEnd: function() {
+          var ids = Array.from(document.querySelectorAll("#category-list .sortable-item")).map(function(el) {
+            return parseInt(el.dataset.id);
+          });
+          fetch("/manga/categories/reorder", {
+            method: "PUT",
+            headers: {"content-type": "application/json", "x-requested-with": "XMLHttpRequest", "x-csrf-token": csrfToken},
+            body: JSON.stringify({ordered_ids: ids})
+          });
+        }
+      });
+
+      var builtin = document.getElementById("builtin-list");
+      if (builtin) {
+        Sortable.create(builtin, {
+          animation: 150,
+          handle: ".drag-handle",
+          draggable: ".sortable-item",
+          ghostClass: "opacity-50",
+          forceFallback: true,
+          fallbackOnBody: true,
+          onEnd: persistBuiltinFromDOM
+        });
+      }
+    };
+    document.head.appendChild(script);
+  })();
+</script>

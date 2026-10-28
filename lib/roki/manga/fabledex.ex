@@ -1,7 +1,7 @@
 defmodule Roki.Manga.Fabledex do
   @moduledoc """
   Sync from the fabledex.com story-structure API into the local
-  `roki_manga_arcs` table — arcs (titles, descriptions, chapter spans),
+  `manga_story_data` table — arcs (titles, descriptions, chapter spans),
   volumes (numbers, chapter spans, release dates, covers) and per-chapter units (titles, summaries, characters, page counts).
 
   Pages never call fabledex: they render the saved row (`get/2`). A
@@ -20,10 +20,11 @@ defmodule Roki.Manga.Fabledex do
   pattern as the MAL credentials in config/mal.secret.exs.
   """
 
+  import Ecto.Query
   require Logger
 
-  alias Roki.Manga.Library
   alias Roki.Repo
+  alias Roki.Manga.Library.MangaStoryData
 
   @stale_after :timer.hours(24)
 
@@ -31,34 +32,16 @@ defmodule Roki.Manga.Fabledex do
 
   @doc "The saved story row for `{source, slug}`, or nil if never synced."
   def get(source, slug) do
-    sql = """
-    select a.story_slug, a.story, a.arcs, a.units, a.volumes, a.synced_at
-      from roki_manga_arcs a
-      join roki_manga_titles t on t.id = a.manga_id
-     where t.source = $1 and t.slug = $2
-    """
-
-    case Repo.query!(sql, [source, slug]) do
-      %{rows: [[story_slug, story, arcs, units, volumes, synced_at]]} ->
-        %{
-          story_slug: story_slug,
-          story: story || %{},
-          arcs: arcs || [],
-          units: units || [],
-          volumes: volumes || [],
-          synced_at: synced_at
-        }
-
-      _ ->
-        nil
-    end
+    MangaStoryData
+    |> where(source: ^source, slug: ^slug)
+    |> Repo.one()
   end
 
   @doc """
   Saved arcs as `%{id, position, title, description, from, to, ongoing}`
   maps sorted by position — `[]` for nil / unmatched rows.
   """
-  def arcs(%{arcs: arcs}) when is_list(arcs) do
+  def arcs(%MangaStoryData{arcs: arcs}) do
     arcs
     |> Enum.map(fn a ->
       %{
@@ -85,7 +68,7 @@ defmodule Roki.Manga.Fabledex do
   Volumes without a chapter span are dropped — nothing to fold into them.
   `[]` for nil / unmatched rows.
   """
-  def volumes(%{volumes: volumes}) when is_list(volumes) do
+  def volumes(%MangaStoryData{volumes: volumes}) do
     for v <- volumes || [], is_integer(v["from"]), is_integer(v["to"]) do
       %{
         id: v["id"],
@@ -106,12 +89,8 @@ defmodule Roki.Manga.Fabledex do
   def volumes(_), do: []
 
   @doc "Saved chapter titles as `%{number => title}` (titled units only)."
-  def chapter_titles(%{units: units}) when is_list(units) do
-    for %{"number" => n, "title" => t} <- units,
-        is_integer(n),
-        is_binary(t),
-        t != "",
-        into: %{},
+  def chapter_titles(%MangaStoryData{units: units}) do
+    for %{"number" => n, "title" => t} <- units, is_integer(n), is_binary(t), t != "", into: %{},
         do: {n, t}
   end
 
@@ -127,11 +106,9 @@ defmodule Roki.Manga.Fabledex do
   @doc "True when `row` is missing or older than the staleness window."
   def stale?(nil), do: true
 
-  def stale?(%{synced_at: %NaiveDateTime{} = at}) do
-    NaiveDateTime.diff(NaiveDateTime.utc_now(), at, :millisecond) > @stale_after
+  def stale?(%MangaStoryData{synced_at: at}) do
+    DateTime.diff(DateTime.utc_now(), at, :millisecond) > @stale_after
   end
-
-  def stale?(_), do: true
 
   # ── Syncing ─────────────────────────────────────────────────────────
 
@@ -173,8 +150,7 @@ defmodule Roki.Manga.Fabledex do
           q = edition_query(story)
 
           with {:ok, arcs} <- fetch_list("/api/v1/stories/#{story_slug}/arcs#{q}", "arcs"),
-               {:ok, volumes} <-
-                 fetch_list("/api/v1/stories/#{story_slug}/volumes#{q}", "volumes"),
+               {:ok, volumes} <- fetch_list("/api/v1/stories/#{story_slug}/volumes#{q}", "volumes"),
                {:ok, units} <- fetch_list("/api/v1/stories/#{story_slug}/units#{q}", "units") do
             save(source, slug, %{
               story_slug: story_slug,
@@ -185,19 +161,13 @@ defmodule Roki.Manga.Fabledex do
             })
           else
             _ ->
-              Logger.warning(
-                "fabledex sync failed for #{source}/#{slug} (story #{story_slug}#{q}); kept saved copy"
-              )
-
+              Logger.warning("fabledex sync failed for #{source}/#{slug} (story #{story_slug}#{q}); kept saved copy")
               :error
           end
       end
     else
       _ ->
-        Logger.warning(
-          "fabledex sync failed for #{source}/#{slug} (stories listing); kept saved copy"
-        )
-
+        Logger.warning("fabledex sync failed for #{source}/#{slug} (stories listing); kept saved copy")
         :error
     end
   end
@@ -213,39 +183,24 @@ defmodule Roki.Manga.Fabledex do
   end
 
   defp save(source, slug, attrs) do
-    attrs = Map.put(attrs, :synced_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))
+    attrs =
+      Map.merge(attrs, %{
+        source: source,
+        slug: slug,
+        synced_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
 
-    id = Library.series_id(source, slug)
-
-    Repo.query!(
-      """
-      insert into roki_manga_arcs (manga_id, story_slug, story, arcs, units, volumes, synced_at, inserted_at, updated_at)
-      values ($1, $2, $3::text::jsonb,
-              array(select jsonb_array_elements($4::text::jsonb)),
-              array(select jsonb_array_elements($5::text::jsonb)),
-              array(select jsonb_array_elements($6::text::jsonb)),
-              $7, now(), now())
-      on conflict (manga_id) do update
-        set story_slug = excluded.story_slug, story = excluded.story, arcs = excluded.arcs,
-            units = excluded.units, volumes = excluded.volumes, synced_at = excluded.synced_at,
-            updated_at = now()
-      """,
-      [
-        id,
-        attrs.story_slug,
-        Jason.encode!(attrs.story),
-        # One JSON array per column, unpacked into a jsonb[] by Postgres. Note `::text::jsonb`
-        # rather than `::jsonb`: a bare jsonb cast makes Postgrex encode the string we pass *as*
-        # JSON, so the column ends up holding one long JSON string instead of an array of
-        # objects, and every reader then gets text where it expects a map.
-        Jason.encode!(attrs.arcs),
-        Jason.encode!(attrs.units),
-        Jason.encode!(attrs.volumes),
-        attrs.synced_at
-      ]
+    %MangaStoryData{}
+    |> MangaStoryData.changeset(attrs)
+    |> Repo.insert(
+      on_conflict: {:replace, [:story_slug, :story, :arcs, :volumes, :units, :synced_at, :updated_at]},
+      conflict_target: [:source, :slug],
+      returning: true
     )
-
-    {:ok, get(source, slug)}
+    |> case do
+      {:ok, row} -> {:ok, row}
+      {:error, _} -> :error
+    end
   end
 
   # ── Story matching ──────────────────────────────────────────────────
@@ -253,9 +208,7 @@ defmodule Roki.Manga.Fabledex do
   @doc false
   def match_story(stories, opts) do
     ids =
-      for {kind, id} <- [mal: opts[:mal_id], anilist: opts[:anilist_id]],
-          id,
-          do: {kind, to_string(id)}
+      for {kind, id} <- [mal: opts[:mal_id], anilist: opts[:anilist_id]], id, do: {kind, to_string(id)}
 
     candidates = (opts[:titles] || []) ++ split_alt_titles(opts[:alt_titles])
     titles = for t <- candidates, is_binary(t), n = normalize(t), n != "", do: n

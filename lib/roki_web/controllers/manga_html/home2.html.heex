@@ -1,0 +1,1534 @@
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">
+      📖 Reader <span class="badge badge-sm badge-primary align-middle">v2</span>
+    </a>
+    <div class="flex items-center gap-2">
+      <Layouts.theme_toggle />
+      <Layouts.notifications_bell parent={@conn} scope={@phoenix_kit_current_scope} />
+      <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+          <li><a href="/manga" class="font-semibold">Home</a></li>
+          <li><a href="/manga/explore">Explore</a></li>
+          <li><a href="/manga/history">History</a></li>
+          <li><a href="/manga/stats">Stats</a></li>
+          <li><a href="/manga/comments">Comments</a></li>
+          <li><a href="/manga/categories">Categories</a></li>
+          <li><a href="/manga/tierlist">Tierlist</a></li>
+          <li><a href="/manga/grid">Grid</a></li>
+          <li><a href="/manga/settings">Settings</a></li>
+          <li>
+            <form method="post" action={~p"/manga/manga_v2"}>
+              <input type="hidden" name="_method" value="put" />
+              <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+              <input type="hidden" name="enabled" value="0" />
+              <button type="submit" class="w-full text-left">Switch to old reader</button>
+            </form>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <%= if @saved_manga != [] || @resume_manga do %>
+    <% resume = @resume_manga %>
+    <%= if resume do %>
+      <%!-- Cinematic resume hero: the current cover blurred/darkened as
+           a full-bleed backdrop, sharp cover + big title + Continue in
+           the foreground, chapter progress as a bar along the bottom
+           edge. Progress bar fills with the inverse of the "% left"
+           text — same scope, one story. Falls back to the overall manga
+           percent when there's no per-chapter data. --%>
+      <% resume_pct =
+        chapter_read_percent(resume.last_page, resume.last_page_fraction, resume.last_chapter_total_pages) ||
+          Roki.Manga.Library.chapter_progress_percent(resume) %>
+      <%
+        # Strip / manhwa mode → percent-left tail; paged mode →
+        # "Page N" when we have it; otherwise just the chapter
+        # (mirrors the manga details page label).
+        strip? = strip_mode?(resume.reading_mode)
+        pct_left =
+          strip? &&
+            percent_left(
+              resume.last_page,
+              resume.last_page_fraction,
+              resume.last_chapter_total_pages
+            )
+
+        tail =
+          cond do
+            pct_left -> " · #{pct_left}% left"
+            !strip? && resume.last_page -> " · Page #{resume.last_page}"
+            true -> ""
+          end
+
+        resume_cover = cover_image_src(resume, @cover_paths, "medium")
+      %>
+      <%!-- The whole banner is a big continue-to-chapter target (the
+           full-surface absolute link below, same pattern as the grid
+           tiles) — tap anywhere, no precise aiming, mobile friendly.
+           The Details pill is a real link layered ABOVE that surface
+           (z-20 + pointer-events-auto) so the shelf also gives access
+           to the details page without nesting anchors. --%>
+      <div class="v2-hero group relative rounded-2xl overflow-hidden mb-6 shadow-lg hover:shadow-2xl transition-shadow">
+        <img
+          src={resume_cover}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          class="v2-hero-backdrop absolute inset-0 w-full h-full object-cover scale-110 blur-xl brightness-[0.35] saturate-150 transition-[filter] duration-300 group-hover:brightness-[0.45]"
+        />
+        <div class="v2-hero-overlay absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent"></div>
+        <a
+          href={~p"/manga/#{resume.source}/#{resume.slug}/#{resume.last_chapter}"}
+          class="absolute inset-0 z-10"
+          aria-label={"Continue #{resume.title} at chapter #{resume.last_chapter}"}
+        >
+        </a>
+        <div class="relative z-20 flex items-center gap-4 sm:gap-6 p-4 sm:p-6 pointer-events-none">
+          <img
+            src={resume_cover}
+            alt={resume.title}
+            decoding="async"
+            class="w-24 sm:w-32 aspect-[3/4] rounded-xl object-cover shadow-2xl ring-1 ring-white/20 group-hover:ring-white/40 transition-all flex-shrink-0"
+          />
+          <div class="flex-1 min-w-0 text-white">
+            <p class="text-[11px] uppercase tracking-widest text-white/60 mb-1">Continue reading</p>
+            <h2 class="text-xl sm:text-3xl font-extrabold drop-shadow-md line-clamp-2">{resume.title}</h2>
+            <p class="text-sm text-white/70 mt-1 truncate">
+              <%= if resume.max_chapter && resume.max_chapter != resume.last_chapter do %>
+                Rereading Ch. {resume.last_chapter}{tail}
+                <span class="text-white/40">· Read up to Ch. {resume.max_chapter}</span>
+              <% else %>
+                Chapter {resume.last_chapter}{tail}
+              <% end %>
+            </p>
+            <a
+              href={~p"/manga/manga2/#{resume.source}/#{resume.slug}"}
+              class="btn btn-sm sm:btn-md rounded-full px-5 sm:px-7 mt-3 sm:mt-4 gap-2 pointer-events-auto bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-sm shadow-lg"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Details
+            </a>
+          </div>
+        </div>
+        <div :if={resume_pct} class="absolute bottom-0 left-0 z-20 h-1 bg-primary rounded-r-full pointer-events-none" style={"width: #{resume_pct}%"}></div>
+      </div>
+
+      <%= if @auto_resume do %>
+        <dialog id="auto-resume-modal" class="modal cursor-pointer">
+          <%= if @auto_resume_art_url do %>
+            <div class="fixed inset-0 z-[-1]" style={"background: url('#{@auto_resume_art_url}') center/cover no-repeat; opacity: 0.5;"}></div>
+          <% end %>
+          <div class="modal-box pointer-events-none">
+            <h3 class="text-lg font-bold mb-2">Auto-resume</h3>
+            <p>
+              Resuming <strong>{resume.title}</strong> (Chapter {resume.last_chapter}) in <span id="auto-resume-countdown">{@auto_resume_timer}</span> seconds...
+            </p>
+            <p class="text-sm text-base-content/50 mt-3">Click anywhere to cancel</p>
+          </div>
+          <form method="dialog" class="modal-backdrop"><button>close</button></form>
+        </dialog>
+        <script>
+          (function() {
+            var count = <%= @auto_resume_timer %>;
+            var url = "<%= ~p"/manga/#{resume.source}/#{resume.slug}/#{resume.last_chapter}" %>";
+            var el = document.getElementById('auto-resume-countdown');
+            var modal = document.getElementById('auto-resume-modal');
+            var timer;
+            modal.showModal();
+            timer = setInterval(function() {
+              count--;
+              if (count <= 0) {
+                clearInterval(timer);
+                window.location = url;
+              } else {
+                el.textContent = count;
+              }
+            }, 1000);
+            modal.addEventListener('click', function() {
+              clearInterval(timer);
+              modal.close();
+            });
+            modal.addEventListener('close', function() {
+              clearInterval(timer);
+            });
+          })();
+        </script>
+      <% end %>
+    <% end %>
+    <%!-- Category filter chips + sort/filter button.
+         v2 chip styling: soft glass pills instead of daisy buttons.
+         Three states via classes updateChipStyles toggles:
+           (none)         → neutral glass pill
+           .chip-active   → filled primary, soft glow
+           .chip-excluded → red-tinted outline + line-through
+         Plain CSS on daisyUI color vars so the states follow the
+         theme in both light and dark. --%>
+    <style>
+      .h2-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        flex-shrink: 0;
+        height: 2rem;
+        padding: 0 0.875rem;
+        border-radius: 9999px;
+        border: 1px solid transparent;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+        background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+        color: color-mix(in oklab, var(--color-base-content) 75%, transparent);
+        transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+      }
+      .h2-chip:hover {
+        background: color-mix(in oklab, var(--color-base-content) 12%, transparent);
+        color: var(--color-base-content);
+      }
+      .h2-chip:active { transform: scale(0.96); }
+      .h2-chip.chip-active {
+        background: var(--color-primary);
+        color: var(--color-primary-content);
+        box-shadow: 0 4px 14px color-mix(in oklab, var(--color-primary) 35%, transparent);
+      }
+      .h2-chip.chip-excluded {
+        background: color-mix(in oklab, var(--color-error) 12%, transparent);
+        border-color: color-mix(in oklab, var(--color-error) 40%, transparent);
+        color: var(--color-error);
+        text-decoration: line-through;
+      }
+      .h2-chip .chip-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.25rem;
+        height: 1.125rem;
+        padding: 0 0.375rem;
+        border-radius: 9999px;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        background: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+      }
+      .h2-chip.chip-active .chip-count {
+        background: color-mix(in oklab, var(--color-primary-content) 22%, transparent);
+      }
+      .h2-chip .chip-count.hidden { display: none; }
+      /* View density — columns per row come from the user's View
+         setting (sort dropdown), separate values for mobile (<1024px)
+         and desktop. Gap shrinks as columns grow so 7-across doesn't
+         drown in gutters. */
+      .manga-grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols-m, 2), minmax(0, 1fr));
+        gap: calc(1.3rem - 0.13rem * var(--cols-m, 2));
+      }
+      @media (min-width: 1024px) {
+        .manga-grid {
+          grid-template-columns: repeat(var(--cols-d, 5), minmax(0, 1fr));
+          gap: calc(1.3rem - 0.13rem * var(--cols-d, 5));
+        }
+      }
+      /* Hide the horizontal scrollbar on the chip strip — swipe/drag
+         still scrolls it. */
+      #category-chips { scrollbar-width: none; }
+      #category-chips::-webkit-scrollbar { display: none; }
+    </style>
+    <div class="flex items-center gap-2 mb-4">
+      <div id="category-chips" class="flex items-center gap-2 overflow-x-auto pb-1 flex-1 min-w-0">
+        <%!-- Chip labels stay clean — the server-computed full-library
+             counts (chip_counts / category_counts assigns) live in the
+             hover tooltips, and the visible "N titles" line after the
+             Sort button tracks the current view. --%>
+        <button
+          type="button"
+          class={["h2-chip cat-chip", if(@active_category == nil, do: "chip-active")]}
+          onclick="filterCategory(null)"
+          title={"#{@chip_counts.all} titles"}
+        >
+          All
+          <span class={["chip-count", @active_category != nil && "hidden"]}>{@chip_counts.all}</span>
+        </button>
+        <button
+          type="button"
+          class="h2-chip reading-chip"
+          onclick="toggleReading()"
+          title={"#{@chip_counts.reading} titles"}
+        >
+          Reading
+          <span class="chip-count hidden"></span>
+        </button>
+        <button
+          type="button"
+          class="h2-chip caughtup-chip"
+          onclick="toggleCaughtUp()"
+          title={"#{@chip_counts.caughtup} titles"}
+        >
+          Caught Up
+          <span class="chip-count hidden"></span>
+        </button>
+        <button
+          type="button"
+          class="h2-chip mangatoread-chip"
+          onclick="toggleMangaToRead()"
+          title={"#{@chip_counts.mangatoread} titles"}
+        >
+          Manga To Read
+          <span class="chip-count hidden"></span>
+        </button>
+        <button
+          type="button"
+          class="h2-chip manhwatoread-chip"
+          onclick="toggleManhwaToRead()"
+          title={"#{@chip_counts.manhwatoread} titles"}
+        >
+          Manhwa To Read
+          <span class="chip-count hidden"></span>
+        </button>
+        <button
+          type="button"
+          class="h2-chip completed-chip"
+          onclick="toggleCompleted()"
+          title={"#{@chip_counts.completed} titles"}
+        >
+          Completed
+          <span class="chip-count hidden"></span>
+        </button>
+        <%= for cat <- @categories do %>
+          <button
+            type="button"
+            data-category-id={cat.id}
+            class={["h2-chip cat-chip", if(@active_category == cat.id, do: "chip-active")]}
+            onclick={"filterCategory(#{cat.id})"}
+            title={"#{Map.get(@category_counts, cat.id, 0)} titles"}
+          >
+            {cat.name}
+            <span class={["chip-count", @active_category != cat.id && "hidden"]}>{Map.get(@category_counts, cat.id, 0)}</span>
+          </button>
+          <button
+            type="button"
+            data-bulk-for={cat.id}
+            class={["btn btn-sm btn-circle btn-ghost bulk-add-btn", if(@active_category != cat.id, do: "hidden", else: "")]}
+            onclick="openBulkAddModal()"
+            title="Add manga to category"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        <% end %>
+      </div>
+      <%!-- Bulk-sync chapter counts for every caught-up title.
+           Hidden until the Caught Up chip is the active mode; JS
+           toggles via `updateChipStyles`. Sits next to the sort
+           dropdown so all "actions" stay grouped on the right.
+           Posts to /manga/sync_caught_up, which iterates the same
+           refresh-one path the manual refresh button uses and fires
+           the new-chapters bell notification per title. --%>
+      <button
+        type="button"
+        id="caughtup-sync-btn"
+        class="btn btn-sm btn-ghost hidden flex-shrink-0 gap-1"
+        title="Sync chapters on all caught-up titles"
+        onclick="syncCaughtUp()"
+      >
+        <svg id="caughtup-sync-icon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        <span id="caughtup-sync-spinner" class="loading loading-spinner loading-xs hidden"></span>
+        <span class="hidden sm:inline">Sync</span>
+      </button>
+      <div class="dropdown dropdown-end flex-shrink-0">
+        <button id="sort-filter-btn" tabindex="0" class="btn btn-sm btn-ghost gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+          </svg>
+          <span id="sort-filter-label" class="hidden sm:inline">Sort</span>
+        </button>
+        <ul tabindex="0" class="dropdown-content z-[1] menu menu-sm p-2 shadow bg-base-200 rounded-box w-52">
+          <li class="menu-title text-xs">Sort by</li>
+          <li><a onclick="setSort('updated_at')" data-sort="updated_at">Last Read</a></li>
+          <li><a onclick="setSort('newest_chapter_at')" data-sort="newest_chapter_at">Newest Chapter</a></li>
+          <li><a onclick="setSort('inserted_at')" data-sort="inserted_at">Date Added</a></li>
+          <li><a onclick="setSort('chapters_desc')" data-sort="chapters_desc">Most Chapters</a></li>
+          <li><a onclick="setSort('chapters_asc')" data-sort="chapters_asc">Fewest Chapters</a></li>
+          <li><a onclick="setSort('catch_up')" data-sort="catch_up">Fastest to Catch Up</a></li>
+          <li class="menu-title text-xs mt-1">Filter</li>
+          <li><a onclick="setFilter('all')" data-filter="all">All</a></li>
+          <li><a onclick="setFilter('read')" data-filter="read">Read</a></li>
+          <li><a onclick="setFilter('unread')" data-filter="unread">Unread</a></li>
+          <li class="menu-title text-xs mt-1">Series status</li>
+          <li><a onclick="setPublicationStatus('any')" data-pub-status="any">Any</a></li>
+          <li><a onclick="setPublicationStatus('ongoing')" data-pub-status="ongoing">Ongoing</a></li>
+          <li><a onclick="setPublicationStatus('completed')" data-pub-status="completed">Completed</a></li>
+          <li><a onclick="setPublicationStatus('hiatus')" data-pub-status="hiatus">Hiatus</a></li>
+          <li><a onclick="setPublicationStatus('unknown')" data-pub-status="unknown">Unknown</a></li>
+          <li class="menu-title text-xs mt-1">View · per row</li>
+          <%!-- Edits the setting for the device you're on (mobile
+               <1024px / desktop) — each remembers its own value. --%>
+          <li>
+            <div class="flex items-center gap-0.5">
+              <%= for n <- 2..7 do %>
+                <button type="button" class="btn btn-xs btn-ghost btn-square" data-grid-cols={n} onclick={"setGridCols(#{n})"}>{n}</button>
+              <% end %>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="manga-grid" class="manga-grid">
+      <%!-- Cover-dominant tile: the art IS the card. Full-bleed cover,
+           bottom gradient carrying title + source + action pill, and a
+           thin progress strip along the bottom edge. The whole tile
+           links to the details page; the pill (Continue/Start) sits
+           above that link via z-index. data-key drives the FLIP
+           reorder animation. --%>
+      <div :for={manga <- @saved_manga} class="group relative rounded-xl overflow-hidden bg-base-300 animate-pulse cover-shell shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 aspect-[3/4]" data-key={"#{manga.source}:#{manga.slug}"} data-inserted-at={manga.inserted_at} data-updated-at={manga.updated_at} data-newest-chapter-at={manga.newest_chapter_at} data-last-chapter={manga.last_chapter} data-total-chapters={manga.total_chapters} data-last-chapter-number={manga.last_chapter_number} data-completed={to_string(manga.completed || false)} data-kind={tierlist_kind(manga)} data-publication-status={publication_status(manga, @publication_statuses)}>
+        <img
+          src={cover_image_src(manga, @cover_paths, "medium")}
+          alt={manga.title}
+          loading="lazy"
+          decoding="async"
+          class="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          onload="this.parentElement.classList.remove('animate-pulse','bg-base-300')"
+          onerror="this.parentElement.classList.remove('animate-pulse')"
+        />
+        <a href={~p"/manga/manga2/#{manga.source}/#{manga.slug}"} class="absolute inset-0 z-10" aria-label={manga.title}></a>
+        <% chapter_pct = chapter_read_percent(manga.last_page, manga.last_page_fraction, manga.last_chapter_total_pages) %>
+        <%!-- Both corner chips live in ONE flex row pinned across the
+             card top, so they're always on exactly the same level. The
+             comment chip carries ml-auto so it hugs the right edge even
+             when there's no chapter chip on the left. --%>
+        <div class="absolute top-1 left-1 right-1 z-20 flex items-center gap-1 pointer-events-none">
+          <span :if={manga.last_chapter} class="badge badge-sm bg-black/45 backdrop-blur-md border-white/15 text-white/90 font-semibold chapter-progress" style={if chapter_pct, do: "--progress: #{chapter_pct}%"}>
+            {manga.last_chapter}<%= if manga.max_chapter && manga.max_chapter != manga.last_chapter do %>
+              <span class="opacity-50">&nbsp;/ {manga.max_chapter}</span>
+            <% else %>
+              <% total = manga.last_chapter_number || manga.total_chapters %>
+              <%= if total do %><span class="opacity-50">&nbsp;/ {total}</span><% end %>
+            <% end %>
+          </span>
+          <% count = Map.get(@comment_counts, {manga.source, manga.slug}, 0) %>
+          <span :if={count > 0} class="badge badge-sm badge-primary gap-1 ml-auto">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+            {count}
+          </span>
+        </div>
+        <div class="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/90 via-black/40 to-transparent px-2.5 pt-10 pb-2.5 pointer-events-none">
+          <h2 class="text-sm font-bold text-white line-clamp-2 drop-shadow-lg">{manga.title}</h2>
+          <div class="flex items-center justify-end gap-2 mt-1.5">
+            <%= if manga.completed do %>
+              <span class="badge badge-sm badge-success gap-1 flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                Done
+              </span>
+            <% else %>
+              <%= if manga.last_chapter do %>
+                <a
+                  href={~p"/manga/#{manga.source}/#{manga.slug}/#{manga.last_chapter}"}
+                  class={["btn btn-xs rounded-full px-3 gap-1 flex-shrink-0 shadow-md pointer-events-auto", if(manga.max_chapter && manga.max_chapter != manga.last_chapter, do: "btn-secondary", else: "btn-primary")]}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                  {manga.last_chapter}
+                </a>
+              <% else %>
+                <a
+                  href={~p"/manga/#{manga.source}/#{manga.slug}"}
+                  class="btn btn-xs btn-primary rounded-full px-3 flex-shrink-0 shadow-md pointer-events-auto"
+                >
+                  Start
+                </a>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+        <% pct = if manga.completed, do: 100, else: Roki.Manga.Library.chapter_progress_percent(manga) %>
+        <div :if={pct} class={["absolute bottom-0 left-0 z-30 h-[3px] pointer-events-none", if(manga.completed, do: "bg-success", else: "bg-primary")]} style={"width: #{pct}%"}></div>
+      </div>
+    </div>
+    <div id="manga-empty" class="hidden text-center py-16">
+      <p id="manga-empty-text" class="text-base-content/70 mb-4">No manga in this category.</p>
+    </div>
+  <% else %>
+    <%= if @active_category != nil do %>
+      <%!-- Category filter chips when filtering with no results --%>
+      <div class="flex items-center gap-2 mb-4">
+        <%= if @categories != [] do %>
+          <div id="category-chips" class="flex items-center gap-2 overflow-x-auto pb-1 flex-1 min-w-0">
+            <button type="button" class="h2-chip cat-chip" onclick="filterCategory(null)" title={"#{@chip_counts.all} titles"}>
+              All
+              <span class="chip-count hidden">{@chip_counts.all}</span>
+            </button>
+            <%= for cat <- @categories do %>
+              <button
+                type="button"
+                data-category-id={cat.id}
+                class={["h2-chip cat-chip", if(@active_category == cat.id, do: "chip-active")]}
+                onclick={"filterCategory(#{cat.id})"}
+                title={"#{Map.get(@category_counts, cat.id, 0)} titles"}
+              >
+                {cat.name}
+                <span class={["chip-count", @active_category != cat.id && "hidden"]}>{Map.get(@category_counts, cat.id, 0)}</span>
+              </button>
+              <button
+                type="button"
+                data-bulk-for={cat.id}
+                class={["btn btn-sm btn-circle btn-ghost bulk-add-btn", if(@active_category != cat.id, do: "hidden", else: "")]}
+                onclick="openBulkAddModal()"
+                title="Add manga to category"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            <% end %>
+          </div>
+        <% else %>
+          <div class="flex-1"></div>
+        <% end %>
+        <div class="dropdown dropdown-end flex-shrink-0">
+          <button tabindex="0" class="btn btn-sm btn-ghost gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+            </svg>
+            <span class="hidden sm:inline">Sort</span>
+          </button>
+          <ul tabindex="0" class="dropdown-content z-[1] menu menu-sm p-2 shadow bg-base-200 rounded-box w-52">
+            <li class="menu-title text-xs">Sort by</li>
+            <li><a onclick="setSort('updated_at')" data-sort="updated_at">Last Read</a></li>
+            <li><a onclick="setSort('newest_chapter_at')" data-sort="newest_chapter_at">Newest Chapter</a></li>
+            <li><a onclick="setSort('inserted_at')" data-sort="inserted_at">Date Added</a></li>
+            <li><a onclick="setSort('chapters_desc')" data-sort="chapters_desc">Most Chapters</a></li>
+            <li><a onclick="setSort('chapters_asc')" data-sort="chapters_asc">Fewest Chapters</a></li>
+            <li><a onclick="setSort('catch_up')" data-sort="catch_up">Fastest to Catch Up</a></li>
+            <li class="menu-title text-xs mt-1">Filter</li>
+            <li><a onclick="setFilter('all')" data-filter="all">All</a></li>
+            <li><a onclick="setFilter('read')" data-filter="read">Read</a></li>
+            <li><a onclick="setFilter('unread')" data-filter="unread">Unread</a></li>
+          </ul>
+        </div>
+      </div>
+      <div id="manga-grid" class="manga-grid"></div>
+      <div id="manga-empty" class="text-center py-16">
+        <p class="text-base-content/70 mb-4">No manga in this category.</p>
+      </div>
+    <% else %>
+      <div class="text-center py-16">
+        <p class="text-base-content/70">
+          No saved manga yet. Visit a manga page and click Save to add it here.
+        </p>
+      </div>
+    <% end %>
+  <% end %>
+</div>
+<%!-- Bulk add to category modal --%>
+<dialog id="bulk-add-modal" class="modal">
+  <div class="modal-box max-w-4xl w-11/12">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">X</button>
+    </form>
+    <h3 id="bulk-add-title" class="text-lg font-bold mb-4">Add to category</h3>
+    <div id="bulk-add-loading" class="flex justify-center py-8">
+      <span class="loading loading-spinner loading-md"></span>
+    </div>
+    <div id="bulk-add-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[70vh] overflow-y-auto"></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+  // Mirrors the server-rendered cover-dominant tile above — full-bleed
+  // cover, gradient footer with title/source/action pill, bottom
+  // progress strip, data-key for the FLIP reorder animation.
+  function mangaCardHTML(m) {
+    const isRereading = m.max_chapter && m.last_chapter && m.max_chapter !== m.last_chapter;
+    let chapterBadge = '';
+    if (m.last_chapter) {
+      const total = m.last_chapter_number || m.total_chapters;
+      const suffix = isRereading
+        ? `<span class="opacity-50">&nbsp;/ ${m.max_chapter}</span>`
+        : (total ? `<span class="opacity-50">&nbsp;/ ${total}</span>` : '');
+      const chapterStyle = (typeof m.chapter_percent === 'number') ? ` style="--progress: ${m.chapter_percent}%"` : '';
+      chapterBadge = `<span class="badge badge-sm bg-black/45 backdrop-blur-md border-white/15 text-white/90 font-semibold chapter-progress"${chapterStyle}>${m.last_chapter}${suffix}</span>`;
+    }
+    const commentBadge = m.comment_count > 0
+      ? `<span class="badge badge-sm badge-primary gap-1 ml-auto"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>${m.comment_count}</span>`
+      : '';
+    const playIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>';
+    let actionPill;
+    if (m.completed) {
+      actionPill = `<span class="badge badge-sm badge-success gap-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>Done</span>`;
+    } else if (m.last_chapter) {
+      const btnClass = isRereading ? 'btn-secondary' : 'btn-primary';
+      actionPill = `<a href="/manga/${m.source}/${m.slug}/${m.last_chapter}" class="btn btn-xs ${btnClass} rounded-full px-3 gap-1 flex-shrink-0 shadow-md pointer-events-auto">${playIcon}${m.last_chapter}</a>`;
+    } else {
+      actionPill = `<a href="/manga/${m.source}/${m.slug}" class="btn btn-xs btn-primary rounded-full px-3 flex-shrink-0 shadow-md pointer-events-auto">Start</a>`;
+    }
+    const pct = m.completed ? 100 : (typeof m.percent_read === 'number' ? m.percent_read : null);
+    const progressStrip = pct
+      ? `<div class="absolute bottom-0 left-0 z-30 h-[3px] pointer-events-none ${m.completed ? 'bg-success' : 'bg-primary'}" style="width: ${pct}%"></div>`
+      : '';
+    const safeTitle = m.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+
+    return `<div class="group relative rounded-xl overflow-hidden bg-base-300 animate-pulse cover-shell shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 aspect-[3/4]" data-key="${m.source}:${m.slug}" data-inserted-at="${m.inserted_at || ''}" data-updated-at="${m.updated_at || ''}" data-newest-chapter-at="${m.newest_chapter_at || ''}" data-last-chapter="${m.last_chapter || ''}" data-total-chapters="${m.total_chapters || ''}" data-last-chapter-number="${m.last_chapter_number || ''}" data-completed="${m.completed || false}" data-kind="${m.kind || ''}" data-publication-status="${m.publication_status || 'unknown'}">
+      <img src="${m.cover_url}" alt="${safeTitle}" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" onload="this.parentElement.classList.remove('animate-pulse','bg-base-300')" onerror="this.parentElement.classList.remove('animate-pulse')" />
+      <a href="/manga/manga2/${m.source}/${m.slug}" class="absolute inset-0 z-10" aria-label="${safeTitle}"></a>
+      <div class="absolute top-1 left-1 right-1 z-20 flex items-center gap-1 pointer-events-none">${chapterBadge}${commentBadge}</div>
+      <div class="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/90 via-black/40 to-transparent px-2.5 pt-10 pb-2.5 pointer-events-none">
+        <h2 class="text-sm font-bold text-white line-clamp-2 drop-shadow-lg">${safeTitle}</h2>
+        <div class="flex items-center justify-end gap-2 mt-1.5">
+          ${actionPill}
+        </div>
+      </div>
+      ${progressStrip}
+    </div>`;
+  }
+
+  var _activeCategoryId = <%= if @active_category, do: @active_category, else: "null" %>;
+  var _excludedCategoryId = null;
+  var _categoryNames = {<%= raw(Enum.map(@categories, fn c -> "#{c.id}:#{Jason.encode!(c.name)}" end) |> Enum.join(",")) %>};
+  var _categoryCache = {};
+
+  // View density — manga per row, 2..7, separate mobile/desktop.
+  function _clampCols(raw, dflt) {
+    var n = parseInt(raw, 10);
+    return (isNaN(n) || n < 2 || n > 7) ? dflt : n;
+  }
+  var _gridColsMobile = _clampCols(localStorage.getItem('manga_grid_cols_mobile'), 2);
+  var _gridColsDesktop = _clampCols(localStorage.getItem('manga_grid_cols_desktop'), 5);
+  function _isMobileView() { return window.innerWidth < 1024; }
+  function applyGridCols() {
+    var grid = document.getElementById('manga-grid');
+    if (grid) {
+      grid.style.setProperty('--cols-m', _gridColsMobile);
+      grid.style.setProperty('--cols-d', _gridColsDesktop);
+    }
+    var current = _isMobileView() ? _gridColsMobile : _gridColsDesktop;
+    document.querySelectorAll('[data-grid-cols]').forEach(function(el) {
+      el.classList.toggle('btn-active', parseInt(el.dataset.gridCols, 10) === current);
+    });
+  }
+  function setGridCols(n) {
+    if (_isMobileView()) {
+      _gridColsMobile = _clampCols(n, _gridColsMobile);
+      localStorage.setItem('manga_grid_cols_mobile', String(_gridColsMobile));
+    } else {
+      _gridColsDesktop = _clampCols(n, _gridColsDesktop);
+      localStorage.setItem('manga_grid_cols_desktop', String(_gridColsDesktop));
+    }
+    // FLIP the relayout so tiles glide into the new density.
+    animateGridReorder(applyGridCols);
+  }
+  applyGridCols();
+  // Re-highlight if the window crosses the mobile/desktop breakpoint.
+  window.addEventListener('resize', applyGridCols);
+
+  var _currentSort = localStorage.getItem('manga_sort') || 'updated_at';
+  var _currentFilter = localStorage.getItem('manga_filter') || 'all';
+  var _publicationStatus = localStorage.getItem('manga_publication_status') || 'any';
+  var _readingMode = false;
+  var _caughtUpMode = false;
+  var _mangaToReadMode = false;
+  var _manhwaToReadMode = false;
+  var _completedMode = false;
+  // When a built-in chip is clicked while *already active*, it flips
+  // into exclude mode — same UX as custom-category chips. Holds the
+  // mode name ("reading" / "caughtup" / "mangatoread" /
+  // "manhwatoread" / "completed") or null. Mutually exclusive with
+  // the active-mode booleans above.
+  var _excludedSpecialMode = null;
+  var _sortFilterInitialized = false;
+
+  // "To Read" predicates: saved but never opened. `last_chapter` is
+  // the user's saved progress; if unset the title hasn't been started.
+  // `kind` is "paged" (manga) or "scroll" (manhwa) per
+  // `MangaHTML.tierlist_kind/1` — server pre-computes it so the filter
+  // doesn't have to replicate the per-device reading_mode resolution
+  // here.
+  function isUnstarted(m) {
+    return (!m.last_chapter || m.last_chapter === '') && !m.completed;
+  }
+  function isUnstartedCard(c) {
+    return !c.dataset.lastChapter && c.dataset.completed !== 'true';
+  }
+
+  // Floor of a chapter string like "42" or "42.5" → integer; null if
+  // unparseable. Mirrors MangaHTML.parse_chapter_num_floor in Elixir
+  // so the Caught Up filter's threshold matches what the server uses
+  // for last_chapter_number.
+  function parseChapterFloor(s) {
+    if (s == null || s === '') return null;
+    var n = parseFloat(s);
+    return isNaN(n) ? null : Math.floor(n);
+  }
+
+  function isCaughtUp(m) {
+    if (!m.last_chapter || m.completed) return false;
+    var threshold = (typeof m.last_chapter_number === 'number')
+      ? m.last_chapter_number
+      : (Number(m.total_chapters) || null);
+    if (threshold == null) return false;
+    var read = parseChapterFloor(m.last_chapter);
+    return read != null && read >= threshold;
+  }
+
+  function isCaughtUpCard(c) {
+    if (!c.dataset.lastChapter || c.dataset.completed === 'true') return false;
+    var n = parseFloat(c.dataset.lastChapterNumber);
+    var threshold = isNaN(n) ? (Number(c.dataset.totalChapters) || null) : n;
+    if (threshold == null) return false;
+    var read = parseChapterFloor(c.dataset.lastChapter);
+    return read != null && read >= threshold;
+  }
+
+  // Chapters left to catch up: newest known chapter (same threshold
+  // isCaughtUp uses) minus the user's read floor. 70/75 → 5 sorts
+  // ahead of 100/300 → 200. Unstarted titles count their full run;
+  // caught-up titles are 0; unknown threshold sorts last (Infinity).
+  function chaptersRemaining(m) {
+    var threshold = (typeof m.last_chapter_number === 'number')
+      ? m.last_chapter_number
+      : (Number(m.total_chapters) || null);
+    if (threshold == null) return Infinity;
+    var read = parseChapterFloor(m.last_chapter) || 0;
+    return Math.max(0, threshold - read);
+  }
+  function chaptersRemainingCard(c) {
+    var n = parseFloat(c.dataset.lastChapterNumber);
+    var threshold = isNaN(n) ? (Number(c.dataset.totalChapters) || null) : n;
+    if (threshold == null) return Infinity;
+    var read = parseChapterFloor(c.dataset.lastChapter) || 0;
+    return Math.max(0, threshold - read);
+  }
+  // Ascending compare that handles Infinity ties without producing
+  // NaN from `Infinity - Infinity`.
+  function cmpRemainingAsc(ra, rb) {
+    if (ra === rb) return 0;
+    return ra < rb ? -1 : 1;
+  }
+
+  // Predicate factories for the five built-in chips. Used by both
+  // active and excluded modes — active filters TO the matches,
+  // exclude filters OUT the matches. Returns a function that takes
+  // a manga object (applySortFilter) or a card DOM node
+  // (sortFilterDom).
+  function modePredicate(mode) {
+    switch (mode) {
+      case 'reading':       return function(m) { return m.last_chapter != null && m.last_chapter !== '' && !m.completed && !isCaughtUp(m); };
+      case 'caughtup':      return isCaughtUp;
+      case 'mangatoread':   return function(m) { return isUnstarted(m) && m.kind === 'paged'; };
+      case 'manhwatoread':  return function(m) { return isUnstarted(m) && m.kind === 'scroll'; };
+      case 'completed':     return function(m) { return !!m.completed; };
+      default:              return function() { return true; };
+    }
+  }
+  function modePredicateCard(mode) {
+    switch (mode) {
+      case 'reading':       return function(c) { return c.dataset.lastChapter && c.dataset.completed !== 'true' && !isCaughtUpCard(c); };
+      case 'caughtup':      return isCaughtUpCard;
+      case 'mangatoread':   return function(c) { return isUnstartedCard(c) && c.dataset.kind === 'paged'; };
+      case 'manhwatoread':  return function(c) { return isUnstartedCard(c) && c.dataset.kind === 'scroll'; };
+      case 'completed':     return function(c) { return c.dataset.completed === 'true'; };
+      default:              return function() { return true; };
+    }
+  }
+
+  // Returns the currently-active special mode name, or null if none.
+  // Mirrors the five _xxxMode booleans into a single discriminator
+  // for the predicate helpers above.
+  function activeSpecialMode() {
+    if (_readingMode)      return 'reading';
+    if (_caughtUpMode)     return 'caughtup';
+    if (_mangaToReadMode)  return 'mangatoread';
+    if (_manhwaToReadMode) return 'manhwatoread';
+    if (_completedMode)    return 'completed';
+    return null;
+  }
+
+  function applySortFilter(manga) {
+    var filtered = manga;
+    var active = activeSpecialMode();
+    if (active) {
+      filtered = filtered.filter(modePredicate(active));
+    } else if (_excludedSpecialMode) {
+      var pred = modePredicate(_excludedSpecialMode);
+      filtered = filtered.filter(function(m) { return !pred(m); });
+    }
+    if (_currentFilter === 'read') {
+      filtered = filtered.filter(function(m) { return m.last_chapter != null && m.last_chapter !== ''; });
+    } else if (_currentFilter === 'unread') {
+      filtered = filtered.filter(function(m) { return m.last_chapter == null || m.last_chapter === ''; });
+    }
+    if (_publicationStatus !== 'any') {
+      filtered = filtered.filter(function(m) {
+        return (m.publication_status || 'unknown') === _publicationStatus;
+      });
+    }
+
+    var sorted = filtered.slice();
+    switch (_currentSort) {
+      case 'inserted_at':
+        sorted.sort(function(a, b) { return (b.inserted_at || '').localeCompare(a.inserted_at || ''); });
+        break;
+      case 'newest_chapter_at':
+        sorted.sort(function(a, b) { return (b.newest_chapter_at || '').localeCompare(a.newest_chapter_at || ''); });
+        break;
+      case 'chapters_desc':
+        sorted.sort(function(a, b) { return (Number(b.total_chapters) || 0) - (Number(a.total_chapters) || 0); });
+        break;
+      case 'chapters_asc':
+        sorted.sort(function(a, b) { return (Number(a.total_chapters) || 0) - (Number(b.total_chapters) || 0); });
+        break;
+      case 'catch_up':
+        sorted.sort(function(a, b) { return cmpRemainingAsc(chaptersRemaining(a), chaptersRemaining(b)); });
+        break;
+      case 'updated_at':
+      default:
+        sorted.sort(function(a, b) { return (b.updated_at || '').localeCompare(a.updated_at || ''); });
+        break;
+    }
+    return sorted;
+  }
+
+  function updateSortFilterUI() {
+    document.querySelectorAll('[data-sort]').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.sort === _currentSort);
+    });
+    document.querySelectorAll('[data-filter]').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.filter === _currentFilter);
+    });
+    document.querySelectorAll('[data-pub-status]').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.pubStatus === _publicationStatus);
+    });
+  }
+
+  function sortFilterDom() {
+    var grid = document.getElementById('manga-grid');
+    var cards = Array.from(grid.children);
+    if (cards.length === 0) return;
+
+    var filtered = cards;
+    var active = activeSpecialMode();
+    if (active) {
+      filtered = filtered.filter(modePredicateCard(active));
+    } else if (_excludedSpecialMode) {
+      var pred = modePredicateCard(_excludedSpecialMode);
+      filtered = filtered.filter(function(c) { return !pred(c); });
+    }
+    if (_currentFilter === 'read') {
+      filtered = filtered.filter(function(c) { return c.dataset.lastChapter; });
+    } else if (_currentFilter === 'unread') {
+      filtered = filtered.filter(function(c) { return !c.dataset.lastChapter; });
+    }
+    if (_publicationStatus !== 'any') {
+      filtered = filtered.filter(function(c) {
+        return (c.dataset.publicationStatus || 'unknown') === _publicationStatus;
+      });
+    }
+
+    filtered.sort(function(a, b) {
+      switch (_currentSort) {
+        case 'inserted_at':
+          return (b.dataset.insertedAt || '').localeCompare(a.dataset.insertedAt || '');
+        case 'newest_chapter_at':
+          return (b.dataset.newestChapterAt || '').localeCompare(a.dataset.newestChapterAt || '');
+        case 'chapters_desc':
+          return (Number(b.dataset.totalChapters) || 0) - (Number(a.dataset.totalChapters) || 0);
+        case 'chapters_asc':
+          return (Number(a.dataset.totalChapters) || 0) - (Number(b.dataset.totalChapters) || 0);
+        case 'catch_up':
+          return cmpRemainingAsc(chaptersRemainingCard(a), chaptersRemainingCard(b));
+        case 'updated_at':
+        default:
+          return (b.dataset.updatedAt || '').localeCompare(a.dataset.updatedAt || '');
+      }
+    });
+
+    updateMangaCount(filtered.length);
+    var empty = document.getElementById('manga-empty');
+    animateGridReorder(function() {
+      grid.innerHTML = '';
+      filtered.forEach(function(c) { grid.appendChild(c); });
+      // Also re-add hidden cards so they aren't lost
+      cards.forEach(function(c) {
+        if (!filtered.includes(c)) {
+          c.style.display = 'none';
+          grid.appendChild(c);
+        } else {
+          c.style.display = '';
+        }
+      });
+    });
+    if (filtered.length === 0) {
+      grid.classList.add('hidden');
+      if (empty) empty.classList.remove('hidden');
+    } else {
+      grid.classList.remove('hidden');
+      if (empty) empty.classList.add('hidden');
+    }
+  }
+
+  function setSort(val) {
+    _currentSort = val;
+    localStorage.setItem('manga_sort', val);
+    updateSortFilterUI();
+    document.activeElement.blur();
+    reapplySortFilter();
+  }
+
+  function setFilter(val) {
+    _currentFilter = val;
+    localStorage.setItem('manga_filter', val);
+    updateSortFilterUI();
+    document.activeElement.blur();
+    reapplySortFilter();
+  }
+
+  function setPublicationStatus(val) {
+    _publicationStatus = val;
+    localStorage.setItem('manga_publication_status', val);
+    updateSortFilterUI();
+    document.activeElement.blur();
+    reapplySortFilter();
+  }
+
+  function reapplySortFilter() {
+    // If we have cached data for the current view, re-render from cache
+    var cacheKey = _excludedCategoryId ? '__all__' : (_activeCategoryId ?? '__all__');
+    if (_categoryCache[cacheKey]) {
+      var manga = _categoryCache[cacheKey];
+      if (_excludedCategoryId && _categoryCache[_excludedCategoryId]) {
+        var excludedManga = _categoryCache[_excludedCategoryId];
+        var excludedKeys = new Set(excludedManga.map(function(m) { return m.source + ':' + m.slug; }));
+        manga = manga.filter(function(m) { return !excludedKeys.has(m.source + ':' + m.slug); });
+      }
+      renderGrid(applySortFilter(manga));
+    } else {
+      // Fall back to DOM-based sort/filter for initial server render
+      sortFilterDom();
+    }
+  }
+
+  // ── FLIP grid animation ─────────────────────────────────────────
+  // Cards glide to their new spots when the sort/filter changes
+  // instead of teleporting. Classic FLIP: snapshot on-screen card
+  // positions (keyed by data-key), run the DOM mutation, then animate
+  // each surviving card from its old rect to its new one. Only cards
+  // near the viewport are tracked/animated — animating hundreds of
+  // offscreen tiles costs main-thread time for nothing visible.
+  // Cards that newly appear on screen get a quick fade/scale-in.
+  function animateGridReorder(mutate) {
+    var grid = document.getElementById('manga-grid');
+    if (!grid || !Element.prototype.animate) { mutate(); return; }
+    var vh = window.innerHeight;
+    var before = {};
+    Array.prototype.forEach.call(grid.children, function(c) {
+      var key = c.dataset && c.dataset.key;
+      if (!key || c.style.display === 'none') return;
+      var r = c.getBoundingClientRect();
+      if (r.bottom < -200 || r.top > vh + 200) return;
+      before[key] = r;
+    });
+    mutate();
+    Array.prototype.forEach.call(grid.children, function(c) {
+      var key = c.dataset && c.dataset.key;
+      if (!key || c.style.display === 'none') return;
+      var r = c.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh) return;
+      var old = before[key];
+      if (old) {
+        var dx = old.left - r.left;
+        var dy = old.top - r.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        c.animate(
+          [{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'translate(0,0)' }],
+          { duration: 350, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+        );
+      } else {
+        c.animate(
+          [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'scale(1)' }],
+          { duration: 250, easing: 'ease-out' }
+        );
+      }
+    });
+  }
+
+  // Current-view count, shown INSIDE the selected chip only (never on
+  // all chips at once). Runs after every grid render, which follows
+  // every updateChipStyles call, so the .chip-active/.chip-excluded
+  // classes are already settled. Falls back to the excluded chip in
+  // exclude mode, where nothing is "active".
+  function updateMangaCount(n) {
+    document.querySelectorAll('.h2-chip .chip-count').forEach(function(el) {
+      el.classList.add('hidden');
+    });
+    var host = document.querySelector('.h2-chip.chip-active .chip-count') ||
+               document.querySelector('.h2-chip.chip-excluded .chip-count');
+    if (host) {
+      host.textContent = n;
+      host.classList.remove('hidden');
+    }
+  }
+
+  // Signature for "did this card actually change" — src attributes are
+  // stripped because cover URLs are re-signed on every fetch, so they
+  // differ even when nothing visible changed. Comparing with them in
+  // would replace (and re-download + flash) every cover on every
+  // background refresh.
+  function cardSig(html) {
+    return html.replace(/src="[^"]*"/g, '');
+  }
+
+  function renderGrid(manga) {
+    const grid = document.getElementById('manga-grid');
+    const empty = document.getElementById('manga-empty');
+    updateMangaCount(manga.length);
+    animateGridReorder(function() {
+      // Keyed reconciliation instead of a wholesale innerHTML rebuild:
+      // reuse the existing card node when its content signature is
+      // unchanged. Moving a live node keeps its decoded <img> — no
+      // skeleton, no flash. Only genuinely-changed cards get rebuilt.
+      const byKey = {};
+      Array.prototype.forEach.call(grid.children, function(c) {
+        if (c.dataset && c.dataset.key) byKey[c.dataset.key] = c;
+      });
+      const frag = document.createDocumentFragment();
+      manga.forEach(function(m) {
+        const key = m.source + ':' + m.slug;
+        const html = mangaCardHTML(m);
+        const sig = cardSig(html);
+        let node = byKey[key];
+        if (node) {
+          delete byKey[key];
+          if (node._cardSig === undefined) {
+            // Server-rendered card adopted on the first client render
+            // — same data the server just used, so keep it as-is.
+            node._cardSig = sig;
+          } else if (node._cardSig !== sig) {
+            node = null; // genuinely stale — rebuild below
+          }
+        }
+        if (!node) {
+          const tpl = document.createElement('template');
+          tpl.innerHTML = html;
+          node = tpl.content.firstElementChild;
+          node._cardSig = sig;
+        }
+        node.style.display = '';
+        frag.appendChild(node);
+      });
+      grid.innerHTML = '';
+      grid.appendChild(frag);
+    });
+    if (manga.length === 0) {
+      grid.classList.add('hidden');
+      if (empty) empty.classList.remove('hidden');
+    } else {
+      grid.classList.remove('hidden');
+      if (empty) empty.classList.add('hidden');
+    }
+  }
+
+  function updateChipStyles() {
+    // Any of the special-mode chips active blocks the cat-chip
+    // "primary" highlight (otherwise "All" would also look active).
+    // v2 chips: base style lives on .h2-chip; the two state classes
+    // (.chip-active / .chip-excluded) carry all the visual difference,
+    // so this only toggles those.
+    const specialOn = _readingMode || _caughtUpMode || _mangaToReadMode || _manhwaToReadMode || _completedMode || _excludedSpecialMode != null;
+    document.querySelectorAll('.cat-chip').forEach(btn => {
+      const btnCatId = btn.dataset.categoryId ? parseInt(btn.dataset.categoryId) : null;
+      const isAll = btnCatId === null;
+      const isActive = !specialOn && ((btnCatId === _activeCategoryId) || (isAll && _activeCategoryId === null));
+      const isExcluded = btnCatId !== null && btnCatId === _excludedCategoryId;
+      btn.classList.toggle('chip-active', isActive && !isExcluded);
+      btn.classList.toggle('chip-excluded', isExcluded);
+    });
+
+    const specialChip = (selector, mode) => {
+      const isActive = activeSpecialMode() === mode;
+      const isExcluded = _excludedSpecialMode === mode;
+      document.querySelectorAll(selector).forEach(btn => {
+        btn.classList.toggle('chip-active', isActive);
+        btn.classList.toggle('chip-excluded', isExcluded);
+      });
+    };
+    specialChip('.reading-chip', 'reading');
+    specialChip('.caughtup-chip', 'caughtup');
+    specialChip('.mangatoread-chip', 'mangatoread');
+    specialChip('.manhwatoread-chip', 'manhwatoread');
+    specialChip('.completed-chip', 'completed');
+
+    // Sync button trails the Caught Up chip — show only in active mode
+    // (not when Caught Up is excluded — bulk-syncing "everything that
+    // isn't caught up" doesn't make sense).
+    var syncBtn = document.getElementById('caughtup-sync-btn');
+    if (syncBtn) syncBtn.classList.toggle('hidden', !_caughtUpMode);
+
+    // Show/hide per-chip bulk add buttons (hidden in exclude mode)
+    document.querySelectorAll('.bulk-add-btn').forEach(btn => {
+      const forId = parseInt(btn.dataset.bulkFor);
+      btn.classList.toggle('hidden', _excludedCategoryId !== null || forId !== _activeCategoryId);
+    });
+
+    // Every state change funnels through here, so this is the single
+    // spot we need to mirror the current chip state into localStorage.
+    // The URL is updated separately by each click handler; both stay
+    // in sync as long as updateChipStyles runs after the state edit.
+    persistChipState();
+  }
+
+  // Built-in chip state cycle, mirroring custom categories:
+  //
+  //   nothing      → click → ACTIVE (filter TO this mode)
+  //   ACTIVE       → click → EXCLUDED (filter OUT this mode)
+  //   EXCLUDED     → click → CLEARED (back to All)
+  //
+  // The five active-mode booleans stay mutually exclusive, and
+  // `_excludedSpecialMode` is mutually exclusive with all of them.
+  // URL: `?mode=NAME` while active, `?exclude_mode=NAME` while
+  // excluded, plain `/manga` once cleared — so refreshing preserves
+  // whichever phase the user was in.
+  async function activateSpecialMode(mode, setter, isActiveFn) {
+    var clearActiveBooleans = function() {
+      _readingMode = false;
+      _caughtUpMode = false;
+      _mangaToReadMode = false;
+      _manhwaToReadMode = false;
+      _completedMode = false;
+    };
+
+    if (isActiveFn()) {
+      // ACTIVE → EXCLUDED
+      clearActiveBooleans();
+      _excludedSpecialMode = mode;
+      _activeCategoryId = null;
+      _excludedCategoryId = null;
+      history.replaceState(null, '', '/manga/home2?exclude_mode=' + mode);
+      updateChipStyles();
+      if (_categoryCache['__all__']) {
+        renderGrid(applySortFilter(_categoryCache['__all__']));
+      }
+      return;
+    }
+
+    if (_excludedSpecialMode === mode) {
+      // EXCLUDED → CLEARED
+      clearActiveBooleans();
+      _excludedSpecialMode = null;
+      _activeCategoryId = null;
+      _excludedCategoryId = null;
+      history.replaceState(null, '', '/manga/home2');
+      updateChipStyles();
+      if (_categoryCache['__all__']) {
+        renderGrid(applySortFilter(_categoryCache['__all__']));
+      }
+      return;
+    }
+
+    // (nothing | other active | other excluded) → THIS ACTIVE
+    clearActiveBooleans();
+    _excludedSpecialMode = null;
+    setter();
+    _activeCategoryId = null;
+    _excludedCategoryId = null;
+    history.replaceState(null, '', '/manga/home2?mode=' + mode);
+    updateChipStyles();
+
+    if (_categoryCache['__all__']) {
+      renderGrid(applySortFilter(_categoryCache['__all__']));
+    }
+    const res = await fetch('/manga/home2', { headers: {'x-requested-with': 'XMLHttpRequest'} });
+    const data = await res.json();
+    if (data.ok && isActiveFn()) {
+      _categoryCache['__all__'] = data.manga;
+      renderGrid(applySortFilter(data.manga));
+    }
+  }
+
+  function toggleReading() {
+    activateSpecialMode('reading', () => { _readingMode = true; }, () => _readingMode);
+  }
+  function toggleCaughtUp() {
+    activateSpecialMode('caughtup', () => { _caughtUpMode = true; }, () => _caughtUpMode);
+  }
+  function toggleMangaToRead() {
+    activateSpecialMode('mangatoread', () => { _mangaToReadMode = true; }, () => _mangaToReadMode);
+  }
+  function toggleManhwaToRead() {
+    activateSpecialMode('manhwatoread', () => { _manhwaToReadMode = true; }, () => _manhwaToReadMode);
+  }
+  function toggleCompleted() {
+    activateSpecialMode('completed', () => { _completedMode = true; }, () => _completedMode);
+  }
+
+  // Bulk-sync chapter counts for every caught-up title. Iterates the
+  // same per-manga refresh-one path the manual refresh button uses,
+  // so any new chapters trigger the bell notification per title.
+  // Each scrape is sequential server-side, so this can take a while
+  // for large caught-up libraries — the spinner + disabled state
+  // give visual feedback. On success, invalidate the category cache
+  // and re-fetch so the now-updated `total_chapters` / `last_chapter_number`
+  // surface in the cards.
+  async function syncCaughtUp() {
+    var btn = document.getElementById('caughtup-sync-btn');
+    var icon = document.getElementById('caughtup-sync-icon');
+    var spinner = document.getElementById('caughtup-sync-spinner');
+    if (!btn || btn.disabled) return;
+
+    btn.disabled = true;
+    if (icon) icon.classList.add('hidden');
+    if (spinner) spinner.classList.remove('hidden');
+
+    try {
+      var csrf = document.querySelector('meta[name="csrf-token"]').content;
+      var res = await fetch('/manga/sync_caught_up', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrf,
+          'x-requested-with': 'XMLHttpRequest'
+        }
+      });
+      var data = await res.json();
+
+      if (data.ok) {
+        var msg;
+        if (data.total === 0) {
+          msg = "No caught-up titles to sync.";
+        } else if (data.with_new === 0) {
+          msg = "Synced " + data.refreshed + " title" + (data.refreshed === 1 ? "" : "s") + " — no new chapters.";
+        } else {
+          msg = data.new_chapters + " new chapter" + (data.new_chapters === 1 ? "" : "s") +
+                " across " + data.with_new + " title" + (data.with_new === 1 ? "" : "s") + ".";
+        }
+        if (data.errors > 0) {
+          msg += " " + data.errors + " failed.";
+        }
+        alert(msg);
+
+        // Invalidate the category cache so the grid re-fetches and
+        // reflects fresh `total_chapters` / `last_chapter_number`.
+        _categoryCache = {};
+        var cacheKey = _activeCategoryId ?? '__all__';
+        var url = _activeCategoryId ? '/manga/home2?category=' + _activeCategoryId : '/manga/home2';
+        var refetch = await fetch(url, { headers: {'x-requested-with': 'XMLHttpRequest'} });
+        var refetchData = await refetch.json();
+        if (refetchData.ok) {
+          _categoryCache[cacheKey] = refetchData.manga;
+          renderGrid(applySortFilter(refetchData.manga));
+        }
+      } else {
+        alert("Sync failed.");
+      }
+    } catch (err) {
+      alert("Sync error: " + (err && err.message ? err.message : err));
+    } finally {
+      btn.disabled = false;
+      if (spinner) spinner.classList.add('hidden');
+      if (icon) icon.classList.remove('hidden');
+    }
+  }
+
+  function renderExcluded() {
+    const allManga = _categoryCache['__all__'];
+    const excludedManga = _categoryCache[_excludedCategoryId];
+    if (!allManga || !excludedManga) return;
+
+    const excludedKeys = new Set(excludedManga.map(m => m.source + ':' + m.slug));
+    const filtered = allManga.filter(m => !excludedKeys.has(m.source + ':' + m.slug));
+    renderGrid(applySortFilter(filtered));
+  }
+
+  async function filterCategory(categoryId) {
+    _readingMode = false;
+    _caughtUpMode = false;
+    _mangaToReadMode = false;
+    _manhwaToReadMode = false;
+    _completedMode = false;
+    _excludedSpecialMode = null;
+    if (categoryId === null) {
+      _currentFilter = 'all';
+      localStorage.setItem('manga_filter', 'all');
+      updateSortFilterUI();
+    }
+    if (categoryId === null && _excludedCategoryId !== null) {
+      // Clicking "All" while excluding: clear exclude, show true All
+      _excludedCategoryId = null;
+      _activeCategoryId = null;
+      history.replaceState(null, '', '/manga/home2');
+      updateChipStyles();
+      if (_categoryCache['__all__']) renderGrid(applySortFilter(_categoryCache['__all__']));
+      const res = await fetch('/manga/home2', { headers: {'x-requested-with': 'XMLHttpRequest'} });
+      const data = await res.json();
+      if (data.ok && _activeCategoryId === null && _excludedCategoryId === null) {
+        _categoryCache['__all__'] = data.manga;
+        renderGrid(applySortFilter(data.manga));
+      }
+      return;
+    }
+
+    if (categoryId !== null && categoryId === _activeCategoryId) {
+      // Clicking the active chip: enter exclude mode. URL persists so
+      // a refresh lands the user back in the same excluded view.
+      _activeCategoryId = null;
+      _excludedCategoryId = categoryId;
+      history.replaceState(null, '', '/manga/home2?exclude=' + categoryId);
+      updateChipStyles();
+      renderExcluded();
+      return;
+    }
+
+    if (categoryId !== null && categoryId === _excludedCategoryId) {
+      // Clicking the excluded chip again: select it normally
+      _excludedCategoryId = null;
+    } else {
+      // Clicking a different category: clear exclude
+      _excludedCategoryId = null;
+    }
+
+    _activeCategoryId = categoryId;
+    const cacheKey = categoryId ?? '__all__';
+    const url = categoryId ? '/manga/home2?category=' + categoryId : '/manga/home2';
+    history.replaceState(null, '', url);
+    updateChipStyles();
+
+    // Render from cache instantly if available
+    if (_categoryCache[cacheKey]) {
+      renderGrid(applySortFilter(_categoryCache[cacheKey]));
+    }
+
+    // Fetch fresh data (background refresh if cache hit, blocking otherwise)
+    const res = await fetch(url, {
+      headers: {'x-requested-with': 'XMLHttpRequest'}
+    });
+    const data = await res.json();
+
+    if (data.ok && _activeCategoryId === categoryId && _excludedCategoryId === null) {
+      _categoryCache[cacheKey] = data.manga;
+      renderGrid(applySortFilter(data.manga));
+    }
+  }
+
+  async function openBulkAddModal() {
+    if (!_activeCategoryId) return;
+    const modal = document.getElementById('bulk-add-modal');
+    const title = document.getElementById('bulk-add-title');
+    const loading = document.getElementById('bulk-add-loading');
+    const list = document.getElementById('bulk-add-list');
+
+    title.textContent = 'Add to ' + (_categoryNames[_activeCategoryId] || 'category');
+    loading.classList.remove('hidden');
+    list.innerHTML = '';
+    modal.showModal();
+
+    const [allRes, keysRes] = await Promise.all([
+      fetch('/manga/home2', {headers: {'x-requested-with': 'XMLHttpRequest'}}),
+      fetch('/manga/categories/' + _activeCategoryId + '/manga_ids')
+    ]);
+    const allData = await allRes.json();
+    const keysData = await keysRes.json();
+
+    loading.classList.add('hidden');
+
+    if (!allData.ok || !keysData.ok) return;
+
+    const inCategory = new Set(keysData.manga_keys.map(k => k.source + ':' + k.slug));
+
+    list.innerHTML = allData.manga.map(m => {
+      const key = m.source + ':' + m.slug;
+      const checked = inCategory.has(key) ? 'checked' : '';
+      return `<label class="card bg-base-200 shadow-sm cursor-pointer relative">
+        <input type="checkbox" class="hidden bulk-cb" data-source="${m.source}" data-slug="${m.slug}" ${checked} onchange="toggleBulkCategory(this)" />
+        <figure class="px-2 pt-2">
+          <div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-base-300 animate-pulse cover-shell">
+            <img src="${m.cover_url}" alt="${m.title.replace(/"/g, '&quot;')}" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover" onload="this.parentElement.classList.remove('animate-pulse','bg-base-300')" onerror="this.parentElement.classList.remove('animate-pulse')" />
+            <div class="absolute top-1 right-1">
+              <span class="bulk-check-icon inline-flex items-center justify-center w-6 h-6 rounded-full ${checked ? 'bg-primary text-primary-content' : 'bg-black/50 text-white/60'}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+              </span>
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 pt-6 pb-2">
+              <h2 class="text-sm font-bold text-white line-clamp-2 drop-shadow-lg">${m.title.replace(/</g, '&lt;')}</h2>
+              <span class="badge badge-xs bg-black/50 text-white border-0 mt-1">${m.source_label}</span>
+            </div>
+          </div>
+        </figure>
+      </label>`;
+    }).join('');
+  }
+
+  async function toggleBulkCategory(el) {
+    const source = el.dataset.source;
+    const slug = el.dataset.slug;
+    const icon = el.closest('label').querySelector('.bulk-check-icon');
+    const isNowChecked = el.checked;
+
+    // Update visual immediately
+    icon.classList.toggle('bg-primary', isNowChecked);
+    icon.classList.toggle('text-primary-content', isNowChecked);
+    icon.classList.toggle('bg-black/50', !isNowChecked);
+    icon.classList.toggle('text-white/60', !isNowChecked);
+
+    el.disabled = true;
+    try {
+      const csrf = document.querySelector('meta[name="csrf-token"]').content;
+      await fetch('/manga/' + source + '/' + slug + '/toggle_category', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrf,
+          'x-requested-with': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({category_id: _activeCategoryId})
+      });
+    } finally {
+      el.disabled = false;
+    }
+  }
+
+  document.getElementById('bulk-add-modal').addEventListener('close', function() {
+    // Invalidate cache since memberships may have changed
+    _categoryCache = {};
+    _excludedCategoryId = null;
+    if (_activeCategoryId) filterCategory(_activeCategoryId);
+  });
+
+  // Restore chip state with a two-tier priority:
+  //
+  //   1. URL params win — `?mode=NAME` / `?exclude_mode=NAME` /
+  //      `?category=N` / `?exclude=N`. Bookmarks / shared links /
+  //      refreshes all flow through this branch.
+  //   2. localStorage `manga_chip_state` is the fallback for a fresh
+  //      landing on `/manga` with no params (logo click from a
+  //      sub-page, browser-history forward to a clean URL, etc.).
+  //
+  // For built-in modes the localStorage restore is synchronous — JS
+  // only filters client-side, so we just set the state and let
+  // sortFilterDom run below. For custom categories the server has to
+  // filter, so localStorage restore redirects to the URL form — the
+  // server then renders the correctly-filtered set and we're back on
+  // the URL-wins branch on the second hit.
+  function persistChipState() {
+    try {
+      var state = {};
+      var active = activeSpecialMode();
+      if (active) state.mode = active;
+      else if (_excludedSpecialMode) state.exclude_mode = _excludedSpecialMode;
+      else if (_activeCategoryId != null) state.category = _activeCategoryId;
+      else if (_excludedCategoryId != null) state.exclude_category = _excludedCategoryId;
+      localStorage.setItem('manga_chip_state', JSON.stringify(state));
+    } catch (_) {}
+  }
+
+  (function applyUrlChipState() {
+    var params = new URLSearchParams(window.location.search);
+    var setMode = function(name) {
+      switch (name) {
+        case 'reading':       _readingMode = true; break;
+        case 'caughtup':      _caughtUpMode = true; break;
+        case 'mangatoread':   _mangaToReadMode = true; break;
+        case 'manhwatoread':  _manhwaToReadMode = true; break;
+        case 'completed':     _completedMode = true; break;
+      }
+    };
+    var mode = params.get('mode');
+    var excludeMode = params.get('exclude_mode');
+    var excludeCat = params.get('exclude');
+    var hasUrlState = !!mode || !!excludeMode || !!excludeCat || _activeCategoryId != null;
+
+    if (hasUrlState) {
+      if (mode) setMode(mode);
+      else if (excludeMode) _excludedSpecialMode = excludeMode;
+      if (excludeCat && !isNaN(parseInt(excludeCat))) {
+        _excludedCategoryId = parseInt(excludeCat);
+        _activeCategoryId = null;
+      }
+      persistChipState();
+      return;
+    }
+
+    // No URL state — try localStorage. Custom categories need server
+    // filtering, so redirect to the canonical URL form rather than
+    // wedge a half-filtered view into the already-rendered grid.
+    var saved;
+    try {
+      var raw = localStorage.getItem('manga_chip_state');
+      saved = raw ? JSON.parse(raw) : null;
+    } catch (_) { saved = null; }
+    if (!saved) return;
+
+    if (saved.mode) {
+      setMode(saved.mode);
+      history.replaceState(null, '', '/manga/home2?mode=' + saved.mode);
+    } else if (saved.exclude_mode) {
+      _excludedSpecialMode = saved.exclude_mode;
+      history.replaceState(null, '', '/manga/home2?exclude_mode=' + saved.exclude_mode);
+    } else if (saved.category != null) {
+      window.location.replace('/manga/home2?category=' + encodeURIComponent(saved.category));
+    } else if (saved.exclude_category != null) {
+      window.location.replace('/manga/home2?exclude=' + encodeURIComponent(saved.exclude_category));
+    }
+  })();
+  var _specialModeOn = _readingMode || _caughtUpMode || _mangaToReadMode || _manhwaToReadMode || _completedMode || _excludedSpecialMode != null;
+  if (_specialModeOn || _excludedCategoryId != null) updateChipStyles();
+
+  // Apply saved sort/filter on page load (DOM-based for server-rendered cards)
+  updateSortFilterUI();
+  if (_specialModeOn || _excludedCategoryId != null || _currentSort !== 'updated_at' || _currentFilter !== 'all' || _publicationStatus !== 'any') {
+    sortFilterDom();
+  }
+
+  // ── Built-in chip prefs (order + visibility) ────────────────────
+  // Shared key with /manga/categories — that page edits, we read.
+  // Default order matches the template; hidden flag → `display:none`.
+  (function applyBuiltinChipPrefs() {
+    const KEY = "reader:builtin_chips";
+    const DEFAULT_IDS = ["reading", "caughtup", "mangatoread", "manhwatoread", "completed"];
+    let prefs;
+    try {
+      const raw = localStorage.getItem(KEY);
+      prefs = raw ? JSON.parse(raw) : [];
+    } catch (_) { prefs = []; }
+    const known = new Set(DEFAULT_IDS);
+    const filtered = prefs.filter((p) => known.has(p.id));
+    const seen = new Set(filtered.map((p) => p.id));
+    DEFAULT_IDS.forEach((id) => { if (!seen.has(id)) filtered.push({ id, hidden: false }); });
+
+    // Apply order: move built-in chips into user-saved order while
+    // keeping them grouped BEFORE the first user-category chip
+    // (.cat-chip with `data-category-id`). The page renders two
+    // chip strips with the same id (mobile + empty-state), so iterate
+    // both.
+    document.querySelectorAll("#category-chips").forEach((strip) => {
+      const userChipAnchor = strip.querySelector(".cat-chip[data-category-id]");
+      filtered.forEach((p) => {
+        const chip = strip.querySelector("." + p.id + "-chip");
+        if (!chip) return;
+        if (userChipAnchor) {
+          strip.insertBefore(chip, userChipAnchor);
+        } else {
+          strip.appendChild(chip);
+        }
+        chip.style.display = p.hidden ? "none" : "";
+      });
+    });
+  })();
+
+  // Prefetch all categories into cache on page load
+  (function() {
+    var cats = Object.keys(_categoryNames).map(Number);
+    cats.push(null); // "All"
+    cats.forEach(function(id) {
+      var url = id ? '/manga/home2?category=' + id : '/manga/home2';
+      fetch(url, {headers: {'x-requested-with': 'XMLHttpRequest'}})
+        .then(r => r.json())
+        .then(data => { if (data.ok) _categoryCache[id ?? '__all__'] = data.manga; });
+    });
+  })();
+</script>

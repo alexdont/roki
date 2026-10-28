@@ -1,0 +1,1157 @@
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">📖 Reader</a>
+    <div class="flex items-center gap-2">
+      <%= if @resume_manga do %>
+        <a
+          href={
+            ~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"
+          }
+          class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
+        >
+          ▶ Resume
+        </a>
+      <% end %>
+      <Layouts.theme_toggle />
+      <Layouts.notifications_bell parent={@conn} scope={@phoenix_kit_current_scope} />
+      <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        </div>
+        <ul
+          tabindex="0"
+          class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg"
+        >
+          <li><a href="/manga">Home</a></li>
+          <li><a href="/manga/explore">Explore</a></li>
+          <li><a href="/manga/history" class="font-semibold">History</a></li>
+          <li><a href="/manga/stats">Stats</a></li>
+          <li><a href="/manga/comments">Comments</a></li>
+          <li><a href="/manga/categories">Categories</a></li>
+          <li><a href="/manga/tierlist">Tierlist</a></li>
+          <li><a href="/manga/grid">Grid</a></li>
+          <li><a href="/manga/settings">Settings</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold">Reading History</h2>
+    <%= if @manga_list != [] do %>
+      <select
+        class="select select-sm select-bordered max-w-[200px] truncate"
+        onchange="
+          const params = new URLSearchParams(window.location.search);
+          if (this.value) { params.set('manga', this.value); } else { params.delete('manga'); }
+          window.location.href = '/manga/legacy/history?' + params.toString();
+        "
+      >
+        <option value="">All manga</option>
+        <%= for m <- @manga_list do %>
+          <option
+            value={"#{m.source}/#{m.slug}"}
+            selected={@manga_filter == "#{m.source}/#{m.slug}"}
+          >
+            {m.title}
+          </option>
+        <% end %>
+      </select>
+    <% end %>
+  </div>
+
+  <% {weeks, max_seconds} = calendar_weeks(@month, @activity) %>
+  <div class="bg-base-200 rounded-xl p-4 mb-6">
+    <%!-- Month navigation --%>
+    <div class="flex items-center justify-between mb-4">
+      <a
+        href={
+          ~p"/manga/legacy/history?#{Enum.reject([month: prev_month_param(@month), manga: @manga_filter], fn {_, v} -> is_nil(v) or v == "" end)}"
+        }
+        class="btn btn-ghost btn-sm btn-square"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+      </a>
+      <span class="font-semibold text-base">{month_label(@month)}</span>
+      <%= if is_current_month?(@month) do %>
+        <div class="btn btn-ghost btn-sm btn-square invisible">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+        </div>
+      <% else %>
+        <a
+          href={
+            ~p"/manga/legacy/history?#{Enum.reject([month: next_month_param(@month), manga: @manga_filter], fn {_, v} -> is_nil(v) or v == "" end)}"
+          }
+          class="btn btn-ghost btn-sm btn-square"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+        </a>
+      <% end %>
+    </div>
+
+    <%!-- Day-of-week headers --%>
+    <div class="grid grid-cols-7 gap-1 mb-1">
+      <div
+        :for={label <- ~w(Mon Tue Wed Thu Fri Sat Sun)}
+        class="text-center text-xs text-base-content/50 font-medium"
+      >
+        {label}
+      </div>
+    </div>
+
+    <%!-- Calendar grid --%>
+    <div class="grid grid-cols-7 gap-1">
+      <%= for week <- weeks, day <- week do %>
+        <% day_events = if day.in_month, do: Map.get(@month_events, day.date, %{}), else: %{} %>
+        <% covers =
+          if day.in_month, do: calendar_day_covers(day.entries, day_events, @manga_meta), else: [] %>
+        <div class="relative group">
+          <a
+            href={
+              if day.in_month,
+                do:
+                  ~p"/manga/legacy/history?#{Enum.reject([month: Calendar.strftime(@month, "%Y-%m"), date: date_param(day.date), manga: @manga_filter], fn {_, v} -> is_nil(v) or v == "" end)}"
+            }
+            class={[
+              "h-10 rounded-md px-1 text-xs flex items-center justify-between gap-0.5 relative overflow-hidden",
+              if(day.in_month,
+                do: calendar_color(day.seconds, max_seconds),
+                else: "opacity-25 pointer-events-none"
+              ),
+              if(day.in_month and day.seconds == 0, do: "bg-base-300"),
+              if(day.date == @selected_date, do: "ring-2 ring-primary"),
+              if(day.date != @selected_date and day.date == Date.utc_today(),
+                do: "ring-2 ring-primary/40"
+              ),
+              if(day.in_month,
+                do: "cursor-pointer hover:ring-2 hover:ring-primary/50 transition-shadow"
+              )
+            ]}
+          >
+            <span class={[
+              "flex-shrink-0",
+              if(day.in_month, do: "text-base-content/70", else: "text-base-content/30")
+            ]}>
+              {day.day}
+            </span>
+            <%!-- Thumbnail covers inline with the date, longest-read
+                 first; milestone badges mark completed / caught-up. --%>
+            <%= if covers != [] do %>
+              <div class="flex gap-0.5 items-center justify-end min-w-0">
+                <div :for={c <- covers} class="relative flex-shrink min-w-0">
+                  <%= if c.src do %>
+                    <img
+                      src={c.src}
+                      alt={c.title}
+                      loading="lazy"
+                      class="h-7 max-w-[20px] aspect-[2/3] object-cover rounded-[3px] ring-1 ring-base-100/40"
+                    />
+                  <% else %>
+                    <div class="h-7 max-w-[20px] aspect-[2/3] rounded-[3px] bg-base-content/20">
+                    </div>
+                  <% end %>
+                  <%= case c.event do %>
+                    <% "completed" -> %>
+                      <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-success text-success-content flex items-center justify-center shadow">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="4"
+                          class="w-2 h-2"
+                        >
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </span>
+                    <% "caught_up" -> %>
+                      <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-warning text-warning-content flex items-center justify-center shadow">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          class="w-2 h-2"
+                        >
+                          <path
+                            fill-rule="evenodd"
+                            d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z"
+                            clip-rule="evenodd"
+                          />
+                        </svg>
+                      </span>
+                    <% "started" -> %>
+                      <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-info text-info-content flex items-center justify-center shadow">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          class="w-2 h-2"
+                        >
+                          <path d="M8 5.14v13.72L19 12 8 5.14Z" />
+                        </svg>
+                      </span>
+                    <% _ -> %>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </a>
+          <%= if day.in_month and (day.seconds > 0 or day_events != %{}) do %>
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+              <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
+                <div class="font-semibold mb-1">{Calendar.strftime(day.date, "%b %-d, %Y")}</div>
+                <%!-- One row per series — milestone icon inline with
+                     the title instead of separate milestone lines. --%>
+                <% row_event = fn entry -> Map.get(day_events, {entry.source, entry.slug}) end %>
+                <div
+                  :for={entry <- day.entries}
+                  class={[
+                    "flex justify-between gap-4",
+                    case row_event.(entry) do
+                      "completed" -> "text-success font-medium"
+                      "caught_up" -> "text-warning font-medium"
+                      "started" -> "text-info font-medium"
+                      _ -> "text-base-content/70"
+                    end
+                  ]}
+                >
+                  <span class="flex items-center gap-1 min-w-0">
+                    <%= case row_event.(entry) do %>
+                      <% "completed" -> %>
+                        <span class="flex-shrink-0" title="Completed">✓</span>
+                      <% "caught_up" -> %>
+                        <span class="flex-shrink-0" title="Caught up">⚡</span>
+                      <% "started" -> %>
+                        <span class="flex-shrink-0" title="Started">▶</span>
+                      <% _ -> %>
+                    <% end %>
+                    <span class="truncate max-w-[150px]">{entry.title}</span>
+                  </span>
+                  <span class={[
+                    "tabular-nums",
+                    if(row_event.(entry), do: "opacity-70", else: "text-base-content/50")
+                  ]}>
+                    <%= if entry.chapters_read > 0 do %>
+                      {entry.chapters_read} ch ·
+                    <% end %>
+                    {format_reading_time(entry.seconds)}
+                  </span>
+                </div>
+                <%!-- Milestones without reading that day (e.g. marked
+                     complete without opening it) keep their own line. --%>
+                <% event_only =
+                  Enum.reject(day_events, fn {key, _} ->
+                    Enum.any?(day.entries, fn e -> {e.source, e.slug} == key end)
+                  end) %>
+                <div
+                  :for={{key, ev} <- event_only}
+                  class={[
+                    "flex items-center gap-1 font-medium",
+                    case ev do
+                      "completed" -> "text-success"
+                      "caught_up" -> "text-warning"
+                      _ -> "text-info"
+                    end
+                  ]}
+                >
+                  <span>{case ev do
+                    "completed" -> "✓"
+                    "caught_up" -> "⚡"
+                    _ -> "▶"
+                  end}</span>
+                  <span class="truncate max-w-[150px]">{get_in(@manga_meta, [key, :title]) ||
+                    elem(key, 1)}</span>
+                </div>
+                <%= if length(day.entries) > 1 do %>
+                  <div class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold">
+                    <span>Total</span>
+                    <span class="tabular-nums">{format_reading_time(day.seconds)}</span>
+                  </div>
+                <% end %>
+                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+
+    <%!-- Legend --%>
+    <div class="flex items-center justify-end gap-1 mt-3 text-[10px] text-base-content/50">
+      <span>Less</span>
+      <div class="w-[11px] h-[11px] rounded-sm bg-base-300"></div>
+      <div class="w-[11px] h-[11px] rounded-sm bg-success/30"></div>
+      <div class="w-[11px] h-[11px] rounded-sm bg-success/50"></div>
+      <div class="w-[11px] h-[11px] rounded-sm bg-success/70"></div>
+      <div class="w-[11px] h-[11px] rounded-sm bg-success"></div>
+      <span>More</span>
+    </div>
+  </div>
+
+  <h3 class="text-base font-semibold mb-3">
+    {selected_date_label(@selected_date)}
+    <%= if Date.compare(@selected_date, DateTime.to_date(@user_now)) == :eq do %>
+      <span class="text-sm font-normal text-base-content/50">
+        {Calendar.strftime(@user_now, "%-I:%M %p")}
+      </span>
+    <% end %>
+  </h3>
+
+  <% max_hour_seconds = @hourly_activity |> Enum.map(& &1.seconds) |> Enum.max() %>
+  <% has_multiple_hours = Enum.count(@hourly_activity, &(&1.seconds > 0)) > 1 %>
+  <% avg_max = @hourly_averages |> Enum.map(& &1.avg_seconds) |> Enum.max() %>
+  <% show_hours = max_hour_seconds > 0 and has_multiple_hours %>
+  <% show_avg = avg_max > 0 %>
+  <% show_sessions = @stints != [] %>
+  <% peak_hour = show_avg && Enum.max_by(@hourly_averages, & &1.avg_seconds) %>
+
+  <%!-- Time-of-day card: one display, three formats behind a switcher —
+       hour bars, minute-resolution sessions (stint package, beta; data
+       accumulates from 2026-07-14, earlier dates have no Sessions tab),
+       and the all-time hourly average heatmap. The chosen format persists
+       in localStorage. --%>
+  <%= if show_hours or show_sessions or show_avg do %>
+    <div
+      class="bg-base-200 rounded-xl p-4 mb-4"
+      id="timeday-card"
+      data-date={Date.to_iso8601(@selected_date)}
+    >
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="text-xs text-base-content/50 truncate">
+          <span :if={show_hours} class="timeday-title hidden" data-view="hours">{selected_date_label(
+            @selected_date
+          )} by hour</span>
+          <span :if={show_sessions} class="timeday-title hidden" data-view="sessions">
+            Sessions <span class="badge badge-ghost badge-xs align-middle">beta</span>
+          </span>
+          <span :if={show_sessions} class="timeday-title hidden" data-view="clock">
+            Session clock <span class="badge badge-ghost badge-xs align-middle">beta</span>
+          </span>
+          <span :if={show_avg} class="timeday-title hidden" data-view="avg">Avg. reading by hour</span>
+          <span :if={show_avg} class="timeday-title hidden" data-view="avgclock">
+            When you usually read<span :if={peak_hour && peak_hour.avg_seconds > 0}> · peak {String.pad_leading(
+              Integer.to_string(peak_hour.hour),
+              2,
+              "0"
+            )}:00</span>
+          </span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <%= if show_sessions do %>
+            <div id="stint-meta" class="flex items-center gap-2" style="display: none">
+              <div class="text-xs text-base-content/40">
+                {length(@stints)} {if length(@stints) == 1, do: "session", else: "sessions"}
+              </div>
+              <div id="stint-zoomctl" class="flex items-center">
+                <button
+                  type="button"
+                  id="stint-zoom-out"
+                  class="btn btn-ghost btn-xs w-6 px-0"
+                  aria-label="Zoom out"
+                >−</button>
+                <span
+                  id="stint-zoom-level"
+                  class="text-[10px] text-base-content/40 tabular-nums w-8 text-center"
+                >1×</span>
+                <button
+                  type="button"
+                  id="stint-zoom-in"
+                  class="btn btn-ghost btn-xs w-6 px-0"
+                  aria-label="Zoom in"
+                >+</button>
+              </div>
+            </div>
+          <% end %>
+          <%= if (if(show_hours, do: 1, else: 0)) + (if show_sessions, do: 2, else: 0) + (if show_avg, do: 2, else: 0) > 1 do %>
+            <div class="join">
+              <button
+                :if={show_hours}
+                type="button"
+                class="btn btn-xs join-item timeday-tab"
+                data-view="hours"
+              >Hours</button>
+              <button
+                :if={show_sessions}
+                type="button"
+                class="btn btn-xs join-item timeday-tab"
+                data-view="sessions"
+              >Sessions</button>
+              <button
+                :if={show_sessions}
+                type="button"
+                class="btn btn-xs join-item timeday-tab"
+                data-view="clock"
+              >Clock</button>
+              <button
+                :if={show_avg}
+                type="button"
+                class="btn btn-xs join-item timeday-tab"
+                data-view="avg"
+              >Avg</button>
+              <button
+                :if={show_avg}
+                type="button"
+                class="btn btn-xs join-item timeday-tab"
+                data-view="avgclock"
+              >Avg Clock</button>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <%!-- format: hour-by-hour bars for the selected day --%>
+      <div :if={show_hours} class="timeday-view hidden" data-view="hours">
+        <div class="flex items-end h-24">
+          <div class="flex flex-col justify-between h-full text-[10px] text-base-content/50 pr-2 tabular-nums shrink-0 leading-none">
+            <span>{format_reading_time(max_hour_seconds)}</span>
+            <span>{format_reading_time(div(max_hour_seconds, 2))}</span>
+            <span></span>
+          </div>
+          <div class="flex items-end gap-[3px] h-full flex-1">
+            <div
+              :for={h <- @hourly_activity}
+              class="flex-1 flex flex-col items-center justify-end h-full relative group"
+            >
+              <div
+                class={[
+                  "w-full rounded-t-sm transition-colors",
+                  if(h.seconds > 0, do: "bg-primary hover:bg-primary-focus", else: "bg-base-300")
+                ]}
+                style={
+                  if h.seconds > 0,
+                    do: "height: #{max(round(h.seconds / max_hour_seconds * 100), 4)}%",
+                    else: "height: 4%"
+                }
+              >
+              </div>
+              <%= if h.seconds > 0 do %>
+                <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+                  <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
+                    <div class="font-semibold mb-1">
+                      {h.hour |> Integer.to_string() |> String.pad_leading(2, "0")}:00 &ndash; {h.hour
+                      |> Integer.to_string()
+                      |> String.pad_leading(2, "0")}:59
+                    </div>
+                    <div
+                      :for={entry <- h.entries}
+                      class="flex justify-between gap-4 text-base-content/70"
+                    >
+                      <span class="truncate max-w-[150px]">{entry.title}</span>
+                      <span class="text-base-content/50 tabular-nums">
+                        <%= if entry.chapters_read > 0 do %>
+                          {entry.chapters_read} ch ·
+                        <% end %>
+                        {format_reading_time(entry.seconds)}
+                      </span>
+                    </div>
+                    <%= if length(h.entries) > 1 do %>
+                      <div class="border-t border-base-content/10 mt-1 pt-1 flex justify-between gap-4 font-semibold">
+                        <span>Total</span>
+                        <span class="tabular-nums">{format_reading_time(h.seconds)}</span>
+                      </div>
+                    <% end %>
+                    <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-[3px] mt-1" style="padding-left: calc(2rem + 0.5rem)">
+          <div :for={h <- @hourly_activity} class="flex-1 text-center">
+            <span :if={h.hour in [0, 6, 12, 18]} class="text-[10px] text-base-content/50">{h.hour}</span>
+          </div>
+        </div>
+      </div>
+
+      <%!-- format: all-time average hourly heatmap --%>
+      <div :if={show_avg} class="timeday-view hidden" data-view="avg">
+        <div class="flex gap-[2px]">
+          <div :for={h <- @hourly_averages} class="flex-1 relative group">
+            <div class={[
+              "h-6 rounded-sm w-full",
+              cond do
+                h.avg_seconds == 0 -> "bg-base-300"
+                h.avg_seconds <= avg_max * 0.25 -> "bg-primary/25"
+                h.avg_seconds <= avg_max * 0.50 -> "bg-primary/50"
+                h.avg_seconds <= avg_max * 0.75 -> "bg-primary/75"
+                true -> "bg-primary"
+              end
+            ]}>
+            </div>
+            <%= if h.avg_seconds > 0 do %>
+              <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+                <div class="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs whitespace-nowrap">
+                  <div class="font-semibold">
+                    {String.pad_leading(Integer.to_string(h.hour), 2, "0")}:00
+                  </div>
+                  <div class="text-base-content/70">
+                    avg {format_reading_time(h.avg_seconds)}/day
+                  </div>
+                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-base-300">
+                  </div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+        <div class="flex gap-[2px] mt-1">
+          <div :for={h <- @hourly_averages} class="flex-1 text-center">
+            <span :if={h.hour in [0, 6, 12, 18]} class="text-[10px] text-base-content/50">{h.hour}</span>
+          </div>
+        </div>
+      </div>
+
+      <%!-- format: all-time average heatmap on one continuous 24h spiral.
+           Midnight begins outside; time moves clockwise and inward. --%>
+      <div :if={show_avg} class="timeday-view hidden" data-view="avgclock">
+        <svg
+          viewBox="0 0 240 240"
+          class="mx-auto w-full max-w-xs"
+          role="img"
+          aria-label="Average reading by hour on a 24-hour spiral"
+        >
+          <%!-- subtle clock spokes beneath the spiral --%>
+          <line
+            :for={i <- 0..11}
+            x1="120"
+            y1="17"
+            x2="120"
+            y2="55"
+            transform={"rotate(#{i * 30} 120 120)"}
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.08"
+          />
+          <path
+            d={clock_spiral_path(0, 86_400)}
+            fill="none"
+            stroke="var(--color-base-300)"
+            stroke-opacity="0.6"
+            stroke-width="11"
+          />
+          <%!-- smooth heatmap segments flow continuously across noon --%>
+          <path
+            :for={seg <- avg_clock_arcs(@hourly_averages, avg_max)}
+            d={clock_spiral_path(seg.start_sec, seg.end_sec)}
+            fill="none"
+            stroke="var(--color-primary)"
+            stroke-opacity={seg.opacity}
+            stroke-width="11"
+          />
+          <%!-- transparent per-hour hit areas carry the hover tooltip --%>
+          <%= for h <- @hourly_averages, h.avg_seconds > 0 do %>
+            <path
+              d={clock_spiral_path(h.hour * 3600, (h.hour + 1) * 3600)}
+              fill="none"
+              stroke="transparent"
+              stroke-width="11"
+            >
+              <title>
+                {String.pad_leading(Integer.to_string(h.hour), 2, "0")}:00 · avg {format_reading_time(
+                  h.avg_seconds
+                )}/day
+              </title>
+            </path>
+          <% end %>
+          <%!-- the top seam shows the spiral's direction through the day --%>
+          <text
+            x="127"
+            y="22"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            00
+          </text>
+          <text
+            x="127"
+            y="37"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            12
+          </text>
+          <text
+            x="127"
+            y="52"
+            font-size="7"
+            fill="var(--color-base-content)"
+            fill-opacity="0.45"
+            dominant-baseline="central"
+          >
+            24
+          </text>
+          <%!-- center face (static — no live hands here) --%>
+          <circle cx="120" cy="120" r="60" fill="var(--color-base-300)" fill-opacity="0.5" />
+          <line
+            :for={i <- 0..11}
+            x1="120"
+            y1="62"
+            x2="120"
+            y2="67"
+            transform={"rotate(#{i * 30} 120 120)"}
+            stroke="var(--color-base-content)"
+            stroke-opacity="0.25"
+          />
+          <text
+            :for={
+              {n, x, y} <- [{"12", 120, 73}, {"3", 167, 120}, {"6", 120, 167}, {"9", 73, 120}]
+            }
+            x={x}
+            y={y}
+            font-size="10"
+            fill="var(--color-base-content)"
+            fill-opacity="0.5"
+            text-anchor="middle"
+            dominant-baseline="central"
+          >
+            {n}
+          </text>
+        </svg>
+        <p
+          :if={peak_hour && peak_hour.avg_seconds > 0}
+          class="text-center text-xs text-base-content/50 mt-1"
+        >
+          You read most around {String.pad_leading(Integer.to_string(peak_hour.hour), 2, "0")}:00
+          <span class="text-base-content/40">({format_reading_time(peak_hour.avg_seconds)}/day)</span>
+        </p>
+      </div>
+
+      <%!-- format: minute-resolution session timeline — one row per series;
+           zoom widens the inner surface inside the scroll pane (labels
+           column stays put). Bars grow inline start/end labels once wide
+           enough; the red line on the ruler is "now" (today only). --%>
+      <%= if show_sessions do %>
+        <% stint_groups =
+          @stints
+          |> Enum.group_by(& &1.item)
+          |> Enum.sort_by(
+            fn {_item, sts} -> Enum.min_by(sts, & &1.started_at, DateTime).started_at end,
+            DateTime
+          ) %>
+        <div class="timeday-view hidden" data-view="sessions">
+          <div class="flex gap-2 mb-1">
+            <div class="w-24 sm:w-40 shrink-0 flex flex-col gap-1.5">
+              <div
+                :for={{item, _sts} <- stint_groups}
+                class="h-4 flex items-center text-[11px] truncate text-base-content/70"
+                title={Map.get(@stint_titles, item, item)}
+              >
+                {Map.get(@stint_titles, item, String.replace_prefix(item, "manga:", ""))}
+              </div>
+              <div class="h-3"></div>
+            </div>
+            <div id="stint-scroll" class="flex-1 min-w-0 overflow-x-auto overflow-y-hidden">
+              <div id="stint-zoom" class="flex flex-col gap-1.5" style="width: 100%">
+                <div
+                  :for={{_item, sts} <- stint_groups}
+                  class="relative h-4 rounded bg-base-300/60 overflow-hidden"
+                >
+                  <div
+                    :for={s <- sts}
+                    class="stint-bar absolute top-0.5 bottom-0.5 rounded-sm bg-primary/80 overflow-hidden"
+                    style={stint_bar_style(s, @selected_date, @stint_tz)}
+                    data-t1={stint_local_time(s.started_at, @stint_tz)}
+                    data-t2={stint_local_time(s.ended_at, @stint_tz)}
+                    data-dur={format_reading_time(s.seconds) || "<1m"}
+                    title={"#{stint_local_time(s.started_at, @stint_tz)}–#{stint_local_time(s.ended_at, @stint_tz)} · #{format_reading_time(s.seconds) || "<1m"}"}
+                  >
+                    <span class="stint-bar-label hidden absolute inset-0 flex items-center px-1 text-[9px] leading-none whitespace-nowrap text-primary-content/90"></span>
+                  </div>
+                </div>
+                <%!-- hour ruler: all labels rendered, JS picks a density that fits the zoom --%>
+                <div class="relative h-3">
+                  <span
+                    :for={h <- 0..24}
+                    class={"stint-hour absolute text-[9px] text-base-content/40 tabular-nums whitespace-nowrap #{if h == 24, do: "-translate-x-full"} #{if h not in [0, 6, 12, 18, 24], do: "hidden"}"}
+                    style={"left: #{h / 24 * 100}%"}
+                    data-h={h}
+                  >
+                    {h}
+                  </span>
+                  <div class="stint-now hidden absolute inset-y-0 w-px bg-error"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <%!-- session list, minute detail. "read ch …" lists the chapters
+           whose completion events (chapter_reads) fall inside the
+           stint's window; the meta chapter is the fallback for
+           sessions that finished nothing (browsing / mid-chapter). --%>
+          <div class="flex flex-col gap-1 border-t border-base-content/10 pt-2">
+            <div :for={s <- @stints} class="flex items-baseline gap-2 text-xs">
+              <span class="tabular-nums text-base-content/70 shrink-0">
+                {stint_local_time(s.started_at, @stint_tz)}–{stint_local_time(
+                  s.ended_at,
+                  @stint_tz
+                )}
+              </span>
+              <span class="text-base-content/50 shrink-0">{format_reading_time(s.seconds) || "<1m"}</span>
+              <span class="truncate text-base-content/60">
+                {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))}
+                <% read = chapters_in_stint(@chapter_reads, s) %>
+                <%= if read != [] do %>
+                  <span class="text-success/80">· read ch {Enum.join(read, ", ")}</span>
+                <% else %>
+                  <span :if={s.meta["chapter"]} class="text-base-content/40">· ch {s.meta[
+                    "chapter"
+                  ]}</span>
+                <% end %>
+              </span>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <%!-- format: session clock — one continuous 24h spiral around the
+           analog clock. Midnight starts outside and the day winds inward;
+           a red tick marks "now" on today's spiral. --%>
+      <%= if show_sessions do %>
+        <div class="timeday-view hidden" data-view="clock">
+          <svg
+            viewBox="0 0 240 240"
+            class="mx-auto w-full max-w-xs"
+            role="img"
+            aria-label="Reading sessions on a 24-hour spiral"
+          >
+            <%!-- subtle clock spokes beneath the spiral --%>
+            <line
+              :for={i <- 0..11}
+              x1="120"
+              y1="17"
+              x2="120"
+              y2="55"
+              transform={"rotate(#{i * 30} 120 120)"}
+              stroke="var(--color-base-content)"
+              stroke-opacity="0.08"
+            />
+            <path
+              d={clock_spiral_path(0, 86_400)}
+              fill="none"
+              stroke="var(--color-base-300)"
+              stroke-opacity="0.6"
+              stroke-width="11"
+            />
+            <%!-- session spans follow the spiral without a noon seam --%>
+            <%= for s <- @stints,
+                    span <- [stint_day_seconds(s, @selected_date, @stint_tz)],
+                    span != nil do %>
+              <path
+                d={clock_spiral_path(elem(span, 0), elem(span, 1))}
+                fill="none"
+                stroke="var(--color-primary)"
+                stroke-opacity="0.85"
+                stroke-width="9"
+                stroke-linecap="butt"
+              >
+                <title>
+                  {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))} · {stint_local_time(
+                    s.started_at,
+                    @stint_tz
+                  )}–{stint_local_time(s.ended_at, @stint_tz)} · {format_reading_time(s.seconds) ||
+                    "<1m"}
+                </title>
+              </path>
+            <% end %>
+            <%!-- the top seam shows the spiral's direction through the day --%>
+            <text
+              x="127"
+              y="22"
+              font-size="7"
+              fill="var(--color-base-content)"
+              fill-opacity="0.45"
+              dominant-baseline="central"
+            >
+              00
+            </text>
+            <text
+              x="127"
+              y="37"
+              font-size="7"
+              fill="var(--color-base-content)"
+              fill-opacity="0.45"
+              dominant-baseline="central"
+            >
+              12
+            </text>
+            <text
+              x="127"
+              y="52"
+              font-size="7"
+              fill="var(--color-base-content)"
+              fill-opacity="0.45"
+              dominant-baseline="central"
+            >
+              24
+            </text>
+            <%!-- "now" tick on the spiral (JS positions both endpoints) --%>
+            <line
+              id="clock-now"
+              stroke="var(--color-error)"
+              stroke-width="2"
+              stroke-linecap="round"
+              display="none"
+            />
+            <%!-- center: analog clock face --%>
+            <circle cx="120" cy="120" r="60" fill="var(--color-base-300)" fill-opacity="0.5" />
+            <line
+              :for={i <- 0..11}
+              x1="120"
+              y1="62"
+              x2="120"
+              y2="67"
+              transform={"rotate(#{i * 30} 120 120)"}
+              stroke="var(--color-base-content)"
+              stroke-opacity="0.25"
+            />
+            <text
+              :for={
+                {n, x, y} <- [{"12", 120, 73}, {"3", 167, 120}, {"6", 120, 167}, {"9", 73, 120}]
+              }
+              x={x}
+              y={y}
+              font-size="10"
+              fill="var(--color-base-content)"
+              fill-opacity="0.5"
+              text-anchor="middle"
+              dominant-baseline="central"
+            >
+              {n}
+            </text>
+            <line
+              id="clock-hand-h"
+              x1="120"
+              y1="126"
+              x2="120"
+              y2="92"
+              stroke="var(--color-base-content)"
+              stroke-opacity="0.75"
+              stroke-width="3.5"
+              stroke-linecap="round"
+            />
+            <line
+              id="clock-hand-m"
+              x1="120"
+              y1="128"
+              x2="120"
+              y2="76"
+              stroke="var(--color-base-content)"
+              stroke-opacity="0.55"
+              stroke-width="2.5"
+              stroke-linecap="round"
+            />
+            <circle cx="120" cy="120" r="3" fill="var(--color-base-content)" fill-opacity="0.75" />
+          </svg>
+        </div>
+      <% end %>
+
+      <script>
+        (() => {
+          const card = document.getElementById("timeday-card");
+          if (!card) return;
+
+          // ── sessions timeline: zoom + inline labels + now-marker ──
+          const scroll = document.getElementById("stint-scroll");
+          const zoomEl = document.getElementById("stint-zoom");
+          const levelEl = document.getElementById("stint-zoom-level");
+          const MAX_ZOOM = 64;
+          let zoom = 1;
+
+          const relayout = () => {
+            if (!zoomEl) return;
+            // hour labels: densest step that keeps ~40px between labels
+            const pxPerHour = zoomEl.offsetWidth / 24;
+            const step = [1, 2, 3, 6].find((s) => s * pxPerHour >= 40) || 6;
+            zoomEl.querySelectorAll(".stint-hour").forEach((el) => {
+              const h = +el.dataset.h;
+              el.classList.toggle("hidden", h % step !== 0);
+              el.textContent = step === 1 ? h + ":00" : h;
+            });
+            // inline start/end labels on bars wide enough to hold them
+            zoomEl.querySelectorAll(".stint-bar").forEach((bar) => {
+              const label = bar.querySelector(".stint-bar-label");
+              const w = bar.offsetWidth;
+              const d = bar.dataset;
+              let text = null;
+              if (w >= 130) text = d.t1 + "–" + d.t2 + " · " + d.dur;
+              else if (w >= 76) text = d.t1 + "–" + d.t2;
+              else if (w >= 34) text = d.t1;
+              label.classList.toggle("hidden", !text);
+              if (text) label.textContent = text;
+            });
+          };
+
+          const setZoom = (next, anchorClientX) => {
+            next = Math.min(MAX_ZOOM, Math.max(1, next));
+            if (next === zoom) return;
+            // keep the point under the anchor (default: pane center) fixed
+            const rect = scroll.getBoundingClientRect();
+            const anchor = anchorClientX == null ? rect.width / 2 : anchorClientX - rect.left;
+            const frac = (scroll.scrollLeft + anchor) / zoomEl.offsetWidth;
+            zoom = next;
+            zoomEl.style.width = zoom * 100 + "%";
+            scroll.scrollLeft = frac * zoomEl.offsetWidth - anchor;
+            levelEl.textContent = zoom + "×";
+            relayout();
+          };
+
+          if (zoomEl) {
+            document.getElementById("stint-zoom-in").addEventListener("click", () => setZoom(zoom * 2));
+            document.getElementById("stint-zoom-out").addEventListener("click", () => setZoom(zoom / 2));
+            scroll.addEventListener(
+              "wheel",
+              (e) => {
+                if (!e.ctrlKey) return; // ctrl+wheel / pinch-trackpad zooms
+                e.preventDefault();
+                setZoom(e.deltaY < 0 ? zoom * 2 : zoom / 2, e.clientX);
+              },
+              { passive: false }
+            );
+
+            // "now" marker, only while viewing today (browser-local, same
+            // offset the stint bars are positioned with)
+            const tickNow = () => {
+              const now = new Date();
+              const localDate =
+                now.getFullYear() + "-" +
+                String(now.getMonth() + 1).padStart(2, "0") + "-" +
+                String(now.getDate()).padStart(2, "0");
+              const isToday = card.dataset.date === localDate;
+              const frac = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+              card.querySelectorAll(".stint-now").forEach((el) => {
+                el.classList.toggle("hidden", !isToday);
+                el.style.left = frac * 100 + "%";
+              });
+              // clock view: live hands + now-tick on the active ring
+              const handH = document.getElementById("clock-hand-h");
+              const handM = document.getElementById("clock-hand-m");
+              const clockNow = document.getElementById("clock-now");
+              if (handH && handM) {
+                const hDeg = ((now.getHours() % 12) + now.getMinutes() / 60) * 30;
+                const mDeg = now.getMinutes() * 6 + now.getSeconds() * 0.1;
+                handH.setAttribute("transform", "rotate(" + hDeg + " 120 120)");
+                handM.setAttribute("transform", "rotate(" + mDeg + " 120 120)");
+              }
+              if (clockNow) {
+                const angle = frac * Math.PI * 4 - Math.PI / 2;
+                const radius = 98 - 30 * frac;
+                const point = (r, axis) => 120 + r * (axis === "x" ? Math.cos(angle) : Math.sin(angle));
+                clockNow.setAttribute("x1", point(radius - 7, "x"));
+                clockNow.setAttribute("y1", point(radius - 7, "y"));
+                clockNow.setAttribute("x2", point(radius + 7, "x"));
+                clockNow.setAttribute("y2", point(radius + 7, "y"));
+                clockNow.setAttribute("display", isToday ? "" : "none");
+              }
+            };
+            tickNow();
+            setInterval(tickNow, 30000);
+            window.addEventListener("resize", relayout);
+          }
+
+          // ── format switcher (hours / sessions / avg) ──
+          const views = Array.from(card.querySelectorAll(".timeday-view"));
+          const names = views.map((el) => el.dataset.view);
+          const setView = (v) => {
+            if (!names.includes(v)) v = names[0];
+            views.forEach((el) => el.classList.toggle("hidden", el.dataset.view !== v));
+            card.querySelectorAll(".timeday-tab").forEach((el) => el.classList.toggle("btn-active", el.dataset.view === v));
+            card.querySelectorAll(".timeday-title").forEach((el) => el.classList.toggle("hidden", el.dataset.view !== v));
+            const meta = document.getElementById("stint-meta");
+            if (meta) meta.style.display = v === "sessions" || v === "clock" ? "" : "none";
+            const zoomctl = document.getElementById("stint-zoomctl");
+            if (zoomctl) zoomctl.style.display = v === "sessions" ? "" : "none";
+            // measure-dependent layout only works once the view is visible
+            if (v === "sessions") relayout();
+          };
+          card.querySelectorAll(".timeday-tab").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              setView(btn.dataset.view);
+              try { localStorage.setItem("reader-history-timeview", btn.dataset.view); } catch (_e) {}
+            });
+          });
+          let initial = "sessions";
+          try { initial = localStorage.getItem("reader-history-timeview") || "sessions"; } catch (_e) {}
+          setView(initial);
+        })();
+      </script>
+    </div>
+  <% end %>
+
+  <%!-- Library milestones for the day: marked complete / caught up.
+       Discrete events from library_events, so "when did I catch up,
+       and to which chapter" survives later state changes. --%>
+  <%= if @library_events != [] do %>
+    <div class="flex flex-col gap-2 mb-4">
+      <div
+        :for={ev <- @library_events}
+        class="flex items-center gap-3 bg-base-200 rounded-xl px-4 py-2.5"
+      >
+        <%= case ev.event do %>
+          <% "completed" -> %>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="h-5 w-5 text-success flex-shrink-0"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M8.603 3.799A4.49 4.49 0 0 1 12 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 0 1 3.498 1.307 4.491 4.491 0 0 1 1.307 3.497A4.49 4.49 0 0 1 21.75 12a4.49 4.49 0 0 1-1.549 3.397 4.491 4.491 0 0 1-1.307 3.497 4.491 4.491 0 0 1-3.497 1.307A4.49 4.49 0 0 1 12 21.75a4.49 4.49 0 0 1-3.397-1.549 4.49 4.49 0 0 1-3.498-1.306 4.491 4.491 0 0 1-1.307-3.498A4.49 4.49 0 0 1 2.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 0 1 1.307-3.497 4.49 4.49 0 0 1 3.497-1.307Zm7.007 6.387a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          <% "started" -> %>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="h-5 w-5 text-info flex-shrink-0"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm14.024-.983a1.125 1.125 0 0 1 0 1.966l-5.603 3.113A1.125 1.125 0 0 1 9 15.113V8.887c0-.857.921-1.4 1.671-.983l5.603 3.113Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          <% _ -> %>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="h-5 w-5 text-warning flex-shrink-0"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+        <% end %>
+        <div class="flex-1 min-w-0 text-sm">
+          <span class="font-semibold">{case ev.event do
+            "completed" -> "Completed"
+            "started" -> "Started"
+            _ -> "Caught up"
+          end}</span>
+          <span class="text-base-content/70 truncate">{ev.title || "#{ev.source}/#{ev.slug}"}</span>
+        </div>
+        <span class="text-xs text-base-content/40 flex-shrink-0">
+          <%= if ev.chapter do %>
+            ch {display_chapter(ev.chapter)} ·
+          <% end %>
+          {stint_local_time(ev.happened_at, @stint_tz)}
+        </span>
+      </div>
+    </div>
+  <% end %>
+
+  <%= if @history != [] do %>
+    <div class="flex flex-col gap-3">
+      <a
+        :for={manga <- @history}
+        href={
+          if manga.last_chapter,
+            do: ~p"/manga/#{manga.source}/#{manga.slug}/#{manga.last_chapter}",
+            else: ~p"/manga/#{manga.source}/#{manga.slug}"
+        }
+        class="flex items-center gap-4 bg-base-200 rounded-xl p-3 hover:bg-base-300 transition-colors"
+      >
+        <%= if (src = history_cover_src(manga.source, manga.slug, @manga_meta, "small") || (manga.cover_url && ~p"/manga/proxy/image?#{%{url: manga.cover_url}}")) do %>
+          <img
+            src={src}
+            alt={manga.title}
+            class="w-14 h-20 rounded-lg object-cover flex-shrink-0"
+          />
+        <% end %>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold truncate">{manga.title}</p>
+          <%= if manga.last_chapter do %>
+            <p class="text-sm text-base-content/60">
+              Chapter {manga.last_chapter}
+              <%= if manga.last_page do %>
+                , Page {manga.last_page}
+              <% end %>
+            </p>
+          <% end %>
+          <%= if (line = history_stat_line(manga, @chapter_reads, @stints)) do %>
+            <p class="text-xs text-base-content/40 mt-1">{line}</p>
+          <% end %>
+        </div>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5 text-base-content/30 flex-shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </a>
+    </div>
+  <% else %>
+    <div class="text-center py-8">
+      <p class="text-base-content/50 text-sm">
+        No reading activity on this day.
+      </p>
+    </div>
+  <% end %>
+</div>

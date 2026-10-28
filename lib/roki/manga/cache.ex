@@ -1,11 +1,4 @@
 defmodule Roki.Manga.Cache do
-  @moduledoc """
-  The small cache the site scrapers were written against, carried over from the old reader with
-  them: a chapter list or a page list for a few hours, keyed by whatever the caller passes.
-
-  It caches what the function returns, errors included — deliberately, so a site that is down
-  does not get hammered — and a caller that cares re-asks on the next call.
-  """
   use GenServer
 
   @table __MODULE__
@@ -23,9 +16,7 @@ defmodule Roki.Manga.Cache do
 
       _ref ->
         case :ets.lookup(@table, key) do
-          [{^key, value, expiry}] when expiry > now ->
-            value
-
+          [{^key, value, expiry}] when expiry > now -> value
           _ ->
             value = fun.()
             :ets.insert(@table, {key, value, now + ttl_ms})

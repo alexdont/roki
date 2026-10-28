@@ -2,7 +2,6 @@ defmodule RokiWeb.Router do
   use RokiWeb, :router
 
   import PhoenixKitWeb.Integration
-  import Manga.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -18,20 +17,200 @@ defmodule RokiWeb.Router do
     plug :protect_from_forgery
   end
 
+  # The manga reader's pages are for a signed-in person and say so, as they did in the app they
+  # came from.
+  pipeline :require_auth do
+    plug PhoenixKitWeb.Users.Auth, :fetch_phoenix_kit_current_scope
+    plug PhoenixKitWeb.Users.Auth, :phoenix_kit_require_authenticated_user
+  end
+
   pipeline :session_user do
     plug :fetch_session
     plug PhoenixKitWeb.Users.Auth, :fetch_phoenix_kit_current_user
   end
 
-  # The manga reader (dev_docs/manga-migration-plan.md). Its own scope, not RokiWeb's, because
-  # the macro names `Manga.ReaderController` in full.
-  scope "/" do
-    # `:session_user` as well as `:browser`: the reader asks the host for the current user, and on
-    # a controller route PhoenixKit's browser plug does not assign one — without it the reader
-    # reads nothing saved and silently falls back to its defaults.
-    pipe_through [:browser, :session_user]
+  # ── the manga reader ──────────────────────────────────────────────
+  # The whole of it, as it stands in the app it came from: same routes, same controller, same
+  # live views, with `/reader` reading `/manga` here. Above this app's own routes, since
+  # `/:username` matches any single segment.
 
-    manga_reader("/manga")
+  scope "/manga", RokiWeb do
+    pipe_through [:browser, :require_auth]
+
+    get "/", MangaController, :home
+    # Parallel test route for the redesigned home (hero + cover-dominant
+    # cards + animated reordering). Swap into "/" once it's proven out.
+    get "/home2", MangaController, :home2
+    # Persisted old/new UI switch — when on, "/" and "/..."
+    # redirect to their v2 counterparts.
+    put "/manga_v2", MangaController, :set_reader_v2
+    # Superseded by the HistoryLive route above; kept as a fallback so the
+    # old calendar stays comparable (and revertable) while the new one beds in.
+    get "/legacy/history", MangaController, :history
+    get "/categories", MangaController, :categories
+    get "/stats", MangaController, :stats
+    get "/explore", MangaController, :explore
+    get "/search", MangaController, :search
+    # Async per-extension fragments for the two pages above — the
+    # pages render instantly and fill these in as sources answer.
+    get "/search/extension", MangaController, :search_extension
+    get "/explore/extension", MangaController, :explore_extension
+    get "/comments", MangaController, :annotations
+    get "/tierlist", MangaController, :tierlist
+    put "/tierlist", MangaController, :update_tierlist
+    get "/grid", MangaController, :grid
+    put "/grid", MangaController, :update_grid
+    # Parallel test route for the redesigned details page (v2).
+    get "/manga2/:source/:slug", MangaController, :index2
+    get "/proxy/image", MangaController, :proxy_image
+    # Chapter-page images from the kotatsu-parsers sidecar (see
+    # RokiWeb.KotatsuProxyController) — reader <img> tags for
+    # kotatsu-backed sources point here, never at upstream CDNs.
+    get "/kotatsu/image", KotatsuProxyController, :image
+    # Kotatsu source extensions: per-user picker + browse surface.
+    get "/extensions", KotatsuController, :extensions
+    post "/extensions", KotatsuController, :update_extensions
+    # MyAnimeList OAuth login (per-user list sync).
+    get "/trackers/mal/connect", TrackerController, :connect
+    get "/trackers/mal/callback", TrackerController, :callback
+    post "/trackers/mal/disconnect", TrackerController, :disconnect
+    get "/kotatsu/:name/manga", KotatsuController, :manga
+    get "/kotatsu/:name/read", KotatsuController, :read
+    post "/sync_caught_up", MangaController, :sync_caught_up
+    post "/categories", MangaController, :create_category
+    put "/categories/reorder", MangaController, :reorder_categories
+    put "/categories/:id", MangaController, :rename_category
+    delete "/categories/:id", MangaController, :delete_category
+    get "/categories/:id/manga_ids", MangaController, :category_manga_ids
+    put "/settings/auto_resume", MangaController, :update_auto_resume
+    put "/settings/auto_resume_timer", MangaController, :update_auto_resume_timer
+    put "/settings/auto_resume_art", MangaController, :update_auto_resume_art
+    put "/settings/default_tap_zone", MangaController, :update_default_tap_zone
+    put "/settings/default_reading_direction", MangaController, :update_default_reading_direction
+    put "/settings/default_smart_scroll", MangaController, :update_default_smart_scroll
+    put "/settings/smart_panels", MangaController, :update_smart_panels
+    put "/settings/default_page_padding", MangaController, :update_default_page_padding
+    put "/settings/smart_scroll_config", MangaController, :update_smart_scroll_config
+    put "/settings/timezone", MangaController, :update_timezone
+
+    # Last on purpose: each of these begins with a wildcard segment, so a literal route
+    # declared after them would never be reached. In the app this came from, the series
+    # paths carried an extra /manga segment that kept them apart; here they do not.
+    get "/:source/:slug", MangaController, :index
+    get "/:source/:slug/migrate/search", MangaController, :migrate_search
+    get "/:source/:slug/migrate/search_one", MangaController, :migrate_search_one
+    post "/:source/:slug/migrate", MangaController, :migrate
+    put "/:source/:slug/completed", MangaController, :toggle_completed
+    # MyAnimeList per-user title linking (enrichment).
+    get "/:source/:slug/mal/search", MangaController, :mal_search
+    post "/:source/:slug/mal/link", MangaController, :mal_link
+    post "/:source/:slug/mal/unlink", MangaController, :mal_unlink
+    post "/:source/:slug/mal/refresh", MangaController, :mal_refresh
+    post "/:source/:slug/save", MangaController, :save
+    post "/:source/:slug/refresh", MangaController, :refresh
+    delete "/:source/:slug/save", MangaController, :unsave
+    put "/:source/:slug/reading_mode", MangaController, :update_reading_mode
+    put "/:source/:slug/reading_direction", MangaController, :update_reading_direction
+    put "/:source/:slug/comments_visible", MangaController, :update_comments_visible
+    put "/:source/:slug/reading_rotation", MangaController, :update_reading_rotation
+    put "/:source/:slug/smart_crop", MangaController, :update_smart_crop
+    put "/:source/:slug/tap_zone_preset", MangaController, :update_tap_zone_preset
+    put "/:source/:slug/progress", MangaController, :update_progress
+    put "/:source/:slug/reading_time", MangaController, :update_reading_time
+    put "/:source/:slug/custom_cover", MangaController, :update_custom_cover
+    post "/:source/:slug/cover", MangaController, :set_cover
+    post "/:source/:slug/title", MangaController, :set_title
+    put "/:source/:slug/reset_max_chapter", MangaController, :reset_max_chapter
+    put "/:source/:slug/category", MangaController, :set_manga_category
+    post "/:source/:slug/toggle_category", MangaController, :toggle_manga_category
+  end
+
+  scope "/manga/api", RokiWeb do
+    pipe_through [:browser, :require_auth]
+
+    get "/giphy/search", GiphyController, :search
+    get "/giphy/trending", GiphyController, :trending
+    post "/fresco-debug-log", MangaController, :fresco_debug_log
+
+
+
+    # Last on purpose: each of these begins with a wildcard segment, so a literal route
+    # declared after them would never be reached. In the app this came from, the series
+    # paths carried an extra /manga segment that kept them apart; here they do not.
+    get "/:source/:slug/:chapter/images", MangaController, :chapter_images
+    get "/:source/:slug/:chapter/annotations", MangaController, :list_annotations
+    post "/:source/:slug/:chapter/annotations", MangaController, :create_annotation
+    put "/:source/:slug/:chapter/annotations/:id", MangaController, :update_annotation
+    delete "/:source/:slug/:chapter/annotations/:id", MangaController, :delete_annotation
+    get "/:source/:slug/:chapter/annotations/:id/detail", MangaController, :annotation_detail
+    post "/:source/:slug/:chapter/annotations/:id/like", MangaController, :toggle_like
+    get "/:source/:slug/:chapter/annotations/:id/replies", MangaController, :list_replies
+    post "/:source/:slug/:chapter/annotations/:id/replies", MangaController, :create_reply
+    delete "/:source/:slug/:chapter/annotations/:id/replies/:reply_id", MangaController, :delete_reply
+    # ─── Per-(user, chapter) page overrides — manual fixes for the
+    # double-page spread engine when a provider injects an ad or
+    # forgets a page. Toggle: same body inserts on absence, removes
+    # on presence (single endpoint, idempotent UI).
+    post "/:source/:slug/:chapter/page_overrides",
+         MangaController,
+         :toggle_page_override
+    # ─── Generic per-(user, chapter) marks API for the new fresco readers.
+    # Items are typed (annotation / drawing / marker / highlight); only
+    # the annotation type is wired up so far, but the list/delete
+    # endpoints are type-agnostic so future types reuse them.
+    get "/:source/:slug/:chapter/marks", MangaController, :list_marks
+    post "/:source/:slug/:chapter/marks/annotations", MangaController, :create_mark_annotation
+    post "/:source/:slug/:chapter/marks/etcher-shapes/:shape_uuid/comment",
+         MangaController,
+         :attach_etcher_comment
+    delete "/:source/:slug/:chapter/marks/:item_id", MangaController, :delete_mark
+  end
+
+  # This scope is declared after the others: its chapter route is `/:source/:slug/:chapter`,
+  # three wildcard segments that would otherwise swallow every literal three-segment route in
+  # the scopes below it — `/manga2/:source/:slug` among them. In the app this came from, the
+  # extra /manga segment on the series paths kept them apart.
+  scope "/manga" do
+    pipe_through [:browser, :require_auth]
+
+
+    live_session :reader_settings,
+      on_mount: [{PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope}] do
+      live "/settings", RokiWeb.Live.ReaderSettingsLive, :index
+
+      # Reading history, built on phoenix_live_calendar. Replaced the
+      # dead-view MangaController.history/2, which stays reachable at
+      # /manga/legacy/history as a fallback.
+      live "/history", RokiWeb.Live.HistoryLive, :index
+
+    # Last on purpose: each of these begins with a wildcard segment, so a literal route
+    # declared after them would never be reached. In the app this came from, the series
+    # paths carried an extra /manga segment that kept them apart; here they do not.
+    # Static path; must be declared before the dynamic :chapter live route below
+    # so it isn't shadowed by /manga/:source/:slug/:chapter.
+    get "/:source/:slug/comments", RokiWeb.MangaController, :manga_annotations
+    end
+
+    # Legacy MangaReaderLive — kept reachable at `/manga/legacy/manga/...`
+    # so old comment notification links (built before the fresco switch)
+    # still resolve to the OSD reader they were anchored against, and
+    # scroll-mode users still get the existing scroll_strip-free OSD
+    # experience.
+    live_session :manga_reader,
+      on_mount: [{PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope}] do
+      live "/legacy/:source/:slug/:chapter", RokiWeb.Live.MangaReaderLive, :show
+      live "/legacy/:source/:slug/:chapter/:page", RokiWeb.Live.MangaReaderLive, :show
+    end
+
+
+    # Last on purpose: each of these begins with a wildcard segment, so a literal route
+    # declared after them would never be reached. In the app this came from, the series
+    # paths carried an extra /manga segment that kept them apart; here they do not.
+    # Canonical reader URL — dispatches by reading_mode:
+    #   paged / double_page → Fresco paged reader (show_fresco)
+    #   scroll              → Fresco scroll-strip reader (show_fresco_strip)
+    # Legacy is only reachable via explicit /manga/legacy/manga/... URLs.
+    get "/:source/:slug/:chapter", RokiWeb.MangaController, :show
   end
 
   scope "/", RokiWeb do
@@ -102,12 +281,6 @@ defmodule RokiWeb.Router do
       live "/study", StudyLive, :index
       live "/lists", ListsLive, :index
       live "/lists/:slug", ListLive, :show
-
-      # The manga shelf and a series' chapters. The reading itself is the packaged reader's own
-      # controller route, mounted near the top of this file; these two are the way in and out of
-      # it. Both must stay above `/:username`, which matches any single segment.
-      live "/manga", MangaLive, :index
-      live "/manga/:source/:slug", MangaLive, :series
       live "/:username/home", UserHomeLive, :index
       live "/:username/stats", StatsLive, :index
       live "/:username/calendar", CalendarLive, :index

@@ -14,15 +14,27 @@ config :phoenix, :filter_parameters, ["password", "token"]
 
 # Who is told when something is said in a comment thread, and how a thread is named in the
 # moderation list (Roki.CommentHandler).
-# The manga reader (dev_docs/manga-migration-plan.md): the packaged reader, told where a series
-# comes from and where someone's place in it is kept.
-config :manhwa,
-  store: Roki.Manga.Store,
-  current_user: {RokiWeb.MangaGlue, :current_user},
-  series_url: {RokiWeb.MangaGlue, :series_url}
+# Reading sessions: each progress tick either extends the session open on a title or starts a
+# new one after a silence. The reader's own numbers.
+config :stint, repo: Roki.Repo, default_gap: 120, default_min: 10
 
-# Where the kotatsu sidecar answers — its own container on this stack's private network.
-config :roki, kotatsu_url: "http://kotatsu:8420"
+# The manga reader (dev_docs/manga-migration-plan.md). This block is the old reader's own, so
+# the packaged reader is wired here exactly as it is there.
+config :manhwa,
+  store: Roki.Manga.MangaReader.Store,
+  annotations: Roki.Manga.MangaReader.Annotations,
+  gif_provider: Roki.Manga.MangaReader.Gifs,
+  etcher_host: RokiWeb.Live.EtcherHostLive,
+  current_user: {RokiWeb.ReaderGlue, :current_user},
+  etcher_session: {RokiWeb.ReaderGlue, :etcher_session},
+  series_url: {RokiWeb.ReaderGlue, :series_url},
+  legacy_url: {RokiWeb.ReaderGlue, :legacy_url},
+  extra_head: {RokiWeb.ReaderGlue, :strip_head},
+  debug_log_path: "/tmp/fresco_debug.log"
+
+# The kotatsu sidecar — here it is a container of its own on this stack's private network rather
+# than a process on the loopback, so it is reached by name.
+config :roki, :kotatsu_url, "http://kotatsu:8420"
 
 config :phoenix_kit, :comment_resource_handlers, %{
   "profile" => Roki.CommentHandler.Profile,

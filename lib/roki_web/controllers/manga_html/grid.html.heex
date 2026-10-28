@@ -1,0 +1,240 @@
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <a href={~p"/manga"} class="text-2xl font-bold hover:opacity-80">📖 Reader</a>
+    <div class="flex items-center gap-2">
+      <%= if @resume_manga do %>
+        <a
+          href={~p"/manga/#{@resume_manga.source}/#{@resume_manga.slug}/#{@resume_manga.last_chapter}"}
+          class="btn btn-sm sm:btn-md sm:px-8 btn-primary"
+        >
+          ▶ Resume
+        </a>
+      <% end %>
+      <Layouts.theme_toggle />
+      <Layouts.notifications_bell parent={@conn} scope={@phoenix_kit_current_scope} />
+      <Layouts.user_menu scope={@phoenix_kit_current_scope} current_path={@conn.request_path} />
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-30 w-40 p-2 shadow-lg">
+          <li><a href="/manga">Home</a></li>
+          <li><a href="/manga/explore">Explore</a></li>
+          <li><a href="/manga/history">History</a></li>
+          <li><a href="/manga/stats">Stats</a></li>
+          <li><a href="/manga/comments">Comments</a></li>
+          <li><a href="/manga/categories">Categories</a></li>
+          <li><a href="/manga/tierlist">Tierlist</a></li>
+          <li><a href="/manga/grid" class="font-semibold">Grid</a></li>
+          <li><a href="/manga/settings">Settings</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+    <h2 class="text-lg font-semibold">My Grid</h2>
+    <div id="grid-mode" style="display: flex; gap: 0.25rem;">
+      <a href={~p"/manga/grid"} class={"btn btn-sm " <> if(@active_mode == "overall", do: "btn-primary", else: "btn-outline")}>Overall</a>
+      <a href={~p"/manga/grid?mode=manga"} class={"btn btn-sm " <> if(@active_mode == "manga", do: "btn-primary", else: "btn-outline")}>Manga</a>
+      <a href={~p"/manga/grid?mode=manhwa"} class={"btn btn-sm " <> if(@active_mode == "manhwa", do: "btn-primary", else: "btn-outline")}>Manhwa</a>
+    </div>
+  </div>
+
+  <style>
+    .grid-slot {
+      aspect-ratio: 3 / 4;
+      overflow: hidden;
+    }
+    .grid-slot .grid-item {
+      width: 100%;
+      height: 100%;
+    }
+    .grid-slot .grid-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      aspect-ratio: unset;
+    }
+    .grid-slot .grid-empty {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+
+  <div class="flex flex-col lg:flex-row-reverse gap-4">
+    <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 flex-1">
+      <div :for={slot <- @slots} class="flex flex-col gap-1 min-w-0">
+        <p class="text-xs text-base-content/60 font-medium px-0.5 truncate">{slot.label}</p>
+        <div
+          id={"grid-slot-#{slot.slot}"}
+          data-slot={slot.slot}
+          class="grid-slot border border-base-300 rounded-lg bg-base-200 relative"
+        >
+          <% manga = slot.source && Map.get(@saved_index, {slot.source, slot.slug}) %>
+          <%= if manga do %>
+            <div
+              class="grid-item cursor-grab active:cursor-grabbing"
+              data-id={"#{manga.source}:#{manga.slug}"}
+              title={manga.title}
+            >
+              <img
+                src={cover_image_src(manga, @cover_paths, "medium")}
+                alt={manga.title}
+                draggable="false"
+              />
+            </div>
+            <button type="button" class="grid-clear absolute top-1 right-1 btn btn-xs btn-circle btn-ghost" title="Clear">×</button>
+          <% else %>
+            <div class="grid-empty text-xs text-base-content/40">Drop here</div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:w-64 lg:shrink-0">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h3 class="text-base font-semibold">Saved</h3>
+        <div id="grid-pool-filter" style="display: flex; gap: 0.25rem;">
+          <button type="button" data-filter="read" class="btn btn-xs btn-primary">Read</button>
+          <button type="button" data-filter="all" class="btn btn-xs btn-outline">All</button>
+        </div>
+      </div>
+      <div
+        id="grid-pool"
+        class="bg-base-200 rounded-lg min-h-[120px] flex flex-wrap content-start gap-2 p-3 border border-base-300 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:sticky lg:top-4"
+      >
+        <div
+          :for={manga <- @saved_manga}
+          class="grid-item w-14 sm:w-16 shrink-0 cursor-grab active:cursor-grabbing"
+          data-id={"#{manga.source}:#{manga.slug}"}
+          data-progress={if (manga.last_chapter && manga.last_chapter != "") || manga.completed, do: "read", else: "unread"}
+          title={manga.title}
+        >
+          <img
+            src={cover_image_src(manga, @cover_paths, "medium")}
+            alt={manga.title}
+            class="w-full aspect-[3/4] object-cover rounded shadow-sm"
+            draggable="false"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const csrfToken = document.querySelector("meta[name=csrf-token]")?.content;
+    const activeMode = <%= raw(Jason.encode!(@active_mode)) %>;
+
+    function setSlot(slotEl, id) {
+      const slot = slotEl.dataset.slot;
+      fetch("/manga/grid", {
+        method: "PUT",
+        headers: {"content-type": "application/json", "x-csrf-token": csrfToken, "x-requested-with": "XMLHttpRequest"},
+        body: JSON.stringify({ slot: slot, id: id, mode: activeMode })
+      }).catch(function() {});
+    }
+
+    function paintEmpty(slotEl) {
+      const item = slotEl.querySelector(".grid-item");
+      if (item) item.remove();
+      const btn = slotEl.querySelector(".grid-clear");
+      if (btn) btn.remove();
+      if (!slotEl.querySelector(".grid-empty")) {
+        const empty = document.createElement("div");
+        empty.className = "grid-empty text-xs text-base-content/40";
+        empty.textContent = "Drop here";
+        slotEl.appendChild(empty);
+      }
+    }
+
+    function paintFilled(slotEl) {
+      const empty = slotEl.querySelector(".grid-empty");
+      if (empty) empty.remove();
+      if (!slotEl.querySelector(".grid-clear")) {
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "grid-clear absolute top-1 right-1 btn btn-xs btn-circle btn-ghost";
+        x.title = "Clear";
+        x.textContent = "×";
+        slotEl.appendChild(x);
+      }
+    }
+
+    let poolFilter = "read";
+    function applyPoolFilter() {
+      document.querySelectorAll("#grid-pool .grid-item").forEach(function(el) {
+        const show = poolFilter === "all" || el.dataset.progress === "read";
+        el.style.display = show ? "" : "none";
+      });
+      document.querySelectorAll("#grid-pool-filter button").forEach(function(b) {
+        const active = b.dataset.filter === poolFilter;
+        b.classList.toggle("btn-primary", active);
+        b.classList.toggle("btn-outline", !active);
+      });
+    }
+
+    document.querySelectorAll("#grid-pool-filter button").forEach(function(b) {
+      b.addEventListener("click", function() {
+        poolFilter = b.dataset.filter;
+        applyPoolFilter();
+      });
+    });
+
+    applyPoolFilter();
+
+    document.addEventListener("click", function(e) {
+      const btn = e.target.closest(".grid-clear");
+      if (!btn) return;
+      e.preventDefault();
+      const slotEl = btn.closest(".grid-slot");
+      if (!slotEl) return;
+      setSlot(slotEl, null);
+      paintEmpty(slotEl);
+    });
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js";
+    script.onload = function() {
+      Sortable.create(document.getElementById("grid-pool"), {
+        group: { name: "grid", pull: "clone", put: false },
+        sort: false,
+        animation: 150,
+        draggable: ".grid-item",
+        forceFallback: true,
+        fallbackOnBody: true
+      });
+
+      document.querySelectorAll(".grid-slot").forEach(function(slotEl) {
+        Sortable.create(slotEl, {
+          group: { name: "grid", pull: true, put: true },
+          animation: 150,
+          draggable: ".grid-item",
+          forceFallback: true,
+          fallbackOnBody: true,
+          onAdd: function(evt) {
+            // Replace existing slot occupant with the newcomer
+            const items = slotEl.querySelectorAll(".grid-item");
+            if (items.length > 1) items[0].remove();
+            paintFilled(slotEl);
+            setSlot(slotEl, evt.item.dataset.id);
+          },
+          onRemove: function() {
+            if (!slotEl.querySelector(".grid-item")) {
+              setSlot(slotEl, null);
+              paintEmpty(slotEl);
+            }
+          }
+        });
+      });
+    };
+    document.head.appendChild(script);
+  })();
+</script>
