@@ -31,7 +31,9 @@ export function makeDolbyDecoder(MB) {
     async init() {
       this.m = await loadModule()
       const name = NAMES[this.codec]
-      const extra = this.config.description ? new Uint8Array(this.config.description.buffer || this.config.description) : null
+      // The description may be a view into a larger buffer: take exactly its bytes.
+      const d = this.config.description
+      const extra = !d ? null : d instanceof ArrayBuffer ? new Uint8Array(d) : new Uint8Array(d.buffer, d.byteOffset || 0, d.byteLength)
       const namePtr = this.m._malloc(name.length + 1)
       this.m.stringToUTF8(name, namePtr, name.length + 1)
       let extraPtr = 0
