@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Black screen bisection</title>
 <style>
-body{background:#111;color:#eee;font:14px system-ui;margin:0}
+html,body{max-width:100vw;overflow-x:hidden} body{background:#111;color:#eee;font:14px system-ui;margin:0}
 header{padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 button{font-size:17px;padding:10px 18px}
 iframe{display:block;width:100vw;height:70vh;border:0;background:#000}
-table{border-collapse:collapse;margin:8px 12px;font-size:13px} td,th{border:1px solid #333;padding:4px 6px;text-align:left} td.ok{color:#5f5} td.bad{color:#f66}
+table{border-collapse:collapse;margin:8px 12px;font-size:13px;display:block;overflow-x:auto;max-width:calc(100vw - 24px)} td,th{border:1px solid #333;padding:4px 6px;text-align:left} td.ok{color:#5f5} td.bad{color:#f66}
 #note{padding:0 12px 12px;color:#aaa}
 </style></head>
 <body>
-<header><button id="go">Run every case</button><span id="status">8 cases, about 25 s each. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
+<header><button id="go">Run every case</button><span id="status">8 cases, about 35 s each. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
 <iframe id="f" allow="autoplay; fullscreen" title="case"></iframe>
 <table id="t"><thead><tr><th>#</th><th>case</th><th>frames</th><th>t</th><th>rs</th><th>size</th><th>state</th></tr></thead><tbody></tbody></table>
 <div id="note"></div>
@@ -18,14 +18,14 @@ table{border-collapse:collapse;margin:8px 12px;font-size:13px} td,th{border:1px 
 // the frame above, with one thing changed; muted, so that one tap here starts them all.
 const W = "/watch/tv/278043/1/13?diag=1"
 const CASES = [
-  ["bare page, site pipeline, controls (muted)", "/lab/local.html?auto=1&mute=1&link=0", "v"],
   ["bare page, no controls (muted)", "/lab/local.html?auto=1&mute=1&link=0&controls=0", "v"],
   ["bare page in the watch page's box (muted)", "/lab/local.html?auto=1&mute=1&link=0&fixed=1", "v"],
   ["watch page as it is", W, "study-video"],
-  ["watch page, a fresh <video> under <body>", W + "&fresh=1", "fresh-video"],
-  ["watch page, fresh <video>, player markup removed", W + "&fresh=1&strip=1", "fresh-video"],
-  ["watch page, its video moved under <body>, controls on", W + "&bare=1&controls=1", "study-video"],
-  ["watch page, controls on", W + "&controls=1", "study-video"],
+  ["watch page, fresh <video>, full-bleed fixed", W + "&fresh=1", "fresh-video"],
+  ["watch page, fresh <video>, fixed, 16 px in from the edges", W + "&fresh=1&geo=inset", "fresh-video"],
+  ["watch page, fresh <video>, in the normal flow, 240 px tall", W + "&fresh=1&geo=flow", "fresh-video"],
+  ["watch page, fresh <video>, fixed, half height", W + "&fresh=1&geo=short", "fresh-video"],
+  ["watch page, fresh <video>, fixed, nine tenths wide", W + "&fresh=1&geo=narrow", "fresh-video"],
 ]
 // What a decoded frame looks like, read back through a canvas: a mean brightness of 0 on a
 // frame the decoder has produced says the picture is black in the data, not just on the screen.
@@ -38,7 +38,7 @@ const brightness = (v) => {
     return Math.round(sum / (d.length / 4) / 3)
   } catch (e) { return "n/a: " + e.message.slice(0, 40) }
 }
-const SECS = 25
+const SECS = 35
 const $ = (id) => document.getElementById(id)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const row = (i, c, r) => {
@@ -46,7 +46,7 @@ const row = (i, c, r) => {
   if (r && r.bright !== null) r.state += ` · brightness ${r.bright}`
   let tr = tb.children[i]; if (!tr) { tr = document.createElement("tr"); tb.appendChild(tr) }
   const ok = r && r.frames > 0
-  tr.innerHTML = `<td>${i + 1}</td><td>${c[0]}</td><td class="${r ? (ok ? "ok" : "bad") : ""}">${r ? r.frames : "…"}</td><td>${r ? r.t : ""}</td><td>${r ? r.rs : ""}</td><td>${r ? r.size : ""}</td><td>${r ? r.state : "running"}</td>`
+  tr.innerHTML = `<td>${i + 1}</td><td>${c[0]}</td><td class="${r ? (ok ? "ok" : "bad") : ""}">${r ? r.frames : "…"}</td><td>${r ? r.t : ""}</td><td>${r ? r.rs : ""}</td><td>${r ? r.size + " in " + (r.rect ? r.rect[2] + "×" + r.rect[3] : "") : ""}</td><td>${r ? r.state : "running"}</td>`
 }
 async function runCase(i) {
   const c = CASES[i]
@@ -55,7 +55,7 @@ async function runCase(i) {
   const f = $("f")
   f.src = "about:blank"; await sleep(300)
   f.src = c[1] + "&_=" + Date.now()
-  const r = {frames: 0, t: 0, rs: 0, size: "", state: "", err: null, build: null, paused: null, muted: null, samples: [], parent: null, rect: null, controls: null, src: null, html: null, bright: null}
+  const r = {frames: 0, t: 0, rs: 0, size: "", state: "", err: null, build: null, paused: null, muted: null, samples: [], parent: null, rect: null, controls: null, src: null, html: null, bright: null, scale: null, frameWidth: null}
   const t0 = Date.now()
   while (Date.now() - t0 < SECS * 1000) {
     await sleep(1000)
@@ -72,6 +72,7 @@ async function runCase(i) {
       const pr = v.parentElement; r.parent = pr ? `${pr.tagName.toLowerCase()}${pr.id ? "#" + pr.id : ""}.${String(pr.className).slice(0, 30)}` : null
       const b = v.getBoundingClientRect(); r.rect = [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]
       r.controls = v.hasAttribute("controls"); r.src = String(v.currentSrc || v.src).slice(0, 12); r.html = d.documentElement.className
+      const w = f.contentWindow; r.scale = w.visualViewport ? +w.visualViewport.scale.toFixed(2) : null; r.frameWidth = w.innerWidth
       if (q.totalVideoFrames > 0 && (r.samples.length % 5 === 0)) r.bright = brightness(v)
       if (r.samples.length < 30) r.samples.push([Math.round((Date.now() - t0) / 1000), q.totalVideoFrames || 0, +v.currentTime.toFixed(1)])
     } catch (e) { r.state = "cannot read frame: " + e.message }
@@ -88,11 +89,11 @@ $("go").onclick = async () => {
   $("f").src = "about:blank"
   try { sessionStorage.removeItem("roki-diag") } catch (e) {}
   const report = {at: new Date().toISOString(), ua: navigator.userAgent, platform: navigator.platform, width: innerWidth, height: innerHeight,
-    managedMediaSource: !!window.ManagedMediaSource, caps: [["bisection"]], results}
+    managedMediaSource: !!window.ManagedMediaSource, caps: [["bisection"]], scale: window.visualViewport ? +window.visualViewport.scale.toFixed(2) : null, results}
   let sent = "not sent"
   try { const res = await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}); sent = res.ok ? "sent (" + (await res.json()).id + ")" : "refused " + res.status + " — signed in as the owner?" } catch (e) { sent = "failed: " + e.message }
   $("status").textContent = `Done. Report ${sent}.`
-  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, frames: r.frames, t: r.t, state: r.state, build: r.build, parent: r.parent, rect: r.rect, controls: r.controls, bright: r.bright})))
+  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, frames: r.frames, t: r.t, state: r.state, build: r.build, parent: r.parent, rect: r.rect, controls: r.controls, bright: r.bright, scale: r.scale, frameWidth: r.frameWidth})))
 }
 </script>
 </body></html>

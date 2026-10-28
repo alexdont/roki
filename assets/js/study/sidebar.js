@@ -15,7 +15,7 @@ import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {startLocalPlayer} from "./local_player.js"
 
-const BUILD = "b7" // shown by `?diag=1`, so a phone can say which bundle it runs
+const BUILD = "b8" // shown by `?diag=1`, so a phone can say which bundle it runs
 
 // The flags app.js kept when the page loaded (LiveView may have rewritten the address since).
 function readFlags() {
@@ -1454,8 +1454,17 @@ export const StudySidebar = {
       let v = this.video
       if (flags.get("fresh") === "1") {
         v = document.createElement("video"); v.id = "fresh-video"; v.setAttribute("playsinline", ""); v.setAttribute("controls", "")
-        v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain"
-        document.body.appendChild(v)
+        // `geo=`: where the fresh element sits — full-bleed fixed (default), fixed but inset
+        // from the edges, in the normal flow, half height, or nine tenths wide.
+        const geo = {
+          inset: "position:fixed;inset:16px;width:calc(100% - 32px);height:calc(100% - 32px);z-index:100;background:#000;object-fit:contain",
+          flow: "position:relative;display:block;width:100%;height:240px;z-index:100;background:#000;object-fit:contain",
+          short: "position:fixed;top:0;left:0;width:100%;height:50%;z-index:100;background:#000;object-fit:contain",
+          narrow: "position:fixed;top:0;left:0;width:90%;height:100%;z-index:100;background:#000;object-fit:contain",
+        }[flags.get("geo")] || "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain"
+        v.style.cssText = geo
+        if (flags.get("geo") === "flow") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style"); document.body.prepend(v) }
+        else document.body.appendChild(v)
         if (flags.get("strip") === "1") { this.el.style.display = "none"; document.documentElement.className = ""; document.body.removeAttribute("class"); document.body.removeAttribute("style") }
       }
       this.showDiag(v)
