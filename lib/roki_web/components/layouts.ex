@@ -39,6 +39,10 @@ defmodule RokiWeb.Layouts do
     default: nil,
     doc: "the page's LiveView socket: the notifications bell is a nested LiveView and needs it"
 
+  attr :conn, :any,
+    default: nil,
+    doc: "the connection, on a controller-rendered page — what the bell uses in place of a socket"
+
   attr :current_path, :string, default: "/"
   attr :wide, :boolean, default: false, doc: "full-width content, for the home page"
 
@@ -69,9 +73,14 @@ defmodule RokiWeb.Layouts do
       {"Manga", ~p"/manga"}
     ]
 
-    # Whom the bell is for: a signed-in person, on a page that passed its socket.
+    # The bell is a nested LiveView, so it needs whatever this page is: a socket on a LiveView,
+    # the connection on a controller page. Reading only the socket meant it vanished from the
+    # header on every controller-rendered page — the whole manga reader, as it turned out.
+    bell_parent = assigns[:socket] || assigns[:conn]
+
+    # Whom the bell is for: a signed-in person, on a page that gave us one of those.
     bell_user =
-      if username && assigns.socket && PhoenixKit.Notifications.enabled?(),
+      if username && bell_parent && PhoenixKit.Notifications.enabled?(),
         do: PhoenixKit.Users.Auth.Scope.user(scope)
 
     assigns =
@@ -79,6 +88,7 @@ defmodule RokiWeb.Layouts do
       |> assign(:scope, scope)
       |> assign(:username, username)
       |> assign(:bell_user, bell_user)
+      |> assign(:bell_parent, bell_parent)
       |> assign(:user, username && PhoenixKit.Users.Auth.Scope.user(scope))
       |> assign(
         :admin?,
@@ -143,14 +153,20 @@ defmodule RokiWeb.Layouts do
             :if={@bell_user}
             class="flex items-stretch [&>*]:flex [&>*]:items-stretch [&_.dropdown]:flex [&_.dropdown]:items-stretch max-sm:[&_.dropdown-content]:!fixed max-sm:[&_.dropdown-content]:!inset-x-2 max-sm:[&_.dropdown-content]:!top-14 max-sm:[&_.dropdown-content]:!mt-0 max-sm:[&_.dropdown-content]:!w-auto [&_label]:flex [&_label]:h-full [&_label]:min-h-0 [&_label]:w-10 [&_label]:items-center [&_label]:justify-center [&_label]:rounded-none [&_label]:border-b-2 [&_label]:border-transparent [&_label]:p-0 [&_label]:transition [&_label:hover]:bg-base-200 min-[420px]:[&_label]:w-12"
           >
-            {Phoenix.Component.live_render(@socket, PhoenixKitWeb.Live.NotificationsBell,
-              id: "pk-notifications-bell",
-              sticky: true,
-              session: %{
-                "user_uuid" => @bell_user.uuid,
-                "locale" => nil,
-                "can_open_inbox" => false
-              }
+            <%!-- `sticky:` only means anything for a LiveView nested in another LiveView; handed a
+                  connection it renders nothing at all, which is how the bell went missing from
+                  every controller page here. --%>
+            {Phoenix.Component.live_render(
+              @bell_parent,
+              PhoenixKitWeb.Live.NotificationsBell,
+              [
+                id: "pk-notifications-bell",
+                session: %{
+                  "user_uuid" => @bell_user.uuid,
+                  "locale" => nil,
+                  "can_open_inbox" => false
+                }
+              ] ++ if(assigns[:socket], do: [sticky: true], else: [])
             )}
           </div>
 
@@ -344,7 +360,7 @@ defmodule RokiWeb.Layouts do
       <%!-- Flush content is laid out by whoever wrote it. Wrapping it in this app's padding and
             width as well would indent it twice over — on a phone that is the whole screen
             margin spent twice, and the page can no longer reach the edge. --%>
-      <div :if={@flush}>{render_slot(@inner_block)}</div>
+      <div :if={@flush} class="flush-page">{render_slot(@inner_block)}</div>
       <div
         :if={!@flush}
         class={["mx-auto space-y-4", if(@wide, do: "max-w-6xl", else: "max-w-2xl")]}
@@ -377,6 +393,7 @@ defmodule RokiWeb.Layouts do
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       socket={assigns[:socket]}
+      conn={assigns[:conn]}
       current_path={(assigns[:conn] && @conn.request_path) || "/manga"}
       flush
     >

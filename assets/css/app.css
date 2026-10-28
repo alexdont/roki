@@ -157,6 +157,14 @@ body::before {
 html.study-open body::before { display: none; }
 html.study-open .site-header { display: none; }
 
+/* The manga reader's menus open with `z-[1]`, which was enough in the app they came from but
+   loses here to any card painted after them — the posters' titles and buttons drew straight
+   over an open filter menu. Lifting them clear of the page content, but still under this
+   site's own header. */
+.flush-page .dropdown-content {
+  z-index: 35;
+}
+
 /* The header: frosted, on top, with a hairline under it. */
 .site-header {
   position: sticky;
