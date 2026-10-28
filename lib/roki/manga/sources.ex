@@ -4,19 +4,38 @@ defmodule Roki.Manga.Sources do
   `get_manga/1`, `get_chapter_images/2` — and is named by the key its slugs were saved under in
   the old reader, so imported rows keep working.
 
-  The old reader had ten hand-written site scrapers beside the kotatsu extensions. They are
-  coming across one at a time, heaviest-used first; `known?/1` tells a caller whether a series
-  can be opened yet, and the library page says so rather than failing at the reader.
+  Each site's parsing came over from the old reader untouched: it is tuned to that site's markup
+  and would only break by being tidied.
   """
-  alias Roki.Manga.Sources.{Kotatsu, MangaHere}
+  alias Roki.Manga.Sources
 
+  # The keys are the ones slugs were saved under in the old reader, so an imported row opens at
+  # the address it always had. `kotatsu` is not a site but every extension the sidecar carries,
+  # with the extension named inside the slug.
   @sources %{
-    "kotatsu" => %{module: Kotatsu, label: "Extensions"},
-    "mangahere" => %{module: MangaHere, label: "MangaHere"}
+    "kotatsu" => %{module: Sources.Kotatsu, label: "Extensions", lang: :en},
+    "mangahere" => %{module: Sources.MangaHere, label: "MangaHere", lang: :en},
+    "mangafreak" => %{module: Sources.MangaFreak, label: "MangaFreak", lang: :en},
+    "mangafire" => %{module: Sources.MangaFire, label: "MangaFire", lang: :en},
+    "atsumaru" => %{module: Sources.Atsumaru, label: "Atsumaru", lang: :en},
+    "weebcentral" => %{module: Sources.WeebCentral, label: "Weeb Central", lang: :en},
+    "mangakatana" => %{module: Sources.MangaKatana, label: "MangaKatana", lang: :en},
+    "mangalib" => %{module: Sources.MangaLib, label: "MangaLib", lang: :ru},
+    "mangabuff" => %{module: Sources.MangaBuff, label: "MangaBuff", lang: :ru},
+    "remanga" => %{module: Sources.Remanga, label: "Remanga", lang: :ru},
+    "comx" => %{module: Sources.ComX, label: "Com-X", lang: :ru}
   }
 
-  @doc "Every source that can be read today."
+  @doc "Every source that can be read."
   def all, do: @sources
+
+  @doc "What language a source reads in, for grouping a search."
+  def lang(source) do
+    case @sources[source] do
+      %{lang: l} -> l
+      _ -> :en
+    end
+  end
 
   @doc "Whether this source is one we can read."
   def known?(source), do: Map.has_key?(@sources, source)

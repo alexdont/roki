@@ -20,6 +20,8 @@ defmodule Roki.Application do
       # request budgets, and a short cache in front of them (see Roki.Search).
       {Roki.RateLimit, clean_period: :timer.minutes(10)},
       Roki.TTLCache,
+      # The manga sources' own cache, carried over with them (Roki.Manga.Cache).
+      Roki.Manga.Cache,
       # Which pictures the media library holds, in memory (see Roki.Images).
       Roki.Images,
       # Where work that can crash (searching other sites) runs, apart from whoever asked for it.

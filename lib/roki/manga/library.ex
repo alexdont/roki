@@ -110,22 +110,25 @@ defmodule Roki.Manga.Library do
     end
   end
 
-  @doc "Everything one person has saved, most recently read first."
-  def shelf(user_uuid) do
+  @doc "Everything one person has saved, most recently read first, optionally one shelf of it."
+  def shelf(user_uuid, category_id \\ nil) do
     sql = """
     select t.id, t.source, t.slug, coalesce(nullif(l.title, ''), t.title) as title,
            coalesce(nullif(l.cover_url, ''), t.cover_url) as cover_url,
-           l.last_chapter, l.max_chapter, l.total_chapters, l.completed,
+           l.last_chapter, l.last_chapter_number, l.max_chapter, l.total_chapters, l.completed,
            l.reading_seconds, l.updated_at
       from roki_manga_library l
       join roki_manga_titles t on t.id = l.manga_id
      where l.user_uuid = $1::text::uuid
+       and ($2::bigint is null or l.category_id = $2::bigint
+             or exists (select 1 from roki_manga_category_members cm
+                         where cm.library_id = l.id and cm.category_id = $2::bigint))
      order by l.updated_at desc nulls last
     """
 
-    %{rows: rows} = Repo.query!(sql, [user_uuid])
+    %{rows: rows} = Repo.query!(sql, [user_uuid, category_id])
 
-    for [id, source, slug, title, cover, last, max, total, done, seconds, at] <- rows do
+    for [id, source, slug, title, cover, last, last_n, max, total, done, seconds, at] <- rows do
       %{
         id: id,
         source: source,
@@ -133,6 +136,7 @@ defmodule Roki.Manga.Library do
         title: title || slug,
         cover_url: cover,
         last_chapter: last,
+        last_number: last_n,
         max_chapter: max,
         total_chapters: total,
         completed: done,
@@ -140,6 +144,52 @@ defmodule Roki.Manga.Library do
         updated_at: at
       }
     end
+  end
+
+  @doc """
+  The shelf as the old reader's home page arranges it: what you are in the middle of, what you
+  have caught up on, what you finished, and what you have never opened. Reading first and most
+  recent first within it, which is the order someone actually wants.
+  """
+  def home(user_uuid, category_id \\ nil) do
+    shelf = shelf(user_uuid, category_id)
+
+    groups =
+      Enum.group_by(shelf, fn item ->
+        cond do
+          item.completed -> :completed
+          item.last_chapter in [nil, ""] -> :unread
+          caught_up?(item) -> :caught_up
+          true -> :reading
+        end
+      end)
+
+    %{
+      reading: Map.get(groups, :reading, []),
+      caught_up: Map.get(groups, :caught_up, []),
+      completed: Map.get(groups, :completed, []),
+      unread: Map.get(groups, :unread, []),
+      count: length(shelf)
+    }
+  end
+
+  # Caught up means there is nothing left that we know of: the chapter they are on is the last
+  # one the source told us about. Without a count of chapters we cannot say, so we do not.
+  defp caught_up?(%{last_number: n, total_chapters: total})
+       when is_integer(n) and is_integer(total) and total > 0,
+       do: n >= total
+
+  defp caught_up?(_), do: false
+
+  @doc "Someone's own shelves, in their order."
+  def categories(user_uuid) do
+    %{rows: rows} =
+      Repo.query!(
+        "select id, name from roki_manga_categories where user_uuid = $1::text::uuid order by position, name",
+        [user_uuid]
+      )
+
+    for [id, name] <- rows, do: %{id: id, name: name}
   end
 
   @doc "Put a series on someone's shelf (or leave it where it is)."

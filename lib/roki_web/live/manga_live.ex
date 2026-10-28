@@ -38,8 +38,21 @@ defmodule RokiWeb.MangaLive do
      start_async(socket, :chapters, fn -> Store.list_chapters(user, [source, slug]) end)}
   end
 
-  def handle_params(_params, _uri, socket) do
-    {:noreply, assign(socket, shelf: Library.shelf(socket.assigns.user.uuid))}
+  def handle_params(params, _uri, socket) do
+    uuid = socket.assigns.user.uuid
+
+    category =
+      with s when is_binary(s) <- params["category"],
+           {n, ""} <- Integer.parse(s),
+           do: n,
+           else: (_ -> nil)
+
+    {:noreply,
+     assign(socket,
+       home: Library.home(uuid, category),
+       categories: Library.categories(uuid),
+       category: category
+     )}
   end
 
   @impl true
@@ -120,44 +133,77 @@ defmodule RokiWeb.MangaLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path="/manga"
     >
-      <div class="space-y-4">
-        <h1 class="font-display text-2xl font-bold">Manga</h1>
+      <div class="space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="font-display text-2xl font-bold">Manga</h1>
+          <span class="text-sm text-base-content/60">{@home.count} on your shelf</span>
+        </div>
 
-        <p :if={@shelf == []} class="text-sm text-base-content/60">
-          Nothing on your shelf yet.
-        </p>
+        <div :if={@categories != []} class="flex flex-wrap gap-2">
+          <.link
+            patch={~p"/manga"}
+            class={["btn btn-xs", if(is_nil(@category), do: "btn-primary", else: "btn-ghost")]}
+          >
+            Everything
+          </.link>
+          <.link
+            :for={c <- @categories}
+            patch={~p"/manga?#{[category: c.id]}"}
+            class={["btn btn-xs", if(@category == c.id, do: "btn-primary", else: "btn-ghost")]}
+          >
+            {c.name}
+          </.link>
+        </div>
 
-        <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <li :for={item <- @shelf} class="poster-card overflow-hidden rounded-box bg-base-200">
-            <.link navigate={~p"/manga/#{item.source}/#{item.slug}"} class="block">
-              <img
-                :if={item.cover_url}
-                src={cover(item.cover_url)}
-                alt=""
-                loading="lazy"
-                class="aspect-[2/3] w-full object-cover"
-              />
-              <div
-                :if={is_nil(item.cover_url)}
-                class="flex aspect-[2/3] w-full items-center justify-center bg-base-300 text-xs text-base-content/40"
-              >
-                no cover
-              </div>
-              <div class="space-y-1 p-2">
-                <p class="line-clamp-2 text-sm font-medium">{item.title}</p>
-                <p class="text-xs text-base-content/60">
-                  <span :if={item.last_chapter}>ch. {item.last_chapter}</span>
-                  <span :if={is_nil(item.last_chapter)}>not started</span>
-                  <span :if={not Sources.known?(item.source)} class="text-warning">
-                    · {item.source} not ported yet
-                  </span>
-                </p>
-              </div>
-            </.link>
-          </li>
-        </ul>
+        <p :if={@home.count == 0} class="text-sm text-base-content/60">Nothing here yet.</p>
+
+        <.section title="Continue reading" items={@home.reading} />
+        <.section title="Caught up" items={@home.caught_up} />
+        <.section title="Not started" items={@home.unread} />
+        <.section title="Finished" items={@home.completed} />
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :title, :string, required: true
+  attr :items, :list, required: true
+
+  defp section(assigns) do
+    ~H"""
+    <section :if={@items != []} class="space-y-2">
+      <h2 class="font-display text-lg font-semibold">
+        {@title} <span class="text-sm font-normal text-base-content/50">{length(@items)}</span>
+      </h2>
+
+      <ul class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        <li :for={item <- @items} class="poster-card overflow-hidden rounded-box bg-base-200">
+          <.link navigate={~p"/manga/#{item.source}/#{item.slug}"} class="block">
+            <img
+              :if={item.cover_url}
+              src={cover(item.cover_url)}
+              alt=""
+              loading="lazy"
+              class="aspect-[2/3] w-full object-cover"
+            />
+            <div
+              :if={is_nil(item.cover_url)}
+              class="flex aspect-[2/3] w-full items-center justify-center bg-base-300 text-xs text-base-content/40"
+            >
+              no cover
+            </div>
+            <div class="space-y-1 p-2">
+              <p class="line-clamp-2 text-sm font-medium">{item.title}</p>
+              <p class="text-xs text-base-content/60">
+                <span :if={item.last_chapter}>ch. {item.last_chapter}</span>
+                <span :if={is_nil(item.last_chapter)}>not started</span>
+                <span :if={item.total_chapters}>/ {item.total_chapters}</span>
+              </p>
+            </div>
+          </.link>
+        </li>
+      </ul>
+    </section>
     """
   end
 end
