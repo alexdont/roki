@@ -363,6 +363,9 @@ if (params.get("fixed") === "1") {
   document.body.appendChild(box); box.appendChild(stage); stage.appendChild(v)
   const back = document.createElement("button"); back.textContent = "✕"; back.style.cssText = "position:absolute;top:8px;right:8px;z-index:2"; back.onclick = () => box.remove(); stage.appendChild(back)
 }
+// `reparent=1`: the video element taken out of the page and put back where it was before anything
+// is attached to it (the fixed box above does this as a side effect, and that case played).
+if (params.get("reparent") === "1") { const v = $("video"); const parent = v.parentNode, next = v.nextSibling; parent.removeChild(v); parent.insertBefore(v, next) }
 if (params.get("link") !== null) {
   const links = await (await fetch("/lab/links")).json()
   const l = links[Number(params.get("link"))]
