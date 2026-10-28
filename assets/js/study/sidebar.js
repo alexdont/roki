@@ -290,6 +290,7 @@ export const StudySidebar = {
   postProgress(paused = false) {
     const t = this.abs()
     if (!this.ready || !(t > 0)) return
+    if (this.flags && this.flags.get("diag") === "1") return // a diagnostic run is not a viewing
     this.pushEvent("progress", {
       position: Math.floor(t),
       duration: Math.floor(this.total()),
@@ -1435,6 +1436,7 @@ export const StudySidebar = {
       // leaves the release's subtitles unread.
       const flags = this.flags
       if (flags.get("controls") === "1") v.setAttribute("controls", "")
+      if (flags.get("mute") === "1") v.muted = true // so a frame may start it without a tap
       // `bare=1`: the element taken out of the player's markup altogether, straight under <body>.
       if (flags.get("bare") === "1") { document.body.appendChild(v); v.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:100;background:#000;object-fit:contain" }
       this.showDiag(p)

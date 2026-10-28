@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Black screen bisection</title>
+<style>
+body{background:#111;color:#eee;font:14px system-ui;margin:0}
+header{padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{font-size:17px;padding:10px 18px}
+iframe{display:block;width:100vw;height:70vh;border:0;background:#000}
+table{border-collapse:collapse;margin:8px 12px;font-size:13px} td,th{border:1px solid #333;padding:4px 6px;text-align:left} td.ok{color:#5f5} td.bad{color:#f66}
+#note{padding:0 12px 12px;color:#aaa}
+</style></head>
+<body>
+<header><button id="go">Run every case</button><span id="status">8 cases, about 25 s each. The site's player, each time with one thing changed; the frame count says whether a picture was drawn.</span></header>
+<iframe id="f" allow="autoplay; fullscreen" title="case"></iframe>
+<table id="t"><thead><tr><th>#</th><th>case</th><th>frames</th><th>t</th><th>rs</th><th>size</th><th>state</th></tr></thead><tbody></tbody></table>
+<div id="note"></div>
+<script>
+// Each case is the site's own watch page (or local.html, the same pipeline on a bare page) in
+// the frame above, with one thing changed; muted, so that one tap here starts them all.
+const W = "/watch/tv/278043/1/13?diag=1&mute=1"
+const CASES = [
+  ["bare page, site pipeline, controls", "/lab/local.html?auto=1&mute=1&link=0", "v"],
+  ["bare page, site pipeline, no controls", "/lab/local.html?auto=1&mute=1&link=0&controls=0", "v"],
+  ["watch page as it is", W, "study-video"],
+  ["watch page, video moved under <body>", W + "&bare=1", "study-video"],
+  ["watch page, controls on", W + "&controls=1", "study-video"],
+  ["watch page, no MediaSource duration", W + "&plain=1", "study-video"],
+  ["watch page, no subtitle scan", W + "&noscan=1", "study-video"],
+  ["watch page, grain + header kept", W + "&keep=all", "study-video"],
+]
+const SECS = 25
+const $ = (id) => document.getElementById(id)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const row = (i, c, r) => {
+  const tb = $("t").tBodies[0]
+  let tr = tb.children[i]; if (!tr) { tr = document.createElement("tr"); tb.appendChild(tr) }
+  const ok = r && r.frames > 0
+  tr.innerHTML = `<td>${i + 1}</td><td>${c[0]}</td><td class="${r ? (ok ? "ok" : "bad") : ""}">${r ? r.frames : "…"}</td><td>${r ? r.t : ""}</td><td>${r ? r.rs : ""}</td><td>${r ? r.size : ""}</td><td>${r ? r.state : "running"}</td>`
+}
+async function runCase(i) {
+  const c = CASES[i]
+  row(i, c, null)
+  $("status").textContent = `Case ${i + 1}/${CASES.length}: ${c[0]}`
+  const f = $("f")
+  f.src = "about:blank"; await sleep(300)
+  f.src = c[1] + "&_=" + Date.now()
+  const r = {frames: 0, t: 0, rs: 0, size: "", state: "", err: null, build: null, paused: null, muted: null, samples: []}
+  const t0 = Date.now()
+  while (Date.now() - t0 < SECS * 1000) {
+    await sleep(1000)
+    try {
+      const d = f.contentDocument
+      const v = d && d.getElementById(c[2])
+      if (!v) { r.state = d ? "no video element yet" : "no document"; continue }
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}
+      r.frames = Math.max(r.frames, q.totalVideoFrames || 0)
+      r.t = +v.currentTime.toFixed(1); r.rs = v.readyState; r.size = `${v.videoWidth}×${v.videoHeight}`; r.paused = v.paused; r.muted = v.muted
+      r.err = v.error ? (v.error.message || String(v.error.code)) : null
+      r.state = r.err ? "error: " + r.err : (v.paused ? "paused" : "playing")
+      const badge = d.querySelector("div[style*='rgb(0 0 0/0.7)']"); if (badge) r.build = badge.textContent.split(" ")[0]
+      if (r.samples.length < 30) r.samples.push([Math.round((Date.now() - t0) / 1000), q.totalVideoFrames || 0, +v.currentTime.toFixed(1)])
+    } catch (e) { r.state = "cannot read frame: " + e.message }
+    row(i, c, r)
+  }
+  row(i, c, r)
+  return {name: c[0], url: c[1], ...r, ok: r.frames > 0}
+}
+$("go").onclick = async () => {
+  $("go").disabled = true
+  const results = []
+  for (let i = 0; i < CASES.length; i++) results.push(await runCase(i))
+  $("f").src = "about:blank"
+  const report = {at: new Date().toISOString(), ua: navigator.userAgent, platform: navigator.platform, width: innerWidth, height: innerHeight,
+    managedMediaSource: !!window.ManagedMediaSource, caps: [["bisection"]], results}
+  let sent = "not sent"
+  try { const res = await fetch("/lab/report", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(report)}); sent = res.ok ? "sent (" + (await res.json()).id + ")" : "refused " + res.status + " — signed in as the owner?" } catch (e) { sent = "failed: " + e.message }
+  $("status").textContent = `Done. Report ${sent}.`
+  $("note").textContent = JSON.stringify(results.map((r) => ({name: r.name, frames: r.frames, t: r.t, rs: r.rs, state: r.state, build: r.build})))
+}
+</script>
+</body></html>
