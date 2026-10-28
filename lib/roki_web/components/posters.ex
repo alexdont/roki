@@ -201,6 +201,10 @@ defmodule RokiWeb.PosterComponents do
     end
   end
 
+  def href(%{type: "manga", source: source, slug: slug})
+      when is_binary(source) and is_binary(slug),
+      do: ~p"/manga/#{source}/#{slug}"
+
   def href(_), do: nil
 
   # "7/13 episodes" / "1/3 seasons watched" in the note laev writes → {7, 13, "episodes"}.

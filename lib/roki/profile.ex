@@ -653,7 +653,7 @@ defmodule Roki.Profile do
 
   defp of_kind?(_item, :all), do: true
   defp of_kind?(item, :anime), do: item.anime
-  defp of_kind?(_item, :manga), do: false
+  defp of_kind?(item, :manga), do: item.type == "manga"
   defp of_kind?(item, kind), do: not item.anime and item.type == Atom.to_string(kind)
 
   defp badge(nil), do: nil
@@ -677,6 +677,59 @@ defmodule Roki.Profile do
     do: ratings[{"mal", mal}] || ratings[{item.type, item.id}]
 
   defp score_of(ratings, item), do: ratings[{item.type, item.id}]
+
+  @doc """
+  What this person has read, in the shape `history/1` returns, so the shelf picker and
+  `arrange/5` work on it unchanged: one entry per saved series, `type: "manga"` with the
+  reader's own id, and its cover as the poster.
+
+  The score is the tier they put it in on their tierlist, through the same mapping the reader
+  pushes to MyAnimeList (S is 10, A is 9, and so on) — manga is not rated out of ten anywhere
+  else here, and a tierlist is the rating this person actually gave it.
+  """
+  def read_history(uuid) when is_binary(uuid) do
+    for m <- Roki.Manga.Library.list_read_history(uuid) do
+      %{
+        type: "manga",
+        id: m.id,
+        source: m.source,
+        slug: m.slug,
+        title: m.title,
+        poster: manga_poster(m),
+        anime: false,
+        seen: false,
+        at: DateTime.to_unix(DateTime.from_naive!(m.updated_at, "Etc/UTC")),
+        tier: m.tier
+      }
+    end
+  end
+
+  # The ratings map `arrange/5` wants, built from the entries themselves.
+  defp manga_scores(items) do
+    for i <- items,
+        score = Roki.Manga.Trackers.MAL.tier_score(i.tier),
+        into: %{},
+        do: {{"manga", i.id}, score * 1.0}
+  end
+
+  # The media library's copy when there is one, else the source's own address through this
+  # site, which carries the headers the source asks for.
+  defp manga_poster(%{cover_file_uuid: uuid}) when is_binary(uuid) and uuid != "",
+    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "medium")
+
+  defp manga_poster(%{cover_url: url}) when is_binary(url) and url != "",
+    do: "/manga/proxy/image?url=" <> URI.encode_www_form(url)
+
+  defp manga_poster(_), do: nil
+
+  # The series behind manga favourites, by the reader's id.
+  defp manga_cards([]), do: %{}
+
+  defp manga_cards(items) do
+    for m <- Roki.Manga.Library.list_saved_by_ids(Enum.map(items, & &1.id)),
+        into: %{},
+        do: {m.id, %{source: m.source, slug: m.slug, title: m.title, poster: manga_poster(m)}}
+  end
 
   # ── the favourites ────────────────────────────────────────────────
 
@@ -735,23 +788,46 @@ defmodule Roki.Profile do
       for [kind, position, type, id, title] <- rows,
           do: %{kind: kind, position: position, type: type, id: id, title: title}
 
-    cards = Roki.Titles.cards(Enum.map(items, &{&1.type, &1.id}))
+    cards =
+      items
+      |> Enum.reject(&(&1.type == "manga"))
+      |> Enum.map(&{&1.type, &1.id})
+      |> Roki.Titles.cards()
+
+    manga = manga_cards(Enum.filter(items, &(&1.type == "manga")))
 
     items =
-      Enum.map(items, fn i ->
-        card = cards[{i.type, i.id}] || %{}
-        {type, id} = if i.type == "mal", do: {nil, nil}, else: {i.type, i.id}
+      Enum.map(items, fn
+        %{type: "manga"} = i ->
+          m = manga[i.id] || %{}
 
-        %{
-          type: type,
-          id: id,
-          mal_id: if(i.type == "mal", do: i.id),
-          title: i.title || card[:title],
-          poster: card[:poster],
-          position: i.position,
-          badge: "##{i.position}",
-          kind: i.kind
-        }
+          %{
+            type: "manga",
+            id: i.id,
+            source: m[:source],
+            slug: m[:slug],
+            title: m[:title] || i.title,
+            poster: m[:poster],
+            position: i.position,
+            badge: "##{i.position}",
+            kind: i.kind,
+            anime: false
+          }
+
+        i ->
+          card = cards[{i.type, i.id}] || %{}
+          {type, id} = if i.type == "mal", do: {nil, nil}, else: {i.type, i.id}
+
+          %{
+            type: type,
+            id: id,
+            mal_id: if(i.type == "mal", do: i.id),
+            title: i.title || card[:title],
+            poster: card[:poster],
+            position: i.position,
+            badge: "##{i.position}",
+            kind: i.kind
+          }
       end)
 
     for {kind, _} <- @shelves,
@@ -910,9 +986,11 @@ defmodule Roki.Profile do
     favs = favorites || favorites(uuid)
     taken = for {_, items} <- favs, i <- items, into: MapSet.new(), do: favorite_key(i)
 
-    uuid
-    |> history()
-    |> arrange(ratings(uuid), kind, :top)
+    items = if kind == :manga, do: read_history(uuid), else: history(uuid)
+    rates = if kind == :manga, do: manga_scores(items), else: ratings(uuid)
+
+    items
+    |> arrange(rates, kind, :top)
     |> Enum.map(fn i ->
       {type, id} = favorite_key(i)
       i |> Map.put(:key, "#{type}:#{id}") |> Map.put(:on_shelf, MapSet.member?(taken, {type, id}))
@@ -921,7 +999,8 @@ defmodule Roki.Profile do
 
   @doc "A click's key (`\"movie:603\"`, `\"mal:5114\"`) as `{type, id}`, or nil."
   def parse_key(key) when is_binary(key) do
-    with [type, id] when type in ["movie", "tv", "mal"] <- String.split(key, ":", parts: 2),
+    with [type, id] when type in ["movie", "tv", "mal", "manga"] <-
+           String.split(key, ":", parts: 2),
          {n, ""} <- Integer.parse(id) do
       {type, n}
     else
@@ -936,7 +1015,8 @@ defmodule Roki.Profile do
   added}`. Only titles in the shelf's own picker list count — a film cannot go on the shows
   shelf — and only as many as the shelf has places left; `{:error, message}` when none can.
   """
-  def add_favorites(uuid, kind, keys) when kind in [:movie, :tv, :anime] and is_list(keys) do
+  def add_favorites(uuid, kind, keys)
+      when kind in [:movie, :tv, :anime, :manga] and is_list(keys) do
     favs = favorites(uuid)
     left = @top - length(favs[kind] || [])
     wanted = keys |> Enum.map(&parse_key/1) |> Enum.reject(&is_nil/1) |> Enum.uniq()

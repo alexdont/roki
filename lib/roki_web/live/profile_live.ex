@@ -16,7 +16,6 @@ defmodule RokiWeb.ProfileLive do
   import PhoenixKitWeb.Components.Core.UserInfo, only: [user_avatar: 1]
 
   alias PhoenixKit.Users.Auth.Scope
-  alias Roki.Manga.Library
   alias Roki.Profile
 
   @impl true
@@ -63,7 +62,6 @@ defmodule RokiWeb.ProfileLive do
           watched: nil,
           films: nil,
           favorites: nil,
-          manga: nil,
           shelf: nil,
           shelf_error: nil,
           picking: nil,
@@ -95,7 +93,6 @@ defmodule RokiWeb.ProfileLive do
 
     socket
     |> start_async(:favorites, fn -> Profile.favorites(uuid) end)
-    |> start_async(:manga, fn -> Library.list_grid_picks(uuid, Profile.top()) end)
     |> start_async(:watched, fn -> Profile.counts(uuid) end)
     |> then(fn s ->
       if Roki.Laev.connected?(uuid),
@@ -191,9 +188,6 @@ defmodule RokiWeb.ProfileLive do
       nil ->
         {:noreply, socket}
 
-      :manga ->
-        {:noreply, socket}
-
       shelf ->
         {:noreply,
          assign(socket,
@@ -211,7 +205,7 @@ defmodule RokiWeb.ProfileLive do
         %{assigns: %{owner?: true, uuid: uuid, profile: profile}} = socket
       ) do
     case Profile.shelf(kind) do
-      shelf when shelf in [:movie, :tv, :anime] ->
+      shelf when shelf in [:movie, :tv, :anime, :manga] ->
         {:ok, profile} = Profile.set_ranked(uuid, shelf, not Profile.ranked?(profile, shelf))
         {:noreply, assign(socket, :profile, profile)}
 
@@ -236,7 +230,7 @@ defmodule RokiWeb.ProfileLive do
         %{assigns: %{owner?: true}} = socket
       )
       when is_list(ids) do
-    with shelf when shelf in [:movie, :tv, :anime] <- Profile.shelf(kind) do
+    with shelf when shelf in [:movie, :tv, :anime, :manga] <- Profile.shelf(kind) do
       {status, favorites} = Profile.reorder_favorites(socket.assigns.uuid, shelf, ids)
 
       {:noreply,
@@ -259,7 +253,7 @@ defmodule RokiWeb.ProfileLive do
       )
       when is_map(favs) do
     case Profile.shelf(kind) do
-      shelf when shelf in [:movie, :tv, :anime] ->
+      shelf when shelf in [:movie, :tv, :anime, :manga] ->
         uuid = socket.assigns.uuid
 
         {:noreply,
@@ -386,23 +380,13 @@ defmodule RokiWeb.ProfileLive do
 
   # The keys ("movie:603", "mal:5114") of what is on a shelf, as the picker names them.
   # Which shelves a page shows. A visitor sees the ones with something on them. Manga also
-  # needs a signed-in viewer: its covers are fetched from the sources by this site, which only
-  # does that for someone signed in.
-  defp show_shelf?(:manga, owner?, viewer, _favorites, manga),
-    do: viewer != nil and (owner? or manga in [nil] or manga != [])
+  # needs a signed-in viewer: the covers that are not in the media library are fetched from the
+  # sources by this site, which only does that for someone signed in.
+  defp show_shelf?(:manga, owner?, viewer, favorites),
+    do: viewer != nil and (favorites == nil or owner? or (favorites[:manga] || []) != [])
 
-  defp show_shelf?(kind, owner?, _viewer, favorites, _manga),
+  defp show_shelf?(kind, owner?, _viewer, favorites),
     do: favorites == nil or owner? or (favorites[kind] || []) != []
-
-  # A cover from the media library when the series has one there, else the source's own
-  # address through this site, which carries the headers the source asks for.
-  defp manga_cover(%{cover_file_uuid: uuid}) when is_binary(uuid) and uuid != "",
-    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "medium")
-
-  defp manga_cover(%{cover_url: url}) when is_binary(url) and url != "",
-    do: ~p"/manga/proxy/image?#{%{url: url}}"
-
-  defp manga_cover(_), do: nil
 
   defp on_shelf_keys(favorites, kind) do
     for i <- (favorites || %{})[kind] || [], into: MapSet.new() do
@@ -434,11 +418,6 @@ defmodule RokiWeb.ProfileLive do
     do: {:noreply, assign(socket, :favorites, favorites)}
 
   def handle_async(:favorites, _other, socket), do: {:noreply, assign(socket, :favorites, %{})}
-
-  def handle_async(:manga, {:ok, picks}, socket) when is_list(picks),
-    do: {:noreply, assign(socket, :manga, picks)}
-
-  def handle_async(:manga, _other, socket), do: {:noreply, assign(socket, :manga, [])}
 
   def handle_async(:watched, {:ok, %{watched: n, films: f}}, socket),
     do: {:noreply, assign(socket, watched: n, films: f)}
@@ -642,17 +621,13 @@ defmodule RokiWeb.ProfileLive do
         <%!-- The shelves. A visitor sees the ones with something on them. --%>
         <section
           :for={{kind, label} <- Profile.shelves()}
-          :if={show_shelf?(kind, @owner?, @viewer, @favorites, @manga)}
+          :if={show_shelf?(kind, @owner?, @viewer, @favorites)}
           class="space-y-3"
         >
           <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-xl font-semibold">{shelf_title(@profile, kind, label)}</h2>
-            <%!-- The manga shelf is the reader's own grid, so it is arranged there. --%>
-            <a :if={@owner? and kind == :manga} href="/manga/grid" class="btn btn-xs ml-auto">
-              <.icon name="hero-pencil-square" class="h-3.5 w-3.5" /> Arrange
-            </a>
             <button
-              :if={@owner? and kind != :manga and @favorites != nil}
+              :if={@owner? and @favorites != nil}
               type="button"
               phx-click="shelf_edit"
               phx-value-kind={kind}
@@ -666,36 +641,8 @@ defmodule RokiWeb.ProfileLive do
             </button>
           </div>
 
-          <%!-- Manga: what this person put on their reading grid, in their order. --%>
-          <div :if={kind == :manga} class="space-y-2">
-            <ul
-              :if={@manga == nil}
-              class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
-              aria-busy="true"
-            >
-              <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
-            </ul>
-            <ul :if={@manga not in [nil, []]} class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10">
-              <li :for={m <- @manga}>
-                <a href={~p"/manga/#{m.source}/#{m.slug}"} title={m.title}>
-                  <img
-                    src={manga_cover(m)}
-                    alt={m.title}
-                    loading="lazy"
-                    class="aspect-[2/3] w-full rounded-box object-cover"
-                  />
-                </a>
-              </li>
-            </ul>
-            <p :if={@manga == []} class="text-sm text-base-content/50">
-              {if @owner?,
-                do: "Nothing on this shelf yet. Arrange your reading grid to fill it.",
-                else: "Nothing here yet."}
-            </p>
-          </div>
-
           <ul
-            :if={kind != :manga and @favorites == nil}
+            :if={@favorites == nil}
             class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
             aria-busy="true"
           >
@@ -704,7 +651,7 @@ defmodule RokiWeb.ProfileLive do
 
           <%!-- Looking: the posters as they are, each a link to its page. --%>
           <ul
-            :if={kind != :manga and @shelf != kind and (@favorites[kind] || []) != []}
+            :if={@shelf != kind and (@favorites[kind] || []) != []}
             class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
           >
             <li :for={i <- @favorites[kind]} class="space-y-1">
@@ -717,10 +664,7 @@ defmodule RokiWeb.ProfileLive do
             </li>
           </ul>
           <p
-            :if={
-              kind != :manga and @shelf != kind and @favorites != nil and
-                (@favorites[kind] || []) == []
-            }
+            :if={@shelf != kind and @favorites != nil and (@favorites[kind] || []) == []}
             class="text-sm text-base-content/50"
           >
             {if @owner?,
@@ -747,7 +691,8 @@ defmodule RokiWeb.ProfileLive do
                 phx-value-kind={kind}
                 class="btn btn-sm btn-outline btn-primary rounded-full"
               >
-                <.icon name="hero-squares-plus" class="h-4 w-4" /> Choose from watched
+                <.icon name="hero-squares-plus" class="h-4 w-4" />
+                {if kind == :manga, do: "Choose from read", else: "Choose from watched"}
               </button>
               <p class="text-sm text-base-content/60">
                 {if Profile.ranked?(@profile, kind),
@@ -924,6 +869,7 @@ defmodule RokiWeb.ProfileLive do
       assign(assigns,
         matches: matches,
         selected: MapSet.size(assigns.picks),
+        verb: if(assigns.kind == :manga, do: "read", else: "watched"),
         added: added,
         removed: removed
       )
@@ -946,7 +892,7 @@ defmodule RokiWeb.ProfileLive do
                 Choose your favorite {String.downcase(@label)}
               </h2>
               <p class="text-sm text-base-content/60">
-                Your watched {String.downcase(@label)}, best rated first. What is on the shelf is ticked: untick it to take it off, tick others to put them on.
+                Your {@verb} {String.downcase(@label)}, best rated first. What is on the shelf is ticked: untick it to take it off, tick others to put them on.
               </p>
             </div>
             <button
@@ -991,13 +937,13 @@ defmodule RokiWeb.ProfileLive do
             <li :for={_ <- 1..16} class="skeleton aspect-[2/3] rounded-box"></li>
           </ul>
           <p :if={@list == []} class="py-10 text-center text-base-content/60">
-            Nothing watched of this kind yet. What you finish shows up here.
+            Nothing {@verb} of this kind yet. What you finish shows up here.
           </p>
           <p
             :if={is_list(@list) and @list != [] and @matches == []}
             class="py-10 text-center text-base-content/60"
           >
-            Nothing watched matches "{@query}".
+            Nothing {@verb} matches "{@query}".
           </p>
 
           <ul

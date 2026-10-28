@@ -410,6 +410,49 @@ defmodule Roki.Manga.Library do
   end
 
   @doc """
+  Everything this person has read, with the tier they gave it — what the profile's manga shelf
+  picks from. A series counts as read once a chapter has been opened.
+  """
+  def list_read_history(user_uuid) do
+    from(s in SavedManga,
+      left_join: t in MangaTierlist,
+      on: t.user_id == s.user_id and t.source == s.source and t.slug == s.slug,
+      where: s.user_id == type(^user_uuid, Ecto.UUID),
+      where: not is_nil(s.last_chapter),
+      order_by: [desc: s.updated_at],
+      select: %{
+        id: s.id,
+        source: s.source,
+        slug: s.slug,
+        title: s.title,
+        cover_url: s.cover_url,
+        cover_file_uuid: s.cover_file_uuid,
+        updated_at: s.updated_at,
+        tier: t.tier
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc "Saved series by the reader's own ids — what a manga favourite points at."
+  def list_saved_by_ids([]), do: []
+
+  def list_saved_by_ids(ids) do
+    from(s in SavedManga,
+      where: s.id in ^ids,
+      select: %{
+        id: s.id,
+        source: s.source,
+        slug: s.slug,
+        title: s.title,
+        cover_url: s.cover_url,
+        cover_file_uuid: s.cover_file_uuid
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   What this person is in the middle of, most recently read first — the reading row on their
   own shelf. A series is in the middle of it once a chapter has been opened and until it is
   marked finished.

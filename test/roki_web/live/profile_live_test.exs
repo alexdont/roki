@@ -99,24 +99,41 @@ defmodule RokiWeb.ProfileLiveTest do
     assert hd(favs.movie).id == 1
   end
 
-  test "the manga shelf is the reader's grid: arranged there, shown here" do
-    user = register("mangafan")
-
+  defp read!(user, slug, title, tier \\ nil) do
     {:ok, _} =
       Roki.Manga.Library.save_manga(user.uuid, %{
         source: "mangadex",
-        slug: "berserk",
-        title: "Berserk",
-        cover_url: "https://example.invalid/berserk.jpg"
+        slug: slug,
+        title: title,
+        cover_url: "https://example.invalid/#{slug}.jpg",
+        last_chapter: "12"
       })
 
     {:ok, bin} = Ecto.UUID.dump(user.uuid)
 
-    Roki.Repo.query!(
-      "insert into manga_grid_slots (user_id, slot, mode, label, source, slug, inserted_at, updated_at) " <>
-        "values ($1, 1, 'overall', 'Top', 'mangadex', 'berserk', now(), now())",
-      [bin]
-    )
+    if tier do
+      Roki.Repo.query!(
+        "insert into manga_tierlist (user_id, source, slug, tier, position, inserted_at, updated_at) " <>
+          "values ($1, 'mangadex', $2, $3, 1, now(), now())",
+        [bin, slug, tier]
+      )
+    end
+
+    %{rows: [[id]]} =
+      Roki.Repo.query!(
+        "select id from saved_manga where user_id = $1 and slug = $2",
+        [bin, slug]
+      )
+
+    id
+  end
+
+  test "the manga shelf is picked like the others, from what was read" do
+    user = register("mangafan")
+    id = read!(user, "berserk", "Berserk", "s")
+
+    {:ok, favs, 1} = Roki.Profile.add_favorites(user.uuid, :manga, ["manga:#{id}"])
+    assert Enum.map(favs.manga, & &1.title) == ["Berserk"]
 
     {:ok, view, _} = live(signed_in(user), "/mangafan")
     html = render_async(view)
@@ -125,30 +142,36 @@ defmodule RokiWeb.ProfileLiveTest do
     refute html =~ "Coming soon"
     assert html =~ "Berserk"
     assert html =~ "/manga/mangadex/berserk"
-    # Arranged on the grid page, not with this page's shelf editor.
-    assert html =~ ~s(href="/manga/grid")
-    refute has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=manga]")
-    assert has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=movie]")
+    # The same editor as every other shelf, not a link somewhere else.
+    assert has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=manga]")
+    refute html =~ ~s(href="/manga/grid")
+  end
+
+  test "the manga picker offers what was read, best tier first" do
+    user = register("mangapick")
+    read!(user, "berserk", "Berserk", "b")
+    read!(user, "vagabond", "Vagabond", "s")
+    read!(user, "unrated", "Unrated One")
+
+    list = Roki.Profile.picker(user.uuid, :manga)
+
+    assert Enum.map(list, & &1.title) == ["Vagabond", "Berserk", "Unrated One"]
+    assert Enum.map(list, & &1.score) == [10.0, 8.0, nil]
+    assert Enum.all?(list, &String.starts_with?(&1.key, "manga:"))
+
+    {:ok, view, _} = live(signed_in(user), "/mangapick")
+    render_async(view)
+    html = render_click(view, "pick_open", %{"kind" => "manga"})
+
+    assert html =~ "Choose your favorite manga"
+    assert html =~ "Your read manga, best rated first"
+    assert render_async(view) =~ "Vagabond"
   end
 
   test "a visitor who is not signed in is not shown someone's manga shelf", %{conn: conn} do
     user = register("mangafan2")
-
-    {:ok, _} =
-      Roki.Manga.Library.save_manga(user.uuid, %{
-        source: "mangadex",
-        slug: "berserk",
-        title: "Berserk",
-        cover_url: "https://example.invalid/berserk.jpg"
-      })
-
-    {:ok, bin} = Ecto.UUID.dump(user.uuid)
-
-    Roki.Repo.query!(
-      "insert into manga_grid_slots (user_id, slot, mode, label, source, slug, inserted_at, updated_at) " <>
-        "values ($1, 1, 'overall', 'Top', 'mangadex', 'berserk', now(), now())",
-      [bin]
-    )
+    id = read!(user, "berserk", "Berserk")
+    {:ok, _, 1} = Roki.Profile.add_favorites(user.uuid, :manga, ["manga:#{id}"])
 
     {:ok, view, _} = live(conn, "/mangafan2")
     # The covers are fetched from the sources by this site, and only for someone signed in.
