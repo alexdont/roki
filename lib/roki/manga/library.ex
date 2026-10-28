@@ -3736,6 +3736,55 @@ defmodule Roki.Manga.Library do
     end
   end
 
+  @doc """
+  What someone put on their grid, in the order they put it there — the manga shelf on a
+  profile. Each entry carries the title and cover of the saved series it points at.
+
+  The grid has three boards: Overall, Manga and Manhwa. The Overall board is this shelf when it
+  has anything on it. When it is empty, which is usual — people tend to keep the two kinds apart
+  rather than rank them against each other — the other two boards stand in, taken rank by rank,
+  manga then manhwa, so both are represented from the top rather than one board filling the
+  shelf before the other begins.
+
+  Reads only. `list_grid_slots/2` fills in the empty places as a side effect of looking, which
+  is right on the grid page itself and wrong here: a visitor opening someone's profile should
+  not write rows into that account.
+  """
+  def list_grid_picks(user_uuid, limit \\ 10) do
+    rows =
+      from(g in MangaGridSlot,
+        where: g.user_id == type(^user_uuid, Ecto.UUID),
+        where: not is_nil(g.source) and not is_nil(g.slug),
+        select: %{slot: g.slot, mode: g.mode, source: g.source, slug: g.slug}
+      )
+      |> Repo.all()
+
+    {overall, rest} = Enum.split_with(rows, &(&1.mode == "overall"))
+
+    picks =
+      if overall != [] do
+        Enum.sort_by(overall, & &1.slot)
+      else
+        rest
+        |> Enum.sort_by(&{&1.slot, &1.mode == "manhwa"})
+        |> Enum.uniq_by(&{&1.source, &1.slug})
+      end
+
+    saved = Map.new(list_saved_manga(user_uuid), fn m -> {{m.source, m.slug}, m} end)
+    covers = list_cover_file_uuids(Enum.map(picks, &{&1.source, &1.slug}))
+
+    # The cap is applied last, after the places pointing at a series that is no longer saved
+    # have dropped out, so one of those costs the shelf nothing.
+    for pick <- picks, m = saved[{pick.source, pick.slug}] do
+      Map.merge(pick, %{
+        title: m.title,
+        cover_url: m.cover_url,
+        cover_file_uuid: m.cover_file_uuid || covers[{pick.source, pick.slug}]
+      })
+    end
+    |> Enum.take(limit)
+  end
+
   defp seed_grid_slots(user_uuid, mode, existing) do
     now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
     taken = MapSet.new(existing, & &1.slot)

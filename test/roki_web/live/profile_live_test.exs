@@ -99,15 +99,60 @@ defmodule RokiWeb.ProfileLiveTest do
     assert hd(favs.movie).id == 1
   end
 
-  test "manga is greyed out for everyone, and its shelf cannot be edited" do
+  test "the manga shelf is the reader's grid: arranged there, shown here" do
     user = register("mangafan")
+
+    {:ok, _} =
+      Roki.Manga.Library.save_manga(user.uuid, %{
+        source: "mangadex",
+        slug: "berserk",
+        title: "Berserk",
+        cover_url: "https://example.invalid/berserk.jpg"
+      })
+
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    Roki.Repo.query!(
+      "insert into manga_grid_slots (user_id, slot, mode, label, source, slug, inserted_at, updated_at) " <>
+        "values ($1, 1, 'overall', 'Top', 'mangadex', 'berserk', now(), now())",
+      [bin]
+    )
+
     {:ok, view, _} = live(signed_in(user), "/mangafan")
     html = render_async(view)
+
     assert html =~ "Favorite Manga"
-    assert html =~ "Coming soon"
-    assert html =~ "opacity-50 grayscale"
+    refute html =~ "Coming soon"
+    assert html =~ "Berserk"
+    assert html =~ "/manga/mangadex/berserk"
+    # Arranged on the grid page, not with this page's shelf editor.
+    assert html =~ ~s(href="/manga/grid")
     refute has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=manga]")
     assert has_element?(view, "button[phx-click=shelf_edit][phx-value-kind=movie]")
+  end
+
+  test "a visitor who is not signed in is not shown someone's manga shelf", %{conn: conn} do
+    user = register("mangafan2")
+
+    {:ok, _} =
+      Roki.Manga.Library.save_manga(user.uuid, %{
+        source: "mangadex",
+        slug: "berserk",
+        title: "Berserk",
+        cover_url: "https://example.invalid/berserk.jpg"
+      })
+
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    Roki.Repo.query!(
+      "insert into manga_grid_slots (user_id, slot, mode, label, source, slug, inserted_at, updated_at) " <>
+        "values ($1, 1, 'overall', 'Top', 'mangadex', 'berserk', now(), now())",
+      [bin]
+    )
+
+    {:ok, view, _} = live(conn, "/mangafan2")
+    # The covers are fetched from the sources by this site, and only for someone signed in.
+    refute render_async(view) =~ "Favorite Manga"
   end
 
   # Rendered HTML line-wraps wherever the template happens to wrap, which `mix format` may change
