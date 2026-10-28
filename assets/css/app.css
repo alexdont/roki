@@ -9,6 +9,11 @@
 /* Required for Tailwind to automatically pick up changes in colocated CSS files in dev */
 @source "../../_build/dev/phoenix-colocated/roki/*/";
 @source "../../deps/phoenix_kit";
+/* The manga reader's own templates. Their markup is full of utility classes — the tap-zone
+   diagrams in its settings are built entirely out of them — and Tailwind only writes the classes
+   it can see, so without these the reader's own panels come out blank. */
+@source "../../deps/manhwa";
+@source "../../deps/manga";
 @source "../../../phoenix_kit";
 @import "./_phoenix_kit_sources.css";
 

@@ -192,6 +192,98 @@ defmodule Roki.Manga.Library do
     for [id, name] <- rows, do: %{id: id, name: name}
   end
 
+  @doc """
+  Everything the series page shows: the series itself, this person's row for it, which of their
+  shelves it is on, and which chapters they have finished.
+  """
+  def details(user_uuid, source, slug) do
+    id = series_id(source, slug)
+
+    row =
+      case Repo.query!(
+             """
+             select l.id, l.last_chapter, l.last_chapter_number, l.max_chapter, l.total_chapters,
+                    l.completed, l.reading_seconds, l.reading_mode, l.reading_direction,
+                    coalesce(nullif(l.title, ''), t.title), coalesce(nullif(l.cover_url, ''), t.cover_url)
+               from roki_manga_library l
+               join roki_manga_titles t on t.id = l.manga_id
+              where l.user_uuid = $1::text::uuid and l.manga_id = $2
+             """,
+             [user_uuid, id]
+           ) do
+        %{rows: [[lid, last, last_n, max, total, done, seconds, mode, dir, title, cover]]} ->
+          %{
+            id: lid,
+            last_chapter: last,
+            last_number: last_n,
+            max_chapter: max,
+            total_chapters: total,
+            completed: done,
+            reading_seconds: seconds || 0,
+            reading_mode: mode,
+            reading_direction: dir,
+            title: title,
+            cover_url: cover
+          }
+
+        _ ->
+          nil
+      end
+
+    %{
+      series: series(id),
+      saved: row,
+      shelves: shelves_of(user_uuid, row),
+      read: read_chapters(user_uuid, id)
+    }
+  end
+
+  @doc "Which chapters of a series this person has finished — the reader's own tick marks."
+  def read_chapters(user_uuid, manga_id) do
+    %{rows: rows} =
+      Repo.query!(
+        "select distinct chapter from roki_manga_reads where user_uuid = $1::text::uuid and manga_id = $2",
+        [user_uuid, manga_id]
+      )
+
+    MapSet.new(rows, fn [c] -> c end)
+  end
+
+  defp shelves_of(_user_uuid, nil), do: []
+
+  defp shelves_of(user_uuid, row) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        select c.name from roki_manga_categories c
+         where c.user_uuid = $1::text::uuid
+           and (exists (select 1 from roki_manga_category_members m
+                         where m.category_id = c.id and m.library_id = $2)
+                or exists (select 1 from roki_manga_library l
+                            where l.id = $2 and l.category_id = c.id))
+         order by c.position, c.name
+        """,
+        [user_uuid, row.id]
+      )
+
+    for [name] <- rows, do: name
+  end
+
+  @doc "Take a series off someone's shelf, and everything of theirs that hung off it."
+  def unsave(user_uuid, source, slug) do
+    id = series_id(source, slug)
+
+    Repo.query!(
+      "delete from roki_manga_library where user_uuid = $1::text::uuid and manga_id = $2",
+      [
+        user_uuid,
+        id
+      ]
+    )
+
+    :ok
+  end
+
   @doc "Put a series on someone's shelf (or leave it where it is)."
   def save(user_uuid, source, slug) do
     id = series_id(source, slug)
