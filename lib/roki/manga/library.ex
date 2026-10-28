@@ -410,6 +410,30 @@ defmodule Roki.Manga.Library do
   end
 
   @doc """
+  What this person is in the middle of, most recently read first — the reading row on their
+  own shelf. A series is in the middle of it once a chapter has been opened and until it is
+  marked finished.
+  """
+  def list_continue_reading(user_uuid, limit \\ 12) do
+    from(s in SavedManga,
+      where: s.user_id == type(^user_uuid, Ecto.UUID),
+      where: not is_nil(s.last_chapter),
+      where: s.completed == false,
+      order_by: [desc: s.updated_at],
+      limit: ^limit,
+      select: %{
+        source: s.source,
+        slug: s.slug,
+        title: s.title,
+        cover_url: s.cover_url,
+        cover_file_uuid: s.cover_file_uuid,
+        last_chapter: s.last_chapter
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   One person's saved manga whose title matches, newest reading first — what this site's own
   search shows under Manga, so a title someone is already reading is found from the same box
   as a film.

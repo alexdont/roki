@@ -47,6 +47,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:completed, nil)
           |> assign(:ratings, if(connected?(socket), do: Roki.Profile.ratings(uuid), else: %{}))
           |> assign(:completed_shown, @completed_page)
+          |> assign(:reading, Roki.Manga.Library.list_continue_reading(uuid))
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
@@ -303,6 +304,10 @@ defmodule RokiWeb.UserHomeLive do
         <span :if={@busy} class="loading loading-spinner"></span>
         {@busy || @error || "Setting up your account…"}
       </p>
+
+      <%!-- Reading sits beside watching rather than inside the shelf above: it comes from the
+            manga tables, so it is here whether or not laev is connected. --%>
+      <.reading :if={@reading != []} items={@reading} />
 
       <.shelf
         :if={@state in [:loading, :ready]}
@@ -814,6 +819,43 @@ defmodule RokiWeb.UserHomeLive do
     d = DateTime.from_unix!(at)
     "#{String.slice(Enum.at(@months, d.month - 1), 0, 3)} #{d.day}"
   end
+
+  attr :items, :list, required: true
+
+  defp reading(assigns) do
+    ~H"""
+    <section class="space-y-3 pb-6">
+      <h2 class="text-xl font-semibold">
+        Continue reading
+        <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
+      </h2>
+      <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+        <li :for={m <- @items} class="space-y-1">
+          <a href={~p"/manga/#{m.source}/#{m.slug}/#{m.last_chapter}"} title={m.title}>
+            <img
+              src={manga_cover(m)}
+              alt={m.title}
+              loading="lazy"
+              class="aspect-[2/3] w-full rounded-box object-cover"
+            />
+          </a>
+          <p class="truncate text-sm font-medium">{m.title}</p>
+          <p class="text-xs text-base-content/60">Ch. {m.last_chapter}</p>
+        </li>
+      </ul>
+    </section>
+    """
+  end
+
+  # The media library's copy when there is one, else the source's own address through this
+  # site, which carries the headers the source asks for.
+  defp manga_cover(%{cover_file_uuid: uuid}) when is_binary(uuid) and uuid != "",
+    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "medium")
+
+  defp manga_cover(%{cover_url: url}) when is_binary(url) and url != "",
+    do: ~p"/manga/proxy/image?#{%{url: url}}"
+
+  defp manga_cover(_), do: nil
 
   attr :title, :string, required: true
   attr :count, :integer, default: nil
