@@ -67,6 +67,8 @@ defmodule RokiWeb.WatchedLive do
           selected: MapSet.new(),
           dating?: false,
           seasons: %{},
+          seasons_all: %{},
+          whole_title?: true,
           date_error: nil,
           notice: nil
         )
@@ -109,13 +111,10 @@ defmodule RokiWeb.WatchedLive do
   # One show selected, and laev's record says which of its seasons were watched: that is the
   # only time a season can be dated on its own. Looked up when the dialog opens rather than
   # with the page, since most of the time nobody opens it.
-  defp seasons_for(%{assigns: %{selected: selected, uuid: uuid}} = socket) do
+  defp seasons_for(%{assigns: %{selected: selected}} = socket) do
     with [key] <- MapSet.to_list(selected),
-         %{} = item <- Enum.find(arranged(socket), &(&1.key == key)),
-         true <- item.type == "tv" or is_integer(item[:mal_id]),
-         {type, id} <- Roki.Profile.parse_key(key),
-         %{} = counts <- Roki.Laev.run(uuid, &Roki.Stats.season_episodes/0) do
-      Map.get(counts, {type, id}, %{})
+         %{} = item <- Enum.find(arranged(socket), &(&1.key == key)) do
+      seasons_of(item, socket.assigns.seasons_all)
     else
       _ -> %{}
     end
@@ -173,6 +172,34 @@ defmodule RokiWeb.WatchedLive do
   defp finished?(%{status: status}), do: status == "finished"
   defp finished?(_), do: true
 
+  # What can be picked in select mode. A finished title, because its date and its place on the
+  # list can be changed — and a show that is still going if laev has episode records for it,
+  # because one of its seasons can be dated even though the show is not done. That was the gap:
+  # a show watched a season at a time is never finished, so it could not be touched at all.
+  defp selectable?(item, seasons_all), do: finished?(item) or seasons_of(item, seasons_all) != %{}
+
+  defp seasons_of(item, seasons_all) do
+    case Roki.Profile.parse_key(item.key) do
+      {type, id} -> Map.get(seasons_all, {type, id}, %{})
+      _ -> %{}
+    end
+  end
+
+  defp all_seasons(uuid) do
+    case Roki.Laev.run(uuid, &Roki.Stats.season_episodes/0) do
+      %{} = counts -> counts
+      _ -> %{}
+    end
+  end
+
+  defp selectable_key?(socket, key) do
+    is_list(socket.assigns.history) and
+      Enum.any?(
+        socket.assigns.history,
+        &(&1.key == key and selectable?(&1, socket.assigns.seasons_all))
+      )
+  end
+
   defp finished_key?(socket, key) do
     is_list(socket.assigns.history) and
       Enum.any?(socket.assigns.history, &(&1.key == key and finished?(&1)))
@@ -194,7 +221,15 @@ defmodule RokiWeb.WatchedLive do
   # Select mode — the owner's.
   def handle_event("select_mode", _params, %{assigns: %{owner?: true}} = socket) do
     on? = not socket.assigns.select?
-    {:noreply, assign(socket, select?: on?, selected: MapSet.new(), dating?: false, notice: nil)}
+
+    {:noreply,
+     assign(socket,
+       select?: on?,
+       selected: MapSet.new(),
+       dating?: false,
+       notice: nil,
+       seasons_all: if(on?, do: all_seasons(socket.assigns.uuid), else: %{})
+     )}
   end
 
   def handle_event(
@@ -206,7 +241,7 @@ defmodule RokiWeb.WatchedLive do
 
     cond do
       MapSet.member?(sel, key) -> {:noreply, assign(socket, :selected, MapSet.delete(sel, key))}
-      finished_key?(socket, key) -> {:noreply, assign(socket, :selected, MapSet.put(sel, key))}
+      selectable_key?(socket, key) -> {:noreply, assign(socket, :selected, MapSet.put(sel, key))}
       true -> {:noreply, socket}
     end
   end
@@ -223,7 +258,13 @@ defmodule RokiWeb.WatchedLive do
   def handle_event("date_open", _params, %{assigns: %{owner?: true, select?: true}} = socket) do
     if MapSet.size(socket.assigns.selected) > 0,
       do:
-        {:noreply, assign(socket, dating?: true, date_error: nil, seasons: seasons_for(socket))},
+        {:noreply,
+         assign(socket,
+           dating?: true,
+           date_error: nil,
+           seasons: seasons_for(socket),
+           whole_title?: Enum.all?(socket.assigns.selected, &finished_key?(socket, &1))
+         )},
       else: {:noreply, socket}
   end
 
@@ -724,7 +765,7 @@ defmodule RokiWeb.WatchedLive do
                   />
                   <.status_pill item={i} />
                   <button
-                    :if={@select? and finished?(i)}
+                    :if={@select? and selectable?(i, @seasons_all)}
                     type="button"
                     phx-click="select_toggle"
                     phx-value-key={i.key}
@@ -733,7 +774,7 @@ defmodule RokiWeb.WatchedLive do
                     class="absolute inset-0 z-10 cursor-pointer"
                   ></button>
                   <div
-                    :if={@select? and finished?(i)}
+                    :if={@select? and selectable?(i, @seasons_all)}
                     class={[
                       "pointer-events-none absolute inset-x-0 top-0 z-20 aspect-[2/3] rounded-box transition",
                       MapSet.member?(@selected, i.key) && "ring-4 ring-primary"
@@ -761,6 +802,7 @@ defmodule RokiWeb.WatchedLive do
                 <.row
                   item={i}
                   select?={@select?}
+                  selectable?={selectable?(i, @seasons_all)}
                   selected={MapSet.member?(@selected, i.key)}
                   show_score={@owner? or @profile.show_ratings}
                 />
@@ -843,8 +885,13 @@ defmodule RokiWeb.WatchedLive do
             <h2 class="text-lg font-semibold">
               When did you watch {if MapSet.size(@selected) == 1, do: "it", else: "them"}?
             </h2>
-            <p class="text-sm text-base-content/60">
+            <p :if={@whole_title?} class="text-sm text-base-content/60">
               {MapSet.size(@selected)} {if MapSet.size(@selected) == 1, do: "title", else: "titles"} will be put on this day in your history — anywhere back, years if you like. They keep the order they have now.
+            </p>
+            <p :if={!@whole_title?} class="text-sm text-base-content/60">
+              This one is still going, so the show itself has no date to change. A season of it
+              does: pick the season you watched and the day you watched it, and its share of the
+              hours moves there.
             </p>
           </div>
           <input
@@ -861,8 +908,9 @@ defmodule RokiWeb.WatchedLive do
                 the rest. Only offered for a single show laev has episode records for. --%>
           <label :if={@seasons != %{}} class="block space-y-1">
             <span class="text-sm font-medium">Apply to</span>
-            <select name="season" class="select select-bordered w-full">
-              <option value="">The whole title</option>
+            <select name="season" class="select select-bordered w-full" required={!@whole_title?}>
+              <option :if={@whole_title?} value="">The whole title</option>
+              <option :if={!@whole_title?} value="" disabled selected>Pick a season</option>
               <option :for={{season, episodes} <- Enum.sort(@seasons)} value={season}>
                 Season {season} only · {episodes} {if episodes == 1,
                   do: "episode",
@@ -1110,6 +1158,7 @@ defmodule RokiWeb.WatchedLive do
   attr :item, :map, required: true
   attr :select?, :boolean, default: false
   attr :selected, :boolean, default: false
+  attr :selectable?, :boolean, default: true
   attr :show_score, :boolean, default: true
 
   # One title as a line: a small poster, its name, what kind and which year, and on the right
@@ -1118,7 +1167,7 @@ defmodule RokiWeb.WatchedLive do
     assigns = assign(assigns, href: href(assigns.item))
 
     ~H"""
-    <%= if @select? and finished?(@item) do %>
+    <%= if @select? and @selectable? do %>
       <button
         type="button"
         phx-click="select_toggle"

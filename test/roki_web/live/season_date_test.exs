@@ -4,6 +4,8 @@ defmodule RokiWeb.SeasonDateTest do
   """
   use RokiWeb.ConnCase
 
+  import Phoenix.LiveViewTest
+
   alias Roki.{Profile, Spent}
 
   setup do
@@ -41,6 +43,27 @@ defmodule RokiWeb.SeasonDateTest do
 
     :ok = Profile.set_season_date(user.uuid, "tv", 110_316, 1, nil)
     assert Profile.season_dates(user.uuid) == %{}
+  end
+
+  test "a show still going can be picked, so one of its seasons can be dated", %{user: user} do
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    # In progress, which used to mean it could not be selected at all.
+    Roki.Repo.query!(
+      "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated, status) " <>
+        "values ($1, 'tv', 110316, 'tv', 110316, 'Alice in Borderland', false, now(), true, 'progress')",
+      [bin]
+    )
+
+    token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
+    conn = Plug.Test.init_test_session(build_conn(), %{user_token: token})
+
+    {:ok, view, _} = live(conn, "/seasonuser/watched")
+    render_async(view)
+
+    # Without episode records there is nothing to date, so it stays unselectable — the rule is
+    # "finished, or a show with seasons we know about", not "anything".
+    refute render(view) =~ ~s(phx-value-key="tv:110316")
   end
 
   test "the stats page then counts that season under its own date", %{user: user} do
