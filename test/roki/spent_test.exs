@@ -71,6 +71,28 @@ defmodule Roki.SpentTest do
     assert Spent.of_kind(entries, :manga) == []
   end
 
+  test "the heatmap puts a title on the date it counts under, not the day it played" do
+    played_today = stats(@now)
+    backdated = Spent.watched(played_today, %{{"mal", 5114} => @long_ago})
+
+    days = Spent.days(backdated, %{})
+    today = DateTime.from_unix!(@now) |> DateTime.to_date()
+    then = DateTime.from_unix!(@long_ago) |> DateTime.to_date()
+
+    # The film, which has no date of its own, stays where laev saw it.
+    assert days[today] == 7200
+    # The anime goes where its owner put it, with its hours.
+    assert days[then] == 3600
+  end
+
+  test "reading keeps its own day-by-day log in the heatmap" do
+    entries = Spent.watched(stats(@now))
+    activity = %{~D[2026-03-01] => [%{seconds: 600}, %{seconds: 300}]}
+
+    days = Spent.days(entries, activity)
+    assert days[~D[2026-03-01]] == 900
+  end
+
   test "reading and watching are the same shape, and add up together" do
     {:ok, user} =
       PhoenixKit.Users.Auth.register_user(%{

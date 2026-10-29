@@ -8,12 +8,15 @@ defmodule Roki.Spent do
   on it, and when it was last touched. Everything the page shows is that list filtered and
   added up, so the big number is always the sum of the rows under it.
 
-  **What a window means.** An entry is in the last 7 days if it was *touched* in the last 7
-  days, and it brings all of its time with it. That is laev's own rule, kept because the two
-  sides can only agree on it: reading is logged per day, watching is not. So "7 days" reads as
-  "what you were on this week, and how long you have spent on it", not "hours logged this
-  week". The day-by-day totals that feed the heatmap are exact; these are not, and the page
-  says so.
+  **What a window means.** An entry is in the last 7 days if it was touched in the last 7 days,
+  and it brings all of its time with it. So "7 days" reads as "what you were on this week, and
+  how long you have spent on it", not "hours logged this week" — a series you have been on for
+  a year counts its year.
+
+  **When something counts.** Whatever this account says: the date set on the watched page where
+  there is one, laev's last play otherwise, and for reading the day a series was last opened.
+  `days/2` places the same entries on the same dates, so the heatmap and the list are two
+  drawings of one thing rather than two sources that disagree.
   """
 
   @kinds [movie: "Films", tv: "Shows", anime: "Anime", manga: "Manga"]
@@ -108,18 +111,31 @@ defmodule Roki.Spent do
   # ── the day-by-day half, which is exact ────────────────────────────
 
   @doc """
-  Watching's seconds-per-day merged with reading's, as `%{~D[2026-10-22] => 3600}`.
+  Seconds per day, as the heatmap draws it.
 
-  Both sides log a day at a time, so unlike the entries above this is the real thing: what the
-  heatmap and the window totals beside it are drawn from.
+  Watching is placed on the date this account says it watched the thing — the same date the
+  list counts it under, so the two agree and a title given a date lands where it was put rather
+  than on the day a device happened to play it. A whole series therefore arrives in one day,
+  which is what a date is: an answer about a title, not about an evening.
+
+  Reading keeps its own day-by-day log, because it has one. Lumping a series onto the day it
+  was last opened would throw away months of real days to make the two halves symmetrical,
+  which is a bad trade.
   """
-  def days(watch_days, reading_activity) do
+  def days(watched, reading_activity) do
+    watched_days =
+      for e <- watched, is_integer(e.at), reduce: %{} do
+        acc ->
+          date = e.at |> DateTime.from_unix!() |> DateTime.to_date()
+          Map.update(acc, date, e.seconds, &(&1 + e.seconds))
+      end
+
     read_days =
       for {date, rows} <- reading_activity || %{}, into: %{} do
         {date, rows |> Enum.map(&(&1.seconds || 0)) |> Enum.sum()}
       end
 
-    Map.merge(watch_days || %{}, read_days, fn _date, a, b -> a + b end)
+    Map.merge(watched_days, read_days, fn _date, a, b -> a + b end)
   end
 
   @doc "Seconds in each of the trailing windows: `[%{id:, label:, seconds:}]`."

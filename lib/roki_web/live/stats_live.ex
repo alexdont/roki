@@ -8,9 +8,9 @@ defmodule RokiWeb.StatsLive do
   underneath, each with its own total and its own table. `Roki.Spent` is what made them one —
   the page is a filter over its list, so the big number and the rows always agree.
 
-  Two of the numbers here mean different things and the page says which. A window over the
-  list means "what you were on, and all the time you have spent on it", because watching is
-  not logged per day. The windows beside the heatmap are logged per day and are exact.
+  A window means "what you were on, and all the time you have spent on it" — a series read for
+  a year counts its year, in the window it was last opened in. The heatmap below places the
+  same entries on the same dates, so the two halves of the page are one thing seen twice.
 
   The first measurement looks up a runtime for every film and show — a minute for a
   big library, once; after that it is cached and the page is instant.
@@ -168,11 +168,12 @@ defmodule RokiWeb.StatsLive do
   defp assign_view(assigns) do
     now = System.os_time(:second)
 
-    all = Spent.sort(Spent.watched(assigns[:data], assigns.watch_dates) ++ assigns.read)
+    watched = Spent.watched(assigns[:data], assigns.watch_dates)
+    all = Spent.sort(watched ++ assigns.read)
     in_window = Spent.within(all, days_of(assigns.range), now)
     visible_all = Spent.of_kind(in_window, assigns.kind)
 
-    days = Spent.days(assigns[:data] && assigns.data.days, assigns.reading_activity)
+    days = Spent.days(watched, assigns.reading_activity)
     today = Date.utc_today()
 
     assign(assigns,
@@ -278,9 +279,8 @@ defmodule RokiWeb.StatsLive do
       <h2 class="text-xl font-semibold">Where the time went</h2>
 
       <p :if={@range != :all} class="text-sm text-base-content/60">
-        What you were on in this window, with all the time you have spent on it. Reading is
-        logged by the day, watching is not, so the two can only be counted the same way by
-        counting whole titles.
+        What you were on in this window, with all the time you have spent on it — a series you
+        have been reading for a year counts its year.
       </p>
 
       <p :if={@all == []} class="py-8 text-center text-base-content/60">Nothing in this window.</p>
@@ -332,7 +332,8 @@ defmodule RokiWeb.StatsLive do
     <section class="space-y-3">
       <h2 class="text-xl font-semibold">Day by day</h2>
       <p class="text-sm text-base-content/60">
-        Watching and reading together, counted on the day it happened.
+        Watching on the date you gave it, so a whole series lands on one day. Reading on the
+        days it was logged.
       </p>
 
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">

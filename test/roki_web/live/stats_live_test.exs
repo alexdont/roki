@@ -89,7 +89,7 @@ defmodule RokiWeb.StatsLiveTest do
     assert html =~ "Long Ago"
   end
 
-  test "the windows beside the heatmap count the days themselves", %{conn: conn, user: user} do
+  test "the heatmap counts the days reading was logged on", %{conn: conn, user: user} do
     read!(user, "Solo Leveling", 7200)
     {:ok, bin} = Ecto.UUID.dump(user.uuid)
 
@@ -102,7 +102,8 @@ defmodule RokiWeb.StatsLiveTest do
     {:ok, _view, html} = live(conn, "/statstest/stats")
 
     assert html =~ "Day by day"
-    assert html =~ "Watching and reading together"
+    # 5400 seconds logged today, so today's cell carries it.
+    assert html =~ "1h 30m"
   end
 
   test "the reader's old stats address leads here", %{conn: conn} do
