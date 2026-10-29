@@ -159,46 +159,31 @@ body::before {
    changes. */
 .site-header { padding-top: env(safe-area-inset-top, 0px); }
 
-/* The strip reader's shell pulls itself up past the safe-area inset so a chapter can run under
-   the clock. That hides the top of the page behind the status bar, which is not wanted here:
-   the page starts below the bar and nothing is lost to it. The bottom keeps the package's full
-   bleed, so nothing shows through at the home indicator. */
+/* The reader runs its page into the top of the screen rather than stopping below the status
+   bar, which is the whole look: no strip of flat background up there pretending to be a bar.
+   What was wrong with it was the cut — the page simply ended at the screen edge, under the
+   clock.
+
+   So fade it instead. The shell is pulled up past the safe-area inset by the package, which
+   puts the screen's top edge one inset into the element and the bottom of the status bar two;
+   the mask is transparent either side of the first and solid by the second, so the page is
+   gone by the time it reaches the top of the screen and whole by the time it clears the clock.
+   Nothing is covered and nothing is cut: the page just stops being there.
+
+   Where there is no inset the mask is a gradient between two zero-length stops, which is to
+   say nothing at all. */
 #fresco-strip-shell {
-  top: env(safe-area-inset-top, 0px) !important;
-}
-
-#fresco-strip-reader {
-  height: calc(100lvh - env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)) !important;
-}
-
-/* What is left in that strip is the page behind the status bar, which on a reading page is a
-   flat bright band with the clock on it, and a seam where the page proper begins. One strip
-   handles both: a blur that takes the seam with it, a little tint so the clock stays readable,
-   and a mask that dissolves the whole thing a third of the way into the page — no edge where it
-   stops, because it never stops anywhere in particular.
-
-   Taller than the inset on purpose: the fade needs somewhere to happen. Drawn only where there
-   is an inset to cover, so a browser tab and a desktop get nothing. */
-body:has(#fresco-strip-shell)::after,
-body:has(#fresco-paged-shell)::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: calc(env(safe-area-inset-top, 0px) * 1.75);
-  z-index: 120;
-  pointer-events: none;
-  backdrop-filter: blur(16px) saturate(1.1);
-  -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  background: linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.12) 50%, transparent);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 40%, rgb(0 0 0 / 0.55) 70%, transparent 100%);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(env(safe-area-inset-top, 0px) * 0.9),
+    #000 calc(env(safe-area-inset-top, 0px) * 2.1)
+  );
   -webkit-mask-image: linear-gradient(
     to bottom,
-    #000 0%,
-    #000 40%,
-    rgb(0 0 0 / 0.55) 70%,
-    transparent 100%
+    transparent 0,
+    transparent calc(env(safe-area-inset-top, 0px) * 0.9),
+    #000 calc(env(safe-area-inset-top, 0px) * 2.1)
   );
 }
 
