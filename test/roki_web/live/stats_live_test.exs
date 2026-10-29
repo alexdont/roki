@@ -38,11 +38,37 @@ defmodule RokiWeb.StatsLiveTest do
     )
   end
 
+  # The page holds its numbers until both halves are in, so every assertion here is made
+  # after the measurement settles — see "the page waits for both halves" below.
+  defp open(conn, path) do
+    {:ok, view, _} = live(conn, path)
+    render_async(view)
+  end
+
   test "an account that has done nothing shows nothing in the list", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/statstest/stats")
+    html = open(conn, "/statstest/stats")
 
     assert html =~ "Nothing in this window."
     refute html =~ "Solo Leveling"
+  end
+
+  test "the page waits for both halves before it shows a number", %{conn: conn, user: user} do
+    read!(user, "Solo Leveling", 7200)
+
+    {:ok, view, html} = live(conn, "/statstest/stats")
+
+    # Reading is in hand at once and watching is a measurement, so the first render shows the
+    # shape of the answer rather than reading's half of it: no total, no list.
+    assert html =~ "skeleton"
+    assert html =~ "Measuring what you watched"
+    refute html =~ "across 1 title"
+    refute html =~ "Solo Leveling"
+
+    # Both halves, together.
+    html = render_async(view)
+    assert html =~ "across 1 title"
+    assert html =~ "Solo Leveling"
+    refute html =~ "Measuring what you watched"
   end
 
   test "reading counts towards the total, and is in the one list", %{conn: conn, user: user} do
@@ -65,11 +91,11 @@ defmodule RokiWeb.StatsLiveTest do
   test "the kind filter narrows the total and the list", %{conn: conn, user: user} do
     read!(user, "Solo Leveling", 7200)
 
-    {:ok, _view, html} = live(conn, "/statstest/stats?kind=manga")
+    html = open(conn, "/statstest/stats?kind=manga")
     assert html =~ "Solo Leveling"
     assert html =~ "across 1 title of manga"
 
-    {:ok, _view, html} = live(conn, "/statstest/stats?kind=movie")
+    html = open(conn, "/statstest/stats?kind=movie")
     refute html =~ "Solo Leveling"
     assert html =~ "Nothing in this window."
   end
@@ -89,17 +115,17 @@ defmodule RokiWeb.StatsLiveTest do
     )
 
     # Nothing was read this week, so nothing is in it.
-    {:ok, _view, html} = live(conn, "/statstest/stats?range=week")
+    html = open(conn, "/statstest/stats?range=week")
     refute html =~ "Long Ago"
 
     # The year holds that one day, and only what that day holds.
-    {:ok, _view, html} = live(conn, "/statstest/stats?range=year")
+    html = open(conn, "/statstest/stats?range=year")
     assert html =~ "Long Ago"
     assert html =~ "1h"
     refute html =~ "10h"
 
     # All time is the whole tally, including time entered by hand with no day on it.
-    {:ok, _view, html} = live(conn, "/statstest/stats?range=all")
+    html = open(conn, "/statstest/stats?range=all")
     assert html =~ "10h"
   end
 
@@ -113,7 +139,7 @@ defmodule RokiWeb.StatsLiveTest do
       [bin]
     )
 
-    {:ok, _view, html} = live(conn, "/statstest/stats")
+    html = open(conn, "/statstest/stats")
 
     assert html =~ "Day by day"
     # 5400 seconds logged today, so today's cell carries it.

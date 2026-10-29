@@ -130,15 +130,8 @@ defmodule RokiWeb.StatsLive do
           total={@total}
           split={@split}
           count={length(@visible_all)}
+          loading={@state == :loading}
         />
-
-        <p
-          :if={@state == :loading}
-          class="flex items-center gap-3 text-sm text-base-content/60"
-        >
-          <span class="loading loading-spinner loading-sm"></span>
-          Measuring what you watched — the first time takes a minute.
-        </p>
 
         <.notice :if={@state == :not_connected} username={@username}>
           Connect laev on your shelf and what you watch is counted here too.
@@ -160,7 +153,10 @@ defmodule RokiWeb.StatsLive do
           You're refreshing a little fast — try again in a few seconds.
         </p>
 
+        <.waiting :if={@state == :loading} />
+
         <.spent_list
+          :if={@state != :loading}
           entries={@visible}
           all={@visible_all}
           shown={@shown}
@@ -168,7 +164,12 @@ defmodule RokiWeb.StatsLive do
           range={@range}
         />
 
-        <.activity :if={@days != %{}} days={@days} windows={@windows} streak={@streak} />
+        <.activity
+          :if={@state != :loading and @days != %{}}
+          days={@days}
+          windows={@windows}
+          streak={@streak}
+        />
 
         <p :if={@unknown > 0} class="text-sm text-base-content/60">
           {@unknown} finished {if @unknown == 1, do: "entry", else: "entries"} had no runtime on
@@ -238,11 +239,21 @@ defmodule RokiWeb.StatsLive do
   attr :total, :integer, required: true
   attr :split, :map, required: true
   attr :count, :integer, required: true
+  attr :loading, :boolean, default: false
 
   defp totals(assigns) do
     ~H"""
     <section class="space-y-4">
-      <div>
+      <%!-- Reading is two small queries and watching is a measurement, so one arrives long
+           before the other. A number that counts only the half that is in is wrong, and
+           watching it jump is worse than waiting for it, so until both halves are here the
+           page shows the shape of the answer and none of its digits. --%>
+      <div :if={@loading}>
+        <div class="skeleton h-12 w-48 sm:h-14"></div>
+        <div class="skeleton mt-2 h-5 w-64"></div>
+      </div>
+
+      <div :if={!@loading}>
         <div class="text-4xl font-bold tracking-tight sm:text-5xl">{Laev.duration(@total)}</div>
         <p class="text-base-content/70">
           across {@count} {if @count == 1, do: "title", else: "titles"}{if @kind != :all,
@@ -265,7 +276,8 @@ defmodule RokiWeb.StatsLive do
           class={["btn btn-sm gap-2", @kind == id && "btn-primary"]}
         >
           {label}
-          <span class={["font-mono text-xs", @kind != id && "opacity-60"]}>
+          <span :if={@loading} class="skeleton h-3 w-10"></span>
+          <span :if={!@loading} class={["font-mono text-xs", @kind != id && "opacity-60"]}>
             {Laev.duration(@split[id] || 0)}
           </span>
         </.link>
@@ -283,6 +295,40 @@ defmodule RokiWeb.StatsLive do
     </section>
     """
   end
+
+  @doc false
+  # The list's own shape while the measurement runs, so the page does not grow under the
+  # reader's hands when it arrives.
+  defp waiting(assigns) do
+    ~H"""
+    <section class="space-y-3">
+      <div class="flex items-center gap-3">
+        <h2 class="text-xl font-semibold">Where the time went</h2>
+        <span class="loading loading-spinner loading-xs text-base-content/40"></span>
+      </div>
+
+      <p class="text-sm text-base-content/60">
+        Measuring what you watched — the first time takes a minute, then it is instant.
+      </p>
+
+      <ol class="divide-y divide-base-300">
+        <li :for={i <- 1..6} class="flex items-center gap-3 py-2">
+          <span class="w-8 shrink-0 text-right text-sm text-base-content/30">{i}</span>
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <div class="flex items-baseline justify-between gap-3">
+              <span class={["skeleton h-4", widths(i)]}></span>
+              <span class="skeleton h-4 w-14 shrink-0"></span>
+            </div>
+            <div class="skeleton h-1.5 w-full"></div>
+          </div>
+        </li>
+      </ol>
+    </section>
+    """
+  end
+
+  # Rows of one length read as a loading bar rather than as a list of titles.
+  defp widths(i), do: Enum.at(~w(w-48 w-40 w-56 w-36 w-44 w-32), rem(i - 1, 6))
 
   defp label_of(kind), do: Keyword.get(Spent.kinds(), kind, "")
 
