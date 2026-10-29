@@ -13,13 +13,13 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="roki" />
-    <%!-- black-translucent, not default: installed to the home screen the page paints under the
-          status bar instead of being inset below it. The manga reader's strip shell pulls itself
-          up by env(safe-area-inset-top) and sizes itself by it, which only reports the notch
-          height when the page owns that strip — with "default" the inset is zero, the reader sits
-          a status bar too low and its snap maths are a status bar short. The site header pads
-          itself by the same inset (app.css) so nothing else moves. --%>
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <%!-- "default", so an installed web app is laid out below the status bar rather than under
+          it. The manga reader's strip shell pulls itself up by env(safe-area-inset-top) and
+          sizes itself by it; with the page inset below the bar that inset is zero, the shell
+          fills the web view exactly and nothing is hidden behind the clock. black-translucent
+          was tried and tucks the top of the page under the status bar, which is not how the app
+          this reader came from behaves on a phone. --%>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="apple-touch-icon" href={~p"/images/apple-touch-icon.png"} />
     <%!-- The paged reader's panel zoom, read by assets/js/panel_overlay.js. --%>
     <meta

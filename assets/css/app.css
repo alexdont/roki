@@ -154,9 +154,9 @@ body::before {
 /* Off while the full-screen player is up (`mounted()` in assets/js/study/sidebar.js): the player
    covers both, and iOS composites inline video more willingly without blend modes and backdrop
    filters on the page. */
-/* Installed to the home screen the page paints under the status bar (root.html.heex), so the
-   header carries that strip itself — its background reaches the top of the screen and its row
-   sits below the clock. In a browser tab the inset is zero and nothing changes. */
+/* Harmless where there is no inset to carry, which is everywhere this app runs today: the
+   status bar is its own strip (root.html.heex). Kept so the header still works if that ever
+   changes. */
 .site-header { padding-top: env(safe-area-inset-top, 0px); }
 
 /* The manga reader is a page you scroll for minutes at a time, often thousands of pixels of
