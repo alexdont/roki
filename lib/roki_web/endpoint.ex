@@ -8,7 +8,12 @@ defmodule RokiWeb.Endpoint do
     store: :cookie,
     key: "_roki_key",
     signing_salt: "LdpSyesq",
-    same_site: "Lax"
+    same_site: "Lax",
+    # Without this the cookie lasts as long as the browser session, which for a web app on a
+    # phone means until the phone decides to stop it — and then the site is signed out again, a
+    # few times a day. Sixty days, the same window the remember-me cookie uses, so the two
+    # expire together rather than one outliving the other.
+    max_age: 60 * 60 * 24 * 60
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

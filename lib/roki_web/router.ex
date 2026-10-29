@@ -12,6 +12,12 @@ defmodule RokiWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug PhoenixKitWeb.Plugs.Integration
+    # Who is signed in, on every page rather than only the ones behind :require_auth. This is
+    # also the one place a session is rebuilt from the remember-me cookie, so without it a
+    # session cookie that did not survive — an installed web app the phone has stopped — left
+    # the whole site looking signed out until something under /manga or /phoenix_kit was opened
+    # and quietly put it back.
+    plug PhoenixKitWeb.Users.Auth, :fetch_phoenix_kit_current_scope
   end
 
   pipeline :csrf do
