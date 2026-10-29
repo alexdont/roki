@@ -2,6 +2,7 @@ defmodule RokiWeb.Router do
   use RokiWeb, :router
 
   import PhoenixKitWeb.Integration
+  import Manga.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -33,6 +34,21 @@ defmodule RokiWeb.Router do
   # The whole of it, as it stands in the app it came from: same routes, same controller, same
   # live views, with `/reader` reading `/manga` here. Above this app's own routes, since
   # `/:username` matches any single segment.
+
+  # The packaged reader, mounted whole — the one the app this came from reads with. Its own
+  # templates, its own API surface (images, settings, progress, marks, gifs), its own snap
+  # algorithm, all under this one prefix.
+  #
+  # The /manga routes below render this app's older in-tree copy of the same reader, which is
+  # what the port carried across and what the chapter links still point at. The two are not the
+  # same code: the in-tree copy reports itself as build "sg3", the package as "manhwa-bf1". The
+  # app this came from mounts the package beside its own copy in exactly this way and says to
+  # swap the canonical links over once it proves out, which has not happened there either.
+  scope "/" do
+    pipe_through [:browser, :require_auth]
+
+    manga_reader("/manga/v3")
+  end
 
   scope "/manga", RokiWeb do
     pipe_through [:browser, :require_auth]
