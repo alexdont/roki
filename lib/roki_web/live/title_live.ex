@@ -1233,7 +1233,8 @@ defmodule RokiWeb.TitleLive do
   attr :can_play?, :boolean, default: false
   attr :rating, :map, default: %{state: :loading, value: nil, provider: :tmdb}
 
-  defp episodes(assigns) do
+  @doc false
+  def episodes(assigns) do
     ~H"""
     <section class="space-y-4">
       <%!-- The season: which one, and the whole of it watched — the dropdown, and the same
@@ -1276,30 +1277,28 @@ defmodule RokiWeb.TitleLive do
           <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
           <span :if={!@rating.value} class="hidden sm:inline">Rate</span>
         </button>
+        <%!-- The whole season, marked or cleared: the same square button the episode rows carry.
+              It says where the season stands, in three states, because "everything that is out is
+              watched" is not "the season is watched" while episodes are still to come: solid green
+              only when there is nothing left to air, outlined when you are up to date and more is
+              coming, plain when something that is out is unwatched. Clicking does the same in all
+              three — it has to be able to unmark. --%>
+        <% state = season_state(@episodes, @watched) %>
+        <% to_come = Enum.count(@episodes || [], &(not &1.aired?)) %>
         <button
           :if={@can_play? and is_list(@episodes) and @episodes != []}
           phx-click="toggle_season"
+          data-season={state}
           class={[
             "btn btn-square h-12 w-12 shrink-0 rounded-xl",
-            season_all_watched?(@episodes, @watched) && "btn-success"
+            state == :complete && "btn-success",
+            state == :up_to_date && "btn-outline btn-success"
           ]}
-          title={
-            if season_all_watched?(@episodes, @watched),
-              do: "Season watched — click to unmark",
-              else: "Mark the whole season watched"
-          }
-          aria-label={
-            if season_all_watched?(@episodes, @watched),
-              do: "Unmark season watched",
-              else: "Mark season watched"
-          }
+          title={season_title(state, to_come)}
+          aria-label={season_aria(state, to_come)}
         >
           <.icon
-            name={
-              if season_all_watched?(@episodes, @watched),
-                do: "hero-check-circle-solid",
-                else: "hero-check-circle"
-            }
+            name={if state == :open, do: "hero-check-circle", else: "hero-check-circle-solid"}
             class="h-8 w-8"
           />
         </button>
@@ -1414,10 +1413,42 @@ defmodule RokiWeb.TitleLive do
   defp season_done?(%{key: key, total: total}, _open, _eps, _watched, counts),
     do: is_integer(total) and total > 0 and Map.get(counts, key, 0) >= total
 
-  defp season_all_watched?(episodes, watched) do
+  @doc """
+  Where a season stands: `:complete` when every episode of it is out and watched, `:up_to_date`
+  when everything that is out is watched but more is still to air, and `:open` when something that
+  is out has not been watched.
+
+  The button beside the season picker drew a season as watched as soon as the episodes that had
+  aired were: so a show part-way through its run, with six of eight out and six ticked, showed its
+  season as completed, two episodes early.
+  """
+  def season_state(episodes, watched) when is_list(episodes) do
     out = for e <- episodes, e.aired?, do: e.number
-    out != [] and Enum.all?(out, &MapSet.member?(watched, &1))
+
+    cond do
+      out == [] -> :open
+      not Enum.all?(out, &MapSet.member?(watched, &1)) -> :open
+      Enum.all?(episodes, & &1.aired?) -> :complete
+      true -> :up_to_date
+    end
   end
+
+  def season_state(_episodes, _watched), do: :open
+
+  @doc false
+  def season_title(:complete, _to_come), do: "Season watched — click to unmark"
+
+  def season_title(:up_to_date, to_come),
+    do: "Up to date: everything that is out is watched, #{to_come} still to air — click to unmark"
+
+  def season_title(:open, 0), do: "Mark the whole season watched"
+  def season_title(:open, _to_come), do: "Mark the episodes that are out as watched"
+
+  @doc false
+  def season_aria(:complete, _to_come), do: "Unmark season watched"
+  def season_aria(:up_to_date, _to_come), do: "Unmark the episodes watched so far"
+  def season_aria(:open, 0), do: "Mark season watched"
+  def season_aria(:open, _to_come), do: "Mark the episodes that are out as watched"
 
   # ── the phone layout ───────────────────────────────────────────────
 
