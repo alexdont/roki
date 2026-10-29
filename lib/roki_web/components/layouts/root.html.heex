@@ -13,15 +13,15 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="roki" />
-    <%!-- "black": the page is laid out below the status bar, which is its own strip, painted
-          black rather than the colour of the page.
+    <%!-- "black", not "default" and not "black-translucent".
 
-          Translucent — the page painting under the bar, which is the only way to put a gradient
-          up there — was tried four times and left the reader shifted up with a gap at the
-          bottom every time, including with manhwa 0.1.11, which fixes the half of it that was
-          the landing maths. Whatever is left is geometry this end cannot see: no browser here
-          reports a safe-area inset, so every attempt was reasoning rather than measuring. It
-          needs numbers off the phone before it is tried again. --%>
+          Translucent lets the page paint under the status bar, which is the only way to put a
+          gradient up there — and it costs more than it gives: the manga reader pulls its shell
+          past the safe-area inset, so with a real inset every snap lands a status bar too high,
+          and on every other page the clock sits over the content. Default avoids both and gives
+          a bar the colour of the page, which on a reading page is white and bright.
+          Black is the third: the page is laid out below the bar, so nothing shifts anywhere,
+          and the bar is black rather than white. --%>
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <link rel="apple-touch-icon" href={~p"/images/apple-touch-icon.png"} />
     <%!-- The paged reader's panel zoom, read by assets/js/panel_overlay.js. --%>
