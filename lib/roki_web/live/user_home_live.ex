@@ -47,7 +47,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:completed, nil)
           |> assign(:ratings, if(connected?(socket), do: Roki.Profile.ratings(uuid), else: %{}))
           |> assign(:completed_shown, @completed_page)
-          |> assign(:reading, Roki.Manga.Library.list_continue_reading(uuid))
+          |> assign(:reading, List.first(Roki.Manga.Library.list_reading(uuid)))
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
@@ -305,10 +305,6 @@ defmodule RokiWeb.UserHomeLive do
         {@busy || @error || "Setting up your account…"}
       </p>
 
-      <%!-- Reading sits beside watching rather than inside the shelf above: it comes from the
-            manga tables, so it is here whether or not laev is connected. --%>
-      <.reading :if={@reading != []} items={@reading} />
-
       <.shelf
         :if={@state in [:loading, :ready]}
         data={@data}
@@ -320,6 +316,7 @@ defmodule RokiWeb.UserHomeLive do
         completed={@completed}
         completed_shown={@completed_shown}
         ratings={@ratings}
+        reading={@reading}
         username={@username}
         cached_titles={@cached_titles}
       />
@@ -515,10 +512,14 @@ defmodule RokiWeb.UserHomeLive do
   attr :completed, :any, default: nil
   attr :completed_shown, :integer, default: 100
   attr :ratings, :map, default: %{}
+  attr :reading, :any, default: nil, doc: "the one manga to carry on with, if any"
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
 
   defp shelf(assigns) do
+    assigns =
+      assign(assigns, :watching, assigns.data && List.first(assigns.data.watchlist.behind))
+
     ~H"""
     <div class="space-y-10">
       <%!-- Stats and the release note: small, quiet, and the same size whether loaded or
@@ -579,6 +580,53 @@ defmodule RokiWeb.UserHomeLive do
         <.pulse_line pulse={@pulse} username={@username} />
         <p :if={@error} class="alert alert-error mt-2 text-sm">{@error}</p>
       </div>
+
+      <%!-- Where you are, in one row: the chapter you stopped on, and the episode you are up
+            to. Two things, not two shelves — the lists below are for browsing, this is for
+            carrying on. --%>
+      <section :if={@reading || @watching} class="space-y-3">
+        <h2 class="text-xl font-semibold">Continue</h2>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <a
+            :if={@reading}
+            href={~p"/manga/#{@reading.source}/#{@reading.slug}/#{@reading.last_chapter}"}
+            class="flex gap-3 rounded-box border border-base-300 p-3 transition hover:bg-base-200"
+          >
+            <img
+              :if={manga_cover(@reading)}
+              src={manga_cover(@reading)}
+              alt={@reading.title}
+              class="h-24 w-16 shrink-0 rounded object-cover"
+            />
+            <span class="min-w-0 self-center">
+              <span class="block text-xs uppercase tracking-wide text-base-content/50">Reading</span>
+              <span class="block truncate font-semibold">{@reading.title}</span>
+              <span class="block text-sm text-base-content/60">
+                Chapter {@reading.last_chapter}
+              </span>
+            </span>
+          </a>
+          <.link
+            :if={@watching}
+            navigate={href(@watching)}
+            class="flex gap-3 rounded-box border border-base-300 p-3 transition hover:bg-base-200"
+          >
+            <img
+              :if={@watching.poster}
+              src={Roki.Images.local(@watching.poster)}
+              alt={@watching.title}
+              class="h-24 w-16 shrink-0 rounded object-cover"
+            />
+            <span class="min-w-0 self-center">
+              <span class="block text-xs uppercase tracking-wide text-base-content/50">Watching</span>
+              <span class="block truncate font-semibold">{@watching.title}</span>
+              <span :if={@watching[:note]} class="block text-sm text-base-content/60">
+                {@watching.note}
+              </span>
+            </span>
+          </.link>
+        </div>
+      </section>
 
       <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
 
@@ -818,33 +866,6 @@ defmodule RokiWeb.UserHomeLive do
   defp day_label(%{at: at}) do
     d = DateTime.from_unix!(at)
     "#{String.slice(Enum.at(@months, d.month - 1), 0, 3)} #{d.day}"
-  end
-
-  attr :items, :list, required: true
-
-  defp reading(assigns) do
-    ~H"""
-    <section class="space-y-3 pb-6">
-      <h2 class="text-xl font-semibold">
-        Continue reading
-        <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
-      </h2>
-      <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={m <- @items} class="space-y-1">
-          <a href={~p"/manga/#{m.source}/#{m.slug}/#{m.last_chapter}"} title={m.title}>
-            <img
-              src={manga_cover(m)}
-              alt={m.title}
-              loading="lazy"
-              class="aspect-[2/3] w-full rounded-box object-cover"
-            />
-          </a>
-          <p class="truncate text-sm font-medium">{m.title}</p>
-          <p class="text-xs text-base-content/60">Ch. {m.last_chapter}</p>
-        </li>
-      </ul>
-    </section>
-    """
   end
 
   # The media library's copy when there is one, else the source's own address through this

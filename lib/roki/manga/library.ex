@@ -453,6 +453,26 @@ defmodule Roki.Manga.Library do
   end
 
   @doc """
+  What this person is actually in the middle of — the reader's own "Reading" state: a chapter
+  opened, not finished, and not already caught up with what the source has published. Most
+  recently read first.
+
+  Caught up is left out on purpose: there is nothing to carry on with until a new chapter
+  arrives, and the thing is waiting rather than waiting on you.
+  """
+  def list_reading(user_uuid, limit \\ 1) do
+    from(s in SavedManga,
+      where: s.user_id == type(^user_uuid, Ecto.UUID),
+      where: not is_nil(s.last_chapter) and s.last_chapter != "",
+      where: s.completed == false,
+      order_by: [desc: s.updated_at]
+    )
+    |> Repo.all()
+    |> Enum.reject(&caught_up?/1)
+    |> Enum.take(limit)
+  end
+
+  @doc """
   What this person is in the middle of, most recently read first — the reading row on their
   own shelf. A series is in the middle of it once a chapter has been opened and until it is
   marked finished.
