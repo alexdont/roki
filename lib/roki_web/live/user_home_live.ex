@@ -584,7 +584,7 @@ defmodule RokiWeb.UserHomeLive do
       <%!-- Where you are, in one row: the chapter you stopped on, and the episode you are up
             to. Two things, not two shelves — the lists below are for browsing, this is for
             carrying on. --%>
-      <section :if={@reading || @watching} class="space-y-3">
+      <section :if={@reading || @watching || @data == nil} class="space-y-3">
         <h2 class="text-xl font-semibold">Continue</h2>
         <%!-- Two across at every width: on a phone they are what the page opens with, and one
               above the other would push the lists past the fold. --%>
@@ -627,6 +627,21 @@ defmodule RokiWeb.UserHomeLive do
               </span>
             </span>
           </.link>
+          <%!-- Watching comes from laev, which answers a moment after the page does. Without
+                this the right half is empty and then a card appears out of nowhere; with it the
+                place is held in the card's own shape. --%>
+          <div
+            :if={@data == nil}
+            class="flex gap-3 rounded-box border border-base-300 p-3"
+            aria-busy="true"
+          >
+            <div class="skeleton hidden h-24 w-16 shrink-0 rounded min-[380px]:block"></div>
+            <div class="min-w-0 flex-1 space-y-2 self-center">
+              <div class="skeleton h-3 w-16 rounded"></div>
+              <div class="skeleton h-4 w-full rounded"></div>
+              <div class="skeleton h-3 w-2/3 rounded"></div>
+            </div>
+          </div>
         </div>
       </section>
 

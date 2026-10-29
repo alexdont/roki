@@ -72,6 +72,20 @@ defmodule RokiWeb.UserHomeContinueTest do
     assert html =~ ~s(class="grid grid-cols-2 gap-3")
   end
 
+  test "the watching half holds its place while laev is still answering", %{
+    conn: conn,
+    user: user
+  } do
+    reading!(user, "berserk", "Berserk")
+
+    # The first render, before the shelf's data has arrived.
+    {:ok, _view, html} = live(conn, "/continuer/home")
+
+    assert html =~ "Continue"
+    assert html =~ ~s(aria-busy="true")
+    assert html =~ "skeleton"
+  end
+
   test "a series you are caught up with is not something to carry on with", %{
     conn: conn,
     user: user
