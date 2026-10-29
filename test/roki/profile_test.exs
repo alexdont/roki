@@ -260,4 +260,27 @@ defmodule Roki.ProfileTest do
     assert Profile.banner_url(%{banner: "a-1.jpg"}) == nil
     assert Profile.banner_url(%{banner: nil}) == nil
   end
+
+  describe "dating titles that appear on the list" do
+    defp finished(id), do: %{type: "movie", id: id, title: "Film #{id}", at: 0, dated?: false, status: "finished"}
+
+    defp dated_count do
+      {:ok, bin} = Ecto.UUID.dump(@uuid)
+      Roki.Repo.query!("select count(*) from roki_watch_dates where user_uuid = $1", [bin]).rows
+    end
+
+    test "a few new finished titles are dated now, a whole catalogue arriving is not" do
+      Profile.replace_watched(@uuid, [finished(1)])
+      # The first copy of an account is left alone.
+      assert dated_count() == [[0]]
+
+      Profile.replace_watched(@uuid, Enum.map(1..4, &finished/1))
+      assert dated_count() == [[3]]
+
+      # Hundreds at once is an import: undated, not filed under today.
+      Profile.replace_watched(@uuid, Enum.map(1..300, &finished/1))
+      assert dated_count() == [[3]]
+      assert Enum.count(Profile.history(@uuid), &(&1.at <= 0 or not &1.dated?)) == 297
+    end
+  end
 end

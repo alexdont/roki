@@ -415,7 +415,8 @@ defmodule Roki.Profile do
     :ok
   end
 
-  defp replace_watched(uuid, items) do
+  @doc false
+  def replace_watched(uuid, items) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     rows =
@@ -473,6 +474,8 @@ defmodule Roki.Profile do
   # not be. A title that shows up undated *now*, on a list that already had titles, was marked
   # since the last look, so it is dated now (and kept, like any date the owner sets). The first
   # copy of an account is left alone: its undated titles are old, not new.
+  @marks_per_look 25
+
   defp date_new_marks(bin, rows, before) do
     if MapSet.size(before) > 0, do: date_marks(bin, rows, before), else: :ok
   end
@@ -482,12 +485,21 @@ defmodule Roki.Profile do
 
     # Only a finished title is dated this way: one still in progress has the time laev last saw
     # it, or none, and a started show is not "watched today" for having appeared.
-    for {type, id, _, _, _, _, _, _, false, "finished", _} <- rows,
-        not MapSet.member?(before, {type, id}) do
-      Repo.query!(
-        "insert into roki_watch_dates (user_uuid, type, id, watched_at) values ($1, $2, $3, $4) on conflict (user_uuid, type, id) do nothing",
-        [bin, type, id, now]
-      )
+    arrived =
+      for {type, id, _, _, _, _, _, _, false, "finished", _} <- rows,
+          not MapSet.member?(before, {type, id}),
+          do: {type, id}
+
+    # A person marks a few titles between two looks. Hundreds at once is a catalogue arriving —
+    # an imported TMDB or IMDb history — and stamping them all "now" files years of watching under
+    # today (it did, on 2026-10-29: 535 titles). They stay undated instead, which is the truth.
+    if length(arrived) <= @marks_per_look do
+      for {type, id} <- arrived do
+        Repo.query!(
+          "insert into roki_watch_dates (user_uuid, type, id, watched_at) values ($1, $2, $3, $4) on conflict (user_uuid, type, id) do nothing",
+          [bin, type, id, now]
+        )
+      end
     end
 
     :ok
