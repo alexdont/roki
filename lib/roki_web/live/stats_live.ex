@@ -17,7 +17,7 @@ defmodule RokiWeb.StatsLive do
   """
   use RokiWeb, :live_view
 
-  alias Roki.{Laev, Spent, Stats}
+  alias Roki.{Detail, Laev, Spent, Stats}
 
   @page 50
 
@@ -35,6 +35,7 @@ defmodule RokiWeb.StatsLive do
           |> assign(:uuid, uuid)
           |> assign(:state, :loading)
           |> assign(:data, nil)
+          |> assign(:detail, nil)
           |> assign(:range, :all)
           |> assign(:kind, :all)
           |> assign(:shown, @page)
@@ -65,7 +66,8 @@ defmodule RokiWeb.StatsLive do
       watch_dates: Roki.Profile.watch_dates(uuid),
       season_dates: Roki.Profile.season_dates(uuid),
       # Watching that has days of its own, from the sessions the player records as it goes.
-      stint_days: Roki.Stints.by_title(uuid, offset(socket))
+      stint_days: Roki.Stints.by_title(uuid, offset(socket)),
+      offset: offset(socket)
     )
   end
 
@@ -84,6 +86,47 @@ defmodule RokiWeb.StatsLive do
     if Laev.connected?(uuid), do: Stats.for_user(uuid), else: :not_connected
   end
 
+  # What the popup is given: the detail itself, and the few things about the title the detail
+  # does not hold (its name, its cover, what the list counts it as).
+  defp detail_for({:watching, {type, id} = key}, assigns) do
+    with %{titles: titles} <- assigns.data,
+         t when not is_nil(t) <- Enum.find(titles, &(&1.type == type and &1.id == id)) do
+      key
+      |> then(&Detail.watching(assigns.uuid, &1))
+      |> Map.merge(%{
+        title: t.title,
+        poster: t.poster,
+        kind_label: kind_label(type),
+        counted: t.seconds,
+        assumed: t.off,
+        believable_from: Stats.believable_from()
+      })
+    else
+      _ -> nil
+    end
+  end
+
+  defp detail_for({:reading, source, slug}, assigns) do
+    with m when not is_nil(m) <-
+           Enum.find(assigns.read, &(&1.source == source and &1.slug == slug)),
+         %{} = detail <- Detail.reading(assigns.uuid, source, slug) do
+      Map.merge(detail, %{
+        title: m.title,
+        poster: assigns.covers[{source, slug}],
+        kind_label: "Manga",
+        counted: detail.on_site + detail.off_site
+      })
+    else
+      _ -> nil
+    end
+  end
+
+  defp detail_for(nil, _assigns), do: nil
+
+  defp kind_label("movie"), do: "Film"
+  defp kind_label("tv"), do: "Show"
+  defp kind_label("mal"), do: "Anime"
+
   @impl true
   # Both live in the address, so a view of this page is a link someone can be sent.
   def handle_params(params, _uri, socket) do
@@ -97,6 +140,14 @@ defmodule RokiWeb.StatsLive do
 
   @impl true
   def handle_event("more", _params, socket), do: {:noreply, update(socket, :shown, &(&1 + @page))}
+
+  # The number on the right of a row opens everything recorded about it. Always all time, and
+  # said to be: a window is a way of looking at the list, and the popup is about the thing.
+  def handle_event("inspect", %{"key" => encoded}, socket) do
+    {:noreply, assign(socket, :detail, detail_for(Detail.decode(encoded), socket.assigns))}
+  end
+
+  def handle_event("close_detail", _params, socket), do: {:noreply, assign(socket, :detail, nil)}
 
   @impl true
   def handle_async(:stats, {:ok, {:ok, data}}, socket),
@@ -167,6 +218,8 @@ defmodule RokiWeb.StatsLive do
           range={@range}
           covers={@covers}
         />
+
+        <.detail_dialog :if={@detail} detail={@detail} offset={@offset} />
 
         <.activity
           :if={@state != :loading and @days != %{}}
@@ -395,7 +448,21 @@ defmodule RokiWeb.StatsLive do
           <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-3">
               <span class="truncate font-medium" title={t.title}>{t.title}</span>
-              <span class="shrink-0 font-mono text-sm">{Laev.duration(t.seconds)}</span>
+              <%!-- The number opens everything recorded about it. A dotted underline, because a
+                   bare number does not look like something to press. --%>
+              <button
+                :if={t[:key]}
+                type="button"
+                phx-click="inspect"
+                phx-value-key={Detail.encode(t)}
+                aria-label={"Details for #{t.title}"}
+                class="shrink-0 cursor-pointer font-mono text-sm underline decoration-base-content/30 decoration-dotted underline-offset-4 transition hover:text-primary hover:decoration-primary"
+              >
+                {Laev.duration(t.seconds)}
+              </button>
+              <span :if={!t[:key]} class="shrink-0 font-mono text-sm">
+                {Laev.duration(t.seconds)}
+              </span>
             </div>
             <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-base-300">
               <div
@@ -404,8 +471,8 @@ defmodule RokiWeb.StatsLive do
               >
               </div>
             </div>
-            <div class="mt-0.5 text-xs text-base-content/50" title={timing_note(t)}>
-              {one(t.kind)}{timing(t)}
+            <div class="mt-0.5 text-xs text-base-content/50">
+              {one(t.kind)}{skipped_note(t)}
             </div>
           </div>
         </li>
@@ -418,47 +485,312 @@ defmodule RokiWeb.StatsLive do
     """
   end
 
-  # What a row's time is made of, as facts. It used to say "69% assumed", which sounded like the
-  # share of the film that had been watched and was in fact the opposite: the share that no
-  # player had timed. Nothing here is a guess — a finished title counts in full, and the only
-  # question is how much of that full length something measured and how much was simply known
-  # from the title being finished.
-  #
-  # Reading says the same thing in its own terms: "off-site" time is a figure the owner entered
-  # on the series page, not something the site assumed.
+  # The one thing worth saying under a name besides what it is: how much of it was skipped
+  # past. Only where the figure can be believed (`Roki.Stats.plays/0`), and only when it is big
+  # enough to mean something — a few seconds of seeking is not worth a line.
   @doc false
-  def timing(%{kind: :manga, off: off, seconds: seconds}) when off > 0 and off == seconds,
-    do: " · added by hand"
+  def skipped_note(%{skipped: skipped}) when is_integer(skipped) and skipped >= 60,
+    do: " · skipped #{Laev.duration(skipped)}"
 
-  def timing(%{kind: :manga, off: off, seconds: seconds}) when off > 0,
-    do: " · #{Laev.duration(seconds - off)} read here · #{Laev.duration(off)} added by hand"
+  def skipped_note(_entry), do: ""
 
-  def timing(%{off: off, seconds: seconds}) when off > 0 and off == seconds,
-    do: " · marked watched, not timed"
+  # ── the popup ──────────────────────────────────────────────────────
 
-  def timing(%{off: off, seconds: seconds}) when off > 0,
-    do: " · counted in full, #{Laev.duration(seconds - off)} of it timed"
+  attr :detail, :map, required: true
+  attr :offset, :integer, default: 0
 
-  def timing(_entry), do: ""
-
-  # The longer version, for the row's tooltip.
   @doc false
-  def timing_note(%{kind: :manga, off: off, seconds: seconds}) when off > 0 and off == seconds,
-    do: "Time you entered by hand on the series page (Adjust Time Read). Nothing here was timed."
+  def detail_dialog(assigns) do
+    ~H"""
+    <dialog
+      id="detail-dialog"
+      class="modal modal-open"
+      phx-window-keydown="close_detail"
+      phx-key="escape"
+      aria-labelledby="detail-title"
+    >
+      <div class="modal-box max-w-xl space-y-5">
+        <button
+          type="button"
+          phx-click="close_detail"
+          class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+          aria-label="Close"
+        >
+          ✕
+        </button>
 
-  def timing_note(%{kind: :manga, off: off, seconds: seconds}) when off > 0,
-    do:
-      "#{Laev.duration(seconds - off)} was timed by the reader. #{Laev.duration(off)} is time you entered by hand on the series page, for reading done elsewhere."
+        <div class="flex items-center gap-4 pr-8">
+          <img
+            :if={@detail.poster}
+            src={@detail.poster}
+            alt=""
+            class="aspect-2/3 w-14 shrink-0 rounded bg-base-300 object-cover"
+          />
+          <div class="min-w-0">
+            <h3 id="detail-title" class="line-clamp-2 text-lg font-semibold leading-snug">
+              {@detail.title}
+            </h3>
+            <p class="text-sm text-base-content/60">
+              {@detail.kind_label} · <span class="font-mono">{Laev.duration(@detail.counted)}</span>
+              all time
+            </p>
+          </div>
+        </div>
 
-  def timing_note(%{off: off, seconds: seconds}) when off > 0 and off == seconds,
-    do:
-      "Marked watched without being played here, so its full length counts. No player timed any of it."
+        <.watching_detail :if={@detail.kind == :watching} detail={@detail} offset={@offset} />
+        <.reading_detail :if={@detail.kind == :reading} detail={@detail} offset={@offset} />
+      </div>
+      <div class="modal-backdrop" phx-click="close_detail"></div>
+    </dialog>
+    """
+  end
 
-  def timing_note(%{off: off, seconds: seconds}) when off > 0,
-    do:
-      "Marked finished, so its full length counts. A player only timed #{Laev.duration(seconds - off)} of it — the rest was skipped past, or played before the timer was fixed."
+  attr :detail, :map, required: true
+  attr :offset, :integer, default: 0
 
-  def timing_note(_entry), do: nil
+  defp watching_detail(assigns) do
+    ~H"""
+    <.facts title="Time">
+      <.fact label="Timed by a player" value={Laev.duration(@detail.counted - @detail.assumed)} />
+      <.fact
+        :if={@detail.assumed > 0}
+        label="Counted without timing"
+        value={Laev.duration(@detail.assumed)}
+        note="Marked watched or finished, so the full length counts; nothing measured it."
+      />
+      <.fact
+        :if={is_integer(@detail.skipped)}
+        label="Skipped past"
+        value={Laev.duration(@detail.skipped)}
+        note={
+          @detail.unsure > 0 &&
+            "Not counting up to #{Laev.duration(@detail.unsure)} from earlier plays, which cannot be trusted."
+        }
+      />
+      <.fact
+        :if={is_nil(@detail.skipped) and @detail.unsure > 0}
+        label="Skipped past"
+        value="not known"
+        note={"Earlier plays show up to #{Laev.duration(@detail.unsure)}, but that cannot be told apart from progress reports that never arrived. Skipping is recorded reliably for plays from #{day(@detail.believable_from, @offset)}."}
+      />
+    </.facts>
+
+    <.facts title="When">
+      <%!-- A film has one date. Saying it three times, as started, last watched and marked, is
+           noise, and "started" would really be the time it finished. --%>
+      <.fact
+        :if={!film?(@detail)}
+        label="Started watching"
+        value={moment(@detail.started, @offset)}
+        note={how(@detail.started, :first)}
+      />
+      <.fact
+        :if={!film?(@detail)}
+        label="Last watched"
+        value={moment(@detail.last, @offset)}
+        note={how(@detail.last, :last)}
+      />
+      <.fact
+        label={marked_label(@detail)}
+        value={moment(@detail.marked, @offset)}
+        note={how_marked(@detail.marked)}
+      />
+      <.fact
+        :if={@detail.your_date}
+        label="Filed under"
+        value={day(@detail.your_date, @offset)}
+        note="The date this list counts it on."
+      />
+    </.facts>
+
+    <.facts
+      :if={@detail.session_count > 0}
+      title={"Sessions · #{@detail.session_count}, longest #{Laev.duration(@detail.longest)}"}
+    >
+      <.fact
+        :for={s <- @detail.sessions}
+        label={"#{day(s.started_at, @offset)}, #{clock(s.started_at, @offset)}–#{clock(s.ended_at, @offset)}"}
+        value={Laev.duration(s.seconds)}
+      />
+    </.facts>
+
+    <details :if={length(@detail.episodes) > 1} class="rounded-box border border-base-300">
+      <summary class="cursor-pointer px-4 py-3 text-sm font-medium">
+        Episodes · {@detail.played_count} timed, {@detail.marked_count} marked
+      </summary>
+      <ul class="divide-y divide-base-300 px-4 pb-2 text-sm">
+        <li
+          :for={e <- Enum.take(@detail.episodes, 60)}
+          class="flex items-baseline justify-between gap-3 py-1.5"
+        >
+          <span>{e.label}</span>
+          <span class="text-base-content/60">
+            {episode_state(e)}
+          </span>
+        </li>
+      </ul>
+      <p :if={length(@detail.episodes) > 60} class="px-4 pb-3 text-xs text-base-content/50">
+        and {length(@detail.episodes) - 60} more
+      </p>
+    </details>
+    """
+  end
+
+  attr :detail, :map, required: true
+  attr :offset, :integer, default: 0
+
+  defp reading_detail(assigns) do
+    ~H"""
+    <.facts title="Time">
+      <.fact label="Read here" value={Laev.duration(@detail.on_site)} />
+      <.fact
+        :if={@detail.off_site > 0}
+        label="Added by hand"
+        value={(if @detail.approximate?, do: "~", else: "") <> Laev.duration(@detail.off_site)}
+        note="Time you entered on the series page for reading done elsewhere."
+      />
+    </.facts>
+
+    <.facts title="Progress">
+      <.fact
+        label="Chapter"
+        value={chapters(@detail)}
+      />
+      <.fact
+        :if={@detail.days_read > 0}
+        label="Read on"
+        value={"#{@detail.days_read} #{if @detail.days_read == 1, do: "day", else: "days"}"}
+        note={"#{date(@detail.first_day)} to #{date(@detail.last_day)}"}
+      />
+    </.facts>
+
+    <.facts title="When">
+      <.fact
+        label="Started reading"
+        value={
+          if @detail.started,
+            do: moment_at(@detail.started, @offset),
+            else: if(@detail.first_day, do: date(@detail.first_day), else: "not recorded")
+        }
+        note={!@detail.started && @detail.first_day && "The first day reading was recorded."}
+      />
+      <.fact :if={@detail.last_day} label="Last read" value={date(@detail.last_day)} />
+      <.fact label="Caught up" value={moment_at(@detail.caught_up_at, @offset)} />
+      <.fact
+        label="Completed"
+        value={
+          if @detail.completed?,
+            do: moment_at(@detail.completed_at, @offset) || "yes",
+            else: "not yet"
+        }
+      />
+    </.facts>
+
+    <.facts
+      :if={@detail.session_count > 0}
+      title={"Sessions · #{@detail.session_count}, longest #{Laev.duration(@detail.longest)}"}
+    >
+      <.fact
+        :for={s <- @detail.sessions}
+        label={"#{day(s.started_at, @offset)}, #{clock(s.started_at, @offset)}–#{clock(s.ended_at, @offset)}"}
+        value={Laev.duration(s.seconds)}
+        note={chapter_note(s)}
+      />
+    </.facts>
+    """
+  end
+
+  attr :title, :string, required: true
+  slot :inner_block, required: true
+
+  defp facts(assigns) do
+    ~H"""
+    <section>
+      <h4 class="mb-1 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+        {@title}
+      </h4>
+      <dl class="divide-y divide-base-300 rounded-box border border-base-300 px-4">
+        {render_slot(@inner_block)}
+      </dl>
+    </section>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :value, :string, required: true
+  attr :note, :string, default: nil
+
+  defp fact(assigns) do
+    ~H"""
+    <div class="py-2 text-sm">
+      <div class="flex items-baseline justify-between gap-4">
+        <dt class="text-base-content/70">{@label}</dt>
+        <dd class="text-right font-mono">{@value}</dd>
+      </div>
+      <p :if={@note} class="mt-0.5 text-xs text-base-content/50">{@note}</p>
+    </div>
+    """
+  end
+
+  # ── how the popup writes a time ──
+  # A date that was not recorded says so, rather than being left blank or guessed.
+  defp moment(nil, _offset), do: "not recorded"
+  defp moment(%{at: at}, offset), do: "#{day(at, offset)}, #{clock(at, offset)}"
+
+  defp moment_at(nil, _offset), do: "not recorded"
+  defp moment_at(at, offset), do: "#{day(at, offset)}, #{clock(at, offset)}"
+
+  defp day(at, offset),
+    do: at |> local(offset) |> Calendar.strftime("%-d %b %Y")
+
+  defp clock(at, offset),
+    do: at |> local(offset) |> Calendar.strftime("%H:%M")
+
+  defp local(at, offset), do: at |> DateTime.from_unix!() |> DateTime.add(offset, :second)
+
+  defp date(nil), do: "—"
+  defp date(%Date{} = d), do: Calendar.strftime(d, "%-d %b %Y")
+
+  # Where a date came from, because a session and a mark are not the same kind of fact.
+  defp how(%{how: :session}, _which), do: "From the sessions recorded."
+
+  defp how(%{how: :finish}, :first),
+    do: "From the first episode finished; no session was recorded."
+
+  defp how(%{how: :finish}, :last),
+    do: "From the last episode finished; no session was recorded."
+
+  defp how(_none, _which), do: nil
+
+  defp film?(%{key: {"movie", _id}}), do: true
+  defp film?(_detail), do: false
+
+  defp marked_label(%{key: {"movie", _}, marked: %{state: :finished}}), do: "Finished"
+  defp marked_label(%{key: {"movie", _}}), do: "Marked watched"
+  defp marked_label(_detail), do: "Marked complete"
+
+  defp how_marked(%{how: :title, state: :marked}), do: "The whole title was marked watched."
+  defp how_marked(%{how: :title, state: :finished}), do: "Finished in a player."
+  defp how_marked(%{how: :episode}), do: "The last episode marked or finished."
+  defp how_marked(_none), do: nil
+
+  defp episode_state(%{state: :finished, timed: t}) when t > 0,
+    do: "played · #{Laev.duration(t)} timed"
+
+  defp episode_state(%{state: :finished}), do: "finished"
+
+  defp episode_state(%{state: :marked, timed: t}) when t > 0,
+    do: "marked · #{Laev.duration(t)} timed"
+
+  defp episode_state(%{state: :marked}), do: "marked watched"
+  defp episode_state(%{state: {:partway, secs}}), do: "stopped at #{Laev.duration(secs)}"
+
+  defp chapters(%{last_chapter: nil}), do: "—"
+  defp chapters(%{last_chapter: ch, total_chapters: nil}), do: "#{ch}"
+  defp chapters(%{last_chapter: ch, total_chapters: total}), do: "#{ch} of #{total}"
+
+  defp chapter_note(%{keys: [ch | _]}) when is_binary(ch) and ch != "", do: "Chapter #{ch}"
+  defp chapter_note(_session), do: nil
 
   # Where a row's art comes from: watching brings a TMDB poster with it (`Roki.Stats.posters/1`),
   # reading is looked up here, because a cover is fetched through the reader's own proxy — or

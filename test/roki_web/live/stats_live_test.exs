@@ -181,18 +181,85 @@ defmodule RokiWeb.StatsLiveTest do
     refute html =~ "/manga/proxy/image"
   end
 
-  test "reading time entered by hand is called that, not assumed", %{conn: conn, user: user} do
-    read!(user, "Overgeared", 8340)
+  describe "the row and its popup" do
+    setup %{user: user} do
+      read!(user, "Overgeared", 8340)
 
-    Roki.Repo.query!(
-      "update saved_manga set reading_seconds_offsite = 95460 where slug = 'overgeared'"
-    )
+      Roki.Repo.query!(
+        "update saved_manga set reading_seconds_offsite = 95460, last_chapter = '331', total_chapters = 342 where slug = 'overgeared'"
+      )
 
-    html = open(conn, "/statstest/stats?kind=manga")
+      :ok
+    end
 
-    assert html =~ "Overgeared"
-    assert html =~ "2h 19m read here"
-    assert html =~ "26h 31m added by hand"
-    refute html =~ "assumed"
+    test "under the name is the kind and nothing else", %{conn: conn} do
+      html = open(conn, "/statstest/stats?kind=manga")
+
+      assert html =~ "Overgeared"
+      # The wording that used to follow the kind is gone from the list.
+      refute html =~ "assumed"
+      refute html =~ "added by hand"
+      refute html =~ "counted in full"
+      refute html =~ "read here"
+    end
+
+    test "the number on the right is the way in", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      render_async(view)
+
+      assert has_element?(
+               view,
+               ~s|button[phx-click="inspect"][phx-value-key="manga:mangadex/overgeared"]|
+             )
+
+      refute has_element?(view, "#detail-dialog")
+    end
+
+    test "pressing it opens what was recorded, and closing puts it away", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      render_async(view)
+
+      html =
+        view |> element(~s|button[phx-value-key="manga:mangadex/overgeared"]|) |> render_click()
+
+      assert has_element?(view, "#detail-dialog")
+      assert html =~ "Overgeared"
+      assert html =~ "Read here"
+      assert html =~ "2h 19m"
+      assert html =~ "Added by hand"
+      assert html =~ "26h 31m"
+      assert html =~ "331 of 342"
+
+      view |> element(~s|button[phx-click="close_detail"]|) |> render_click()
+      refute has_element?(view, "#detail-dialog")
+    end
+
+    test "escape closes it too", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      render_async(view)
+      view |> element(~s|button[phx-value-key="manga:mangadex/overgeared"]|) |> render_click()
+
+      view |> element("#detail-dialog") |> render_keydown(%{"key" => "Escape"})
+      refute has_element?(view, "#detail-dialog")
+    end
+
+    test "a key that is not a title opens nothing", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      render_async(view)
+
+      render_click(view, "inspect", %{"key" => "nonsense"})
+      render_click(view, "inspect", %{"key" => "tv:999999999"})
+      render_click(view, "inspect", %{"key" => "manga:mangadex/not-a-series"})
+
+      refute has_element?(view, "#detail-dialog")
+    end
+
+    test "a skipped figure is said under the name only when it is big enough to mean something" do
+      assert RokiWeb.StatsLive.skipped_note(%{skipped: 4980}) == " · skipped 1h 23m"
+      assert RokiWeb.StatsLive.skipped_note(%{skipped: 59}) == ""
+      assert RokiWeb.StatsLive.skipped_note(%{skipped: 0}) == ""
+      assert RokiWeb.StatsLive.skipped_note(%{skipped: nil}) == ""
+      assert RokiWeb.StatsLive.skipped_note(%{}) == ""
+    end
   end
 end

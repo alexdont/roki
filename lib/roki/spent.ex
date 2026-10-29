@@ -109,7 +109,7 @@ defmodule Roki.Spent do
       end
 
     if parts == [] do
-      [entry(t, t.title, t.seconds, t.off, at)]
+      [entry(t, t.title, t.seconds, t.off, at, t[:skipped])]
     else
       # Whatever the division left over stays with the title, so the show still adds up to
       # laev's own figure however its seasons are dated.
@@ -119,7 +119,8 @@ defmodule Roki.Spent do
           t.title,
           t.seconds - Enum.sum(Enum.map(parts, & &1.seconds)),
           t.off - Enum.sum(Enum.map(parts, & &1.off)),
-          at
+          at,
+          t[:skipped]
         )
 
       if rest.seconds > 0, do: parts ++ [rest], else: parts
@@ -129,7 +130,9 @@ defmodule Roki.Spent do
   defp portion(_whole, _part, 0), do: 0
   defp portion(whole, part, total), do: div(whole * part, total)
 
-  defp entry(t, title, seconds, off, at) do
+  # `skipped` rides only on a whole title: a season carved out of it cannot claim the title's
+  # skipped time, so its row says nothing about it and the title's own row does.
+  defp entry(t, title, seconds, off, at, skipped \\ nil) do
     %{
       kind: if(t.anime, do: :anime, else: String.to_existing_atom(t.type)),
       # Laev's own key for the thing, so an entry can be matched against what the day-by-day
@@ -140,6 +143,7 @@ defmodule Roki.Spent do
       # whole thing and the split has nothing left to say.
       base: t.title,
       poster: t[:poster],
+      skipped: skipped,
       seconds: seconds,
       off: max(off, 0),
       at: at

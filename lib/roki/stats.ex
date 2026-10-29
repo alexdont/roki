@@ -83,11 +83,12 @@ defmodule Roki.Stats do
       seen = last_seen()
       days = day_totals()
       art = posters(s.titles)
+      plays = plays()
 
       {:ok,
        %{
          totals: Map.drop(s, [:titles]),
-         titles: Enum.map(s.titles, &title(&1, seen, art)),
+         titles: Enum.map(s.titles, &title(&1, seen, art, plays)),
          tally: Shelf.tally(),
          days: days,
          seasons: season_episodes(),
@@ -136,7 +137,9 @@ defmodule Roki.Stats do
     Map.merge(history, anime)
   end
 
-  defp title(t, seen, posters) do
+  defp title(t, seen, posters, plays) do
+    key = {t.type, t.tmdb_id}
+
     %{
       type: t.type,
       id: t.tmdb_id,
@@ -144,9 +147,124 @@ defmodule Roki.Stats do
       seconds: t.seconds,
       off: t.off,
       anime: t.type == "mal",
-      last_seen: seen[{t.type, t.tmdb_id}],
-      poster: posters[{t.type, t.tmdb_id}]
+      last_seen: seen[key],
+      poster: posters[key],
+      skipped: plays[key][:skipped]
     }
+  end
+
+  # ── what the players measured, per title ───────────────────────────
+
+  # When every play can be believed about what it skipped.
+  #
+  # The page began counting its own watched seconds at 1_793_282_397 (2026-10-29 13:59:57 UTC),
+  # and until then the server subtracted one reported position from the last: a missed report
+  # became a seek, so a skipped figure is mostly the time between two missed reports. Nothing in
+  # the file says which logic wrote it — the third number a browser line carries was only added
+  # to the format later, so older browser lines have two, exactly like the ones mpv writes.
+  #
+  # A play already open at the deploy kept the old page code, and so the old arithmetic, until
+  # its tab reloaded (one was caught 39 minutes after: 5022s watched, 5973s "skipped"). So the
+  # line is drawn a day later, when no tab can still be running the old page.
+  @timer_fixed_at 1_793_282_397 + 86_400
+
+  @doc """
+  What laev measured for each title, from its `played/` files:
+  `%{{"movie", 603} => %{timed:, plays:, skipped:, unsure:}}`.
+
+  `timed` is every measurement. `skipped` is the part that can be believed: plays recorded after
+  a day after the timer was fixed, by whichever player. `unsure` is the skipped time of every earlier play,
+  which may be real seeking or may be lost progress reports and cannot be told apart.
+
+  The date of a play is laev's own sync record of when its position file changed
+  (`positions_at/0`), since a file's modification time is reset every time another device syncs.
+
+  `skipped` is nil when no play is recent enough to believe, which is a different statement from
+  zero: zero means the players saw every second and you skipped none.
+  """
+  def plays do
+    dir = Path.join(Laev.Scope.dir(), "played")
+
+    lines =
+      case File.ls(dir) do
+        {:ok, names} ->
+          for name <- names,
+              key = Roki.Stints.parse(Laev.Stints.item(name)),
+              {watched, skipped} = read_play(Path.join(dir, name)) || {nil, nil},
+              is_integer(watched),
+              do: {name, key, watched, skipped}
+
+        _ ->
+          []
+      end
+
+    at = if lines == [], do: %{}, else: positions_at()
+
+    for {name, key, watched, skipped} <- lines, reduce: %{} do
+      acc ->
+        recent? = believable?(Map.get(at, name))
+
+        play = %{
+          timed: watched,
+          plays: 1,
+          skipped: if(recent?, do: skipped),
+          unsure: if(recent?, do: 0, else: skipped)
+        }
+
+        Map.update(acc, key, play, fn e ->
+          %{
+            e
+            | timed: e.timed + play.timed,
+              plays: e.plays + 1,
+              skipped: add(e.skipped, play.skipped),
+              unsure: e.unsure + play.unsure
+          }
+        end)
+    end
+  end
+
+  @doc "The moment from which a skipped figure can be believed, as a unix time."
+  def believable_from, do: @timer_fixed_at
+
+  @doc "Can a skipped figure recorded when this position file changed be believed?"
+  def believable?(changed_at), do: is_integer(changed_at) and changed_at >= @timer_fixed_at
+
+  # Nil is "no figure to believe": adding a figure to it makes that figure, and adding nothing to
+  # a figure leaves it alone.
+  defp add(nil, other), do: other
+  defp add(total, nil), do: total
+  defp add(total, other), do: total + other
+
+  # {watched, skipped} from one `played/` line, or nil for a line that is not one.
+  defp read_play(path) do
+    with {:ok, body} <- File.read(path),
+         [watched, skipped | _] <- String.split(String.trim(body)),
+         {watched, ""} <- Integer.parse(watched),
+         {skipped, ""} <- Integer.parse(skipped) do
+      {watched, skipped}
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  When laev last saw each position file change: `%{"tv-225634-s1e7" => 1790602387}`.
+
+  This is the nearest thing there is to "when was this marked or finished". It is the time the
+  change was noticed by a sync, so it can run a little behind the play itself; and an import
+  stamps everything it brings in with the same moment.
+  """
+  def positions_at do
+    with {:ok, body} <- File.read(Path.join(Laev.Scope.dir(), "sync.json")),
+         {:ok, %{"positions" => positions}} when is_map(positions) <- Jason.decode(body) do
+      for {name, %{"updated_at" => at, "deleted" => false}} <- positions,
+          is_integer(at),
+          into: %{} do
+        {name, at}
+      end
+    else
+      _ -> %{}
+    end
   end
 
   # ── posters ────────────────────────────────────────────────────────
