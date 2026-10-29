@@ -419,14 +419,21 @@ defmodule Roki.Watch do
   end
 
   # What is rated has been seen: the film, or every aired episode of the show, unless it is
-  # marked already. (A show rated half-way through is a judgement on it all the same.)
+  # marked already. (A show rated half-way through is a judgement on it all the same.) The show
+  # itself is only marked completed once it is over: a rating is not a promise that nothing more
+  # is coming.
   defp watched_by_rating(uuid, title) do
     lib = library(uuid, title)
 
     cond do
-      title.type == "movie" and not lib.watched? -> set_watched(uuid, title, nil, nil, true)
-      title.type == "tv" and not lib.all_watched? -> set_series_watched(uuid, title, true)
-      true -> :ok
+      title.type == "movie" and not lib.watched? ->
+        set_watched(uuid, title, nil, nil, true)
+
+      title.type == "tv" and not lib.all_watched? ->
+        set_series_watched(uuid, title, true, only_if_over: true)
+
+      true ->
+        :ok
     end
 
     :ok
@@ -531,19 +538,47 @@ defmodule Roki.Watch do
     library_changed(uuid)
   end
 
-  @doc "Every episode that is out, across all seasons, marked or cleared. Slow for a long series."
-  def set_series_watched(uuid, title, watched?) do
-    pairs =
+  @doc """
+  Every episode that is out, across all seasons, marked or cleared. Slow for a long series.
+
+  The show itself is marked too — "Completed", which is what the button under the poster means —
+  unless `only_if_over: true` and the show has more to come. That is what a rating asks for: it
+  says what has been seen, and a series still airing has not been seen: its mark is the strongest
+  one there is, it takes the show off the watchlist, and it would keep the show off it when the
+  next episode comes out. The episodes that are out are marked either way.
+  """
+  def set_series_watched(uuid, title, watched?, opts \\ []) do
+    seasons =
       for s <- aired_seasons(title),
           {:ok, eps} <- [episodes(title.id, s.number, uuid)],
-          e <- eps,
-          e.aired?,
-          do: {s.number, e.number}
+          do: {s.number, eps}
+
+    pairs = for {number, eps} <- seasons, e <- eps, e.aired?, do: {number, e.number}
 
     set_many_watched(uuid, title, pairs, watched?)
-    # The whole series, from the button under the poster: completed or not completed.
-    set_completed(uuid, title, watched?)
+
+    if watched? and Keyword.get(opts, :only_if_over, false) and not over?(title, seasons) do
+      :ok
+    else
+      # The whole series, from the button under the poster: completed or not completed.
+      set_completed(uuid, title, watched?)
+    end
+
     library_changed(uuid)
+  end
+
+  @doc """
+  Has a series nothing left to come? TMDB says it has ended or was cancelled, every episode of every
+  season that has started has aired, and no further season is announced.
+
+  `seasons` is `[{number, episodes}]` as `episodes/3` gives them. A series TMDB still calls
+  returning is never over, however much of it is watched: that is the one thing about it that can
+  change.
+  """
+  def over?(title, seasons) do
+    title[:status] in ["Ended", "Canceled"] and
+      Enum.all?(seasons, fn {_number, eps} -> eps != [] and Enum.all?(eps, & &1.aired?) end) and
+      Enum.all?(title.seasons, &(&1.number == 0 or &1 in aired_seasons(title)))
   end
 
   # Anime is kept on MyAnimeList: once an episode is watched, that entry's list count follows,

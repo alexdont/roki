@@ -348,11 +348,13 @@ defmodule Roki.Laev do
           # the watchlist. One download per account, then it is just a file.
           Laev.AnimeMap.ensure()
 
+          {rows, moved} = shelf_rows()
+
           {:ok,
            %{
-             tally: Shelf.tally(),
+             tally: shift_tally(Shelf.tally(), moved),
              watchlist:
-               watchlist()
+               watchlist(rows)
                |> Map.new(fn {k, v} ->
                  {k, v |> mark_seen() |> then(&if(k == :behind, do: with_resume(&1), else: &1))}
                end),
@@ -1240,9 +1242,115 @@ defmodule Roki.Laev do
   # Laev's own Watchlist: what you are in the middle of, most recently watched
   # first, then the shows you are caught up on, then the ones on hold. `rows/0`
   # marks the boundaries with `:caught_up` / `:on_hold` atoms between the maps.
-  defp watchlist do
+  # ── a season that is still airing is not watched through ──────────────
+
+  # How long after a show's last episode it stops counting as airing. A season in the middle of a
+  # run is a week or two between episodes; one that has been quiet for four months is on a break
+  # or is not coming back, and waiting on it is the shelf's "caught up", not "in progress".
+  @airing_gap_days 120
+
+  @doc """
+  The shelf's rows, with one correction: **a show is not caught up while its season is still
+  airing.**
+
+  Laev counts a season as watched through once the episodes that have *aired* are watched. So a
+  show with six of its eight episodes out and six marked has its one season "complete", is "caught
+  up", and sinks to the bottom of the list — while two of the episodes you are following it for
+  have not come out yet. That is right for a show between seasons, where there is nothing to
+  watch until it returns, and wrong for one that is half-way through its run and has something
+  every week. A season that has begun and has episodes still to air is not watched through, so
+  such a show stays in progress, with the count to say where you are: "6/8 episodes watched".
+
+  `{rows, moved}`: the rows in the order the shelf shows them, markers between the sections, and
+  how many shows were moved out of caught up (the home page's count has to move with them).
+
+  Anime is left as laev has it (MyAnimeList decides where an anime is), and so is anything on hold.
+  """
+  def shelf_rows do
+    {fixed, moved} =
+      Shelf.rows()
+      |> Enum.filter(&is_map/1)
+      |> Enum.map_reduce(0, fn row, moved ->
+        case still_airing(row) do
+          nil -> {row, moved}
+          corrected -> {corrected, moved + 1}
+        end
+      end)
+
+    {Shelf.divide_sections(fixed), moved}
+  end
+
+  # The home strip's "in progress" and the lists have to say the same thing.
+  @doc false
+  def shift_tally(tally, 0), do: tally
+
+  def shift_tally(tally, moved) do
+    %{tally | behind: tally.behind + moved, caught_up: max(tally.caught_up - moved, 0)}
+  end
+
+  defp still_airing(%{type: "tv", caught_up: true} = row) do
+    with false <- row[:held] == true or is_integer(row[:mal_id]),
+         card when is_map(card) <- Laev.Cards.get("tv", row.id),
+         true <- airing?(card, &Laev.Seasons.aired(row.id, &1), Date.utc_today()) do
+      marked =
+        Laev.Position.episode_marks()
+        |> Map.get({"tv", row.id}, %{})
+        |> Map.values()
+        |> Enum.sum()
+
+      row
+      |> Map.put(:caught_up, false)
+      |> Map.put(
+        :note,
+        " · #{marked}/#{episodes_out_or_due(card, Date.utc_today())} episodes watched"
+      )
+    else
+      _ -> nil
+    end
+  end
+
+  defp still_airing(_row), do: nil
+
+  @doc """
+  Is a show part-way through a season: one that has begun, has episodes still to come, and has had
+  one recently?
+
+  `aired` is laev's count of the episodes of a season that are out (nil when it has never looked,
+  which counts as "not known to be airing"); `today` is passed in so this can be tested.
+  """
+  def airing?(card, aired, today) do
+    recent? =
+      case Date.from_iso8601(card["last_air_date"] || "") do
+        {:ok, last} -> Date.diff(today, last) <= @airing_gap_days
+        _ -> false
+      end
+
+    recent? and
+      Enum.any?(begun_seasons(card, today), fn season ->
+        out = aired.(season["season_number"])
+        total = season["episode_count"]
+
+        is_integer(out) and is_integer(total) and out < total
+      end)
+  end
+
+  # The real seasons (not specials) that have started.
+  defp begun_seasons(card, today) do
+    iso = Date.to_iso8601(today)
+
+    for s <- card["seasons"] || [],
+        is_integer(s["season_number"]) and s["season_number"] > 0,
+        s["air_date"] not in [nil, ""] and s["air_date"] <= iso,
+        do: s
+  end
+
+  defp episodes_out_or_due(card, today) do
+    card |> begun_seasons(today) |> Enum.map(&(&1["episode_count"] || 0)) |> Enum.sum()
+  end
+
+  defp watchlist(rows) do
     {sections, _} =
-      Enum.reduce(Shelf.rows(), {%{behind: [], caught_up: [], on_hold: []}, :behind}, fn
+      Enum.reduce(rows, {%{behind: [], caught_up: [], on_hold: []}, :behind}, fn
         row, {acc, section} when is_map(row) ->
           {Map.update!(acc, section, &[watch_item(row) | &1]), section}
 
@@ -1394,7 +1502,7 @@ defmodule Roki.Laev do
   """
   def unfinished(uuid) do
     run(uuid, fn ->
-      for row <- Laev.Shelf.rows(),
+      for row <- elem(shelf_rows(), 0),
           is_map(row),
           is_binary(row[:title]) or is_integer(row[:mal_id]) do
         at = row[:watched_at]
