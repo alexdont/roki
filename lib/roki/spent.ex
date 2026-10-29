@@ -45,9 +45,60 @@ defmodule Roki.Spent do
     Enum.find_value(@ranges, :all, fn {id, _, _} -> Atom.to_string(id) == value && id end)
   end
 
-  @doc "A kind id from a URL, or `:all`."
-  def kind(value) do
-    Enum.find_value(@kinds, :all, fn {id, _} -> Atom.to_string(id) == value && id end)
+  @doc """
+  The kinds named by a URL value — `"movie,tv"` — in the order the page lists them, each once.
+  Anything that is not a kind is dropped, so a hand-edited address cannot break the page, and
+  `nil` or `"all"` (the old way of saying nothing is chosen) is no kinds at all.
+  """
+  def kinds_from(value) when is_binary(value) do
+    named = value |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+    for {id, _} <- @kinds, Atom.to_string(id) in named, do: id
+  end
+
+  def kinds_from(_value), do: []
+
+  @doc "The URL value for a set of kinds, or nil when it is empty (so the address stays short)."
+  def kinds_param([]), do: nil
+  def kinds_param(kinds), do: kinds |> sort_kinds() |> Enum.map_join(",", &Atom.to_string/1)
+
+  @doc """
+  What a kind is doing in the filter: `:only` (the list shows only the kinds that are), `:hidden`
+  (left out of the calculation), or `:off` (not asked about).
+  """
+  def kind_state(kind, only, hidden) do
+    cond do
+      kind in only -> :only
+      kind in hidden -> :hidden
+      true -> :off
+    end
+  end
+
+  @doc """
+  What pressing a kind does, as the `{only, hidden}` it leads to: off → only → hidden → off.
+
+  Pressing once shows just that kind (and pressing a second one adds it); pressing it again
+  leaves it out of everything, red and struck through; pressing it a third time puts it back.
+  Any number of kinds can be in either state at once, which is how "everything except anime and
+  manga" is made.
+  """
+  def cycle(kind, only, hidden) do
+    case kind_state(kind, only, hidden) do
+      :off -> {sort_kinds([kind | only]), hidden}
+      :only -> {List.delete(only, kind), sort_kinds([kind | hidden])}
+      :hidden -> {only, List.delete(hidden, kind)}
+    end
+  end
+
+  defp sort_kinds(kinds), do: for({id, _} <- @kinds, id in kinds, do: id)
+
+  @doc """
+  The entries that are wanted: of the `only` kinds when there are any (all of them when there
+  are none), and never of a `hidden` one. A kind in both is hidden.
+  """
+  def of_kinds(entries, only, hidden) do
+    Enum.filter(entries, fn e ->
+      (only == [] or e.kind in only) and e.kind not in hidden
+    end)
   end
 
   @doc """

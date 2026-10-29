@@ -364,4 +364,91 @@ defmodule Roki.SpentTest do
       assert Spent.narrow(entries, nil, @now, @logged) == entries
     end
   end
+
+  describe "the kind filter" do
+    test "reads kinds out of an address, in the page's order, ignoring anything else" do
+      assert Spent.kinds_from("manga,movie") == [:movie, :manga]
+      assert Spent.kinds_from("tv") == [:tv]
+      assert Spent.kinds_from("movie,movie,tv") == [:movie, :tv]
+      assert Spent.kinds_from(" anime , manga ") == [:anime, :manga]
+      assert Spent.kinds_from("banana,tv,") == [:tv]
+      assert Spent.kinds_from("all") == []
+      assert Spent.kinds_from("") == []
+      assert Spent.kinds_from(nil) == []
+      assert Spent.kinds_from(%{}) == []
+    end
+
+    test "writes them back the same way, and nothing when there are none" do
+      assert Spent.kinds_param([]) == nil
+      assert Spent.kinds_param([:manga, :movie]) == "movie,manga"
+      assert Spent.kinds_param(Spent.kinds_from("manga,movie")) == "movie,manga"
+    end
+
+    test "a kind is shown alone, left out, or not asked about" do
+      assert Spent.kind_state(:tv, [:tv], []) == :only
+      assert Spent.kind_state(:tv, [], [:tv]) == :hidden
+      assert Spent.kind_state(:tv, [], []) == :off
+      assert Spent.kind_state(:tv, [:movie], [:anime]) == :off
+    end
+
+    test "pressing a kind goes off, only, hidden, off" do
+      assert {[:anime], []} = step = Spent.cycle(:anime, [], [])
+      assert {[], [:anime]} = step = Spent.cycle(:anime, elem(step, 0), elem(step, 1))
+      assert {[], []} = Spent.cycle(:anime, elem(step, 0), elem(step, 1))
+    end
+
+    test "any number of kinds can be in either state, kept in the page's order" do
+      # Leave out anime, then manga: "everything but those".
+      {only, hidden} = Spent.cycle(:manga, [], [])
+      {only, hidden} = Spent.cycle(:manga, only, hidden)
+      {only, hidden} = Spent.cycle(:anime, only, hidden)
+      {only, hidden} = Spent.cycle(:anime, only, hidden)
+
+      assert only == []
+      assert hidden == [:anime, :manga]
+
+      # Show films and shows alone.
+      {only, hidden} = Spent.cycle(:tv, [], [])
+      {only, _} = Spent.cycle(:movie, only, hidden)
+      assert only == [:movie, :tv]
+    end
+
+    test "putting one back leaves the others as they were" do
+      {only, hidden} = {[:movie], [:anime, :manga]}
+
+      assert Spent.cycle(:anime, only, hidden) == {[:movie], [:manga]}
+      assert Spent.cycle(:movie, only, hidden) == {[], [:movie, :anime, :manga]}
+    end
+
+    test "with nothing chosen every entry is wanted" do
+      entries = for kind <- [:movie, :tv, :anime, :manga], do: %{kind: kind, seconds: 100}
+
+      assert Spent.of_kinds(entries, [], []) == entries
+    end
+
+    test "only the shown kinds are wanted when any are chosen" do
+      entries = for kind <- [:movie, :tv, :anime, :manga], do: %{kind: kind, seconds: 100}
+
+      assert Enum.map(Spent.of_kinds(entries, [:movie, :tv], []), & &1.kind) == [:movie, :tv]
+    end
+
+    test "a kind that is left out is never wanted, however it is asked for" do
+      entries = for kind <- [:movie, :tv, :anime, :manga], do: %{kind: kind, seconds: 100}
+
+      assert Enum.map(Spent.of_kinds(entries, [], [:anime, :manga]), & &1.kind) == [:movie, :tv]
+      assert Enum.map(Spent.of_kinds(entries, [:movie, :anime], [:anime]), & &1.kind) == [:movie]
+      assert Spent.of_kinds(entries, [], [:movie, :tv, :anime, :manga]) == []
+    end
+
+    test "leaving kinds out takes them out of the total" do
+      entries = [
+        %{kind: :movie, seconds: 3600},
+        %{kind: :anime, seconds: 7200},
+        %{kind: :manga, seconds: 1800}
+      ]
+
+      assert Spent.total(Spent.of_kinds(entries, [], [:anime, :manga])) == 3600
+      assert Spent.total(Spent.of_kinds(entries, [], [])) == 12_600
+    end
+  end
 end

@@ -37,7 +37,8 @@ defmodule RokiWeb.StatsLive do
           |> assign(:data, nil)
           |> assign(:detail, nil)
           |> assign(:range, :all)
-          |> assign(:kind, :all)
+          |> assign(:only, [])
+          |> assign(:hidden, [])
           |> assign(:shown, @page)
           |> assign_reading()
 
@@ -130,10 +131,16 @@ defmodule RokiWeb.StatsLive do
   @impl true
   # Both live in the address, so a view of this page is a link someone can be sent.
   def handle_params(params, _uri, socket) do
+    # `kind` is the kinds to show only, `hide` the kinds to leave out. A kind named in both is
+    # left out: that is what the address was hand-edited to mean at its most cautious.
+    hidden = Spent.kinds_from(params["hide"])
+    only = Spent.kinds_from(params["kind"]) -- hidden
+
     {:noreply,
      assign(socket,
        range: Spent.range(params["range"]),
-       kind: Spent.kind(params["kind"]),
+       only: only,
+       hidden: hidden,
        shown: @page
      )}
   end
@@ -180,7 +187,8 @@ defmodule RokiWeb.StatsLive do
         <.totals
           username={@username}
           range={@range}
-          kind={@kind}
+          only={@only}
+          hidden={@hidden}
           total={@total}
           split={@split}
           count={length(@visible_all)}
@@ -254,7 +262,7 @@ defmodule RokiWeb.StatsLive do
           Spent.read(assigns.read, assigns.reading_activity, days_back, now, assigns.arc_parts)
       )
 
-    visible_all = Spent.of_kind(in_window, assigns.kind)
+    visible_all = Spent.of_kinds(in_window, assigns.only, assigns.hidden)
 
     days = Spent.days(watched, assigns.reading_activity, assigns.arc_parts, assigns.stint_days)
     today = Date.utc_today()
@@ -292,7 +300,8 @@ defmodule RokiWeb.StatsLive do
 
   attr :username, :string, required: true
   attr :range, :atom, required: true
-  attr :kind, :atom, required: true
+  attr :only, :list, required: true
+  attr :hidden, :list, required: true
   attr :total, :integer, required: true
   attr :split, :map, required: true
   attr :count, :integer, required: true
@@ -313,30 +322,48 @@ defmodule RokiWeb.StatsLive do
       <div :if={!@loading}>
         <div class="text-4xl font-bold tracking-tight sm:text-5xl">{Laev.duration(@total)}</div>
         <p class="text-base-content/70">
-          across {@count} {if @count == 1, do: "title", else: "titles"}{if @kind != :all,
-            do: " of " <> String.downcase(label_of(@kind))}{if @range != :all,
-            do: " you were on in the last " <> String.downcase(range_label(@range))}
+          across {@count} {if @count == 1, do: "title", else: "titles"}{scope_note(@only, @hidden)}{range_note(
+            @range
+          )}
         </p>
       </div>
 
       <%!-- The split, and the filter: each one is its own share of the window above. --%>
       <div class="flex flex-wrap gap-2">
         <.link
-          patch={~p"/#{@username}/stats?#{[range: @range, kind: :all]}"}
-          class={["btn btn-sm", @kind == :all && "btn-neutral"]}
+          patch={stats_path(@username, @range, [], [])}
+          class={["btn btn-sm", (@only == [] and @hidden == []) && "btn-neutral"]}
         >
           All
         </.link>
         <%!-- Every kind keeps one colour, here and on its bars below, so the chips are the
-             legend for the list and nothing has to be labelled twice. --%>
+             legend for the list and nothing has to be labelled twice. A chip is pressed once to
+             show only that kind, again to leave it out (red, struck through, and out of the
+             number above), and a third time to put it back; any number can be in either state,
+             which is how "everything but anime and manga" is made. --%>
+        <% states =
+          Map.new(Spent.kinds(), fn {id, _} -> {id, Spent.kind_state(id, @only, @hidden)} end) %>
+        <% next = Map.new(Spent.kinds(), fn {id, _} -> {id, Spent.cycle(id, @only, @hidden)} end) %>
         <.link
           :for={{id, label} <- Spent.kinds()}
-          patch={~p"/#{@username}/stats?#{[range: @range, kind: id]}"}
-          class={["btn btn-sm gap-2", chip(id), @kind != id && "btn-outline"]}
+          patch={stats_path(@username, @range, elem(next[id], 0), elem(next[id], 1))}
+          title={chip_hint(states[id], label)}
+          aria-label={chip_hint(states[id], label)}
+          class={[
+            "btn btn-sm gap-2",
+            chip_class(id, states[id], @only)
+          ]}
         >
-          {label}
+          <span class={states[id] == :hidden && "line-through"}>{label}</span>
           <span :if={@loading} class="skeleton h-3 w-10"></span>
-          <span :if={!@loading} class={["font-mono text-xs", @kind != id && "opacity-60"]}>
+          <span
+            :if={!@loading}
+            class={[
+              "font-mono text-xs",
+              states[id] == :hidden && "line-through",
+              states[id] == :off && "opacity-60"
+            ]}
+          >
             {Laev.duration(@split[id] || 0)}
           </span>
         </.link>
@@ -345,7 +372,7 @@ defmodule RokiWeb.StatsLive do
       <div class="tabs tabs-box w-fit max-w-full overflow-x-auto" role="tablist">
         <.link
           :for={{id, label, _} <- Spent.ranges()}
-          patch={~p"/#{@username}/stats?#{[range: id, kind: @kind]}"}
+          patch={stats_path(@username, id, @only, @hidden)}
           class={["tab", @range == id && "tab-active"]}
         >
           {label}
@@ -389,6 +416,51 @@ defmodule RokiWeb.StatsLive do
 
   # Rows of one length read as a loading bar rather than as a list of titles.
   defp widths(i), do: Enum.at(~w(w-48 w-40 w-56 w-36 w-44 w-32), rem(i - 1, 6))
+
+  # The address of this page for a window and a filter. Only what is set is in it, so the
+  # unfiltered page is still `?range=all` and the links people have already are still right.
+  defp stats_path(username, range, only, hidden) do
+    params =
+      [range: range, kind: Spent.kinds_param(only), hide: Spent.kinds_param(hidden)]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+
+    ~p"/#{username}/stats?#{params}"
+  end
+
+  # What the sentence under the number says about the filter: "of films & shows" for the kinds
+  # shown alone, "without anime & manga" for the ones left out, and both when both are set.
+  defp scope_note(only, hidden) do
+    [
+      only != [] && " of " <> kind_names(only),
+      hidden != [] && " without " <> kind_names(hidden)
+    ]
+    |> Enum.filter(& &1)
+    |> Enum.join()
+  end
+
+  defp range_note(:all), do: ""
+  defp range_note(range), do: " you were on in the last " <> String.downcase(range_label(range))
+
+  defp kind_names(kinds) do
+    case Enum.map(kinds, &String.downcase(label_of(&1))) do
+      [one] -> one
+      names -> Enum.join(Enum.drop(names, -1), ", ") <> " & " <> List.last(names)
+    end
+  end
+
+  # Shown: the kind's own colour, solid. Left out: red, outlined. Not asked about: outlined in
+  # its own colour, and dimmed too while something else is being shown alone, because then it is
+  # not in the number either.
+  defp chip_class(id, :only, _only), do: chip(id)
+  defp chip_class(_id, :hidden, _only), do: "btn-outline btn-error"
+  defp chip_class(id, :off, []), do: [chip(id), "btn-outline"]
+  defp chip_class(id, :off, _only), do: [chip(id), "btn-outline opacity-60"]
+
+  # What pressing it would do, since there are three states and the colour only says which one
+  # it is in now.
+  defp chip_hint(:off, label), do: "Show only #{String.downcase(label)}"
+  defp chip_hint(:only, label), do: "Leave #{String.downcase(label)} out of the numbers"
+  defp chip_hint(:hidden, label), do: "Put #{String.downcase(label)} back"
 
   defp label_of(kind), do: Keyword.get(Spent.kinds(), kind, "")
 

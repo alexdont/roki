@@ -262,4 +262,132 @@ defmodule RokiWeb.StatsLiveTest do
       assert RokiWeb.StatsLive.skipped_note(%{}) == ""
     end
   end
+
+  describe "the kind chips" do
+    setup %{user: user} do
+      read!(user, "Overgeared", 7200)
+      :ok
+    end
+
+    # The chip for a kind, found by what it says it will do.
+    defp chip(view, hint), do: element(view, ~s|a[title="#{hint}"]|)
+
+    test "pressing a kind once shows only it, and says so", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats")
+      render_async(view)
+
+      view |> chip("Show only manga") |> render_click()
+      assert_patch(view, "/statstest/stats?kind=manga&range=all")
+
+      html = render(view)
+      assert html =~ "across 1 title of manga"
+      assert has_element?(view, ~s|a[title="Leave manga out of the numbers"]|)
+    end
+
+    test "pressing it again leaves it out: red, struck through, and out of the number", %{
+      conn: conn
+    } do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      render_async(view)
+
+      view |> chip("Leave manga out of the numbers") |> render_click()
+      assert_patch(view, "/statstest/stats?hide=manga&range=all")
+
+      html = render(view)
+      # Out of the number and the list…
+      assert html =~ "across 0 titles without manga"
+      assert html =~ "Nothing in this window."
+      refute html =~ "Overgeared"
+      # …and shown as left out: red, and struck through, name and figure both.
+      assert has_element?(view, ~s|a[title="Put manga back"].btn-error|)
+      assert has_element?(view, ~s|a[title="Put manga back"] .line-through|, "Manga")
+    end
+
+    test "pressing a red one puts it back", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?hide=manga")
+      render_async(view)
+      refute render(view) =~ "Overgeared"
+
+      view |> chip("Put manga back") |> render_click()
+      assert_patch(view, "/statstest/stats?range=all")
+
+      html = render(view)
+      assert html =~ "Overgeared"
+      assert html =~ "across 1 title"
+      refute html =~ "without"
+      refute has_element?(view, "a.btn-error")
+    end
+
+    test "several kinds can be left out at once", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?hide=anime")
+      render_async(view)
+
+      view |> chip("Show only manga") |> render_click()
+      view |> chip("Leave manga out of the numbers") |> render_click()
+
+      html = render(view)
+      assert html =~ "without anime &amp; manga"
+      assert has_element?(view, ~s|a[title="Put anime back"].btn-error|)
+      assert has_element?(view, ~s|a[title="Put manga back"].btn-error|)
+      # Films and shows are not in the list anyway, so nothing is left to show.
+      assert html =~ "Nothing in this window."
+    end
+
+    test "leaving out a kind this account has none of changes nothing", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?hide=movie,tv,anime")
+      render_async(view)
+
+      html = render(view)
+      assert html =~ "Overgeared"
+      assert html =~ "without films, shows &amp; anime"
+    end
+
+    test "kinds shown alone and kinds left out can be mixed", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=movie,manga&hide=movie")
+      html = render_async(view)
+
+      # Films are shown alone and also left out, which leaves manga shown alone, without films.
+      assert html =~ "of manga without films"
+      refute html =~ "of films"
+    end
+
+    test "the sentence names a kind shown alone and a kind left out together", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=movie,tv&hide=manga")
+      html = render_async(view)
+
+      assert html =~ "of films &amp; shows without manga"
+    end
+
+    test "a kind named in both is left out", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga&hide=manga")
+      html = render_async(view)
+
+      refute html =~ "Overgeared"
+      assert has_element?(view, ~s|a[title="Put manga back"]|)
+    end
+
+    test "an address with nonsense in it is read as no filter", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=banana&hide=,,")
+      html = render_async(view)
+
+      assert html =~ "Overgeared"
+      assert has_element?(view, ~s|a.btn-neutral|, "All")
+    end
+
+    test "the window tabs keep the filter, and All clears it", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?kind=movie&hide=manga&range=month")
+      render_async(view)
+
+      assert has_element?(view, ~s|a[href="/statstest/stats?hide=manga&kind=movie&range=week"]|)
+      assert has_element?(view, ~s|a[href="/statstest/stats?range=month"]|, "All")
+    end
+
+    test "the figure on a left-out chip is still its own, struck through", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/statstest/stats?hide=manga")
+      render_async(view)
+
+      # The chip says what it would hold, so putting it back is an informed choice.
+      assert has_element?(view, ~s|a[title="Put manga back"] .line-through.font-mono|, "2h")
+    end
+  end
 end
