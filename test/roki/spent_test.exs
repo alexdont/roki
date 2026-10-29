@@ -314,4 +314,54 @@ defmodule Roki.SpentTest do
       assert Enum.sum(Map.values(days)) == 10_000
     end
   end
+
+  describe "a window over a title with sessions" do
+    @today @now |> DateTime.from_unix!() |> DateTime.to_date()
+    @logged %{{"tv", 110_316} => %{@today => 2000, Date.add(@today, -40) => 5000}}
+    @all_old %{{"tv", 110_316} => %{Date.add(@today, -40) => 5000}}
+
+    test "holds exactly what the sessions put in it, not the title's whole history" do
+      entries = Spent.watched(show(10_000))
+
+      assert [one] = Spent.narrow(entries, 7, @now, @logged)
+      assert one.title == "Alice in Borderland"
+      assert one.seconds == 2000
+      assert one.off == 0
+
+      # A wider window reaches the earlier session too.
+      assert [wider] = Spent.narrow(entries, 60, @now, @logged)
+      assert wider.seconds == 7000
+    end
+
+    test "holds nothing when the sessions say nothing happened in it" do
+      assert Spent.narrow(Spent.watched(show(10_000)), 7, @now, @all_old) == []
+    end
+
+    test "a measured title is one row however its seasons are dated" do
+      entries =
+        Spent.watched(show(10_000), %{}, %{
+          {"tv", 110_316, 1} => @long_ago,
+          {"tv", 110_316, 2} => @now
+        })
+
+      assert [one] = Spent.narrow(entries, 7, @now, @logged)
+      assert one.title == "Alice in Borderland"
+      assert one.seconds == 2000
+    end
+
+    test "a title with no sessions is narrowed as it always was" do
+      entries = Spent.watched(show(10_000))
+
+      assert [one] = Spent.narrow(entries, 7, @now, %{})
+      assert one.seconds == 10_000
+      # And a title last touched long ago is out of the window, as before.
+      old = put_in(show(10_000), [:titles, Access.at(0), :last_seen], @long_ago)
+      assert Spent.narrow(Spent.watched(old), 7, @now, %{}) == []
+    end
+
+    test "all time is all of it, sessions or not" do
+      entries = Spent.watched(show(10_000))
+      assert Spent.narrow(entries, nil, @now, @logged) == entries
+    end
+  end
 end

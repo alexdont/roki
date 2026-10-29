@@ -17,10 +17,12 @@ defmodule Roki.Spent do
   there is one, laev's last play otherwise, and for reading the last day the log says it was
   read.
 
-  **The two halves are not narrowed the same way, because they are not known the same way.**
-  Reading is logged day by day, so a window over it holds exactly what those days hold.
-  Watching is one number per title, so a window holds the titles touched in it, whole. The page
-  says so where it matters.
+  **A window holds what is known, and says how well it is known.** Reading is logged day by
+  day, and watching has been too since it started keeping sessions, so for both of those a
+  window holds exactly what those days hold. What is left is the watching from before the
+  sessions and from the terminal app: one number per title, so the window holds those titles
+  whole. The page says which is which, and a title crosses from one to the other the first
+  time it is watched with the sessions running.
   """
 
   @kinds [movie: "Films", tv: "Shows", anime: "Anime", manga: "Manga"]
@@ -134,6 +136,9 @@ defmodule Roki.Spent do
       # log knows about it. A show split by season keeps the show's key, which is what it is.
       key: {t.type, t.id},
       title: title,
+      # The title without the season it was split into, for when the sessions speak for the
+      # whole thing and the split has nothing left to say.
+      base: t.title,
       seconds: seconds,
       off: max(off, 0),
       at: at
@@ -176,6 +181,7 @@ defmodule Roki.Spent do
           kind: :manga,
           key: {m.source, m.slug},
           title: m.title,
+          base: m.title,
           seconds: on + off - moved,
           off: off - moved,
           at: last[{m.source, m.slug}] || naive_unix(m.updated_at)
@@ -219,7 +225,15 @@ defmodule Roki.Spent do
   # A dated arc is an entry in its own right, with its date and its share.
   defp arc_entries(arcs) do
     for {key, parts} <- arcs, p <- parts do
-      %{kind: :manga, key: key, title: p.title, seconds: p.seconds, off: p.seconds, at: p.at}
+      %{
+        kind: :manga,
+        key: key,
+        title: p.title,
+        base: p.title,
+        seconds: p.seconds,
+        off: p.seconds,
+        at: p.at
+      }
     end
   end
 
@@ -248,6 +262,55 @@ defmodule Roki.Spent do
     cutoff = now - days * 86_400
     Enum.filter(entries, &(is_integer(&1.at) and &1.at >= cutoff))
   end
+
+  @doc """
+  The entries in a window, measured where they can be and estimated where they cannot.
+
+  `logged` is `Roki.Stints.by_title/2`. A title it knows is one whose watching was recorded
+  session by session, so the window holds **exactly** the seconds those sessions put in it —
+  nothing if there were none, which is the honest answer and the one a tally can never give.
+  A title it does not know is older than the sessions, or was watched in the terminal app, and
+  for those the window still holds the title whole: all that is known is that it was touched
+  in here somewhere.
+
+  The two rules live side by side on purpose, and the page says which is which. Nothing had to
+  be switched over on a date: a title moves from the second rule to the first the first time it
+  is watched with the sessions running, so the page grows exact by itself.
+
+  A measured title is one entry whatever its seasons are dated — a season's date places history
+  that has no day of its own, and this has days.
+  """
+  def narrow(entries, days, now, logged \\ %{})
+
+  def narrow(entries, nil, _now, _logged), do: entries
+
+  def narrow(entries, days, now, logged) do
+    from = Date.add(today(now), -days)
+    {measured, rest} = Enum.split_with(entries, &Map.has_key?(logged, &1[:key]))
+
+    exact =
+      for {key, group} <- Enum.group_by(measured, & &1.key),
+          by_day = Map.get(logged, key, %{}),
+          within_window = for({date, n} <- by_day, Date.compare(date, from) != :lt, do: {date, n}),
+          seconds = within_window |> Enum.map(&elem(&1, 1)) |> Enum.sum(),
+          seconds > 0 do
+        first = hd(group)
+
+        %{
+          kind: first.kind,
+          key: key,
+          title: first[:base] || first.title,
+          base: first[:base] || first.title,
+          seconds: seconds,
+          off: 0,
+          at: within_window |> Enum.map(&elem(&1, 0)) |> Enum.max() |> noon()
+        }
+      end
+
+    exact ++ within(rest, days, now)
+  end
+
+  defp noon(date), do: date |> DateTime.new!(~T[12:00:00], "Etc/UTC") |> DateTime.to_unix()
 
   @doc "The entries of one kind; all of them for `:all`."
   def of_kind(entries, :all), do: entries

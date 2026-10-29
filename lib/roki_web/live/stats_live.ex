@@ -192,7 +192,7 @@ defmodule RokiWeb.StatsLive do
     # window holds the titles touched in it, whole.
     in_window =
       Spent.sort(
-        Spent.within(watched, days_back, now) ++
+        Spent.narrow(watched, days_back, now, assigns.stint_days) ++
           Spent.read(assigns.read, assigns.reading_activity, days_back, now, assigns.arc_parts)
       )
 
@@ -304,10 +304,12 @@ defmodule RokiWeb.StatsLive do
       <h2 class="text-xl font-semibold">Where the time went</h2>
 
       <p :if={@range != :all} class="text-sm text-base-content/60">
-        Reading is counted from its day-by-day log, so this is exactly what these days hold.
-        Watching is one number per title, so a title you were on in this window brings all of
-        its time with it. Hours entered by hand have no day of their own — give an arc a date
-        on the series page and its share counts then.
+        Reading is counted from its day-by-day log, and so is anything watched here since the
+        player started keeping sessions, so for those this is exactly what these days hold.
+        Older watching, and anything watched in the terminal app, is one number per title, so a
+        title you were on in this window brings all of its time with it. Hours entered by hand
+        have no day of their own — give an arc a date on the series page and its share counts
+        then.
       </p>
 
       <p :if={@all == []} class="py-8 text-center text-base-content/60">Nothing in this window.</p>
