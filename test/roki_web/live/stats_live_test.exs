@@ -14,7 +14,9 @@ defmodule RokiWeb.StatsLiveTest do
       })
 
     token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
-    {:ok, conn: Plug.Test.init_test_session(conn, %{user_token: token}), user: user}
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    {:ok, conn: Plug.Test.init_test_session(conn, %{user_token: token}), user: user, bin: bin}
   end
 
   # `reading_seconds` is the reader's own tally and the changeset does not cast it,
@@ -36,29 +38,71 @@ defmodule RokiWeb.StatsLiveTest do
     )
   end
 
-  test "an account that has read nothing gets no reading section", %{conn: conn} do
+  test "an account that has done nothing shows nothing in the list", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/statstest/stats")
 
-    refute html =~ ~s(id="reading")
-    refute html =~ "Total Reading Time"
+    assert html =~ "Nothing in this window."
+    refute html =~ "Solo Leveling"
   end
 
-  test "reading time is on this page, whether or not laev is connected", %{
-    conn: conn,
-    user: user
-  } do
+  test "reading counts towards the total, and is in the one list", %{conn: conn, user: user} do
     read!(user, "Solo Leveling", 7200)
     read!(user, "Berserk", 3600)
 
-    {:ok, _view, html} = live(conn, "/statstest/stats")
+    {:ok, view, _} = live(conn, "/statstest/stats")
+    html = render_async(view)
 
-    # The watching half is still measuring (and this account has no laev at all);
-    # reading is drawn from the manga tables and is there either way.
-    assert html =~ ~s(id="reading")
-    assert html =~ "Total Reading Time"
-    assert html =~ "3h"
+    # One list, both series in it, and the headline is their sum.
     assert html =~ "Solo Leveling"
     assert html =~ "Berserk"
+    assert html =~ "Where the time went"
+    assert html =~ "3h"
+    assert html =~ "across 2 titles"
+    # Laev is not connected here; the page is still worth opening.
+    assert html =~ "Connect laev"
+  end
+
+  test "the kind filter narrows the total and the list", %{conn: conn, user: user} do
+    read!(user, "Solo Leveling", 7200)
+
+    {:ok, _view, html} = live(conn, "/statstest/stats?kind=manga")
+    assert html =~ "Solo Leveling"
+    assert html =~ "across 1 title of manga"
+
+    {:ok, _view, html} = live(conn, "/statstest/stats?kind=movie")
+    refute html =~ "Solo Leveling"
+    assert html =~ "Nothing in this window."
+  end
+
+  test "a window keeps what was touched inside it", %{conn: conn, user: user, bin: bin} do
+    read!(user, "Long Ago", 7200)
+
+    Roki.Repo.query!(
+      "update saved_manga set updated_at = now() - interval '200 days' where user_id = $1",
+      [bin]
+    )
+
+    {:ok, _view, html} = live(conn, "/statstest/stats?range=week")
+    refute html =~ "Long Ago"
+
+    {:ok, _view, html} = live(conn, "/statstest/stats?range=year")
+    assert html =~ "Long Ago"
+  end
+
+  test "the windows beside the heatmap count the days themselves", %{conn: conn, user: user} do
+    read!(user, "Solo Leveling", 7200)
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    Roki.Repo.query!(
+      "insert into reading_activity (user_id, date, source, slug, title, reading_seconds, chapters_read, inserted_at, updated_at) " <>
+        "values ($1, current_date, 'mangadex', 'solo-leveling', 'Solo Leveling', 5400, 2, now(), now())",
+      [bin]
+    )
+
+    {:ok, _view, html} = live(conn, "/statstest/stats")
+
+    assert html =~ "Day by day"
+    assert html =~ "Watching and reading together"
   end
 
   test "the reader's old stats address leads here", %{conn: conn} do

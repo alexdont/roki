@@ -1,16 +1,23 @@
 defmodule RokiWeb.StatsLive do
   @moduledoc """
-  `/:username/stats` — what this user has watched, the way laev's stats screen
-  shows it: the total and what it is made of, the shelf counts, an activity
-  heatmap, and the titles that took the most time, narrowed by when you last
-  watched them (last week, month, 6 months, or all time).
+  `/:username/stats` — everything this account has spent time on, watched and read, as one
+  thing: a total, the split across films, shows, anime and manga, a window to look through,
+  and the list those numbers are the sum of.
+
+  It used to be two pages stacked on one: laev's watching on top, the reader's own tally
+  underneath, each with its own total and its own table. `Roki.Spent` is what made them one —
+  the page is a filter over its list, so the big number and the rows always agree.
+
+  Two of the numbers here mean different things and the page says which. A window over the
+  list means "what you were on, and all the time you have spent on it", because watching is
+  not logged per day. The windows beside the heatmap are logged per day and are exact.
 
   The first measurement looks up a runtime for every film and show — a minute for a
   big library, once; after that it is cached and the page is instant.
   """
   use RokiWeb, :live_view
 
-  alias Roki.{Laev, Stats}
+  alias Roki.{Laev, Spent, Stats}
 
   @page 50
 
@@ -28,7 +35,8 @@ defmodule RokiWeb.StatsLive do
           |> assign(:uuid, uuid)
           |> assign(:state, :loading)
           |> assign(:data, nil)
-          |> assign(:range, nil)
+          |> assign(:range, :all)
+          |> assign(:kind, :all)
           |> assign(:shown, @page)
           |> assign_reading()
 
@@ -40,17 +48,15 @@ defmodule RokiWeb.StatsLive do
     end
   end
 
-  # Reading time comes from the manga tables, not from laev, so this part of the page
-  # is here whether or not the terminal app is connected. One query, so no async.
+  # Reading comes from the manga tables, not from laev, so this half of the page is here
+  # whether or not the terminal app is connected — and the page is worth opening either way.
+  # Two queries, both small, so no async.
   defp assign_reading(socket) do
-    stats = Roki.Manga.Library.list_reading_stats(socket.assigns.uuid)
-    {total, onsite, offsite} = RokiWeb.MangaStats.totals(stats)
+    uuid = socket.assigns.uuid
 
     assign(socket,
-      reading: stats,
-      reading_total: total,
-      reading_onsite: onsite,
-      reading_offsite: offsite
+      read: Spent.read(uuid),
+      reading_activity: Roki.Manga.Library.list_reading_activity(uuid)
     )
   end
 
@@ -59,9 +65,14 @@ defmodule RokiWeb.StatsLive do
   end
 
   @impl true
+  # Both live in the address, so a view of this page is a link someone can be sent.
   def handle_params(params, _uri, socket) do
-    range = Enum.find(Stats.ranges(), fn {id, _, _} -> Atom.to_string(id) == params["range"] end)
-    {:noreply, assign(socket, range: range && elem(range, 0), shown: @page)}
+    {:noreply,
+     assign(socket,
+       range: Spent.range(params["range"]),
+       kind: Spent.kind(params["kind"]),
+       shown: @page
+     )}
   end
 
   @impl true
@@ -94,25 +105,30 @@ defmodule RokiWeb.StatsLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}/stats"}
     >
-      <div class="space-y-6">
-        <div
+      <div class="space-y-10">
+        <.totals
+          username={@username}
+          range={@range}
+          kind={@kind}
+          total={@total}
+          split={@split}
+          count={length(@visible_all)}
+        />
+
+        <p
           :if={@state == :loading}
-          class="flex flex-col items-center gap-3 py-24 text-center text-base-content/60"
+          class="flex items-center gap-3 text-sm text-base-content/60"
         >
-          <span class="loading loading-spinner"></span>
-          <span>Measuring your history…</span>
-          <span class="max-w-sm text-sm">
-            The first time looks up a length for every film and show, which can take a minute.
-            After that it's instant.
-          </span>
-        </div>
+          <span class="loading loading-spinner loading-sm"></span>
+          Measuring what you watched — the first time takes a minute.
+        </p>
 
         <.notice :if={@state == :not_connected} username={@username}>
-          Connect laev on your shelf to see your stats.
+          Connect laev on your shelf and what you watch is counted here too.
         </.notice>
         <.notice :if={@state == {:error, :no_tmdb_key}} username={@username}>
-          Stats need your TMDB key to look up how long films and shows run. Connect laev and bring
-          your API keys.
+          Watching needs your TMDB key to look up how long films and shows run. Connect laev and
+          bring your API keys.
         </.notice>
         <p
           :if={
@@ -121,74 +137,59 @@ defmodule RokiWeb.StatsLive do
           }
           class="alert alert-error text-sm"
         >
-          Couldn't measure your history just now. Try again in a minute.
+          Couldn't measure your watching just now. Try again in a minute.
         </p>
         <p :if={match?({:error, {:rate_limited, _}}, @state)} class="alert alert-warning text-sm">
           You're refreshing a little fast — try again in a few seconds.
         </p>
 
-        <div :if={@state == :ready} class="space-y-10">
-          <.headline d={@data} />
-          <.split d={@data} />
-          <.activity d={@data} windows={@data.windows} />
-          <.most_time
-            d={@data}
-            username={@username}
-            range={@range}
-            ranges={@ranges}
-            titles={@titles}
-            visible={@visible}
-            shown={@shown}
-            max_seconds={@max_seconds}
-          />
-          <p :if={@data.totals.unknown > 0} class="text-sm text-base-content/60">
-            {@data.totals.unknown} finished {if @data.totals.unknown == 1,
-              do: "entry",
-              else: "entries"} had no runtime on TMDB, so {if @data.totals.unknown == 1,
-              do: "it's",
-              else: "they're"} counted as watched but not timed.
-          </p>
-        </div>
-
-        <%!-- What this account has read, absorbed from the reader's own stats page so
-             watching and reading are counted in one place. Shown only when there is
-             reading time: most accounts here watch and never read. --%>
-        <RokiWeb.MangaStats.reading
-          :if={@reading != []}
-          stats={@reading}
-          total_seconds={@reading_total}
-          onsite_seconds={@reading_onsite}
-          offsite_seconds={@reading_offsite}
+        <.spent_list
+          entries={@visible}
+          all={@visible_all}
+          shown={@shown}
+          max_seconds={@max_seconds}
+          range={@range}
         />
+
+        <.activity :if={@days != %{}} days={@days} windows={@windows} streak={@streak} />
+
+        <p :if={@unknown > 0} class="text-sm text-base-content/60">
+          {@unknown} finished {if @unknown == 1, do: "entry", else: "entries"} had no runtime on
+          TMDB, so {if @unknown == 1, do: "it is", else: "they are"} counted as watched but not
+          timed.
+        </p>
       </div>
     </Layouts.app>
     """
   end
 
-  # What the page draws, worked out once per render.
-  defp assign_view(%{state: :ready, data: d} = assigns) do
+  # What the page draws, worked out once per render: one list, filtered two ways.
+  defp assign_view(assigns) do
     now = System.os_time(:second)
-    default = if Stats.within(d.titles, 7, now) != [], do: :week, else: :all
-    range = assigns.range || default
 
-    {_, _, days} = List.keyfind(Stats.ranges(), range, 0)
-    titles = Stats.within(d.titles, days, now)
+    all = Spent.sort(Spent.watched(assigns[:data]) ++ assigns.read)
+    in_window = Spent.within(all, days_of(assigns.range), now)
+    visible_all = Spent.of_kind(in_window, assigns.kind)
 
-    ranges =
-      for {id, label, n} <- Stats.ranges(),
-          do: %{id: id, label: label, count: length(Stats.within(d.titles, n, now))}
+    days = Spent.days(assigns[:data] && assigns.data.days, assigns.reading_activity)
+    today = Date.utc_today()
 
     assign(assigns,
-      range: range,
-      ranges: ranges,
-      titles: titles,
-      visible: Enum.take(titles, assigns.shown),
-      max_seconds: titles |> Enum.map(& &1.seconds) |> Enum.max(fn -> 1 end) |> max(1)
+      total: Spent.total(visible_all),
+      split: Spent.by_kind(in_window),
+      visible_all: visible_all,
+      visible: Enum.take(visible_all, assigns.shown),
+      max_seconds: visible_all |> Enum.map(& &1.seconds) |> Enum.max(fn -> 1 end) |> max(1),
+      days: days,
+      windows: Spent.windows(days, today),
+      streak: Spent.streak(days, today),
+      unknown: (assigns[:data] && assigns.data.totals.unknown) || 0
     )
   end
 
-  defp assign_view(assigns),
-    do: assign(assigns, ranges: [], titles: [], visible: [], max_seconds: 1)
+  defp days_of(range) do
+    Enum.find_value(Spent.ranges(), fn {id, _, n} -> id == range && n end)
+  end
 
   attr :username, :string, required: true
   slot :inner_block, required: true
@@ -202,113 +203,136 @@ defmodule RokiWeb.StatsLive do
     """
   end
 
-  attr :d, :map, required: true
+  # ── the numbers, and the two ways to narrow them ───────────────────
 
-  defp headline(assigns) do
+  attr :username, :string, required: true
+  attr :range, :atom, required: true
+  attr :kind, :atom, required: true
+  attr :total, :integer, required: true
+  attr :split, :map, required: true
+  attr :count, :integer, required: true
+
+  defp totals(assigns) do
     ~H"""
-    <section class="space-y-3">
+    <section class="space-y-4">
       <div>
-        <div class="text-4xl font-bold tracking-tight sm:text-5xl">
-          {Laev.duration(@d.totals.seconds)}
-        </div>
+        <div class="text-4xl font-bold tracking-tight sm:text-5xl">{Laev.duration(@total)}</div>
         <p class="text-base-content/70">
-          across {length(@d.titles)} titles · {@d.totals.films} films · {@d.totals.episodes} episodes
-          from {@d.totals.shows} {if @d.totals.shows == 1, do: "show", else: "shows"}
+          across {@count} {if @count == 1, do: "title", else: "titles"}{if @kind != :all,
+            do: " of " <> String.downcase(label_of(@kind))}{if @range != :all,
+            do: " you were on in the last " <> String.downcase(range_label(@range))}
         </p>
       </div>
-      <p class="flex flex-wrap gap-x-3 gap-y-1 text-sm text-base-content/70">
-        <span :if={@d.tally.series_finished > 0}>
-          <b>{@d.tally.series_finished}</b> series finished
-        </span>
-        <span :if={@d.tally.anime_finished > 0}>
-          <b>{@d.tally.anime_finished}</b> anime finished
-        </span>
-        <span :if={@d.tally.behind > 0}><b>{@d.tally.behind}</b> watching</span>
-        <span :if={@d.tally.caught_up > 0}><b>{@d.tally.caught_up}</b> caught up</span>
-        <span :if={@d.tally.held > 0}><b>{@d.tally.held}</b> on hold</span>
-      </p>
+
+      <%!-- The split, and the filter: each one is its own share of the window above. --%>
+      <div class="flex flex-wrap gap-2">
+        <.link
+          patch={~p"/#{@username}/stats?#{[range: @range, kind: :all]}"}
+          class={["btn btn-sm", @kind == :all && "btn-primary"]}
+        >
+          All
+        </.link>
+        <.link
+          :for={{id, label} <- Spent.kinds()}
+          patch={~p"/#{@username}/stats?#{[range: @range, kind: id]}"}
+          class={["btn btn-sm gap-2", @kind == id && "btn-primary"]}
+        >
+          {label}
+          <span class={["font-mono text-xs", @kind != id && "opacity-60"]}>
+            {Laev.duration(@split[id] || 0)}
+          </span>
+        </.link>
+      </div>
+
+      <div class="tabs tabs-box w-fit max-w-full overflow-x-auto" role="tablist">
+        <.link
+          :for={{id, label, _} <- Spent.ranges()}
+          patch={~p"/#{@username}/stats?#{[range: id, kind: @kind]}"}
+          class={["tab", @range == id && "tab-active"]}
+        >
+          {label}
+        </.link>
+      </div>
     </section>
     """
   end
 
-  attr :d, :map, required: true
+  defp label_of(kind), do: Keyword.get(Spent.kinds(), kind, "")
 
-  defp split(assigns) do
-    t = assigns.d.totals
-    total = max(t.seconds, 1)
+  defp range_label(range) do
+    Enum.find_value(Spent.ranges(), "", fn {id, label, _} -> id == range && label end)
+  end
 
-    assigns =
-      assign(assigns,
-        t: t,
-        rows:
-          Enum.reject(
-            [
-              {"Films & TV", t.other.seconds, kind_note(t.other, "show"), total},
-              {"Anime", t.anime.seconds, kind_note(t.anime, "anime"), total},
-              {"In laev", t.in_laev, "played here", total},
-              {"Off laev", t.off_laev, "#{t.marked} marked watched, counted at full runtime",
-               total}
-            ],
-            fn {_, s, _, _} -> s == 0 end
-          )
-      )
+  # ── the list those numbers are the sum of ──────────────────────────
 
+  attr :entries, :list, required: true
+  attr :all, :list, required: true
+  attr :shown, :integer, required: true
+  attr :max_seconds, :integer, required: true
+  attr :range, :atom, required: true
+
+  defp spent_list(assigns) do
     ~H"""
     <section class="space-y-3">
       <h2 class="text-xl font-semibold">Where the time went</h2>
-      <div class="space-y-3">
-        <div :for={{label, seconds, note, total} <- @rows} class="space-y-1">
-          <div class="flex items-baseline justify-between gap-3">
-            <span class="font-medium">{label}</span>
-            <span class="font-mono text-sm">{Laev.duration(seconds)}</span>
-          </div>
-          <div class="h-2 overflow-hidden rounded-full bg-base-300">
-            <div
-              class="h-full rounded-full bg-primary"
-              style={"width: #{Float.round(seconds * 100 / total, 1)}%"}
-            >
+
+      <p :if={@range != :all} class="text-sm text-base-content/60">
+        What you were on in this window, with all the time you have spent on it. Reading is
+        logged by the day, watching is not, so the two can only be counted the same way by
+        counting whole titles.
+      </p>
+
+      <p :if={@all == []} class="py-8 text-center text-base-content/60">Nothing in this window.</p>
+
+      <ol class="divide-y divide-base-300">
+        <li :for={{t, i} <- Enum.with_index(@entries, 1)} class="flex items-center gap-3 py-2">
+          <span class="w-8 shrink-0 text-right text-sm text-base-content/50">{i}</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-baseline justify-between gap-3">
+              <span class="truncate font-medium" title={t.title}>{t.title}</span>
+              <span class="shrink-0 font-mono text-sm">{Laev.duration(t.seconds)}</span>
+            </div>
+            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-base-300">
+              <div
+                class="h-full rounded-full bg-primary/70"
+                style={"width: #{Float.round(t.seconds * 100 / @max_seconds, 1)}%"}
+              >
+              </div>
+            </div>
+            <div class="mt-0.5 text-xs text-base-content/50">
+              {one(t.kind)}{if t.off > 0 and t.off == t.seconds,
+                do: " · marked, not measured",
+                else: ""}
             </div>
           </div>
-          <div class="text-xs text-base-content/60">{note}</div>
-        </div>
-      </div>
-      <p :if={@t.measured > 0} class="text-sm text-base-content/70">
-        <b>{Laev.duration(@t.skipped)}</b>
-        skipped past
-        <span class="text-base-content/50">
-          (measured on {@t.measured} {if @t.measured == 1, do: "play", else: "plays"} — laev only counts what it watched you watch)
-        </span>
-      </p>
+        </li>
+      </ol>
+
+      <button :if={length(@all) > @shown} phx-click="more" class="btn btn-sm btn-ghost">
+        Show more ({length(@all) - @shown} left)
+      </button>
     </section>
     """
   end
 
-  defp kind_note(%{films: films, episodes: episodes, shows: shows}, unit) do
-    [
-      films > 0 && "#{films} #{if films == 1, do: "film", else: "films"}",
-      episodes > 0 && "#{episodes} episodes from #{shows} #{plural(unit, shows)}"
-    ]
-    |> Enum.filter(& &1)
-    |> Enum.join(" · ")
-    |> case do
-      "" -> "nothing yet"
-      note -> note
-    end
-  end
+  defp one(:movie), do: "film"
+  defp one(:tv), do: "show"
+  defp one(:anime), do: "anime"
+  defp one(:manga), do: "manga"
 
-  defp plural("anime", _), do: "anime"
-  defp plural(unit, 1), do: unit
-  defp plural(unit, _), do: unit <> "s"
+  # ── the day-by-day half, which is exact ────────────────────────────
 
-  # ── activity ───────────────────────────────────────────────────────
-
-  attr :d, :map, required: true
+  attr :days, :map, required: true
   attr :windows, :list, required: true
+  attr :streak, :map, required: true
 
   defp activity(assigns) do
     ~H"""
     <section class="space-y-3">
-      <h2 class="text-xl font-semibold">Activity</h2>
+      <h2 class="text-xl font-semibold">Day by day</h2>
+      <p class="text-sm text-base-content/60">
+        Watching and reading together, counted on the day it happened.
+      </p>
 
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <div :for={w <- @windows} class="rounded-box bg-base-200 p-3">
@@ -317,15 +341,15 @@ defmodule RokiWeb.StatsLive do
         </div>
         <div class="rounded-box bg-base-200 p-3">
           <div class="text-xs text-base-content/60">Streak</div>
-          <div class="text-lg font-bold">{@d.streak.current} days</div>
-          <div class="text-xs text-base-content/60">longest {@d.streak.longest}</div>
+          <div class="text-lg font-bold">{@streak.current} days</div>
+          <div class="text-xs text-base-content/60">longest {@streak.longest}</div>
         </div>
       </div>
 
       <%!-- A phone shows the last six months, wider screens the year. Today is the
             bottom-right square either way. --%>
-      <div class="md:hidden"><.heatmap weeks={Stats.heatmap(@d.days, 26)} /></div>
-      <div class="hidden md:block"><.heatmap weeks={Stats.heatmap(@d.days, 53)} /></div>
+      <div class="md:hidden"><.heatmap weeks={Stats.heatmap(@days, 26)} /></div>
+      <div class="hidden md:block"><.heatmap weeks={Stats.heatmap(@days, 53)} /></div>
 
       <div class="flex items-center gap-1 text-xs text-base-content/60">
         less
@@ -373,70 +397,4 @@ defmodule RokiWeb.StatsLive do
 
   defp cell_title(date, seconds),
     do: "#{Calendar.strftime(date, "%b %-d")} · #{Laev.duration(seconds)}"
-
-  # ── most time spent ────────────────────────────────────────────────
-
-  attr :d, :map, required: true
-  attr :username, :string, required: true
-  attr :range, :atom, required: true
-  attr :ranges, :list, required: true
-  attr :titles, :list, required: true
-  attr :visible, :list, required: true
-  attr :shown, :integer, required: true
-  attr :max_seconds, :integer, required: true
-
-  defp most_time(assigns) do
-    ~H"""
-    <section class="space-y-3">
-      <h2 class="text-xl font-semibold">Most time spent</h2>
-
-      <div class="tabs tabs-box w-fit max-w-full overflow-x-auto" role="tablist">
-        <.link
-          :for={r <- @ranges}
-          patch={~p"/#{@username}/stats?#{[range: r.id]}"}
-          class={["tab gap-1", @range == r.id && "tab-active"]}
-        >
-          {r.label} <span class="text-xs opacity-60">{r.count}</span>
-        </.link>
-      </div>
-
-      <p :if={@range != :all} class="text-sm text-base-content/60">
-        Titles you last watched in this window, with their all-time hours. Hand-marked
-        and imported titles have no date, so they appear only in All time.
-      </p>
-
-      <p :if={@titles == []} class="py-8 text-center text-base-content/60">Nothing in this window.</p>
-
-      <ol class="divide-y divide-base-300">
-        <li :for={{t, i} <- Enum.with_index(@visible, 1)} class="flex items-center gap-3 py-2">
-          <span class="w-8 shrink-0 text-right text-sm text-base-content/50">{i}</span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-baseline justify-between gap-3">
-              <span class="truncate font-medium" title={t.title}>{t.title}</span>
-              <span class="shrink-0 font-mono text-sm">{Laev.duration(t.seconds)}</span>
-            </div>
-            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-base-300">
-              <div
-                class="h-full rounded-full bg-primary/70"
-                style={"width: #{Float.round(t.seconds * 100 / @max_seconds, 1)}%"}
-              >
-              </div>
-            </div>
-            <div class="mt-0.5 text-xs text-base-content/50">
-              {kind(t)}{if t.off > 0 and t.off == t.seconds, do: " · marked, not measured", else: ""}
-            </div>
-          </div>
-        </li>
-      </ol>
-
-      <button :if={length(@titles) > @shown} phx-click="more" class="btn btn-sm btn-ghost">
-        Show more ({length(@titles) - @shown} left)
-      </button>
-    </section>
-    """
-  end
-
-  defp kind(%{anime: true}), do: "anime"
-  defp kind(%{type: "movie"}), do: "film"
-  defp kind(_), do: "show"
 end

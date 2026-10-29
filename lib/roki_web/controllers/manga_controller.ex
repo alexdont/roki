@@ -924,8 +924,8 @@ defmodule RokiWeb.MangaController do
 
   @doc """
   `/manga/stats` -> `/:username/stats`, whose Reading section now carries the reader's
-  reading time (`RokiWeb.MangaStats`). The reader's own stats page is gone; its menus
-  still point here.
+  reading time, counted in the same list as everything else (`Roki.Spent`). The reader's own
+  stats page is gone; its menus still point here.
   """
   def stats(conn, _params) do
     username = conn.assigns[:phoenix_kit_current_user].username
