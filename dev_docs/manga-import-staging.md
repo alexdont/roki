@@ -51,6 +51,32 @@ awk -F'|' '{printf "insert into reader_import.reader_users values ('\''%s'\'','\
 docker cp /tmp/users.sql postgres:/tmp/ && docker exec postgres psql -U postgres -d roki_ee -q -f /tmp/users.sql
 ```
 
+### How each person has the reader set up
+
+Auto-resume, smart panels, panel snap and its gutter settings, the sources turned on and the
+drawing colours live on the user row in `custom_fields`, not in any of the tables above. Without
+this table `copy_preferences/0` is a no-op and everyone arrives with a reader set to its
+defaults, which is what happened on the first import:
+
+```bash
+$R/psql.sh dev_habit_tracker_db -c \
+  "\\copy (select uuid, username, custom_fields from phoenix_kit_users \
+           where custom_fields is not null and custom_fields <> '{}') \
+   to '/tmp/reader_user_settings.csv' csv"
+
+$R/psql.sh roki_ee -c \
+  "create table reader_import.reader_user_settings \
+     (uuid uuid primary key, username text, custom_fields jsonb)"
+
+$R/psql.sh roki_ee -c "\\copy reader_import.reader_user_settings from '/tmp/reader_user_settings.csv' csv"
+```
+
+**What no import can carry.** The readers keep what you tune *per series* — panel snap and its
+gutter settings, tap zones, page padding, smart crop — in the browser's `localStorage`, under the
+address it was tuned on. A different domain is a different store, so none of it follows the
+database. The Reading settings page has a carry-over for it: a line to run on the old reader and a
+box to paste the result into.
+
 The schema is created by the superuser, so the app's own role has to be let in — without this the
 import sees nothing and `staged?` answers false:
 
