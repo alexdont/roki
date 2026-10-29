@@ -41,7 +41,7 @@
       </div>
     </div>
     <div id="ann-list" class="flex flex-col gap-2">
-      <.annotation_row :for={a <- @annotations} a={a} />
+      <.comment_entry :for={a <- @annotations} a={a} />
     </div>
     <div
       :if={@next_cursor}
@@ -54,7 +54,8 @@
   <% else %>
     <div class="text-center py-16">
       <p class="text-base-content/70">
-        No comments yet. Open a chapter and use the comment tool to add comments to pages.
+        Nothing said yet. Comment under a film or a show, or open a chapter and use the comment
+        tool to write on a page.
       </p>
     </div>
   <% end %>

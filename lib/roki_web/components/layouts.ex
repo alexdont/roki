@@ -454,8 +454,7 @@ defmodule RokiWeb.Layouts do
 
     # Map.merge, not assign/2: a controller renders this layout with a plain assigns map,
     # which Phoenix.Component.assign/2 refuses.
-    assigns =
-      Map.merge(assigns, %{path: path, nav: @manga_nav, resume: assigns[:resume_manga]})
+    assigns = Map.merge(assigns, %{path: path, nav: @manga_nav})
 
     ~H"""
     <.app
@@ -466,22 +465,13 @@ defmodule RokiWeb.Layouts do
       current_path={@path}
       flush
     >
-      <nav class="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 pt-6">
+      <nav class="mx-auto flex max-w-6xl flex-wrap gap-2 px-4 pt-6">
         <a
           :for={{label, href} <- @nav}
           href={href}
           class={["btn btn-sm", (@path == href && "btn-primary") || "btn-ghost"]}
         >
           {label}
-        </a>
-        <%!-- Carry on reading, from wherever you are. Each page used to draw this for
-             itself above its own menu; one row holds both now. --%>
-        <a
-          :if={@resume && @resume.last_chapter}
-          href={~p"/manga/#{@resume.source}/#{@resume.slug}/#{@resume.last_chapter}"}
-          class="btn btn-sm btn-primary ml-auto sm:px-8"
-        >
-          ▶ Resume
         </a>
       </nav>
       {@inner_content}

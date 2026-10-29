@@ -2942,7 +2942,7 @@ defmodule RokiWeb.MangaController do
     user = conn.assigns[:phoenix_kit_current_user]
     before = parse_before_cursor(params["before"])
 
-    annotations =
+    reader =
       Library.list_recent_annotations(@annotations_page_size, user.uuid, before: before)
       |> Enum.map(fn a ->
         gif_url = get_in(a, [:metadata, "giphy", "url"])
@@ -2952,6 +2952,14 @@ defmodule RokiWeb.MangaController do
         |> Map.put(:gif_url, gif_url)
         |> Map.drop([:metadata])
       end)
+
+    # One page of what was said, wherever it was said: notes on a page of a chapter, and
+    # comments under a film, a show or someone's profile. Each source is asked for a page and
+    # the two are merged, so the oldest of the merged page is where the next one carries on.
+    annotations =
+      (reader ++ Roki.Comments.recent(@annotations_page_size, before))
+      |> Enum.sort_by(& &1.inserted_at, {:desc, NaiveDateTime})
+      |> Enum.take(@annotations_page_size)
 
     # When a full page comes back, assume there's more and surface the
     # last row's inserted_at as the next cursor. A short page means the

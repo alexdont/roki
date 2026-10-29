@@ -1131,6 +1131,53 @@ defmodule RokiWeb.MangaHTML do
 
   attr :a, :map, required: true
 
+  @doc """
+  One line of the comments page, whichever kind it is: a note on a page of a chapter, or a
+  comment under a film, a show or someone's profile.
+  """
+  def comment_entry(%{a: %{kind: :site}} = assigns), do: site_comment_row(assigns)
+  def comment_entry(assigns), do: annotation_row(assigns)
+
+  attr :a, :map, required: true
+
+  defp site_comment_row(assigns) do
+    ~H"""
+    <a
+      href={@a.path}
+      data-color="site"
+      data-user={@a.username}
+      data-title={@a.title}
+      class="block rounded-lg border border-base-300 bg-base-200 px-4 py-3 transition-opacity hover:opacity-80"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-semibold">{@a.title}</span>
+        <span class="whitespace-nowrap text-xs text-base-content/40">
+          {if @a.where == "profile", do: "On a profile", else: "Under a title"}
+        </span>
+      </div>
+      <p
+        :if={@a.content != ""}
+        class="mb-1.5 mt-1.5 line-clamp-2 border-l-2 border-current/20 pl-2.5 text-sm"
+      >
+        {@a.content}
+      </p>
+      <img
+        :if={@a.gif_url}
+        src={@a.gif_url}
+        loading="lazy"
+        alt="GIF"
+        class="mb-1.5 mt-1.5 max-h-40 w-auto rounded-lg"
+      />
+      <div class="flex items-center justify-between">
+        <span class="text-xs text-base-content/40">{@a.username}</span>
+        <span :if={@a.like_count > 0} class="text-xs text-base-content/40">
+          ♥ {@a.like_count}
+        </span>
+      </div>
+    </a>
+    """
+  end
+
   def annotation_row(assigns) do
     ~H"""
     <a
