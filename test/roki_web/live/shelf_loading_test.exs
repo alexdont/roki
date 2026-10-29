@@ -289,4 +289,90 @@ defmodule RokiWeb.ShelfLoadingTest do
       refute html =~ "chapters"
     end
   end
+
+  describe "the strip's watching figures" do
+    @totals %{totals: %{seconds: 360_000, films: 1350, episodes: 9000}, films: %{}}
+
+    test "are on the first frame when they are kept, so no placeholder is swapped for them", %{
+      conn: conn,
+      user: user
+    } do
+      connect!(user)
+      Roki.Laev.remember_shelf(user.uuid, shelf(7))
+      Roki.Laev.remember_totals(user.uuid, @totals)
+
+      # The page the server sends, before any socket.
+      html = conn |> get("/shelftest/home") |> html_response(200)
+
+      assert html =~ "100h"
+      assert html =~ "1,350"
+      assert html =~ "films watched"
+      # The ghost that used to stand in for them is not drawn.
+      refute html =~ "w-[7.5rem]"
+    end
+
+    test "are drawn as placeholders when nothing is kept, in cells of their own", %{
+      conn: conn,
+      user: user
+    } do
+      connect!(user)
+
+      {:ok, _view, html} = live(conn, "/shelftest/home")
+
+      assert html =~ "w-[7.5rem]"
+      refute html =~ "films watched"
+      # The strip is a grid on a phone, so a late figure can only change its own cell.
+      assert html =~ "grid-cols-2"
+    end
+
+    test "survive the page being loaded cold, because a missing shelf is not missing figures",
+         %{conn: conn, user: user} do
+      connect!(user)
+      Roki.Laev.remember_totals(user.uuid, @totals)
+
+      {:ok, _view, html} = live(conn, "/shelftest/home")
+
+      # No shelf kept, so the shelf's own placeholders stand in…
+      assert html =~ "aria-busy"
+      # …but the figures that are kept are not thrown away to be fetched again.
+      assert html =~ "1,350"
+    end
+
+    test "are not shown to an account that is no longer connected", %{conn: conn, user: user} do
+      Roki.Laev.remember_totals(user.uuid, @totals)
+
+      {:ok, _view, html} = live(conn, "/shelftest/home")
+
+      refute html =~ "1,350"
+    end
+
+    test "are kept beside the account's data, and forgotten with the shelf", %{user: user} do
+      connect!(user)
+      Roki.Laev.remember_totals(user.uuid, @totals)
+      file = Path.join(Roki.Laev.dir(user.uuid), "roki-totals.etf")
+      assert File.exists?(file)
+
+      # A restart empties memory and leaves the disk.
+      Roki.TTLCache.delete({:totals, user.uuid})
+      assert {:ok, @totals, _age} = Roki.Laev.cached_totals(user.uuid)
+
+      Roki.Laev.forget_shelf(user.uuid)
+      refute File.exists?(file)
+      assert Roki.Laev.cached_totals(user.uuid) == :miss
+    end
+
+    test "are kept by the measurement that produces them", %{user: user} do
+      # A summary already in hand, so nothing is measured from laev.
+      Roki.TTLCache.put(
+        {:stats_summary, user.uuid},
+        3600,
+        {:ok, %{at: System.os_time(:second), value: @totals}}
+      )
+
+      assert Roki.Profile.kept_totals(user.uuid) == :miss
+
+      assert {:ok, measured} = Roki.Profile.totals(user.uuid)
+      assert {:ok, ^measured} = Roki.Profile.kept_totals(user.uuid)
+    end
+  end
 end

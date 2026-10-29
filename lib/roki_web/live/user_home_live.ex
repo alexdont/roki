@@ -57,7 +57,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:busy, nil)
           |> assign(:error, nil)
           |> assign(:open, MapSet.new())
-          |> assign(:stats, nil)
+          |> assign(:stats, kept_stats(state, uuid))
           |> assign(:pulse, nil)
           |> assign(:completed, nil)
           |> assign(:ratings, if(connected?(socket), do: Roki.Profile.ratings(uuid), else: %{}))
@@ -84,6 +84,18 @@ defmodule RokiWeb.UserHomeLive do
     end
   end
 
+  # The strip's last figures, when this account is connected and has any kept: on the first
+  # frame, so there is no placeholder to be swapped for them. They are measured again behind the
+  # page and replaced in place.
+  defp kept_stats(:not_connected, _uuid), do: nil
+
+  defp kept_stats(_state, uuid) do
+    case Roki.Profile.kept_totals(uuid) do
+      {:ok, totals} -> totals
+      :miss -> nil
+    end
+  end
+
   defp same_user?(mine, requested) when is_binary(mine),
     do: String.downcase(mine) == String.downcase(requested)
 
@@ -99,7 +111,7 @@ defmodule RokiWeb.UserHomeLive do
 
   # First load / after connecting: the skeleton shows until the shelf arrives.
   defp load(socket) do
-    socket |> assign(state: :loading, data: nil, stats: nil, pulse: nil) |> reload()
+    socket |> assign(state: :loading, data: nil, pulse: nil) |> reload()
   end
 
   # The page is showing a kept shelf. Everything else it needs is fetched straight away; the
@@ -547,46 +559,57 @@ defmodule RokiWeb.UserHomeLive do
             not — placeholders stand in at their width, and what is known at once comes
             first, so numbers arriving later only ever fill space already reserved. --%>
       <div class="space-y-1.5">
-        <div class="flex items-center gap-1">
+        <div class="flex items-start gap-1">
+          <%!-- Every figure sits in a cell of its own. On a phone the cells are a two-column grid,
+                so a number arriving at a different width than its placeholder can only change the
+                inside of its own cell; in a wrapping row it would push everything after it along
+                and re-wrap the lines. From `sm` up there is room for one line, and the cells that
+                arrive late hold a minimum width instead. --%>
           <.link
             navigate={~p"/#{@username}/stats"}
-            class="flex min-h-5 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-0.5 text-sm text-base-content/60 transition hover:text-base-content"
+            class="grid min-h-5 min-w-0 flex-1 grid-cols-2 items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:flex sm:flex-wrap sm:gap-y-0.5"
           >
-            <span :if={@data}>
+            <span :if={@data} class="whitespace-nowrap sm:min-w-[13ch]">
               <b class="text-base-content">{@data.tally.behind}</b> in progress
             </span>
-            <span :if={@data}>
+            <span :if={@data} class="whitespace-nowrap sm:min-w-[26ch]">
               <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
-              series &amp; anime finished
+              <span class="sm:hidden">finished</span>
+              <span class="hidden sm:inline">series &amp; anime finished</span>
             </span>
-            <.sk :if={!@data} class="w-[5.5rem]" />
-            <.sk :if={!@data} class="w-[4.5rem]" />
+            <span :if={!@data} class="sm:min-w-[13ch]"><.sk class="block w-[5.5rem]" /></span>
+            <span :if={!@data} class="sm:min-w-[26ch]"><.sk class="block w-[4.5rem]" /></span>
 
             <%= cond do %>
               <% match?(%{totals: _}, @stats) -> %>
-                <span>
+                <span class="whitespace-nowrap sm:min-w-[19ch]">
                   <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
                 </span>
-                <span>
+                <span class="whitespace-nowrap sm:min-w-[16ch]">
                   <b class="text-base-content">{thousands(@stats.totals.films)}</b> films watched
                 </span>
-                <span class="hidden sm:inline">
+                <span class="hidden whitespace-nowrap sm:inline sm:min-w-[13ch]">
                   <b class="text-base-content">{thousands(@stats.totals.episodes)}</b> episodes
                 </span>
               <% match?({:error, _}, @stats) -> %>
-                <span class="text-base-content/40">time watched unavailable</span>
+                <span class="col-span-2 text-base-content/40">time watched unavailable</span>
               <% true -> %>
-                <.sk class="w-[7.5rem]" />
-                <.sk class="hidden w-16 sm:block" />
-                <.sk class="hidden w-24 sm:block" />
+                <%!-- A placeholder stands in a cell as wide as the figure's, so nothing after it
+                     moves when the figure arrives. --%>
+                <span class="sm:min-w-[19ch]"><.sk class="block w-[7.5rem]" /></span>
+                <span class="sm:min-w-[16ch]"><.sk class="block w-[6rem]" /></span>
+                <span class="hidden sm:block sm:min-w-[13ch]"><.sk class="block w-24" /></span>
             <% end %>
 
             <%!-- Reading, last: it is known from the first paint, so it never has to wait for
                  the watching numbers it sits beside. --%>
-            <span :if={@manga_totals.series > 0}>
+            <span :if={@manga_totals.series > 0} class="whitespace-nowrap sm:min-w-[15ch]">
               <b class="text-base-content">{Roki.Laev.duration(@manga_totals.seconds)}</b> read
             </span>
-            <span :if={@manga_totals.chapters > 0} class="hidden sm:inline">
+            <span
+              :if={@manga_totals.chapters > 0}
+              class="hidden whitespace-nowrap sm:inline sm:min-w-[14ch]"
+            >
               <b class="text-base-content">{thousands(@manga_totals.chapters)}</b> chapters
             </span>
 

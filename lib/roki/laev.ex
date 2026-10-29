@@ -419,38 +419,55 @@ defmodule Roki.Laev do
   account's laev data, so that a restart (every deploy is one) does not send the next visit back
   to waiting a second and a half.
   """
-  def remember_shelf(uuid, data) do
-    kept = %{at: System.os_time(:second), data: data}
-    Roki.TTLCache.put({:shelf, uuid}, @shelf_keep_s, {:ok, kept})
-    write_shelf(uuid, kept)
-  end
+  def remember_shelf(uuid, data), do: keep(:shelf, uuid, data)
 
   @doc """
   The kept shelf and how old it is in seconds — `{:ok, data, age}` — or `:miss`. Memory first,
   then the file; a file that cannot be read, or is older than a week, is as good as none.
   """
-  def cached_shelf(uuid) do
-    case Roki.TTLCache.peek({:shelf, uuid}) do
-      {:ok, kept} ->
-        aged(kept)
+  def cached_shelf(uuid), do: kept(:shelf, uuid)
+
+  @doc """
+  Keep the numbers the home page's strip shows (hours watched, films, episodes), the same way,
+  so a return visit paints them on its first frame instead of drawing a placeholder and swapping
+  it for the figure — which moves everything beside it.
+  """
+  def remember_totals(uuid, totals), do: keep(:totals, uuid, totals)
+
+  @doc "The kept totals, as `cached_shelf/1` gives the shelf."
+  def cached_totals(uuid), do: kept(:totals, uuid)
+
+  @doc "Throw away what is kept for this account (it was disconnected, or its data replaced)."
+  def forget_shelf(uuid) do
+    for name <- [:shelf, :totals] do
+      Roki.TTLCache.delete({name, uuid})
+      File.rm(kept_file(name, uuid))
+    end
+
+    :ok
+  end
+
+  defp keep(name, uuid, value) do
+    entry = %{at: System.os_time(:second), data: value}
+    Roki.TTLCache.put({name, uuid}, @shelf_keep_s, {:ok, entry})
+    write_kept(name, uuid, entry)
+  end
+
+  defp kept(name, uuid) do
+    case Roki.TTLCache.peek({name, uuid}) do
+      {:ok, entry} ->
+        aged(entry)
 
       _ ->
-        with {:ok, kept} <- read_shelf(uuid),
-             {:ok, _data, _age} = found <- aged(kept) do
+        with {:ok, entry} <- read_kept(name, uuid),
+             {:ok, _data, _age} = found <- aged(entry) do
           # Back in memory, so the next page does not read the file.
-          Roki.TTLCache.put({:shelf, uuid}, @shelf_keep_s, {:ok, kept})
+          Roki.TTLCache.put({name, uuid}, @shelf_keep_s, {:ok, entry})
           found
         else
           _ -> :miss
         end
     end
-  end
-
-  @doc "Throw the kept shelf away (the account was disconnected, or its data replaced)."
-  def forget_shelf(uuid) do
-    Roki.TTLCache.delete({:shelf, uuid})
-    File.rm(shelf_file(uuid))
-    :ok
   end
 
   defp aged(%{at: at, data: data}) do
@@ -460,17 +477,17 @@ defmodule Roki.Laev do
 
   defp aged(_other), do: :miss
 
-  defp shelf_file(uuid), do: Path.join(dir(uuid), "roki-shelf.etf")
+  defp kept_file(name, uuid), do: Path.join(dir(uuid), "roki-#{name}.etf")
 
   # Only for an account that already has a directory: nothing is created on disk for someone
   # who never connected. Written to a side file and renamed, so a read never sees half of it.
-  defp write_shelf(uuid, kept) do
-    path = shelf_file(uuid)
+  defp write_kept(name, uuid, entry) do
+    path = kept_file(name, uuid)
 
     if File.dir?(dir(uuid)) do
       tmp = path <> ".tmp"
 
-      with :ok <- File.write(tmp, :erlang.term_to_binary(kept, compressed: 3)),
+      with :ok <- File.write(tmp, :erlang.term_to_binary(entry, compressed: 3)),
            do: File.rename(tmp, path)
     end
 
@@ -481,8 +498,8 @@ defmodule Roki.Laev do
 
   # `:safe` refuses to make atoms, so a file written by some other version of the code is a miss
   # rather than a way of filling the atom table.
-  defp read_shelf(uuid) do
-    with {:ok, bin} <- File.read(shelf_file(uuid)) do
+  defp read_kept(name, uuid) do
+    with {:ok, bin} <- File.read(kept_file(name, uuid)) do
       {:ok, :erlang.binary_to_term(bin, [:safe])}
     end
   rescue

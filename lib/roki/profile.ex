@@ -221,6 +221,24 @@ defmodule Roki.Profile do
   for the same person. `{:error, why}` when laev's stats cannot be had.
   """
   def totals(uuid) when is_binary(uuid) do
+    with {:ok, measured} = ok <- measure_totals(uuid) do
+      Roki.Laev.remember_totals(uuid, measured)
+      ok
+    end
+  end
+
+  @doc """
+  The last totals this account had, if any are kept — `{:ok, totals}` or `:miss`. Read from
+  memory (or a small file), never worked out, so a page can have them on its first frame.
+  """
+  def kept_totals(uuid) when is_binary(uuid) do
+    case Roki.Laev.cached_totals(uuid) do
+      {:ok, totals, _age} -> {:ok, totals}
+      :miss -> :miss
+    end
+  end
+
+  defp measure_totals(uuid) do
     with {:ok, %{totals: totals} = summary} <- Roki.Stats.summary(uuid) do
       billed = Map.get(summary, :films, %{})
       ids = for i <- history(uuid), i.type == "movie", do: i.id
