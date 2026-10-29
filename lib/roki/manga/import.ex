@@ -125,6 +125,7 @@ defmodule Roki.Manga.Import do
     for table <- @owned, do: copy_owned(table, people)
     rehost_sidecar()
     drop_missing_covers()
+    copy_preferences()
     true
   end
 
@@ -190,6 +191,83 @@ defmodule Roki.Manga.Import do
       """)
 
     n
+  end
+
+  # How the reader is set up for a person, which lives on the user row rather than in any of
+  # the tables above — so the row copy alone leaves someone with a reader that reads the way
+  # nobody asked for. Only the reader's own keys are taken; this account's avatar and the rest
+  # of what it keeps there are its own.
+  @preferences ~w(auto_resume auto_resume_timer auto_resume_art default_tap_zone
+                  default_reading_direction default_smart_scroll smart_panels
+                  smart_scroll_config default_page_padding_desktop default_page_padding_mobile
+                  reader_ui_v2 native_sources kotatsu_sources etcher_colors etcher_line_params)
+
+  @doc """
+  Carry each person's reader preferences onto their account here: auto-resume, panel snap and
+  its settings, smart panels, the sources they turned on, their drawing colours.
+
+  Needs `reader_import.reader_user_settings` — `uuid`, `username`, `custom_fields` straight off
+  the reader's user table (`dev_docs/manga-import-staging.md`). Without it this is a no-op, so
+  an import that has not staged it still runs.
+
+  Merged rather than written over: what is already on the account wins for any key it has, so
+  running this again cannot undo a setting someone has since changed here.
+
+  `auto_resume_art` is dropped unless the picture itself came across, since the address is a
+  file in the media library and a missing one draws nothing.
+  """
+  def copy_preferences do
+    if staged_preferences?() do
+      for {from, to} <- @pairs, do: copy_preferences_for(from, to)
+    else
+      :not_staged
+    end
+  end
+
+  defp staged_preferences? do
+    %{rows: [[n]]} =
+      Repo.query!(
+        "select count(*) from information_schema.tables where table_schema = 'reader_import' and table_name = 'reader_user_settings'"
+      )
+
+    n > 0
+  end
+
+  defp copy_preferences_for(from, to) do
+    Repo.query!(
+      """
+      update phoenix_kit_users k
+         set custom_fields = coalesce(r.custom_fields, '{}'::jsonb)
+                               - (select coalesce(array_agg(key), '{}')
+                                    from jsonb_object_keys(coalesce(r.custom_fields, '{}'::jsonb)) key
+                                   where key <> all($3::text[]))
+                               - (select coalesce(array_agg(key), '{}')
+                                    from jsonb_object_keys(coalesce(k.custom_fields, '{}'::jsonb)) key)
+                            || coalesce(k.custom_fields, '{}'::jsonb)
+        from reader_import.reader_user_settings r
+       where lower(r.username) = $1
+         and lower(k.username::text) = $2
+      """,
+      [from, to, @preferences]
+    )
+
+    drop_missing_art(to)
+  end
+
+  defp drop_missing_art(username) do
+    Repo.query!(
+      """
+      update phoenix_kit_users k
+         set custom_fields = k.custom_fields - 'auto_resume_art'
+       where lower(k.username::text) = $1
+         and k.custom_fields ? 'auto_resume_art'
+         and not exists (
+           select 1 from phoenix_kit_files f
+            where f.uuid = (k.custom_fields ->> 'auto_resume_art')::uuid
+         )
+      """,
+      [username]
+    )
   end
 
   # Their rows, by whichever column that table uses to say whose they are.

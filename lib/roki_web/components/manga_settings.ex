@@ -16,7 +16,21 @@ defmodule RokiWeb.MangaSettings do
   attr :mal_token, :any, default: nil, doc: "the reader's own MyAnimeList token, if connected"
   attr :mal_available, :boolean, default: false
 
+  # Everything the two readers keep in the browser: the strip reader's per-series panel snap,
+  # the paged reader's per-series page settings, and the rotation.
+  @carry_prefixes ~w(fresco-test: fresco-strip-test: fresco:rotate)
+
+  @carry_snippet String.trim("""
+                 (()=>{const p=#{inspect(@carry_prefixes)},d={};\
+                 for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);\
+                 if(p.some(x=>k.startsWith(x)))d[k]=localStorage.getItem(k)}\
+                 const s=JSON.stringify(d);try{copy(s)}catch(e){}console.log(s);\
+                 return Object.keys(d).length+" settings copied"})()
+                 """)
+
   def preferences(assigns) do
+    assigns = assign(assigns, :carry_snippet, @carry_snippet)
+
     ~H"""
     <div id="reader-settings" phx-hook=".ReaderSettings" class="space-y-4">
       <a
@@ -40,6 +54,40 @@ defmodule RokiWeb.MangaSettings do
         </svg>
       </a>
 
+      <%!-- The readers keep what you tune per series — panel snap and its gutter settings, tap
+           zones, padding, smart crop — in the browser, under the address it was tuned on. The
+           old reader was a different address, so none of it followed the rest of your reading
+           here. This moves it, without any of it passing through the server. --%>
+      <details class="bg-base-200 rounded-xl p-4">
+        <summary class="cursor-pointer font-medium">Bring your settings from the old reader</summary>
+        <div class="mt-3 space-y-3 text-sm">
+          <p class="text-base-content/60">
+            Panel snap, its gutter settings, tap zones and page padding are set per series and
+            kept by the browser against the address you set them on, so moving here left them
+            behind. Open the old reader, paste the line below into the browser console, then
+            paste what it copies into the box here.
+          </p>
+          <div class="flex items-start gap-2">
+            <code
+              id="old-reader-snippet"
+              class="flex-1 overflow-x-auto whitespace-pre rounded bg-base-300 p-2 text-xs"
+            >{@carry_snippet}</code>
+            <button type="button" id="old-reader-copy" class="btn btn-sm">Copy</button>
+          </div>
+          <textarea
+            id="old-reader-blob"
+            rows="3"
+            placeholder="Paste here"
+            class="textarea textarea-bordered w-full font-mono text-xs"
+          ></textarea>
+          <div class="flex items-center gap-3">
+            <button type="button" id="old-reader-import" class="btn btn-sm btn-primary">
+              Bring them over
+            </button>
+            <span id="old-reader-result" class="text-base-content/60"></span>
+          </div>
+        </div>
+      </details>
       <div class="bg-base-200 rounded-xl p-4">
         <div class="flex items-center justify-between">
           <div class="min-w-0 pr-3">
@@ -574,6 +622,19 @@ defmodule RokiWeb.MangaSettings do
             return this.pick(".default-dir-btn", "direction", dir.dataset.direction);
           }
 
+          if (e.target.closest("#old-reader-copy")) {
+            const text = this.$("#old-reader-snippet").textContent;
+            navigator.clipboard.writeText(text).then(
+              () => { e.target.closest("#old-reader-copy").textContent = "Copied" },
+              () => {}
+            );
+            return;
+          }
+
+          if (e.target.closest("#old-reader-import")) {
+            return this.carryOver();
+          }
+
           if (e.target.closest("#auto-resume-art-upload")) {
             const input = this.$("#auto-resume-art-input");
             if (input) input.click();
@@ -651,6 +712,35 @@ defmodule RokiWeb.MangaSettings do
           if (widthHint && widthSel) {
             widthHint.textContent = width[widthSel.value] || "";
           }
+        },
+
+        // ── the old reader's per-series settings ─────────────────────────
+
+        // Written straight into this browser: these never belonged to the server, and
+        // sending them there to come back again would only put them somewhere they are
+        // not read from.
+        carryOver() {
+          const out = this.$("#old-reader-result");
+          const raw = (this.$("#old-reader-blob").value || "").trim();
+          if (!raw) { out.textContent = "Paste what the line copied first."; return; }
+
+          let data;
+          try { data = JSON.parse(raw) } catch (_) {
+            out.textContent = "That is not what the line copies — try again.";
+            return;
+          }
+
+          const prefixes = ["fresco-test:", "fresco-strip-test:", "fresco:rotate"];
+          let n = 0;
+          for (const [k, v] of Object.entries(data)) {
+            if (typeof v !== "string") continue;
+            if (!prefixes.some((p) => k.startsWith(p))) continue;
+            try { localStorage.setItem(k, v); n++ } catch (_) {}
+          }
+
+          out.textContent = n
+            ? n + " brought over. Open a series to see it."
+            : "Nothing in there belonged to the reader.";
         },
 
         // ── auto-resume backdrop art ─────────────────────────────────────
