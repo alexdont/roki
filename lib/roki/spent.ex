@@ -41,20 +41,30 @@ defmodule Roki.Spent do
     Enum.find_value(@kinds, :all, fn {id, _} -> Atom.to_string(id) == value && id end)
   end
 
-  @doc "What was watched, from `Roki.Stats` data, as entries."
-  def watched(%{titles: titles}) do
+  @doc """
+  What was watched, from `Roki.Stats` data, as entries.
+
+  `dates` is `Roki.Profile.watch_dates/1`: where this account has said when it watched
+  something, that is when it counts. Laev knows when a title was last *played*, which for
+  anything marked or backdated is a different thing — a film given a date in 2019 belongs in
+  2019, and something played once while testing belongs wherever its owner put it, not in this
+  week.
+  """
+  def watched(stats, dates \\ %{})
+
+  def watched(%{titles: titles}, dates) do
     for t <- titles do
       %{
         kind: if(t.anime, do: :anime, else: String.to_existing_atom(t.type)),
         title: t.title,
         seconds: t.seconds,
         off: t.off,
-        at: t.last_seen
+        at: Map.get(dates, {t.type, t.id}, t.last_seen)
       }
     end
   end
 
-  def watched(_), do: []
+  def watched(_, _dates), do: []
 
   @doc "What was read, from the reader's own tally, as entries."
   def read(uuid) when is_binary(uuid) do

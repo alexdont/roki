@@ -494,6 +494,26 @@ defmodule Roki.Profile do
     :ok
   end
 
+  @doc """
+  When this account says it watched each title, for the ones where it has said so: `%{{type,
+  id} => unix}`.
+
+  The watched page can give a title a date — a film found years after it was seen goes back
+  where it belongs — and that date is this account's own answer, which is not the same as when
+  anything was played on a device. Only rows carrying a real date are here; the rest have
+  nothing to say and are left to laev.
+  """
+  def watch_dates(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!("select type, id, at from roki_watched where user_uuid = $1 and dated", [bin])
+
+    Map.new(rows, fn [type, id, at] ->
+      {{type, id}, at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix()}
+    end)
+  end
+
   defp read_watched(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
