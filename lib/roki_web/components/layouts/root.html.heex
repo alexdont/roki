@@ -13,16 +13,16 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="roki" />
-    <%!-- black-translucent: the page paints under the status bar rather than below a bar of its
-          own, so a chapter runs to the top of the screen and fades out there (app.css) instead
-          of stopping at a strip of flat colour.
+    <%!-- "black": the page is laid out below the status bar, which is its own strip, painted
+          black rather than the colour of the page.
 
-          This needs manhwa 0.1.11, which lands a snap below the status bar rather than below the
-          top of its own container — the container starts a status bar above the screen when the
-          page owns that strip, and every snap landed that far too high until it accounted for
-          it. Everywhere else the strip is the site header's own background, which pads itself by
-          the same inset. --%>
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+          Translucent — the page painting under the bar, which is the only way to put a gradient
+          up there — was tried four times and left the reader shifted up with a gap at the
+          bottom every time, including with manhwa 0.1.11, which fixes the half of it that was
+          the landing maths. Whatever is left is geometry this end cannot see: no browser here
+          reports a safe-area inset, so every attempt was reasoning rather than measuring. It
+          needs numbers off the phone before it is tried again. --%>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <link rel="apple-touch-icon" href={~p"/images/apple-touch-icon.png"} />
     <%!-- The paged reader's panel zoom, read by assets/js/panel_overlay.js. --%>
     <meta
