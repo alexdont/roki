@@ -180,4 +180,19 @@ defmodule RokiWeb.StatsLiveTest do
     assert html =~ "bg-success/20"
     refute html =~ "/manga/proxy/image"
   end
+
+  test "reading time entered by hand is called that, not assumed", %{conn: conn, user: user} do
+    read!(user, "Overgeared", 8340)
+
+    Roki.Repo.query!(
+      "update saved_manga set reading_seconds_offsite = 95460 where slug = 'overgeared'"
+    )
+
+    html = open(conn, "/statstest/stats?kind=manga")
+
+    assert html =~ "Overgeared"
+    assert html =~ "2h 19m read here"
+    assert html =~ "26h 31m added by hand"
+    refute html =~ "assumed"
+  end
 end

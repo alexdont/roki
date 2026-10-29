@@ -404,8 +404,8 @@ defmodule RokiWeb.StatsLive do
               >
               </div>
             </div>
-            <div class="mt-0.5 text-xs text-base-content/50">
-              {one(t.kind)}{assumed(t)}
+            <div class="mt-0.5 text-xs text-base-content/50" title={timing_note(t)}>
+              {one(t.kind)}{timing(t)}
             </div>
           </div>
         </li>
@@ -418,16 +418,47 @@ defmodule RokiWeb.StatsLive do
     """
   end
 
-  # How much of a row was observed. All of it assumed is a hand mark; some of it assumed is a
-  # film laev followed for four minutes and then saw marked finished, which is most of what the
-  # browser leaves behind.
-  defp assumed(%{off: off, seconds: seconds}) when off > 0 and off == seconds,
-    do: " · marked, not measured"
+  # What a row's time is made of, as facts. It used to say "69% assumed", which sounded like the
+  # share of the film that had been watched and was in fact the opposite: the share that no
+  # player had timed. Nothing here is a guess — a finished title counts in full, and the only
+  # question is how much of that full length something measured and how much was simply known
+  # from the title being finished.
+  #
+  # Reading says the same thing in its own terms: "off-site" time is a figure the owner entered
+  # on the series page, not something the site assumed.
+  @doc false
+  def timing(%{kind: :manga, off: off, seconds: seconds}) when off > 0 and off == seconds,
+    do: " · added by hand"
 
-  defp assumed(%{off: off, seconds: seconds}) when off > 0 and seconds > 0,
-    do: " · #{round(off * 100 / seconds)}% assumed"
+  def timing(%{kind: :manga, off: off, seconds: seconds}) when off > 0,
+    do: " · #{Laev.duration(seconds - off)} read here · #{Laev.duration(off)} added by hand"
 
-  defp assumed(_entry), do: ""
+  def timing(%{off: off, seconds: seconds}) when off > 0 and off == seconds,
+    do: " · marked watched, not timed"
+
+  def timing(%{off: off, seconds: seconds}) when off > 0,
+    do: " · counted in full, #{Laev.duration(seconds - off)} of it timed"
+
+  def timing(_entry), do: ""
+
+  # The longer version, for the row's tooltip.
+  @doc false
+  def timing_note(%{kind: :manga, off: off, seconds: seconds}) when off > 0 and off == seconds,
+    do: "Time you entered by hand on the series page (Adjust Time Read). Nothing here was timed."
+
+  def timing_note(%{kind: :manga, off: off, seconds: seconds}) when off > 0,
+    do:
+      "#{Laev.duration(seconds - off)} was timed by the reader. #{Laev.duration(off)} is time you entered by hand on the series page, for reading done elsewhere."
+
+  def timing_note(%{off: off, seconds: seconds}) when off > 0 and off == seconds,
+    do:
+      "Marked watched without being played here, so its full length counts. No player timed any of it."
+
+  def timing_note(%{off: off, seconds: seconds}) when off > 0,
+    do:
+      "Marked finished, so its full length counts. A player only timed #{Laev.duration(seconds - off)} of it — the rest was skipped past, or played before the timer was fixed."
+
+  def timing_note(_entry), do: nil
 
   # Where a row's art comes from: watching brings a TMDB poster with it (`Roki.Stats.posters/1`),
   # reading is looked up here, because a cover is fetched through the reader's own proxy — or
