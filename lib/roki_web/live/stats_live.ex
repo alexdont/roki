@@ -315,9 +315,7 @@ defmodule RokiWeb.StatsLive do
               </div>
             </div>
             <div class="mt-0.5 text-xs text-base-content/50">
-              {one(t.kind)}{if t.off > 0 and t.off == t.seconds,
-                do: " · marked, not measured",
-                else: ""}
+              {one(t.kind)}{assumed(t)}
             </div>
           </div>
         </li>
@@ -329,6 +327,17 @@ defmodule RokiWeb.StatsLive do
     </section>
     """
   end
+
+  # How much of a row was observed. All of it assumed is a hand mark; some of it assumed is a
+  # film laev followed for four minutes and then saw marked finished, which is most of what the
+  # browser leaves behind.
+  defp assumed(%{off: off, seconds: seconds}) when off > 0 and off == seconds,
+    do: " · marked, not measured"
+
+  defp assumed(%{off: off, seconds: seconds}) when off > 0 and seconds > 0,
+    do: " · #{round(off * 100 / seconds)}% assumed"
+
+  defp assumed(_entry), do: ""
 
   defp one(:movie), do: "film"
   defp one(:tv), do: "show"

@@ -82,11 +82,12 @@ defmodule Roki.Stats do
       s = Stats.all_time()
       seen = last_seen()
       days = day_totals()
+      short = shortfalls()
 
       {:ok,
        %{
-         totals: Map.drop(s, [:titles]),
-         titles: Enum.map(s.titles, &title(&1, seen)),
+         totals: lift_totals(Map.drop(s, [:titles]), short),
+         titles: Enum.map(lift(s.titles, short), &title(&1, seen)),
          tally: Shelf.tally(),
          days: days,
          seasons: season_episodes(),
@@ -94,6 +95,114 @@ defmodule Roki.Stats do
          streak: streaks(days)
        }}
     end
+  end
+
+  # ── what was finished but barely measured ──────────────────────────
+
+  @doc """
+  Films and episodes the record calls finished, lifted to their runtime.
+
+  Laev keeps two files about one play: the position, which says how far it got or that it is
+  finished, and the measurement, which says how many seconds were actually observed. Its fold
+  prefers the measurement wherever there is one, which is right for a play it followed from
+  beginning to end — and wrong for the ordinary web case, where a few minutes are measured
+  before the page stops reporting and the film is then marked finished. Pulse read as four
+  minutes of a two-hour film; Avengers: Endgame as four minutes of three hours. Thirteen films
+  on this account lost twenty-three hours between them.
+
+  So where the record says finished and the measurement is under half the runtime, the
+  difference is added back as **assumed** time, the same bucket a hand mark lands in — because
+  that is what it is. Nothing is invented: an entry with no known runtime is left alone, and a
+  play that really was measured end to end keeps its own figure.
+
+  This belongs in laev's own fold, where both files are already open. It is here because that
+  is a published package and this is the page people look at.
+  """
+  def shortfalls do
+    dir = Laev.Scope.dir()
+    runtimes = read_runtimes(dir)
+
+    case File.ls(Path.join(dir, "positions")) do
+      {:ok, names} ->
+        for {key, seconds} <- Enum.flat_map(names, &shortfall(&1, dir, runtimes)), reduce: %{} do
+          acc -> Map.update(acc, key, seconds, &(&1 + seconds))
+        end
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp shortfall(name, dir, runtimes) do
+    with [_, type, id] <- Regex.run(~r/^(movie|tv|mal)-(\d+)/, name),
+         true <- finished?(Path.join([dir, "positions", name])),
+         watched when is_integer(watched) <- measured(Path.join([dir, "played", name])),
+         runtime when is_integer(runtime) <- runtimes[runtime_cache_key(type, id, name)],
+         true <- watched * 2 < runtime do
+      [{{type, String.to_integer(id)}, runtime - watched}]
+    else
+      _ -> []
+    end
+  end
+
+  # "done" is laev's own 85% rule; "seen" is a hand mark. Both say the thing was watched.
+  defp finished?(path) do
+    case File.read(path) do
+      {:ok, body} -> String.trim(body) in ["done", "seen"]
+      _ -> false
+    end
+  end
+
+  # The first number of the measurement file: the seconds really observed.
+  defp measured(path) do
+    with {:ok, body} <- File.read(path),
+         [first | _] <- String.split(String.trim(body)),
+         {seconds, _} <- Integer.parse(first) do
+      seconds
+    else
+      _ -> nil
+    end
+  end
+
+  # A film's runtime is its own; an episode's is the show's typical length, and an anime
+  # episode's comes from MyAnimeList. A whole-anime mark has no measurement to correct.
+  defp runtime_cache_key("movie", id, _name), do: "movie-#{id}"
+  defp runtime_cache_key("tv", id, _name), do: "tv-#{id}"
+
+  defp runtime_cache_key("mal", id, name) do
+    if String.match?(name, ~r/-e\d+$/), do: "mal-#{id}"
+  end
+
+  defp read_runtimes(dir) do
+    with {:ok, body} <- File.read(Path.join(dir, "runtimes.json")),
+         {:ok, cache} when is_map(cache) <- Jason.decode(body) do
+      cache
+    else
+      _ -> %{}
+    end
+  end
+
+  defp lift(titles, short) do
+    Enum.map(titles, fn t ->
+      case Map.get(short, {t.type, t.tmdb_id}) do
+        nil -> t
+        seconds -> %{t | seconds: t.seconds + seconds, off: t.off + seconds}
+      end
+    end)
+  end
+
+  # The same hours in the totals, and on the right side of the anime / everything-else split,
+  # so no two figures on a page disagree about how much there is.
+  defp lift_totals(totals, short) do
+    {anime, other} = Enum.split_with(short, fn {{type, _id}, _s} -> type == "mal" end)
+    anime = anime |> Enum.map(&elem(&1, 1)) |> Enum.sum()
+    other = other |> Enum.map(&elem(&1, 1)) |> Enum.sum()
+
+    totals
+    |> Map.update(:seconds, 0, &(&1 + anime + other))
+    |> Map.update(:off_laev, 0, &(&1 + anime + other))
+    |> update_in([:anime, :seconds], &(&1 + anime))
+    |> update_in([:other, :seconds], &(&1 + other))
   end
 
   # ── runtimes ───────────────────────────────────────────────────────
