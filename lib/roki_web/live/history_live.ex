@@ -45,7 +45,7 @@ defmodule RokiWeb.Live.HistoryLive do
     month = Date.beginning_of_month(today)
     offset_seconds = Library.timezone_offset_seconds(user.user_timezone)
 
-    all_activity = Library.list_reading_activity(user.uuid)
+    {all_activity, watched_meta} = activity(user.uuid, offset_seconds)
 
     saved_all = Library.list_saved_manga(user.uuid)
     meta_cover_uuids = Library.list_cover_file_uuids(Enum.map(saved_all, &{&1.source, &1.slug}))
@@ -59,6 +59,7 @@ defmodule RokiWeb.Live.HistoryLive do
            cover_uuid: m.cover_file_uuid || Map.get(meta_cover_uuids, {m.source, m.slug})
          }}
       end)
+      |> Map.merge(watched_meta)
 
     stint_titles = Map.new(saved_all, fn m -> {"manga:#{m.source}/#{m.slug}", m.title} end)
 
@@ -141,13 +142,52 @@ defmodule RokiWeb.Live.HistoryLive do
   # dropdown), the visible month's milestone badges, and the selected day.
   defp reload(socket) do
     socket
-    |> assign(:all_activity, Library.list_reading_activity(socket.assigns.user.uuid))
+    |> then(fn s ->
+      {activity, _meta} = activity(s.assigns.user.uuid, s.assigns.offset_seconds)
+      assign(s, :all_activity, activity)
+    end)
     |> apply_filter(socket.assigns.manga_filter)
     |> load_month_events(socket.assigns.month)
     |> select_date(socket.assigns.selected_date)
   end
 
   # ── data loading ──────────────────────────────────────────────────────
+
+  @doc false
+  # A day holds whatever was done that day: chapters read, and films, shows and anime finished.
+  # Reading is the one that is timed, so it is the one the heatmap is drawn from — a finished
+  # film counts as something done, not as an amount of time.
+  defp activity(uuid, offset_seconds) do
+    reading = Library.list_reading_activity(uuid)
+    watched = Roki.Profile.history(uuid)
+
+    by_day =
+      Enum.group_by(
+        watched,
+        fn t ->
+          t.at
+          |> DateTime.from_unix!()
+          |> DateTime.add(offset_seconds, :second)
+          |> DateTime.to_date()
+        end,
+        fn t ->
+          %{
+            title: t.title,
+            source: "watch",
+            slug: "#{t.type}:#{t.id}",
+            seconds: 0,
+            chapters_read: nil
+          }
+        end
+      )
+
+    meta =
+      Map.new(watched, fn t ->
+        {{"watch", "#{t.type}:#{t.id}"}, %{title: t.title, poster: t.poster, cover_uuid: nil}}
+      end)
+
+    {Map.merge(reading, by_day, fn _day, read, seen -> read ++ seen end), meta}
+  end
 
   # Filter the all-time activity to a single series (or not), then rebuild
   # the heatmap markers and the filter dropdown's option list off it.
@@ -307,7 +347,7 @@ defmodule RokiWeb.Live.HistoryLive do
     >
       <div class="max-w-6xl mx-auto px-4 py-8">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold">Reading History</h2>
+          <h2 class="text-lg font-semibold">History</h2>
           <div class="flex items-center gap-3">
             <form :if={@manga_list != []} phx-change="filter_manga">
               <select name="manga" class="select select-sm select-bordered max-w-[200px] truncate">

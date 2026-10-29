@@ -586,7 +586,9 @@ defmodule RokiWeb.UserHomeLive do
             carrying on. --%>
       <section :if={@reading || @watching} class="space-y-3">
         <h2 class="text-xl font-semibold">Continue</h2>
-        <div class="grid gap-3 sm:grid-cols-2">
+        <%!-- Two across at every width: on a phone they are what the page opens with, and one
+              above the other would push the lists past the fold. --%>
+        <div class="grid grid-cols-2 gap-3">
           <a
             :if={@reading}
             href={~p"/manga/#{@reading.source}/#{@reading.slug}/#{@reading.last_chapter}"}
@@ -596,7 +598,7 @@ defmodule RokiWeb.UserHomeLive do
               :if={manga_cover(@reading)}
               src={manga_cover(@reading)}
               alt={@reading.title}
-              class="h-24 w-16 shrink-0 rounded object-cover"
+              class="hidden h-24 w-16 shrink-0 rounded object-cover min-[380px]:block"
             />
             <span class="min-w-0 self-center">
               <span class="block text-xs uppercase tracking-wide text-base-content/50">Reading</span>
@@ -615,7 +617,7 @@ defmodule RokiWeb.UserHomeLive do
               :if={@watching.poster}
               src={Roki.Images.local(@watching.poster)}
               alt={@watching.title}
-              class="h-24 w-16 shrink-0 rounded object-cover"
+              class="hidden h-24 w-16 shrink-0 rounded object-cover min-[380px]:block"
             />
             <span class="min-w-0 self-center">
               <span class="block text-xs uppercase tracking-wide text-base-content/50">Watching</span>

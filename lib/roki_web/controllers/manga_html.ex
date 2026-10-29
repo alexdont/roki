@@ -1004,6 +1004,11 @@ defmodule RokiWeb.MangaHTML do
     meta = Map.get(manga_meta, {source, slug}, %{})
 
     cond do
+      # A film or a show: the address is this site's own, so it is used as it is. The proxy
+      # below is for the reader's sources, whose hosts are the only ones it will fetch.
+      url = meta[:poster] ->
+        Roki.Images.local(url)
+
       uuid = meta[:cover_uuid] ->
         PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, variant)
 
