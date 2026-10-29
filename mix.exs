@@ -67,11 +67,7 @@ defmodule Roki.MixProject do
       # scrolling viewers, `etcher` the drawing layer over them. See
       # dev_docs/manga-migration-plan.md.
       {:manga, "~> 0.1.4"},
-      # Vendored, not from hex: 0.1.11 fixes the snap landing when the page runs under a notch
-      # or a translucent status bar — the offset was measured from the container's top, which
-      # sits a status bar above the screen's. `override: true` because `manga` asks hex for it.
-      # Swap back to {:manhwa, "~> 0.1.11"} once that version is published.
-      {:manhwa, path: "packages/manhwa", override: true},
+      {:manhwa, "~> 0.1.9"},
       {:fresco, "~> 0.14.0"},
       {:fresco_strip, "~> 0.3.0"},
       {:etcher, "~> 0.22.0"},
