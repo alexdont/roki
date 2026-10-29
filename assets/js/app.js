@@ -31,10 +31,88 @@ import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
 import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
-// The manga reader's scrolling viewer. PhoenixKit vendors fresco itself (hence FrescoCanvas,
-// the paged viewer), but not the strip — it registers into window.FrescoHooks when imported,
-// which is why those are spread into the socket below.
+// The manga reader, as the app it came from loads it. PhoenixKit ships Fresco and Etcher of its
+// own under the same globals, and they are not these: its build has no `viewerRegistry`, which
+// is the contract the strip reader and the annotation layer bind through. These imports run
+// after its bundle (that one is a plain script tag, this one is deferred), so the packaged
+// versions are the ones the reader ends up using — the same ones it was built against.
+import "../../deps/fresco/priv/static/fresco.js"
 import "../../deps/fresco_strip/priv/static/fresco_strip.js"
+import "../../deps/etcher/priv/static/etcher.js"
+// The paged manga reader's panel zoom ("Smart panels" in Reading settings), which reads the
+// meta the root layout writes. Its heavy lifting runs in /assets/js/panel_worker.js.
+import "./panel_overlay"
+// Custom tooltip slots for Etcher.
+// - header: annotation author's display name. Etcher renders the
+//   header slot in the same row as the delete (trash) button, so
+//   the username and the action button share a line at the top of
+//   the tooltip. Default would have fallen back to the shape kind
+//   ("Rectangle"), which is meaningless to the reader.
+// - body:   comment content only (no author repeat).
+// - footer: untouched — default reads `metadata.subtitle` (the date).
+window.Etcher = window.Etcher || {};
+window.Etcher.tooltipSlots = Object.assign(window.Etcher.tooltipSlots || {}, {
+  header: function(shape) {
+    var m = shape.metadata || {};
+    var esc = (window.Etcher && window.Etcher.escapeHtml) || ((s) => s);
+    if (m.author_name) return esc(m.author_name);
+    // Fall through to etcher's default (shape kind) when no author —
+    // this also covers freshly drawn shapes before the composer posts.
+    return null;
+  }
+})
+
+const CommentBridge = {
+  mounted() {
+    this._openHandler = (e) => this.pushEvent("open_comment_modal", e.detail)
+    this._updateHandler = (e) => this.pushEvent("annotation_updated", e.detail)
+    this._closeHandler = () => this.pushEvent("close_comment_modal", {})
+    this._loadedChaptersHandler = (e) => this.pushEvent("set_loaded_chapters", e.detail)
+    window.addEventListener("open-comment-modal", this._openHandler)
+    window.addEventListener("annotation-updated", this._updateHandler)
+    window.addEventListener("close-comment-modal", this._closeHandler)
+    window.addEventListener("etcher-loaded-chapters", this._loadedChaptersHandler)
+    // Ping any active strip reader so it re-dispatches its loaded
+    // chapters. The strip's initial dispatch may have fired before
+    // this hook mounted; this handshake closes that race.
+    window.dispatchEvent(new CustomEvent("etcher-bridge-ready"))
+  },
+  destroyed() {
+    window.removeEventListener("open-comment-modal", this._openHandler)
+    window.removeEventListener("annotation-updated", this._updateHandler)
+    window.removeEventListener("close-comment-modal", this._closeHandler)
+    window.removeEventListener("etcher-loaded-chapters", this._loadedChaptersHandler)
+  }
+}
+
+const CommentModalScrollLock = {
+  mounted() {
+    this._prevOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+  },
+  destroyed() {
+    document.body.style.overflow = this._prevOverflow || ""
+  }
+}
+
+const CommentModalScroll = {
+  mounted() {
+    this._stop = (e) => e.stopPropagation()
+    this.el.addEventListener("wheel", this._stop, { passive: true })
+    this.el.addEventListener("touchstart", this._stop, { passive: true })
+    this.el.addEventListener("touchmove", this._stop, { passive: true })
+    this.el.addEventListener("touchend", this._stop, { passive: true })
+    this.el.addEventListener("scroll", this._stop, { passive: true })
+  },
+  destroyed() {
+    this.el.removeEventListener("wheel", this._stop)
+    this.el.removeEventListener("touchstart", this._stop)
+    this.el.removeEventListener("touchmove", this._stop)
+    this.el.removeEventListener("touchend", this._stop)
+    this.el.removeEventListener("scroll", this._stop)
+  }
+}
+
 // For the player lab and the console.
 window.rokiLocalPlayer = startLocalPlayer
 
@@ -125,7 +203,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...window.FrescoHooks, ...colocatedHooks, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel},
+  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.

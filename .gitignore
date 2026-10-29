@@ -26,7 +26,14 @@ erl_crash.dump
 roki-*.tar
 
 # Ignore assets that are produced by build tools.
-/priv/static/assets/
+/priv/static/assets/*
+# …except the OCR worker the manga reader waits for. The package ships three of these five; the
+# model and the wasm core are downloads, and the app this reader came from keeps all five in the
+# repo for the same reason: without them the strip reader waits three seconds for a worker that
+# never arrives, every time it measures a page. Everything else under vendor/ is build output.
+!/priv/static/assets/vendor/
+/priv/static/assets/vendor/*
+!/priv/static/assets/vendor/tesseract/
 
 # Ignore digested assets cache.
 /priv/static/cache_manifest.json
