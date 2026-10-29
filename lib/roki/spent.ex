@@ -130,6 +130,9 @@ defmodule Roki.Spent do
   defp entry(t, title, seconds, off, at) do
     %{
       kind: if(t.anime, do: :anime, else: String.to_existing_atom(t.type)),
+      # Laev's own key for the thing, so an entry can be matched against what the day-by-day
+      # log knows about it. A show split by season keeps the show's key, which is what it is.
+      key: {t.type, t.id},
       title: title,
       seconds: seconds,
       off: max(off, 0),
@@ -171,6 +174,7 @@ defmodule Roki.Spent do
 
         %{
           kind: :manga,
+          key: {m.source, m.slug},
           title: m.title,
           seconds: on + off - moved,
           off: off - moved,
@@ -197,7 +201,14 @@ defmodule Roki.Spent do
 
     logged =
       for {key, s} <- seconds, s > 0 do
-        %{kind: :manga, title: titles[key] || elem(key, 1), seconds: s, off: 0, at: last[key]}
+        %{
+          kind: :manga,
+          key: key,
+          title: titles[key] || elem(key, 1),
+          seconds: s,
+          off: 0,
+          at: last[key]
+        }
       end
 
     from = cutoff |> DateTime.new!(~T[00:00:00], "Etc/UTC") |> DateTime.to_unix()
@@ -207,8 +218,8 @@ defmodule Roki.Spent do
 
   # A dated arc is an entry in its own right, with its date and its share.
   defp arc_entries(arcs) do
-    for {_key, parts} <- arcs, p <- parts do
-      %{kind: :manga, title: p.title, seconds: p.seconds, off: p.seconds, at: p.at}
+    for {key, parts} <- arcs, p <- parts do
+      %{kind: :manga, key: key, title: p.title, seconds: p.seconds, off: p.seconds, at: p.at}
     end
   end
 
@@ -264,22 +275,50 @@ defmodule Roki.Spent do
   was last opened would throw away months of real days to make the two halves symmetrical,
   which is a bad trade. A dated arc is the exception, and for the same reason a watched title
   is: hours with no day of their own land on the day they were given.
+
+  `logged` is `Roki.Stints.by_title/2` — watching that *does* have days of its own, because it
+  happened here and the player said so as it went. Those hours are placed where they happened,
+  and only what the log cannot account for falls back to the lump. Everything watched before
+  that log existed, and everything watched in the terminal app, is still a lump; this is the
+  half that stops being one.
   """
-  def days(watched, reading_activity, arcs \\ %{}) do
-    watched_days =
-      for e <- watched ++ arc_entries(arcs), is_integer(e.at), reduce: %{} do
-        acc ->
-          date = e.at |> DateTime.from_unix!() |> DateTime.to_date()
-          Map.update(acc, date, e.seconds, &(&1 + e.seconds))
+  def days(watched, reading_activity, arcs \\ %{}, logged \\ %{}) do
+    known =
+      for {_key, by_day} <- logged, {date, seconds} <- by_day, reduce: %{} do
+        acc -> add(acc, date, seconds)
       end
+
+    left = Map.new(logged, fn {key, by_day} -> {key, Enum.sum(Map.values(by_day))} end)
+
+    # What the log already accounts for is not placed again: a title's own date keeps only the
+    # time no day is known for. A show split across seasons spends that allowance in order, so
+    # the two sides cannot both claim the same hour.
+    {lumped, _left} =
+      Enum.reduce(watched ++ arc_entries(arcs), {%{}, left}, fn e, {acc, left} ->
+        take = min(Map.get(left, e[:key], 0), e.seconds)
+        rest = e.seconds - take
+
+        acc =
+          if is_integer(e.at) and rest > 0 do
+            add(acc, e.at |> DateTime.from_unix!() |> DateTime.to_date(), rest)
+          else
+            acc
+          end
+
+        {acc, Map.update(left, e[:key], 0, &(&1 - take))}
+      end)
 
     read_days =
       for {date, rows} <- reading_activity || %{}, into: %{} do
         {date, rows |> Enum.map(&(&1.seconds || 0)) |> Enum.sum()}
       end
 
-    Map.merge(watched_days, read_days, fn _date, a, b -> a + b end)
+    known
+    |> Map.merge(lumped, fn _date, a, b -> a + b end)
+    |> Map.merge(read_days, fn _date, a, b -> a + b end)
   end
+
+  defp add(acc, date, seconds), do: Map.update(acc, date, seconds, &(&1 + seconds))
 
   @doc "Seconds in each of the trailing windows: `[%{id:, label:, seconds:}]`."
   def windows(days, today) do

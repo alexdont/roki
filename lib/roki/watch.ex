@@ -1866,22 +1866,47 @@ defmodule Roki.Watch do
   def remember_resolution(_uuid, _ctx, _source), do: :ok
 
   @doc """
-  Record where the player has got to. The arithmetic — what was watched, what was skipped,
-  when it counts as finished (85%) — is laev's, so it is exactly what the terminal app writes.
-  `{:finished, true}` is returned the first time it crosses into watched.
+  Record where the player has got to.
+
+  `opts[:watched]` is how much of the film the page really played since it last reported, which
+  the page counts for itself. When it is there, that figure is what is written: a report that
+  never arrives — a tab throttled in the background, a socket that dropped, a phone put down —
+  then costs nothing but its own lateness, because the seconds are still in the page's counter
+  and come with the next one.
+
+  Without it the arithmetic is laev's: the distance between two reports, counted as watching
+  when it is small enough to be watching and as a seek when it is not. That is right for the
+  terminal app, whose script is inside the player and never misses, and it is what cost the
+  browser whole films — one missed report and an hour of watching reads as one jump. Pulse was
+  measured at four minutes of two hours that way.
+
+  Either way the position, the 85% finish rule and the day log are laev's own, so this is
+  exactly what the terminal app writes — and the same figure is handed to `Roki.Stints`, which
+  assembles it into sessions the way the reader's reading time already is. `{:finished, true}` is returned the first time it
+  crosses into watched.
   """
-  def record_progress(uuid, ctx, position, duration, paused? \\ false) when is_number(position) do
+  def record_progress(uuid, ctx, position, duration, paused? \\ false, opts \\ [])
+      when is_number(position) do
     # Stopped: send the position to the user's other devices now (the terminal app picks it up
     # on its next sync), without making the player wait for the network.
     if paused?, do: Task.start(fn -> Roki.Laev.run(uuid, &Laev.Sync.live_push/0) end)
 
+    watched = seconds(opts[:watched])
+
     Roki.Laev.run(uuid, fn ->
       before? = Laev.Position.finished?(ctx)
-      Laev.Playback.progress(ctx, position, duration: duration, interval: 5)
+
+      if watched do
+        measured(ctx, position, duration, watched)
+      else
+        Laev.Playback.progress(ctx, position, duration: duration, interval: 5)
+      end
+
       finished? = Laev.Position.finished?(ctx)
       if finished? and not before?, do: Laev.Sync.live_push()
       {:finished, finished? and not before?}
     end)
+    |> tap(fn _ -> Roki.Stints.track(uuid, ctx, watched || 0) end)
     |> tap(fn _ -> note_started(uuid, ctx, position) end)
     |> tap(fn {:finished, new?} ->
       if new? do
@@ -1917,6 +1942,28 @@ defmodule Roki.Watch do
 
     new?
   end
+
+  # The page's own figure, written the way the mpv script writes its own: laev keeps a running
+  # total, so what arrives is added to it. What the playhead crossed without being watched is
+  # the seek — the distance it moved, less the part that was really played.
+  defp measured(ctx, position, duration, watched) do
+    played = Laev.Position.played(ctx) || %{watched: 0, skipped: 0, reported: nil}
+    previous = played[:reported] || Laev.Position.saved_position(ctx) || 0
+
+    Laev.Position.record(ctx, %{
+      position: position,
+      duration: duration,
+      watched: played.watched + watched,
+      skipped: played.skipped + max(trunc(position - previous - watched), 0),
+      finished: duration > 0 and position >= duration * 0.85 and previous < duration * 0.85,
+      log_seconds: watched,
+      reported: position
+    })
+  end
+
+  defp seconds(n) when is_integer(n) and n >= 0, do: n
+  defp seconds(n) when is_float(n) and n >= 0, do: trunc(n)
+  defp seconds(_n), do: nil
 
   # Ten minutes in is "started" (once per episode: the guard keeps the 5-second progress ticks off the
   # database).

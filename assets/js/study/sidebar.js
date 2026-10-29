@@ -259,6 +259,10 @@ export const StudySidebar = {
     clearTimeout(this.seekWait)
     clearInterval(this.seekTimer)
     clearInterval(this.postTimer)
+    if (this.onHide) {
+      document.removeEventListener("visibilitychange", this.onHide)
+      window.removeEventListener("pagehide", this.onHide)
+    }
     if (this.tip) this.tip.remove()
     if (this.hls) this.hls.destroy()
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
@@ -293,24 +297,58 @@ export const StudySidebar = {
     // Progress goes back to the server only when the page asked for it, and never before the
     // resume seek has happened (a playhead at 0 would overwrite where you were).
     if (this.el.dataset.progress === "true") {
+      this.measure()
       this.postTimer = setInterval(() => !v.paused && this.postProgress(), 5000)
       v.addEventListener("pause", () => this.postProgress(true))
       v.addEventListener("ended", () => {
         this.postProgress(true)
         this.pushEvent("ended", {})
       })
+      // A tab going away is where watched time used to be lost: a hidden tab's timers are
+      // throttled to about once a minute, and a closed one never fires again. Both flush here,
+      // and what has not been acknowledged stays in the counter either way.
+      this.onHide = () => { if (document.hidden) this.postProgress(true) }
+      document.addEventListener("visibilitychange", this.onHide)
+      window.addEventListener("pagehide", this.onHide)
     }
+  },
+
+  // ── how much was watched ───────────────────────────────────────────
+  // The page counts its own seconds rather than letting the server subtract one position from
+  // the last: a report that never arrives — a throttled tab, a dropped socket, a phone put down
+  // — used to turn the whole gap into a seek, so a film watched to the end could land as four
+  // minutes. Here the clock's own small steps are added up, a seek is the one thing that is not
+  // a step, and the figure is only cleared once the server says it has it.
+  measure() {
+    const v = this.video
+    this.watched = 0
+    let last = v.currentTime
+
+    v.addEventListener("timeupdate", () => {
+      const now = v.currentTime
+      const step = now - last
+      last = now
+      // A normal timeupdate is a quarter of a second; two seconds covers jank and playback at
+      // speed, and anything past it is a jump, which is not watching.
+      if (!v.paused && !v.seeking && v.readyState >= 2 && step > 0 && step <= 2) this.watched += step
+    })
+
+    for (const ev of ["seeking", "seeked", "ratechange"]) v.addEventListener(ev, () => { last = v.currentTime })
   },
 
   postProgress(paused = false) {
     const t = this.abs()
     if (!this.ready || !(t > 0)) return
     if (this.flags && this.flags.get("diag") === "1") return // a diagnostic run is not a viewing
-    this.pushEvent("progress", {
-      position: Math.floor(t),
-      duration: Math.floor(this.total()),
-      paused,
-    })
+    const sent = Math.floor(this.watched || 0)
+    this.pushEvent(
+      "progress",
+      {position: Math.floor(t), duration: Math.floor(this.total()), paused, watched: sent},
+      // Only what the server took is dropped, and the clock has gone on running in the meantime,
+      // so this subtracts rather than resets. No reply means nothing is lost: it goes with the
+      // next report.
+      () => { this.watched = Math.max(0, (this.watched || 0) - sent) }
+    )
   },
 
   // ── the film's clock ───────────────────────────────────────────────

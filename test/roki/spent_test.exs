@@ -269,4 +269,49 @@ defmodule Roki.SpentTest do
       assert days[~D[2017-07-14]] == 3600
     end
   end
+
+  describe "days a title's hours are placed on" do
+    test "what the sessions can place goes where it happened, and only the rest on the date" do
+      stats = show(10_000)
+      [entry] = Spent.watched(stats, %{{"tv", 110_316} => @now})
+
+      # Three of the ten thousand seconds have days of their own.
+      logged = %{
+        {"tv", 110_316} => %{~D[2026-03-01] => 2000, ~D[2026-03-02] => 1000}
+      }
+
+      days = Spent.days([entry], %{}, %{}, logged)
+      today = @now |> DateTime.from_unix!() |> DateTime.to_date()
+
+      assert days[~D[2026-03-01]] == 2000
+      assert days[~D[2026-03-02]] == 1000
+      # The lump keeps only what no day is known for.
+      assert days[today] == 7000
+      assert Enum.sum(Map.values(days)) == 10_000
+    end
+
+    test "a title the sessions account for entirely leaves nothing on its date" do
+      stats = show(10_000)
+      [entry] = Spent.watched(stats, %{{"tv", 110_316} => @now})
+      logged = %{{"tv", 110_316} => %{~D[2026-03-01] => 10_000}}
+
+      days = Spent.days([entry], %{}, %{}, logged)
+
+      assert days == %{~D[2026-03-01] => 10_000}
+    end
+
+    test "seasons spend one allowance between them, not one each" do
+      entries =
+        Spent.watched(show(10_000), %{}, %{
+          {"tv", 110_316, 1} => @long_ago,
+          {"tv", 110_316, 2} => @now
+        })
+
+      logged = %{{"tv", 110_316} => %{~D[2026-03-01] => 9000}}
+      days = Spent.days(entries, %{}, %{}, logged)
+
+      assert days[~D[2026-03-01]] == 9000
+      assert Enum.sum(Map.values(days)) == 10_000
+    end
+  end
 end

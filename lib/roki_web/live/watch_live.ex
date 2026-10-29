@@ -530,14 +530,17 @@ defmodule RokiWeb.WatchLive do
 
   # ── events ─────────────────────────────────────────────────────────
 
-  # The player reports the playhead every few seconds. Laev does the arithmetic (what was
-  # watched, what was skipped, when it counts as finished) exactly as it does for mpv.
+  # The player reports the playhead every few seconds, and how much of the film it has really
+  # played since it last said so — the page counts that itself, so a report that never arrives
+  # costs nothing (see `measure()` in study/sidebar.js).
   @impl true
   def handle_event("progress", %{"position" => position, "duration" => duration} = params, socket) do
     %{uuid: uuid, ctx: ctx} = socket.assigns
 
     if uuid && ctx && is_number(position) do
-      case Watch.record_progress(uuid, ctx, position, duration || 0, params["paused"] == true) do
+      case Watch.record_progress(uuid, ctx, position, duration || 0, params["paused"] == true,
+             watched: params["watched"]
+           ) do
         {:finished, true} -> {:noreply, assign(socket, :up_next, next_episode(socket.assigns))}
         _ -> {:noreply, socket}
       end

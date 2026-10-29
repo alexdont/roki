@@ -1116,11 +1116,11 @@ defmodule RokiWeb.Live.HistoryLive do
           <div class="flex gap-2 mb-1">
             <div class="w-24 sm:w-40 shrink-0 flex flex-col gap-1.5">
               <div
-                :for={{item, _sts} <- stint_groups}
+                :for={{_item, sts} <- stint_groups}
                 class="h-4 flex items-center text-[11px] truncate text-base-content/70"
-                title={Map.get(@stint_titles, item, item)}
+                title={MangaHTML.stint_label(hd(sts), @stint_titles)}
               >
-                {Map.get(@stint_titles, item, String.replace_prefix(item, "manga:", ""))}
+                {MangaHTML.stint_label(hd(sts), @stint_titles)}
               </div>
               <div class="h-3"></div>
             </div>
@@ -1168,7 +1168,7 @@ defmodule RokiWeb.Live.HistoryLive do
               <span class="text-base-content/50 shrink-0">{MangaHTML.format_reading_time(s.seconds) ||
                 "<1m"}</span>
               <span class="truncate text-base-content/60">
-                {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))}
+                {MangaHTML.stint_label(s, @stint_titles)}
                 <% read = MangaHTML.chapters_in_stint(@chapter_reads, s) %>
                 <span :if={read != []} class="text-success/80">· read ch {Enum.join(read, ", ")}</span>
                 <span :if={read == [] and s.meta["chapter"]} class="text-base-content/40">· ch {s.meta[
@@ -1215,7 +1215,7 @@ defmodule RokiWeb.Live.HistoryLive do
               stroke-linecap="butt"
             >
               <title>
-                {Map.get(@stint_titles, s.item, String.replace_prefix(s.item, "manga:", ""))} · {MangaHTML.stint_local_time(
+                {MangaHTML.stint_label(s, @stint_titles)} · {MangaHTML.stint_local_time(
                   s.started_at,
                   @stint_tz
                 )}–{MangaHTML.stint_local_time(s.ended_at, @stint_tz)} · {MangaHTML.format_reading_time(

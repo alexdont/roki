@@ -1294,6 +1294,21 @@ defmodule RokiWeb.MangaHTML do
   end
 
   @doc """
+  What a stint was of.
+
+  Stints are not only the reader's any more — watching records them too, as `watch:tv/110316`
+  with the title in `meta` (`Roki.Stints`) — so a label asks the stint itself first, then the
+  library's own names, and falls back to the bare item.
+  """
+  def stint_label(stint, titles) do
+    stint.meta["title"] || Map.get(titles, stint.item) || bare_item(stint.item)
+  end
+
+  defp bare_item(item) do
+    item |> String.replace_prefix("manga:", "") |> String.replace_prefix("watch:", "")
+  end
+
+  @doc """
   Chapters completed during a stint — the chapter-read events on the
   stint's item whose read_at falls inside its time window.
   """

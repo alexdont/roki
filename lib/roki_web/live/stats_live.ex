@@ -60,8 +60,21 @@ defmodule RokiWeb.StatsLive do
       arc_parts: Roki.Manga.ArcDates.parts(uuid, read),
       reading_activity: Roki.Manga.Library.list_reading_activity(uuid),
       watch_dates: Roki.Profile.watch_dates(uuid),
-      season_dates: Roki.Profile.season_dates(uuid)
+      season_dates: Roki.Profile.season_dates(uuid),
+      # Watching that has days of its own, from the sessions the player records as it goes.
+      stint_days: Roki.Stints.by_title(uuid, offset(socket))
     )
+  end
+
+  # A day is the viewer's day, not UTC — the same offset the reader's history page uses.
+  defp offset(socket) do
+    case socket.assigns[:phoenix_kit_current_scope] do
+      %{user: %{user_timezone: tz}} when is_binary(tz) and tz != "" ->
+        Roki.Manga.Library.timezone_offset_seconds(tz)
+
+      _ ->
+        0
+    end
   end
 
   defp load(uuid) do
@@ -185,7 +198,7 @@ defmodule RokiWeb.StatsLive do
 
     visible_all = Spent.of_kind(in_window, assigns.kind)
 
-    days = Spent.days(watched, assigns.reading_activity, assigns.arc_parts)
+    days = Spent.days(watched, assigns.reading_activity, assigns.arc_parts, assigns.stint_days)
     today = Date.utc_today()
 
     assign(assigns,
