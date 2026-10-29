@@ -117,6 +117,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:sync, nil)
           |> assign(:mal, %{status: :loading, url: nil, error: nil, busy: false})
           |> assign(:tmdb, %{status: :loading, note: nil})
+          |> allow_upload(:imdb_csv, accept: ~w(.csv), max_entries: 1, max_file_size: 5_000_000)
           |> assign(:notify, Roki.Notify.choices(uuid))
           |> assign(:carrying?, false)
           |> assign(:server, nil)
@@ -331,6 +332,29 @@ defmodule RokiWeb.SettingsLive do
     {:noreply, assign(socket, :tmdb, %{status: %{linked?: false, username: nil}, note: note})}
   end
 
+  def handle_event("imdb_validate", _params, socket), do: {:noreply, socket}
+
+  # An IMDb ratings export, for the dates TMDB does not keep (Roki.ImdbDates).
+  def handle_event("imdb_dates", _params, socket) do
+    uuid = socket.assigns.uuid
+
+    csv =
+      consume_uploaded_entries(socket, :imdb_csv, fn %{path: path}, _entry ->
+        {:ok, File.read!(path)}
+      end)
+
+    case csv do
+      [csv] ->
+        {:noreply,
+         socket
+         |> update(:tmdb, &%{&1 | note: "Reading your export…"})
+         |> start_async(:imdb_dates, fn -> Roki.ImdbDates.import(uuid, csv) end)}
+
+      _ ->
+        {:noreply, update(socket, :tmdb, &%{&1 | note: "Choose the .csv file from IMDb first."})}
+    end
+  end
+
   def handle_event("mal_logout", _params, socket) do
     Laev.mal_logout(socket.assigns.uuid)
 
@@ -415,6 +439,30 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_async(:auto_sync, {:exit, _}, socket),
     do: {:noreply, assign(socket, auto_sync: :failed)}
+
+  def handle_async(:imdb_dates, {:ok, {:ok, r}}, socket) do
+    left =
+      if r.kept + r.unlisted + r.unresolved > 0,
+        do:
+          " #{r.kept} already had a date, #{r.unlisted} are not on your watched list, #{r.unresolved} could not be matched.",
+        else: ""
+
+    {:noreply,
+     update(socket, :tmdb, &%{&1 | note: "Dated #{r.dated} titles from your export." <> left})}
+  end
+
+  def handle_async(:imdb_dates, _other, socket),
+    do:
+      {:noreply,
+       update(
+         socket,
+         :tmdb,
+         &%{
+           &1
+           | note:
+               "That file is not an IMDb ratings export (it needs the Const and Date Rated columns)."
+         }
+       )}
 
   def handle_async(:tmdb, {:ok, status}, socket),
     do: {:noreply, update(socket, :tmdb, &%{&1 | status: status})}
@@ -683,7 +731,7 @@ defmodule RokiWeb.SettingsLive do
           </form>
         </section>
 
-        <.tmdb_section :if={@state == :ready} tmdb={@tmdb} username={@username} />
+        <.tmdb_section :if={@state == :ready} tmdb={@tmdb} username={@username} uploads={@uploads} />
 
         <.mal_section :if={@state == :ready} mal={@mal} />
 
@@ -1084,6 +1132,7 @@ defmodule RokiWeb.SettingsLive do
 
   attr :tmdb, :map, required: true
   attr :username, :string, required: true
+  attr :uploads, :map, required: true
 
   # TMDB: where film and show ratings are saved, on the person's own account.
   defp tmdb_section(assigns) do
@@ -1108,6 +1157,19 @@ defmodule RokiWeb.SettingsLive do
         >
           Unlink
         </button>
+
+        <form id="imdb-dates" phx-submit="imdb_dates" phx-change="imdb_validate" class="space-y-2 pt-3">
+          <p class="text-sm text-base-content/70">
+            Brought your ratings over from IMDb? TMDB does not keep when you rated them, so they
+            arrive with no date. Export them from IMDb (Your ratings → Export) and add the file
+            here to date your watched titles by it.
+          </p>
+          <.live_file_input
+            upload={@uploads.imdb_csv}
+            class="file-input file-input-bordered file-input-sm w-full max-w-md"
+          />
+          <button type="submit" class="btn btn-sm btn-primary">Date my titles</button>
+        </form>
       </div>
 
       <div :if={is_map(@tmdb.status) and not @tmdb.status.linked?} class="space-y-3">

@@ -88,6 +88,39 @@ defmodule RokiWeb.SettingsLiveTest do
     refute html =~ "Unlink"
   end
 
+  test "a linked TMDB account can add an IMDb export to date its titles, and a wrong file is refused",
+       %{conn: conn, user: user} do
+    dir = connect!(user)
+
+    File.write!(
+      Path.join(dir, "config"),
+      File.read!(Path.join(dir, "config")) <> "TMDB_SESSION_ID=abc123\n"
+    )
+
+    {:ok, view, _} = live(conn, "/settingstest/settings")
+    html = render_async(view, 3000)
+    assert html =~ "Date my titles"
+    assert html =~ "Your ratings → Export"
+
+    upload = fn name, body ->
+      file_input(view, "form[phx-submit=imdb_dates]", :imdb_csv, [
+        %{name: name, content: body, type: "text/csv"}
+      ])
+    end
+
+    render_upload(
+      upload.("ratings.csv", "Const,Date Rated,Title Type\ntt0000001,2020-01-01,Movie\n"),
+      "ratings.csv"
+    )
+
+    view |> form("form[phx-submit=imdb_dates]") |> render_submit()
+    assert render_async(view, 5000) =~ "Dated 0 titles from your export"
+
+    render_upload(upload.("other.csv", "a,b\n1,2\n"), "other.csv")
+    view |> form("form[phx-submit=imdb_dates]") |> render_submit()
+    assert render_async(view, 5000) =~ "not an IMDb ratings export"
+  end
+
   test "unlinking takes the session and the copied TMDB ratings, and keeps the MyAnimeList ones",
        %{user: user} do
     dir = connect!(user)
