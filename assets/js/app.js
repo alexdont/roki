@@ -209,28 +209,38 @@ const liveSocket = new LiveSocket("/live", Socket, {
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
 window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "smooth", block: "center"}))
 
-// The rating slider: the word and the colour of the score under the thumb. The same scale as
-// `score_word/1` and `score_color/1` in title_live.ex.
-// The words come from laev, put on the sheet by the server (`data-words`).
+// The rating slider: the word and the colour of the score under the thumb. Both come from the
+// server, put on the sheet (`data-words`, `data-colors`): the words are laev's own list, and the
+// colours are `RokiWeb.ScoreColor`'s — one scale, kept in one place, rather than a copy of its
+// formula here to drift from it. Ten is "gold", which is not a colour on the ramp but a metal, and
+// is drawn with the stylesheet's gold: a class on the number and the word, an attribute on the
+// slider for its thumb.
 let SCORE_WORDS = {}
-function scoreColor(v) {
-  const s = Math.min(10, Math.max(1, v))
-  const [h, sat, l] = s <= 7 ? [(s - 1) / 6 * 130, 75, 46]
-    : [130 - (s - 7) / 3 * 85, 75 + (s - 7) / 3 * 20, 46 + (s - 7) / 3 * 6]
-  return `hsl(${Math.round(h)} ${Math.round(sat)}% ${Math.round(l)}%)`
-}
+let SCORE_COLORS = {}
 window.rokiScore = input => {
   const v = Number(input.value)
-  const color = scoreColor(v)
   const out = document.getElementById("rate-out")
   const word = document.getElementById("rate-word")
-  out.textContent = v % 1 === 0 ? String(v) : v.toFixed(1)
+  const sheet = document.getElementById("rate-sheet")
   if (!Object.keys(SCORE_WORDS).length) {
-    try { SCORE_WORDS = JSON.parse(document.getElementById("rate-sheet").dataset.words) } catch {}
+    try { SCORE_WORDS = JSON.parse(sheet.dataset.words) } catch {}
   }
+  if (!Object.keys(SCORE_COLORS).length) {
+    try { SCORE_COLORS = JSON.parse(sheet.dataset.colors) } catch {}
+  }
+  const key = v % 1 === 0 ? String(v) : v.toFixed(1)
+  const color = SCORE_COLORS[key] || SCORE_COLORS["7"] || ""
+  const gold = color === "gold"
+
+  out.textContent = key
   word.textContent = SCORE_WORDS[Math.min(10, Math.max(1, Math.round(v)))] || ""
-  out.style.color = word.style.color = color
-  input.style.setProperty("--thumb", color)
+  for (const el of [out, word]) {
+    el.classList.toggle("rate-gold", gold)
+    el.style.color = gold ? "" : color
+  }
+  if (gold) input.setAttribute("data-gold", "")
+  else input.removeAttribute("data-gold")
+  input.style.setProperty("--thumb", gold ? "" : color)
 }
 
 // Play on an external player: the server found the release and says where to open it.

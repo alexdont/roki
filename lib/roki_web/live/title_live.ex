@@ -13,6 +13,7 @@ defmodule RokiWeb.TitleLive do
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
+  alias RokiWeb.ScoreColor
   alias Roki.Watch.SourceCache
 
   # ── mount & params ─────────────────────────────────────────────────
@@ -1067,27 +1068,13 @@ defmodule RokiWeb.TitleLive do
     end
   end
 
-  # What a score means is laev's own list (`Laev.Ratings`); the colour it is drawn in runs red at the
-  # bottom through green at 7 to gold at 10. `assets/js/app.js` (`rokiScore`) does the same while the
-  # slider moves, with the words handed to it on the sheet.
+  # What a score means is laev's own list (`Laev.Ratings`); the colour it is drawn in is
+  # `RokiWeb.ScoreColor`'s, which also hands the script its table, so the slider does not carry a
+  # second copy of the scale.
   defp score_word(v) when is_number(v), do: Laev.Ratings.score_word(v)
 
-  defp score_color(v) when is_number(v) do
-    s = v |> max(1) |> min(10)
-
-    {hue, sat, light} =
-      if s <= 7,
-        do: {(s - 1) / 6 * 130, 75, 46},
-        else: {130 - (s - 7) / 3 * 85, 75 + (s - 7) / 3 * 20, 46 + (s - 7) / 3 * 6}
-
-    "hsl(#{round(hue)} #{round(sat)}% #{round(light)}%)"
-  end
-
-  defp score_track do
-    # The slider runs 0.5 to 10, so a score sits at (score - 0.5) / 9.5 along it.
-    stops = Enum.map_join(1..10, ", ", &"#{score_color(&1)} #{round((&1 - 0.5) / 9.5 * 100)}%")
-    "linear-gradient(90deg, #{stops})"
-  end
+  # Is the rating in hand the top score, which is gold rather than a colour on the ramp?
+  defp gold?(%{value: value}), do: ScoreColor.gold?(value)
 
   defp fmt_rating(v) when is_number(v) do
     if v == trunc(v),
@@ -1974,11 +1961,13 @@ defmodule RokiWeb.TitleLive do
   attr :label, :string, default: nil
 
   # Where you rate: TMDB's score for reference, a half-step slider, save or take it back.
-  defp rate_sheet(assigns) do
+  @doc false
+  def rate_sheet(assigns) do
     ~H"""
     <div
       id="rate-sheet"
       data-words={Jason.encode!(for {n, w} <- Laev.Ratings.score_words(), into: %{}, do: {n, w})}
+      data-colors={Jason.encode!(RokiWeb.ScoreColor.table())}
       class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50 sm:items-center sm:justify-center"
       phx-window-keydown={JS.hide(to: "#rate-sheet")}
       phx-key="escape"
@@ -2041,15 +2030,15 @@ defmodule RokiWeb.TitleLive do
           <div class="text-center">
             <p
               id="rate-word"
-              class="text-sm font-semibold uppercase tracking-wider"
-              style={"color: #{score_color(@rating.value || 7)}"}
+              class={["text-sm font-semibold uppercase tracking-wider", gold?(@rating) && "rate-gold"]}
+              style={!gold?(@rating) && "color: #{ScoreColor.color(@rating.value || 7)}"}
             >
               {score_word(@rating.value || 7)}
             </p>
             <span
               id="rate-out"
-              class="text-5xl font-bold"
-              style={"color: #{score_color(@rating.value || 7)}"}
+              class={["text-5xl font-bold", gold?(@rating) && "rate-gold"]}
+              style={!gold?(@rating) && "color: #{ScoreColor.color(@rating.value || 7)}"}
             >{fmt_rating(@rating.value || 7)}</span>
             <span class="text-lg text-base-content/50"> / 10</span>
           </div>
@@ -2061,7 +2050,8 @@ defmodule RokiWeb.TitleLive do
             step={if @rating.provider == :mal, do: "1", else: "0.5"}
             value={@rating.value || 7}
             oninput="rokiScore(this)"
-            style={"--thumb: #{score_color(@rating.value || 7)}; --track: #{score_track()}"}
+            data-gold={gold?(@rating) && ""}
+            style={"--thumb: #{ScoreColor.color(@rating.value || 7)}; --track: #{ScoreColor.track(if @rating.provider == :mal, do: 1, else: 0.5)}"}
             class="rate-range w-full"
             aria-label="Your rating"
           />
@@ -2077,7 +2067,10 @@ defmodule RokiWeb.TitleLive do
             </button>
           </div>
           <p :if={@rating.value} class="text-center text-xs text-base-content/60">
-            Your rating: <span class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
+            Your rating:
+            <span class={["font-semibold", (gold?(@rating) && "rate-gold") || "text-info"]}>
+              {fmt_rating(@rating.value)}
+            </span>
           </p>
         </form>
 

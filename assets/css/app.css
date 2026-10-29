@@ -538,7 +538,27 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .peek-released { margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.55; }
 
 
-/* The rating slider: a red-to-green-to-gold track, the thumb in the colour of the score. */
+/* The rating slider: a red-to-green track with a gold notch at the end, the thumb in the colour of
+   the score. Ten is not on the ramp: it is the one score nothing beats, and it is gold — a metal,
+   so a gradient rather than a yellow — on the number, the thumb and the last notch of the track.
+   `RokiWeb.ScoreColor` says where each colour is used. */
+:root {
+  --gold-light: #fff0a8;
+  --gold: #f4c430;
+  --gold-deep: #b8860b;
+  --gold-fill: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 38%, var(--gold-deep) 74%, var(--gold) 100%);
+}
+
+/* Text in the gold: the number and the word, when the score is ten. */
+.rate-gold {
+  background-image: var(--gold-fill);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 1px 6px rgb(244 196 48 / 0.35));
+}
+
 .rate-range {
   -webkit-appearance: none;
   appearance: none;
@@ -567,6 +587,15 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 }
 .rate-range::-moz-range-track {
   background: transparent;
+}
+/* At ten the thumb is gold, with a glow, to say so. */
+.rate-range[data-gold]::-webkit-slider-thumb {
+  background: var(--gold-fill);
+  box-shadow: 0 0 0 1px var(--gold-deep), 0 0 14px 2px rgb(244 196 48 / 0.7);
+}
+.rate-range[data-gold]::-moz-range-thumb {
+  background: var(--gold-fill);
+  box-shadow: 0 0 0 1px var(--gold-deep), 0 0 14px 2px rgb(244 196 48 / 0.7);
 }
 
 
