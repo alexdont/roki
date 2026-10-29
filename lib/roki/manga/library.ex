@@ -313,6 +313,54 @@ defmodule Roki.Manga.Library do
   end
 
   @doc """
+  What this account has read, all in: `%{seconds:, series:, chapters:}`.
+
+  `seconds` is the reader's own timing plus time entered by hand for reading done elsewhere —
+  the same figure the stats page shows for manga — and `series` is how many series that spans.
+
+  `chapters` is the chapter each of those series is up to, added together. That is deliberately
+  not the number of chapters the reader has logged as finished: most of what an account has read
+  was read before the reader existed (one series alone is at chapter 331 with two hours timed
+  here), so the logged count says 569 where the answer is 8,422. A label that is not a number —
+  "Extra", "Oneshot" — counts as nothing rather than as an error.
+  """
+  def reading_totals(user_uuid) do
+    from(s in SavedManga,
+      where: s.user_id == ^user_uuid,
+      where:
+        s.reading_seconds > 0 or s.reading_seconds_adjusted > 0 or s.reading_seconds_offsite > 0,
+      select: %{
+        seconds:
+          type(
+            coalesce(
+              sum(
+                coalesce(s.reading_seconds_adjusted, s.reading_seconds) +
+                  coalesce(s.reading_seconds_offsite, 0)
+              ),
+              0
+            ),
+            :integer
+          ),
+        series: count(s.id),
+        chapters:
+          type(
+            coalesce(
+              sum(
+                coalesce(
+                  fragment("nullif(substring(? from '^[0-9]+'), '')::int", s.last_chapter),
+                  0
+                )
+              ),
+              0
+            ),
+            :integer
+          )
+      }
+    )
+    |> Repo.one()
+  end
+
+  @doc """
   Snap the user's `last_chapter` forward to `chapter`. Used by the
   "Continue from Ch. N" jump-ahead button on the manga details page so
   one click advances the resume pointer instead of leaving it on the

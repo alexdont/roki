@@ -38,22 +38,68 @@ defmodule Roki.Stats do
 
   def ranges, do: @ranges
 
-  @doc """
-  The headline totals for the shelf's one-line strip, kept ten minutes — the shelf is
-  opened far more often than the numbers change, and measuring is real work. The full
-  page uses `for_user/1` and is always live.
+  # How long a summary counts as current, and how long an older one is still worth showing.
+  @summary_fresh_s 10 * 60
+  @summary_keep_s 7 * 86_400
 
-  `build/0` for a user, under a small per-user budget — the first measurement is a
-  burst of TMDB lookups, and nothing should be able to repeat it in a loop.
+  @doc """
+  The headline totals for the shelf's one-line strip. The full page uses `for_user/1` and is
+  always live.
+
+  Measuring is real work — a full minute the first time, nearly two seconds on every rebuild —
+  and the shelf is opened far more often than the numbers change. It used to be kept ten minutes
+  and then rebuilt in front of whoever opened the page next, so a short break was enough to
+  make the strip arrive two seconds after everything else.
+
+  Now an answer older than ten minutes is still handed back at once, and rebuilt behind it, so
+  the page that asked is never the one that waits. Only the very first call, with nothing to
+  show, has to measure. At most one rebuild is started a minute, however many pages ask.
   """
   def summary(uuid) do
-    Roki.TTLCache.fetch({:stats_summary, uuid}, 10 * 60, fn ->
-      with {:ok, s} <- for_user(uuid) do
-        # What each film was billed (seconds), for the profile's own hours (see Roki.Profile.counts/1).
-        films = for t <- s.titles, t.type == "movie", into: %{}, do: {t.id, t.seconds}
-        {:ok, %{totals: s.totals, films: films}}
-      end
+    key = {:stats_summary, uuid}
+
+    case Roki.TTLCache.peek(key) do
+      {:ok, %{at: at, value: value}} ->
+        if System.os_time(:second) - at > @summary_fresh_s, do: refresh_summary(uuid)
+        {:ok, value}
+
+      :miss ->
+        with {:ok, value} <- measure_summary(uuid) do
+          keep_summary(uuid, value)
+          {:ok, value}
+        end
+    end
+  end
+
+  # What the strip needs, from the full measurement.
+  defp measure_summary(uuid) do
+    with {:ok, s} <- for_user(uuid) do
+      # What each film was billed (seconds), for the profile's own hours (see Roki.Profile.counts/1).
+      films = for t <- s.titles, t.type == "movie", into: %{}, do: {t.id, t.seconds}
+      {:ok, %{totals: s.totals, films: films}}
+    end
+  end
+
+  defp keep_summary(uuid, value) do
+    Roki.TTLCache.put(
+      {:stats_summary, uuid},
+      @summary_keep_s,
+      {:ok, %{at: System.os_time(:second), value: value}}
+    )
+  end
+
+  # One rebuild a minute at most. A rebuild that fails (laev not connected, no TMDB key) is not
+  # retried for that minute either, and the old answer keeps being shown.
+  defp refresh_summary(uuid) do
+    Roki.TTLCache.fetch({:stats_refreshing, uuid}, 60, fn ->
+      Task.start(fn ->
+        with {:ok, value} <- measure_summary(uuid), do: keep_summary(uuid, value)
+      end)
+
+      {:ok, true}
     end)
+
+    :ok
   end
 
   @doc "Drop the cached summary — call when the user's data changed (sync, connect, disconnect)."

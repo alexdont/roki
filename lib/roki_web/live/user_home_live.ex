@@ -31,14 +31,29 @@ defmodule RokiWeb.UserHomeLive do
       true ->
         uuid = Scope.user_uuid(scope)
 
+        # The last shelf this account had, if one is kept: shown at once — in the page the
+        # server sends, not only once the socket is up — and checked again behind it. Without
+        # one the skeleton stands in, as it always did.
+        {state, kept} =
+          cond do
+            !Laev.connected?(uuid) -> {:not_connected, :miss}
+            true -> {:loading, Laev.cached_shelf(uuid)}
+          end
+
+        {state, data} =
+          case kept do
+            {:ok, data, _age} -> {:ready, data}
+            :miss -> {state, nil}
+          end
+
         socket =
           socket
           |> assign(:page_title, "Home")
           |> assign(:username, username)
           |> assign(:uuid, uuid)
           |> assign(:granted, Roki.Keys.granted?(uuid))
-          |> assign(:state, if(Laev.connected?(uuid), do: :loading, else: :not_connected))
-          |> assign(:data, nil)
+          |> assign(:state, state)
+          |> assign(:data, data)
           |> assign(:busy, nil)
           |> assign(:error, nil)
           |> assign(:open, MapSet.new())
@@ -48,6 +63,8 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:ratings, if(connected?(socket), do: Roki.Profile.ratings(uuid), else: %{}))
           |> assign(:completed_shown, @completed_page)
           |> assign(:reading, List.first(Roki.Manga.Library.list_reading(uuid)))
+          # Known from the reader's own tables, so it is there on the first paint.
+          |> assign(:manga_totals, Roki.Manga.Library.reading_totals(uuid))
           |> assign(:client, RokiWeb.Client.key(socket, uuid))
           |> assign(:form, to_form(%{"key" => "", "url" => "", "carry" => "false"}, as: :laev))
 
@@ -55,6 +72,9 @@ defmodule RokiWeb.UserHomeLive do
           cond do
             not connected?(socket) -> socket
             socket.assigns.state == :loading -> load(socket)
+            # A kept shelf is already on screen: look again, in place, unless it is so recent
+            # that looking would only repeat itself.
+            socket.assigns.state == :ready -> revisit(socket, kept)
             # An account that uses the site's keys has nothing to fill in: it is set up here.
             socket.assigns.granted -> start_granted_setup(socket)
             true -> socket
@@ -82,11 +102,32 @@ defmodule RokiWeb.UserHomeLive do
     socket |> assign(state: :loading, data: nil, stats: nil, pulse: nil) |> reload()
   end
 
-  # A refresh (sync): the page stays exactly as it is and the new data replaces the
-  # old in place — nothing blanks, nothing moves.
+  # The page is showing a kept shelf. Everything else it needs is fetched straight away; the
+  # shelf itself is only re-read when the kept one is old enough to have changed.
+  defp revisit(socket, {:ok, _data, age}) do
+    if age > Laev.shelf_fresh_s(), do: reload(socket), else: start_side(socket)
+  end
+
+  # A refresh (sync, or a kept shelf being checked): the page stays exactly as it is and the new
+  # data replaces the old in place — nothing blanks, nothing moves.
   defp reload(socket) do
     uuid = socket.assigns.uuid
-    start_async(socket, :overview, fn -> Laev.overview(uuid) end)
+
+    socket
+    |> start_async(:overview, fn -> Laev.shelf(uuid) end)
+    |> start_side()
+  end
+
+  # What else the page draws. None of it needs the shelf, so none of it waits for it: these used
+  # to start when the shelf arrived, which put a second and a half of waiting after the first
+  # second and a half on a cold start.
+  defp start_side(socket) do
+    %{uuid: uuid, client: client} = socket.assigns
+
+    socket
+    |> start_async(:completed, fn -> Roki.Profile.history(uuid) end)
+    |> start_async(:stats, fn -> Roki.Profile.totals(uuid) end)
+    |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)
   end
 
   # Posters for the part of Completed on screen: titles laev has never drawn have none yet, and
@@ -181,37 +222,10 @@ defmodule RokiWeb.UserHomeLive do
   def handle_async(:overview, {:ok, :not_connected}, socket),
     do: {:noreply, assign(socket, state: :not_connected, data: nil)}
 
-  # The shelf is on screen first; what costs lookups (stats, release dates) follows
-  # and fills in its own corner.
-  def handle_async(:overview, {:ok, {:ok, data}}, socket) do
-    %{uuid: uuid, client: client} = socket.assigns
-
-    {:noreply,
-     socket
-     |> assign(state: :ready, data: data, busy: nil)
-     |> start_async(:eps, fn -> Laev.episode_progress(uuid, watchlist_items(data)) end)
-     |> start_async(:completed, fn -> Roki.Profile.history(uuid) end)
-     |> start_async(:stats, fn -> Roki.Profile.totals(uuid) end)
-     |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)}
-  end
-
-  # Episodes watched out of all episodes, for the posters that count in seasons: only the
-  # progress bar uses it, so nothing moves when it arrives.
-  def handle_async(:eps, {:ok, eps}, %{assigns: %{data: %{} = data}} = socket) when eps != %{} do
-    add = fn items ->
-      Enum.map(items, fn i ->
-        case eps[{i.type, i.id}] do
-          {done, total} -> Map.merge(i, %{ep_done: done, ep_total: total})
-          nil -> i
-        end
-      end)
-    end
-
-    watchlist = Map.new(data.watchlist, fn {k, items} -> {k, add.(items)} end)
-    {:noreply, assign(socket, :data, %{data | watchlist: watchlist})}
-  end
-
-  def handle_async(:eps, _other, socket), do: {:noreply, socket}
+  # The shelf comes with its progress bars worked out (`Laev.shelf/1`), so nothing is added to it
+  # afterwards and nothing changes under the reader's eye when it lands.
+  def handle_async(:overview, {:ok, {:ok, data}}, socket),
+    do: {:noreply, assign(socket, state: :ready, data: data, busy: nil)}
 
   def handle_async(:completed, {:ok, items}, socket) when is_list(items),
     do:
@@ -250,6 +264,11 @@ defmodule RokiWeb.UserHomeLive do
   # No release dates is not worth an error on the home page — but the placeholder
   # has to resolve to something, or it would shimmer forever.
   def handle_async(:pulse, _other, socket), do: {:noreply, assign(socket, :pulse, :unavailable)}
+
+  # A refresh that failed behind a shelf that is already on screen leaves the shelf alone: the
+  # page is as good as it was a second ago, and an error over it would say otherwise.
+  def handle_async(:overview, {:exit, _reason}, %{assigns: %{data: %{}}} = socket),
+    do: {:noreply, assign(socket, :busy, nil)}
 
   def handle_async(:overview, {:exit, reason}, socket),
     do:
@@ -317,6 +336,7 @@ defmodule RokiWeb.UserHomeLive do
         completed_shown={@completed_shown}
         ratings={@ratings}
         reading={@reading}
+        manga_totals={@manga_totals}
         username={@username}
         cached_titles={@cached_titles}
       />
@@ -513,6 +533,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :completed_shown, :integer, default: 100
   attr :ratings, :map, default: %{}
   attr :reading, :any, default: nil, doc: "the one manga to carry on with, if any"
+  attr :manga_totals, :map, default: %{seconds: 0, series: 0, chapters: 0}
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
 
@@ -559,6 +580,15 @@ defmodule RokiWeb.UserHomeLive do
                 <.sk class="hidden w-16 sm:block" />
                 <.sk class="hidden w-24 sm:block" />
             <% end %>
+
+            <%!-- Reading, last: it is known from the first paint, so it never has to wait for
+                 the watching numbers it sits beside. --%>
+            <span :if={@manga_totals.series > 0}>
+              <b class="text-base-content">{Roki.Laev.duration(@manga_totals.seconds)}</b> read
+            </span>
+            <span :if={@manga_totals.chapters > 0} class="hidden sm:inline">
+              <b class="text-base-content">{thousands(@manga_totals.chapters)}</b> chapters
+            </span>
 
             <span class="ml-auto hidden h-5 items-center text-xs text-base-content/50 sm:flex">all stats →</span>
           </.link>
@@ -930,6 +960,4 @@ defmodule RokiWeb.UserHomeLive do
   end
 
   defp thousands(n), do: to_string(n)
-
-  defp watchlist_items(%{watchlist: wl}), do: wl |> Map.values() |> List.flatten()
 end

@@ -368,6 +368,127 @@ defmodule Roki.Laev do
     end
   end
 
+  # ── the shelf, kept ────────────────────────────────────────────────
+
+  # How long the last shelf is kept to be shown at once, and how recent one has to be to be
+  # trusted without checking. Between the two it is shown immediately and checked in the
+  # background: opening the home page should not mean waiting for work that gave the same
+  # answer a minute ago.
+  @shelf_keep_s 7 * 86_400
+  @shelf_fresh_s 20
+
+  @doc "How recent a kept shelf must be for the page to leave it alone."
+  def shelf_fresh_s, do: @shelf_fresh_s
+
+  @doc """
+  The home page's shelf, with the progress bars it draws already worked out — `overview/1` plus
+  the episode counts that fill them in — and kept for next time.
+
+  The pieces cost about a second between them even when everything they read is warm, because
+  laev reads its position files afresh for each one (this account has fourteen thousand). So the
+  answer is remembered per account, and `cached_shelf/1` hands it back before any of it is
+  worked out again.
+  """
+  def shelf(uuid) do
+    with {:ok, data} <- overview(uuid) do
+      eps = episode_progress(uuid, data.watchlist |> Map.values() |> List.flatten())
+      data = put_progress(data, eps)
+      remember_shelf(uuid, data)
+      {:ok, data}
+    end
+  end
+
+  # Episodes watched out of all episodes, for the posters that count in seasons.
+  defp put_progress(data, eps) when eps == %{}, do: data
+
+  defp put_progress(%{watchlist: watchlist} = data, eps) do
+    add = fn items ->
+      Enum.map(items, fn i ->
+        case eps[{i.type, i.id}] do
+          {done, total} -> Map.merge(i, %{ep_done: done, ep_total: total})
+          nil -> i
+        end
+      end)
+    end
+
+    %{data | watchlist: Map.new(watchlist, fn {k, items} -> {k, add.(items)} end)}
+  end
+
+  @doc """
+  Keep this account's shelf to show at once next time — in memory, and in a file beside the
+  account's laev data, so that a restart (every deploy is one) does not send the next visit back
+  to waiting a second and a half.
+  """
+  def remember_shelf(uuid, data) do
+    kept = %{at: System.os_time(:second), data: data}
+    Roki.TTLCache.put({:shelf, uuid}, @shelf_keep_s, {:ok, kept})
+    write_shelf(uuid, kept)
+  end
+
+  @doc """
+  The kept shelf and how old it is in seconds — `{:ok, data, age}` — or `:miss`. Memory first,
+  then the file; a file that cannot be read, or is older than a week, is as good as none.
+  """
+  def cached_shelf(uuid) do
+    case Roki.TTLCache.peek({:shelf, uuid}) do
+      {:ok, kept} ->
+        aged(kept)
+
+      _ ->
+        with {:ok, kept} <- read_shelf(uuid),
+             {:ok, _data, _age} = found <- aged(kept) do
+          # Back in memory, so the next page does not read the file.
+          Roki.TTLCache.put({:shelf, uuid}, @shelf_keep_s, {:ok, kept})
+          found
+        else
+          _ -> :miss
+        end
+    end
+  end
+
+  @doc "Throw the kept shelf away (the account was disconnected, or its data replaced)."
+  def forget_shelf(uuid) do
+    Roki.TTLCache.delete({:shelf, uuid})
+    File.rm(shelf_file(uuid))
+    :ok
+  end
+
+  defp aged(%{at: at, data: data}) do
+    age = max(System.os_time(:second) - at, 0)
+    if age <= @shelf_keep_s, do: {:ok, data, age}, else: :miss
+  end
+
+  defp aged(_other), do: :miss
+
+  defp shelf_file(uuid), do: Path.join(dir(uuid), "roki-shelf.etf")
+
+  # Only for an account that already has a directory: nothing is created on disk for someone
+  # who never connected. Written to a side file and renamed, so a read never sees half of it.
+  defp write_shelf(uuid, kept) do
+    path = shelf_file(uuid)
+
+    if File.dir?(dir(uuid)) do
+      tmp = path <> ".tmp"
+
+      with :ok <- File.write(tmp, :erlang.term_to_binary(kept, compressed: 3)),
+           do: File.rename(tmp, path)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  # `:safe` refuses to make atoms, so a file written by some other version of the code is a miss
+  # rather than a way of filling the atom table.
+  defp read_shelf(uuid) do
+    with {:ok, bin} <- File.read(shelf_file(uuid)) do
+      {:ok, :erlang.binary_to_term(bin, [:safe])}
+    end
+  rescue
+    _ -> :error
+  end
+
   @doc """
   Connect to a laev key and pull what it holds. `carry_keys?` also brings the
   encrypted API keys across (Real-Debrid, TorBox, TMDB) — off unless the user
@@ -377,6 +498,7 @@ defmodule Roki.Laev do
     carry? = Keyword.get(opts, :carry_keys?, false)
     url = opts |> Keyword.get(:url) |> blank_to_nil() || sync_url()
     Roki.Stats.forget(uuid)
+    forget_shelf(uuid)
 
     hiding_site_keys(fn ->
       run(uuid, fn ->
@@ -403,6 +525,7 @@ defmodule Roki.Laev do
   """
   def setup(uuid, keys) do
     Roki.Stats.forget(uuid)
+    forget_shelf(uuid)
 
     case hiding_site_keys(fn -> run(uuid, fn -> Laev.Setup.first_run(keys) end) end) do
       {:ok, _} ->
@@ -434,6 +557,7 @@ defmodule Roki.Laev do
   """
   def setup_granted(uuid) do
     Roki.Stats.forget(uuid)
+    forget_shelf(uuid)
 
     with {:ok, summary} <- connect(uuid, Laev.Setup.generate_key(), carry_keys?: false) do
       sync(uuid)
@@ -550,6 +674,7 @@ defmodule Roki.Laev do
   @doc "Forget the connection and everything pulled for this account."
   def disconnect(uuid) do
     Roki.Stats.forget(uuid)
+    forget_shelf(uuid)
     File.rm_rf!(dir(uuid))
     :ok
   end
