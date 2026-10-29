@@ -156,12 +156,19 @@ defmodule Roki.Stats do
   end
 
   @doc """
-  How many episodes of each season were watched: `%{{"tv", 110316} => %{1 => 8, 2 => 2}}`.
+  What each season of a show holds: `%{{"tv", 110316} => %{1 => %{episodes: 8, marked: 8,
+  seconds: 0}}}`.
 
   Laev's time is per title — a show is one number however many seasons it has — but the record
-  it is derived from is one file per episode, named `tv-110316-s1e5`. Counting those names is
-  enough to say what share of a show belongs to each season, which is what lets a season carry
-  its own date without the two sides disagreeing about the total.
+  it is derived from is one file per episode, named `tv-110316-s1e5`, and the file says which
+  kind of time it is. A file holding "seen" is a hand mark, and its time is laev's estimate of
+  the episode's runtime; a file holding a number is a position, and that episode was really
+  played. So a season is described by both counts, and a season's share of a show can be worked
+  out from the matching half rather than from episode numbers alone.
+
+  That distinction is the whole point. Eight marked episodes and two test plays of nine minutes
+  is ten episodes either way, and dividing a show's hours ten ways hands a fifth of eight marked
+  episodes' runtime to the two that were barely touched.
 
   Entries numbered without a season (`tv-110316-e5`) and whole-show marks have no season to
   belong to, so they are not counted and their time stays with the title.
@@ -178,12 +185,34 @@ defmodule Roki.Stats do
           acc ->
             key = {type, String.to_integer(id)}
             season = String.to_integer(season)
-            Map.update(acc, key, %{season => 1}, &Map.update(&1, season, 1, fn n -> n + 1 end))
+            one = episode(Path.join(dir, name))
+
+            Map.update(acc, key, %{season => one}, fn seasons ->
+              Map.update(seasons, season, one, &merge_episode(&1, one))
+            end)
         end
 
       _ ->
         %{}
     end
+  end
+
+  # A position file is either a resume point in seconds or the word "seen".
+  defp episode(path) do
+    with {:ok, body} <- File.read(path),
+         {seconds, _} when seconds > 0 <- Integer.parse(String.trim(body)) do
+      %{episodes: 1, marked: 0, seconds: seconds}
+    else
+      _ -> %{episodes: 1, marked: 1, seconds: 0}
+    end
+  end
+
+  defp merge_episode(a, b) do
+    %{
+      episodes: a.episodes + b.episodes,
+      marked: a.marked + b.marked,
+      seconds: a.seconds + b.seconds
+    }
   end
 
   # ── days ───────────────────────────────────────────────────────────

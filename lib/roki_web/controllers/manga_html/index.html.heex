@@ -1344,7 +1344,15 @@
   </dialog>
 
   <dialog :if={@saved} id="adjust-time-modal" class="modal">
-    <div class="modal-box max-w-xs">
+    <%!-- A little wider when the arc dates are in it: a date input beside an arc
+         name does not fit the dialog's usual width. --%>
+    <div class={[
+      "modal-box",
+      if(@arc_dates != [] and (@reading_seconds_offsite || 0) > 0,
+        do: "max-w-sm",
+        else: "max-w-xs"
+      )
+    ]}>
       <h3 class="font-bold text-lg mb-4">Adjust Time Read</h3>
       <form
         id="adjust-time-form"
@@ -1428,6 +1436,7 @@
             class="input input-bordered w-full"
           />
         </label>
+        <.arc_dates arcs={@arc_dates} off_site={off_site} />
         <p class="text-center text-sm text-base-content/70 mb-4">
           Total:
           <span id="adjust-time-total" class="font-semibold text-base-content tabular-nums">{format_reading_time(

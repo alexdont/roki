@@ -911,14 +911,15 @@ defmodule RokiWeb.WatchedLive do
             <select name="season" class="select select-bordered w-full" required={!@whole_title?}>
               <option :if={@whole_title?} value="">The whole title</option>
               <option :if={!@whole_title?} value="" disabled selected>Pick a season</option>
-              <option :for={{season, episodes} <- Enum.sort(@seasons)} value={season}>
+              <option :for={{season, %{episodes: episodes}} <- Enum.sort(@seasons)} value={season}>
                 Season {season} only · {episodes} {if episodes == 1,
                   do: "episode",
                   else: "episodes"}
               </option>
             </select>
             <span class="block text-xs text-base-content/60">
-              A season takes its share of the show's hours with it, counted by episodes watched.
+              A season takes its share of the show's hours with it: episodes you marked take
+              their runtime, episodes you played take what was measured.
             </span>
           </label>
           <p :if={@date_error} class="text-sm text-error">{@date_error}</p>

@@ -59,14 +59,17 @@ defmodule Roki.Spent do
 
   `season_dates` is `Roki.Profile.season_dates/1`, and it splits a show. A season with a date
   of its own becomes an entry of its own, carrying its share of the show's time; what is left
-  stays with the title. The share is by episodes watched — `stats.seasons` counts them, one
-  file per episode — so a show whose first season is eight episodes and second is two gives
-  the first four fifths of the hours.
+  stays with the title.
 
-  That share is proportional rather than measured: laev times a show as one number, and
-  episodes of a show are close enough in length for the division to be fair. The shares are
-  made to sum back to laev's figure exactly, so splitting a show never changes a total — it
-  only moves time to the date it belongs under.
+  **The share is taken from the matching half.** Laev times a show as one number, but it knows
+  per episode whether that episode was marked by hand or really played (`stats.seasons`). A
+  marked episode's time is laev's estimate of its runtime, so the marked hours divide by marked
+  episodes; a played episode has a real position, so the measured hours divide by those
+  positions. Mixing the two is how a show with eight marked episodes and two nine-minute test
+  plays handed the second season two hours it never had.
+
+  The shares are made to sum back to laev's figure exactly, so splitting a show never changes
+  a total — it only moves time to the date it belongs under.
   """
   def watched(stats, dates \\ %{}, season_dates \\ %{})
 
@@ -84,22 +87,28 @@ defmodule Roki.Spent do
 
   # A show with no season dated, or nothing to divide by, is one entry as it always was.
   defp split(t, at, counts, season_dates) do
+    counts = counts || %{}
+
     dated =
-      for {season, episodes} <- counts || %{},
+      for {season, info} <- counts,
           when_at = season_dates[{t.type, t.id, season}],
-          do: {season, episodes, when_at}
+          do: {season, info, when_at}
 
-    total_episodes = counts |> Kernel.||(%{}) |> Map.values() |> Enum.sum()
+    marked = counts |> Map.values() |> Enum.map(& &1.marked) |> Enum.sum()
+    positions = counts |> Map.values() |> Enum.map(& &1.seconds) |> Enum.sum()
+    measured = max(t.seconds - t.off, 0)
 
-    if dated == [] or total_episodes == 0 do
+    parts =
+      for {season, info, when_at} <- Enum.sort(dated),
+          off = portion(t.off, info.marked, marked),
+          seconds = off + portion(measured, info.seconds, positions),
+          seconds > 0 do
+        entry(t, "#{t.title} · S#{season}", seconds, off, when_at)
+      end
+
+    if parts == [] do
       [entry(t, t.title, t.seconds, t.off, at)]
     else
-      parts =
-        for {season, episodes, when_at} <- Enum.sort(dated) do
-          share = fn whole -> div(whole * episodes, total_episodes) end
-          entry(t, "#{t.title} · S#{season}", share.(t.seconds), share.(t.off), when_at)
-        end
-
       # Whatever the division left over stays with the title, so the show still adds up to
       # laev's own figure however its seasons are dated.
       rest =
@@ -114,6 +123,9 @@ defmodule Roki.Spent do
       if rest.seconds > 0, do: parts ++ [rest], else: parts
     end
   end
+
+  defp portion(_whole, _part, 0), do: 0
+  defp portion(whole, part, total), do: div(whole * part, total)
 
   defp entry(t, title, seconds, off, at) do
     %{
@@ -138,27 +150,38 @@ defmodule Roki.Spent do
 
   The date an entry counts under is the last day it was actually read, not when its row was
   last written — an import or a cover repair touches a row without anyone reading anything.
-  """
-  def read(rows, activity, days, now \\ nil)
 
-  def read(rows, activity, nil, _now) do
+  `arcs` is `Roki.Manga.ArcDates.parts/2`, and it splits a series the way `season_dates` splits
+  a show: an arc given a date of its own becomes an entry of its own, carrying its share of the
+  hours that have no day attached, and what is left stays with the series. So an account that
+  read the first eighty chapters years ago, off this site, can say so — and those hours stop
+  arriving in this month along with the chapter it read yesterday.
+  """
+  def read(rows, activity, days, now \\ nil, arcs \\ %{})
+
+  def read(rows, activity, nil, _now, arcs) do
     last = last_read(activity)
 
-    for m <- rows do
-      on = m.reading_seconds_adjusted || m.reading_seconds || 0
-      off = m.reading_seconds_offsite || 0
+    series =
+      for m <- rows do
+        on = m.reading_seconds_adjusted || m.reading_seconds || 0
+        off = m.reading_seconds_offsite || 0
+        dated = Map.get(arcs, {m.source, m.slug}, [])
+        moved = dated |> Enum.map(& &1.seconds) |> Enum.sum()
 
-      %{
-        kind: :manga,
-        title: m.title,
-        seconds: on + off,
-        off: off,
-        at: last[{m.source, m.slug}] || naive_unix(m.updated_at)
-      }
-    end
+        %{
+          kind: :manga,
+          title: m.title,
+          seconds: on + off - moved,
+          off: off - moved,
+          at: last[{m.source, m.slug}] || naive_unix(m.updated_at)
+        }
+      end
+
+    Enum.filter(series, &(&1.seconds > 0)) ++ arc_entries(arcs)
   end
 
-  def read(rows, activity, days, now) do
+  def read(rows, activity, days, now, arcs) do
     cutoff = Date.add(today(now), -days)
 
     windowed =
@@ -172,8 +195,20 @@ defmodule Roki.Spent do
     last = last_read(windowed)
     titles = Map.new(rows, &{{&1.source, &1.slug}, &1.title})
 
-    for {key, s} <- seconds, s > 0 do
-      %{kind: :manga, title: titles[key] || elem(key, 1), seconds: s, off: 0, at: last[key]}
+    logged =
+      for {key, s} <- seconds, s > 0 do
+        %{kind: :manga, title: titles[key] || elem(key, 1), seconds: s, off: 0, at: last[key]}
+      end
+
+    from = cutoff |> DateTime.new!(~T[00:00:00], "Etc/UTC") |> DateTime.to_unix()
+
+    logged ++ Enum.filter(arc_entries(arcs), &(is_integer(&1.at) and &1.at >= from))
+  end
+
+  # A dated arc is an entry in its own right, with its date and its share.
+  defp arc_entries(arcs) do
+    for {_key, parts} <- arcs, p <- parts do
+      %{kind: :manga, title: p.title, seconds: p.seconds, off: p.seconds, at: p.at}
     end
   end
 
@@ -227,11 +262,12 @@ defmodule Roki.Spent do
 
   Reading keeps its own day-by-day log, because it has one. Lumping a series onto the day it
   was last opened would throw away months of real days to make the two halves symmetrical,
-  which is a bad trade.
+  which is a bad trade. A dated arc is the exception, and for the same reason a watched title
+  is: hours with no day of their own land on the day they were given.
   """
-  def days(watched, reading_activity) do
+  def days(watched, reading_activity, arcs \\ %{}) do
     watched_days =
-      for e <- watched, is_integer(e.at), reduce: %{} do
+      for e <- watched ++ arc_entries(arcs), is_integer(e.at), reduce: %{} do
         acc ->
           date = e.at |> DateTime.from_unix!() |> DateTime.to_date()
           Map.update(acc, date, e.seconds, &(&1 + e.seconds))

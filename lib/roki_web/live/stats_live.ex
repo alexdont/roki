@@ -53,9 +53,11 @@ defmodule RokiWeb.StatsLive do
   # Two queries, both small, so no async.
   defp assign_reading(socket) do
     uuid = socket.assigns.uuid
+    read = Roki.Manga.Library.list_reading_stats(uuid)
 
     assign(socket,
-      read: Roki.Manga.Library.list_reading_stats(uuid),
+      read: read,
+      arc_parts: Roki.Manga.ArcDates.parts(uuid, read),
       reading_activity: Roki.Manga.Library.list_reading_activity(uuid),
       watch_dates: Roki.Profile.watch_dates(uuid),
       season_dates: Roki.Profile.season_dates(uuid)
@@ -178,12 +180,12 @@ defmodule RokiWeb.StatsLive do
     in_window =
       Spent.sort(
         Spent.within(watched, days_back, now) ++
-          Spent.read(assigns.read, assigns.reading_activity, days_back, now)
+          Spent.read(assigns.read, assigns.reading_activity, days_back, now, assigns.arc_parts)
       )
 
     visible_all = Spent.of_kind(in_window, assigns.kind)
 
-    days = Spent.days(watched, assigns.reading_activity)
+    days = Spent.days(watched, assigns.reading_activity, assigns.arc_parts)
     today = Date.utc_today()
 
     assign(assigns,
@@ -291,7 +293,8 @@ defmodule RokiWeb.StatsLive do
       <p :if={@range != :all} class="text-sm text-base-content/60">
         Reading is counted from its day-by-day log, so this is exactly what these days hold.
         Watching is one number per title, so a title you were on in this window brings all of
-        its time with it.
+        its time with it. Hours entered by hand have no day of their own — give an arc a date
+        on the series page and its share counts then.
       </p>
 
       <p :if={@all == []} class="py-8 text-center text-base-content/60">Nothing in this window.</p>

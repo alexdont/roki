@@ -2035,4 +2035,52 @@ defmodule RokiWeb.MangaHTML do
     base = if double_page?, do: %{"double" => "1"}, else: %{}
     if direction == "ltr", do: Map.put(base, "dir", "ltr"), else: base
   end
+
+  @doc """
+  The "when did you read this" rows in the Adjust Time Read dialog.
+
+  Hand-entered off-site hours have no day attached, so all of them count as all
+  time and none of them land in a window — a series read years ago off this site
+  arrives in this month on the strength of one chapter opened yesterday. Giving an
+  arc a date moves its share of those hours to where they happened; the share is by
+  chapters read, and whatever is left stays with the series, so a total never moves.
+
+  Only shown when there are off-site hours to place and arcs (or volumes) to place
+  them in. Clearing a date puts that arc back with the rest.
+  """
+  attr :arcs, :list, required: true
+  attr :off_site, :integer, required: true
+
+  def arc_dates(assigns) do
+    ~H"""
+    <div :if={@off_site > 0 and @arcs != []} class="mb-3">
+      <div class="label pt-2 pb-1">
+        <span class="label-text font-semibold">When did you read it?</span>
+      </div>
+      <p class="text-xs text-base-content/60 mb-2">
+        Off-site hours count on the day you give them. An arc with a date takes its
+        share by chapters; the rest stays with the series.
+      </p>
+      <div class="max-h-56 overflow-y-auto -mx-1 px-1 space-y-1">
+        <div :for={a <- @arcs} class="flex items-center gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="text-xs truncate" title={a.title}>{a.title}</div>
+            <div class="text-[0.65rem] text-base-content/50 tabular-nums">
+              Ch {a.from}–{a.to} · {if a.chapters > 0,
+                do: format_reading_time(a.seconds) || "0m",
+                else: "not read yet"}
+            </div>
+          </div>
+          <input
+            type="date"
+            name={"arc_date[#{a.kind}:#{a.position}]"}
+            value={a.at && Date.to_iso8601(a.at)}
+            disabled={a.chapters == 0}
+            class="input input-bordered input-xs w-[8.5rem] shrink-0"
+          />
+        </div>
+      </div>
+    </div>
+    """
+  end
 end

@@ -83,7 +83,12 @@ defmodule RokiWeb.SeasonDateTest do
           last_seen: now
         }
       ],
-      seasons: %{{"tv", 110_316} => %{1 => 8, 2 => 2}}
+      seasons: %{
+        {"tv", 110_316} => %{
+          1 => %{episodes: 8, marked: 0, seconds: 800},
+          2 => %{episodes: 2, marked: 0, seconds: 200}
+        }
+      }
     }
 
     entries = Spent.watched(stats, %{}, Profile.season_dates(user.uuid))

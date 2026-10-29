@@ -84,7 +84,13 @@ defmodule Roki.SpentTest do
           last_seen: @now
         }
       ],
-      seasons: %{{"tv", 110_316} => %{1 => 8, 2 => 2}}
+      # Ten episodes all really played, their positions in the same 8:2 proportion.
+      seasons: %{
+        {"tv", 110_316} => %{
+          1 => %{episodes: 8, marked: 0, seconds: 800},
+          2 => %{episodes: 2, marked: 0, seconds: 200}
+        }
+      }
     }
   end
 
@@ -120,6 +126,41 @@ defmodule Roki.SpentTest do
 
     assert Spent.total(entries) == 10_000
     assert Spent.total(Spent.within(entries, 7, @now)) == 2000
+  end
+
+  test "marked episodes take runtime, played episodes take what was measured" do
+    # The real shape of a show someone watched years ago and is restarting: season one
+    # marked by hand, which is where all of laev's `off` comes from, and two test plays
+    # of nine minutes in season two. Dividing by episode count gave season two a fifth
+    # of the marked hours — two hours of a show nobody had watched.
+    stats = %{
+      titles: [
+        %{
+          type: "tv",
+          id: 110_316,
+          title: "Alice in Borderland",
+          seconds: 37_506,
+          off: 36_960,
+          anime: false,
+          last_seen: @now
+        }
+      ],
+      seasons: %{
+        {"tv", 110_316} => %{
+          1 => %{episodes: 8, marked: 8, seconds: 0},
+          2 => %{episodes: 2, marked: 0, seconds: 610}
+        }
+      }
+    }
+
+    [s2, rest] = Spent.watched(stats, %{}, %{{"tv", 110_316, 2} => @now})
+
+    assert s2.title == "Alice in Borderland · S2"
+    assert s2.seconds == 546
+    assert s2.off == 0
+
+    assert rest.seconds == 36_960
+    assert Spent.total([s2, rest]) == 37_506
   end
 
   test "a show nobody has dated by season is one entry as before" do
@@ -176,5 +217,56 @@ defmodule Roki.SpentTest do
     both = Spent.sort(Spent.watched(stats(@now)) ++ read)
     assert Enum.map(both, & &1.title) == ["The Matrix", "Nagatoro", "Berserk"]
     assert Spent.total(both) == 12_600
+  end
+
+  describe "dated arcs" do
+    # Off-site hours have no day of their own, so a window cannot hold them and all
+    # of them sit in all time. A dated arc moves its share — and only its share.
+    @arcs %{
+      {"mangadex", "berserk"} => [
+        %{title: "Berserk · Golden Age Arc", seconds: 3600, at: 1_500_000_000}
+      ]
+    }
+
+    setup do
+      rows = [
+        %{
+          source: "mangadex",
+          slug: "berserk",
+          title: "Berserk",
+          reading_seconds: 1800,
+          reading_seconds_adjusted: nil,
+          reading_seconds_offsite: 7200,
+          updated_at: ~N[2026-03-01 10:00:00]
+        }
+      ]
+
+      %{rows: rows}
+    end
+
+    test "an arc with a date is its own entry, and the total does not move", %{rows: rows} do
+      undated = Spent.read(rows, %{}, nil, @now)
+      dated = Spent.read(rows, %{}, nil, @now, @arcs)
+
+      assert Spent.total(undated) == Spent.total(dated)
+      assert Spent.total(dated) == 9000
+
+      assert Enum.sort(Enum.map(dated, &{&1.title, &1.seconds})) == [
+               {"Berserk", 5400},
+               {"Berserk · Golden Age Arc", 3600}
+             ]
+    end
+
+    test "a window holds a dated arc only when the date is in it", %{rows: rows} do
+      now = DateTime.to_unix(~U[2017-07-20 00:00:00Z])
+
+      assert [%{title: "Berserk · Golden Age Arc"}] = Spent.read(rows, %{}, 30, now, @arcs)
+      assert Spent.read(rows, %{}, 30, @now, @arcs) == []
+    end
+
+    test "the heatmap places a dated arc on its day" do
+      days = Spent.days([], %{}, @arcs)
+      assert days[~D[2017-07-14]] == 3600
+    end
   end
 end

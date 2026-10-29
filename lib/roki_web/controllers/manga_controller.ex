@@ -34,9 +34,10 @@ defmodule RokiWeb.MangaController do
 
   defp profile_page(conn, _opts), do: conn
 
+  alias Guise
+  alias Roki.Manga.ArcDates
   alias Roki.Manga.Library
   alias Roki.Manga.Sources
-  alias Guise
   alias RokiWeb.MangaHTML
 
   plug :load_resume_manga
@@ -1128,6 +1129,10 @@ defmodule RokiWeb.MangaController do
             chapter_comment_counts: chapter_comment_counts,
             story_arcs: story_arcs,
             story_volumes: story_volumes,
+            # The arcs (or volumes) that can be given a date of their own in the
+            # Adjust Time Read dialog, each with the share of the off-site hours
+            # it would carry. See `Roki.Manga.ArcDates`.
+            arc_dates: Roki.Manga.ArcDates.datable(user.uuid, saved_manga, story_row),
             chapter_titles: chapter_titles,
             finished_chapters: finished_chapters,
             cover_img_src: cover_img_src,
@@ -1172,6 +1177,7 @@ defmodule RokiWeb.MangaController do
             chapter_comment_counts: %{},
             story_arcs: [],
             story_volumes: [],
+            arc_dates: [],
             chapter_titles: %{},
             finished_chapters: [],
             cover_img_src: nil,
@@ -1941,6 +1947,23 @@ defmodule RokiWeb.MangaController do
             value = if offsite > 0, do: offsite, else: nil
             approximate? = params["offsite_approximate"] in [true, "true", "on", "1"]
             Library.update_reading_seconds_offsite(user.uuid, source, slug, value, approximate?)
+          end
+
+          # When an arc was read. Off-site hours carry no day of their own, so
+          # a date here moves that arc's share of them to where it happened
+          # (Roki.Manga.ArcDates); an empty field puts the arc back with the
+          # rest of the series.
+          for {key, value} <- params["arc_date"] || %{} do
+            with [kind, position] <- String.split(key, ":", parts: 2),
+                 {position, ""} <- Integer.parse(position) do
+              date =
+                case Date.from_iso8601(value || "") do
+                  {:ok, date} -> date
+                  _ -> nil
+                end
+
+              ArcDates.set(user.uuid, source, slug, kind, position, date)
+            end
           end
 
           # Editable "date started" milestone: a date moves/creates
