@@ -139,6 +139,7 @@ defmodule Roki.Spent do
       # The title without the season it was split into, for when the sessions speak for the
       # whole thing and the split has nothing left to say.
       base: t.title,
+      poster: t[:poster],
       seconds: seconds,
       off: max(off, 0),
       at: at
@@ -301,6 +302,7 @@ defmodule Roki.Spent do
           key: key,
           title: first[:base] || first.title,
           base: first[:base] || first.title,
+          poster: first[:poster],
           seconds: seconds,
           off: 0,
           at: within_window |> Enum.map(&elem(&1, 0)) |> Enum.max() |> noon()

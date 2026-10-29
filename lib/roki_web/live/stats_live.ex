@@ -57,6 +57,9 @@ defmodule RokiWeb.StatsLive do
 
     assign(socket,
       read: read,
+      # A manga cover is fetched through the reader's proxy, or signed when the file is this
+      # site's own, so the web layer resolves it and `Roki.Spent` carries no art for reading.
+      covers: Map.new(read, &{{&1.source, &1.slug}, manga_cover(&1)}),
       arc_parts: Roki.Manga.ArcDates.parts(uuid, read),
       reading_activity: Roki.Manga.Library.list_reading_activity(uuid),
       watch_dates: Roki.Profile.watch_dates(uuid),
@@ -162,6 +165,7 @@ defmodule RokiWeb.StatsLive do
           shown={@shown}
           max_seconds={@max_seconds}
           range={@range}
+          covers={@covers}
         />
 
         <.activity
@@ -266,14 +270,16 @@ defmodule RokiWeb.StatsLive do
       <div class="flex flex-wrap gap-2">
         <.link
           patch={~p"/#{@username}/stats?#{[range: @range, kind: :all]}"}
-          class={["btn btn-sm", @kind == :all && "btn-primary"]}
+          class={["btn btn-sm", @kind == :all && "btn-neutral"]}
         >
           All
         </.link>
+        <%!-- Every kind keeps one colour, here and on its bars below, so the chips are the
+             legend for the list and nothing has to be labelled twice. --%>
         <.link
           :for={{id, label} <- Spent.kinds()}
           patch={~p"/#{@username}/stats?#{[range: @range, kind: id]}"}
-          class={["btn btn-sm gap-2", @kind == id && "btn-primary"]}
+          class={["btn btn-sm gap-2", chip(id), @kind != id && "btn-outline"]}
         >
           {label}
           <span :if={@loading} class="skeleton h-3 w-10"></span>
@@ -313,7 +319,8 @@ defmodule RokiWeb.StatsLive do
 
       <ol class="divide-y divide-base-300">
         <li :for={i <- 1..6} class="flex items-center gap-3 py-2">
-          <span class="w-8 shrink-0 text-right text-sm text-base-content/30">{i}</span>
+          <span class="w-6 shrink-0 text-right text-sm text-base-content/30 sm:w-8">{i}</span>
+          <div class="skeleton aspect-2/3 w-8 shrink-0 rounded sm:w-10"></div>
           <div class="min-w-0 flex-1 space-y-1.5">
             <div class="flex items-baseline justify-between gap-3">
               <span class={["skeleton h-4", widths(i)]}></span>
@@ -343,6 +350,7 @@ defmodule RokiWeb.StatsLive do
   attr :shown, :integer, required: true
   attr :max_seconds, :integer, required: true
   attr :range, :atom, required: true
+  attr :covers, :map, required: true
 
   defp spent_list(assigns) do
     ~H"""
@@ -362,7 +370,28 @@ defmodule RokiWeb.StatsLive do
 
       <ol class="divide-y divide-base-300">
         <li :for={{t, i} <- Enum.with_index(@entries, 1)} class="flex items-center gap-3 py-2">
-          <span class="w-8 shrink-0 text-right text-sm text-base-content/50">{i}</span>
+          <span class="w-6 shrink-0 text-right text-sm text-base-content/50 sm:w-8">{i}</span>
+
+          <%!-- The cover, because a list of names is harder to read than a shelf. A title with
+               no art keeps the space and shows its kind's colour, so the rows stay in line. --%>
+          <img
+            :if={poster_of(t, @covers)}
+            src={poster_of(t, @covers)}
+            alt=""
+            loading="lazy"
+            class="aspect-2/3 w-8 shrink-0 rounded bg-base-300 object-cover sm:w-10"
+          />
+          <div
+            :if={!poster_of(t, @covers)}
+            class={[
+              "aspect-2/3 w-8 shrink-0 rounded sm:w-10",
+              "flex items-center justify-center text-[0.6rem] font-semibold uppercase",
+              tint(t.kind)
+            ]}
+          >
+            {String.first(one(t.kind))}
+          </div>
+
           <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-3">
               <span class="truncate font-medium" title={t.title}>{t.title}</span>
@@ -370,7 +399,7 @@ defmodule RokiWeb.StatsLive do
             </div>
             <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-base-300">
               <div
-                class="h-full rounded-full bg-primary/70"
+                class={["h-full rounded-full", bar(t.kind)]}
                 style={"width: #{Float.round(t.seconds * 100 / @max_seconds, 1)}%"}
               >
               </div>
@@ -399,6 +428,41 @@ defmodule RokiWeb.StatsLive do
     do: " · #{round(off * 100 / seconds)}% assumed"
 
   defp assumed(_entry), do: ""
+
+  # Where a row's art comes from: watching brings a TMDB poster with it (`Roki.Stats.posters/1`),
+  # reading is looked up here, because a cover is fetched through the reader's own proxy — or
+  # signed, when the file was uploaded to this site.
+  defp poster_of(%{kind: :manga, key: key}, covers), do: covers[key]
+  defp poster_of(entry, _covers), do: entry[:poster]
+
+  defp manga_cover(%{cover_file_uuid: uuid}) when is_binary(uuid) and uuid != "",
+    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "small")
+
+  defp manga_cover(%{cover_url: url}) when is_binary(url) and url != "",
+    do: ~p"/manga/proxy/image?#{%{url: url}}"
+
+  defp manga_cover(_manga), do: nil
+
+  # One colour per kind, three ways: the bar in the list, the chip that filters it, and the
+  # placeholder where a title has no cover. Films take the theme's own colour; the rest are
+  # far enough apart in hue to be told apart at a glance and in either theme.
+  defp bar(:movie), do: "bg-primary/70"
+  defp bar(:tv), do: "bg-info/70"
+  defp bar(:anime), do: "bg-secondary/70"
+  defp bar(:manga), do: "bg-success/70"
+  defp bar(_kind), do: "bg-base-content/40"
+
+  defp chip(:movie), do: "btn-primary"
+  defp chip(:tv), do: "btn-info"
+  defp chip(:anime), do: "btn-secondary"
+  defp chip(:manga), do: "btn-success"
+  defp chip(_kind), do: "btn-neutral"
+
+  defp tint(:movie), do: "bg-primary/20 text-primary"
+  defp tint(:tv), do: "bg-info/20 text-info"
+  defp tint(:anime), do: "bg-secondary/20 text-secondary"
+  defp tint(:manga), do: "bg-success/20 text-success"
+  defp tint(_kind), do: "bg-base-300 text-base-content/60"
 
   defp one(:movie), do: "film"
   defp one(:tv), do: "show"

@@ -82,11 +82,12 @@ defmodule Roki.Stats do
       s = Stats.all_time()
       seen = last_seen()
       days = day_totals()
+      art = posters(s.titles)
 
       {:ok,
        %{
          totals: Map.drop(s, [:titles]),
-         titles: Enum.map(s.titles, &title(&1, seen)),
+         titles: Enum.map(s.titles, &title(&1, seen, art)),
          tally: Shelf.tally(),
          days: days,
          seasons: season_episodes(),
@@ -135,7 +136,7 @@ defmodule Roki.Stats do
     Map.merge(history, anime)
   end
 
-  defp title(t, seen) do
+  defp title(t, seen, posters) do
     %{
       type: t.type,
       id: t.tmdb_id,
@@ -143,9 +144,48 @@ defmodule Roki.Stats do
       seconds: t.seconds,
       off: t.off,
       anime: t.type == "mal",
-      last_seen: seen[{t.type, t.tmdb_id}]
+      last_seen: seen[{t.type, t.tmdb_id}],
+      poster: posters[{t.type, t.tmdb_id}]
     }
   end
+
+  # ── posters ────────────────────────────────────────────────────────
+
+  @doc """
+  A poster for each title, from the cards laev already holds — one file read, no requests.
+
+  An anime is filed by its MyAnimeList id and the cards by TMDB's, so it goes through the
+  cross-id map (already loaded by `build/0`) to find the show or film it belongs to. Anything
+  with no card and anything that map cannot place has no poster, and the page draws its kind
+  instead.
+  """
+  def posters(titles) do
+    keyed =
+      for t <- titles, key = card_key(t), into: %{} do
+        {{t.type, t.tmdb_id}, key}
+      end
+
+    cards = Laev.Cards.get_many(keyed |> Map.values() |> Enum.uniq())
+
+    for {title_key, card_key} <- keyed,
+        card = cards[card_key],
+        is_map(card),
+        path = card["poster_path"],
+        is_binary(path),
+        into: %{} do
+      {title_key, "https://image.tmdb.org/t/p/w154" <> path}
+    end
+  end
+
+  defp card_key(%{type: "mal", tmdb_id: mal_id}) do
+    case Laev.AnimeMap.tmdb(mal_id) do
+      {"tv", id, _season} -> {"tv", id}
+      {"movie", id} -> {"movie", id}
+      _ -> nil
+    end
+  end
+
+  defp card_key(%{type: type, tmdb_id: id}), do: {type, id}
 
   @doc "Titles last watched within `days` (all of them for `nil`), most time first."
   def within(titles, nil, _now), do: titles

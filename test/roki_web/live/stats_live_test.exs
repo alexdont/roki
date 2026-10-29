@@ -150,4 +150,34 @@ defmodule RokiWeb.StatsLiveTest do
     conn = get(conn, "/manga/stats")
     assert redirected_to(conn) == "/statstest/stats#reading"
   end
+
+  test "each kind is told apart by colour, and a row carries its cover", %{conn: conn, user: user} do
+    read!(user, "Solo Leveling", 7200)
+    html = open(conn, "/statstest/stats")
+
+    # Reading's bar and its chip are the same colour, so the chips read as the list's legend.
+    assert html =~ "bg-success/70"
+    assert html =~ "btn-success"
+    # And the other kinds have their own, whether or not anything is in them.
+    assert html =~ "btn-primary"
+    assert html =~ "btn-info"
+    assert html =~ "btn-secondary"
+
+    # A manga cover is fetched through the reader's proxy, never hotlinked.
+    assert html =~ "/manga/proxy/image"
+    assert html =~ "aspect-2/3"
+  end
+
+  test "a title with no cover keeps the space and shows its kind", %{conn: conn, user: user} do
+    # `read!/3` saves a cover, so this one is blanked to leave a row with no art at all.
+    # The column is NOT NULL, and the reader treats an empty cover as none.
+    read!(user, "No Cover", 3600)
+    Roki.Repo.query!("update saved_manga set cover_url = '' where slug = 'no-cover'")
+
+    html = open(conn, "/statstest/stats")
+
+    assert html =~ "No Cover"
+    assert html =~ "bg-success/20"
+    refute html =~ "/manga/proxy/image"
+  end
 end
