@@ -21,10 +21,13 @@ defmodule RokiWeb.ReaderGlue do
     }
   end
 
-  def series_url([source, slug]), do: "/manga/manga/#{source}/#{slug}"
+  # The reader came from an app where a series lived under /reader/manga/…, which the port
+  # rewrote to /manga/manga/… — one segment too many for this app, where it is /manga/…. Same
+  # for the legacy link.
+  def series_url([source, slug]), do: "/manga/#{source}/#{slug}"
 
   def legacy_url([source, slug], chapter),
-    do: "/manga/legacy/manga/#{source}/#{slug}/#{chapter}"
+    do: "/manga/legacy/#{source}/#{slug}/#{chapter}"
 
   @doc "OCR runtime for the strip reader's smart auto-reader."
   def strip_head(assigns) do

@@ -2245,15 +2245,16 @@ defmodule RokiWeb.MangaController do
         Library.snap_to_chapter(user.uuid, source, slug, chapter, user.user_timezone)
       end
 
-      saved_manga = if user, do: Library.get_saved_manga(user.uuid, source, slug)
-      device = device_kind(conn, params)
-      mode = effective_reading_mode(saved_manga, device) || "paged"
-
-      if mode == "scroll" do
-        show_fresco_strip(conn, params)
-      else
-        show_fresco(conn, params)
-      end
+      # The packaged reader (`manga_reader "/manga/v3"` in the router), which is the one this
+      # app's owner reads with: the same build the app this came from uses, against this app's
+      # own store, so progress and marks are the same rows either way.
+      #
+      # `show_fresco/2` and `show_fresco_strip/2` below are this app's older in-tree copy of the
+      # same reader, which every chapter link reached until now. They are left in place: putting
+      # a chapter back on them is this one redirect, and nothing else, until the package has had
+      # long enough to be sure of.
+      qs = if conn.query_string != "", do: "?" <> conn.query_string, else: ""
+      redirect(conn, to: "/manga/v3/#{source}/#{slug}/#{chapter}" <> qs)
     else
       send_resp(conn, 404, "Unknown source")
     end
