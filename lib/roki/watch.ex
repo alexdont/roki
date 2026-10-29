@@ -253,7 +253,8 @@ defmodule Roki.Watch do
     end
   end
 
-  defp set_completed(uuid, title, completed?) do
+  @doc false
+  def set_completed(uuid, title, completed?) do
     Roki.Laev.run(uuid, fn ->
       for mark <- title_marks(title), do: Laev.Position.set_watched(mark, completed?)
     end)
