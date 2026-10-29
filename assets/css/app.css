@@ -172,10 +172,13 @@ body::before {
 }
 
 /* What is left in that strip is the page behind the status bar, which on a reading page is a
-   flat white band — bright, and over the top of everything. A scrim across it instead: strongest
-   at the very top where the clock sits, gone by the time it meets the page. Drawn only over the
-   status bar's own height, so where there is no inset (a browser tab, a desktop) there is
-   nothing to draw and nothing is drawn. */
+   flat bright band with the clock on it, and a seam where the page proper begins. One strip
+   handles both: a blur that takes the seam with it, a little tint so the clock stays readable,
+   and a mask that dissolves the whole thing a third of the way into the page — no edge where it
+   stops, because it never stops anywhere in particular.
+
+   Taller than the inset on purpose: the fade needs somewhere to happen. Drawn only where there
+   is an inset to cover, so a browser tab and a desktop get nothing. */
 body:has(#fresco-strip-shell)::after,
 body:has(#fresco-paged-shell)::after {
   content: "";
@@ -183,14 +186,19 @@ body:has(#fresco-paged-shell)::after {
   top: 0;
   left: 0;
   right: 0;
-  height: calc(env(safe-area-inset-top, 0px) * 1.15);
+  height: calc(env(safe-area-inset-top, 0px) * 1.75);
   z-index: 120;
   pointer-events: none;
-  background: linear-gradient(
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.12) 50%, transparent);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 40%, rgb(0 0 0 / 0.55) 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(
     to bottom,
-    rgb(0 0 0 / 0.55),
-    rgb(0 0 0 / 0.3) 55%,
-    transparent
+    #000 0%,
+    #000 40%,
+    rgb(0 0 0 / 0.55) 70%,
+    transparent 100%
   );
 }
 
