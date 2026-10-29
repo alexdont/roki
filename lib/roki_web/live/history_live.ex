@@ -311,10 +311,25 @@ defmodule RokiWeb.Live.HistoryLive do
       user_now: DateTime.utc_now() |> DateTime.add(offset, :second),
       history: Library.list_reading_history_for_date(user.uuid, date),
       hourly_activity: Library.list_hourly_activity_for_date(user.uuid, date),
-      stints: Stint.on_date(user.uuid, date, utc_offset: offset),
+      # Reading's sessions are this site's own; watching's are laev's, read back and dressed
+      # the same (Roki.Stints). One timeline, because an evening is one evening.
+      stints: day_sessions(user.uuid, date, offset),
       chapter_reads: Library.chapter_reads_on_date(user.uuid, date, offset),
       library_events: Library.library_events_on_date(user.uuid, date, offset)
     )
+  end
+
+  # Every session that touches this day, reading and watching together, oldest first.
+  defp day_sessions(uuid, date, offset) do
+    reading = Stint.on_date(uuid, date, utc_offset: offset)
+
+    watching =
+      Enum.filter(
+        Roki.Stints.records(uuid),
+        &(Stint.clamp_to_date(&1, date, utc_offset: offset) != nil)
+      )
+
+    Enum.sort_by(reading ++ watching, & &1.started_at, DateTime)
   end
 
   # ── view helpers ──────────────────────────────────────────────────────

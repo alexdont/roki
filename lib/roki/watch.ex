@@ -1880,9 +1880,9 @@ defmodule Roki.Watch do
   browser whole films — one missed report and an hour of watching reads as one jump. Pulse was
   measured at four minutes of two hours that way.
 
-  Either way the position, the 85% finish rule and the day log are laev's own, so this is
-  exactly what the terminal app writes — and the same figure is handed to `Roki.Stints`, which
-  assembles it into sessions the way the reader's reading time already is. `{:finished, true}` is returned the first time it
+  Either way the position, the 85% finish rule, the day log and the tick log are laev's own, so
+  this is exactly what the terminal app writes — including the sessions, which laev assembles
+  from its own ticks whatever played the thing (`Roki.Stints` only reads them back). `{:finished, true}` is returned the first time it
   crosses into watched.
   """
   def record_progress(uuid, ctx, position, duration, paused? \\ false, opts \\ [])
@@ -1906,7 +1906,6 @@ defmodule Roki.Watch do
       if finished? and not before?, do: Laev.Sync.live_push()
       {:finished, finished? and not before?}
     end)
-    |> tap(fn _ -> Roki.Stints.track(uuid, ctx, watched || 0) end)
     |> tap(fn _ -> note_started(uuid, ctx, position) end)
     |> tap(fn {:finished, new?} ->
       if new? do
