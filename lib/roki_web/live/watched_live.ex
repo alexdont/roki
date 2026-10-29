@@ -66,6 +66,7 @@ defmodule RokiWeb.WatchedLive do
           select?: false,
           selected: MapSet.new(),
           dating?: false,
+          seasons: %{},
           date_error: nil,
           notice: nil
         )
@@ -103,6 +104,21 @@ defmodule RokiWeb.WatchedLive do
     socket
     |> start_async(:ratings, fn -> Profile.ratings(uuid) end)
     |> start_async(:history, fn -> Profile.history_all(uuid) end)
+  end
+
+  # One show selected, and laev's record says which of its seasons were watched: that is the
+  # only time a season can be dated on its own. Looked up when the dialog opens rather than
+  # with the page, since most of the time nobody opens it.
+  defp seasons_for(%{assigns: %{selected: selected, uuid: uuid}} = socket) do
+    with [key] <- MapSet.to_list(selected),
+         %{} = item <- Enum.find(arranged(socket), &(&1.key == key)),
+         true <- item.type == "tv" or is_integer(item[:mal_id]),
+         {type, id} <- Roki.Profile.parse_key(key),
+         %{} = counts <- Roki.Laev.run(uuid, &Roki.Stats.season_episodes/0) do
+      Map.get(counts, {type, id}, %{})
+    else
+      _ -> %{}
+    end
   end
 
   defp arranged(%{assigns: a}) when is_list(a.history) do
@@ -206,12 +222,42 @@ defmodule RokiWeb.WatchedLive do
 
   def handle_event("date_open", _params, %{assigns: %{owner?: true, select?: true}} = socket) do
     if MapSet.size(socket.assigns.selected) > 0,
-      do: {:noreply, assign(socket, dating?: true, date_error: nil)},
+      do:
+        {:noreply, assign(socket, dating?: true, date_error: nil, seasons: seasons_for(socket))},
       else: {:noreply, socket}
   end
 
   def handle_event("date_close", _params, socket),
-    do: {:noreply, assign(socket, dating?: false, date_error: nil)}
+    do: {:noreply, assign(socket, dating?: false, date_error: nil, seasons: %{})}
+
+  # One season of one show, rather than the whole title: its share of the show's time moves to
+  # this day and the rest of the show stays where it was.
+  def handle_event(
+        "date_save",
+        %{"date" => text, "season" => season},
+        %{assigns: %{owner?: true, select?: true}} = socket
+      )
+      when season != "" do
+    with {:ok, date} <- Date.from_iso8601(text),
+         true <- Date.compare(date, Date.utc_today()) != :gt and date.year >= 1900,
+         {n, ""} <- Integer.parse(season),
+         [key] <- MapSet.to_list(socket.assigns.selected),
+         {type, id} <- Roki.Profile.parse_key(key) do
+      :ok = Profile.set_season_date(socket.assigns.uuid, type, id, n, date)
+
+      {:noreply,
+       socket
+       |> assign(dating?: false, selected: MapSet.new(), date_error: nil, seasons: %{})
+       |> assign(
+         notice:
+           "Season #{n} set to #{Calendar.strftime(date, "%B %-d, %Y")}. The rest of the show stays where it was."
+       )}
+    else
+      _ ->
+        {:noreply,
+         assign(socket, :date_error, "Pick a day that has happened (not in the future).")}
+    end
+  end
 
   # The chosen day goes on every title selected, in the order the list shows them.
   def handle_event(
@@ -811,6 +857,22 @@ defmodule RokiWeb.WatchedLive do
             class="input input-bordered w-full"
             autofocus
           />
+          <%!-- A show whose seasons were watched years apart: date one of them without moving
+                the rest. Only offered for a single show laev has episode records for. --%>
+          <label :if={@seasons != %{}} class="block space-y-1">
+            <span class="text-sm font-medium">Apply to</span>
+            <select name="season" class="select select-bordered w-full">
+              <option value="">The whole title</option>
+              <option :for={{season, episodes} <- Enum.sort(@seasons)} value={season}>
+                Season {season} only · {episodes} {if episodes == 1,
+                  do: "episode",
+                  else: "episodes"}
+              </option>
+            </select>
+            <span class="block text-xs text-base-content/60">
+              A season takes its share of the show's hours with it, counted by episodes watched.
+            </span>
+          </label>
           <p :if={@date_error} class="text-sm text-error">{@date_error}</p>
           <div class="flex justify-end gap-2">
             <button type="button" phx-click="date_close" class="btn btn-ghost">Cancel</button>

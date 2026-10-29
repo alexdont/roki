@@ -89,6 +89,7 @@ defmodule Roki.Stats do
          titles: Enum.map(s.titles, &title(&1, seen)),
          tally: Shelf.tally(),
          days: days,
+         seasons: season_episodes(),
          windows: windows(days),
          streak: streaks(days)
        }}
@@ -152,6 +153,37 @@ defmodule Roki.Stats do
   def within(titles, days, now) do
     cutoff = now - days * 86_400
     Enum.filter(titles, &(is_integer(&1.last_seen) and &1.last_seen >= cutoff))
+  end
+
+  @doc """
+  How many episodes of each season were watched: `%{{"tv", 110316} => %{1 => 8, 2 => 2}}`.
+
+  Laev's time is per title — a show is one number however many seasons it has — but the record
+  it is derived from is one file per episode, named `tv-110316-s1e5`. Counting those names is
+  enough to say what share of a show belongs to each season, which is what lets a season carry
+  its own date without the two sides disagreeing about the total.
+
+  Entries numbered without a season (`tv-110316-e5`) and whole-show marks have no season to
+  belong to, so they are not counted and their time stays with the title.
+  """
+  def season_episodes do
+    dir = Path.join(Laev.Scope.dir(), "positions")
+
+    case File.ls(dir) do
+      {:ok, names} ->
+        for name <- names,
+            [_, type, id, season] <-
+              [Regex.run(~r/^(tv|mal)-(\d+)-s(\d+)e\d+$/, name)] |> Enum.reject(&is_nil/1),
+            reduce: %{} do
+          acc ->
+            key = {type, String.to_integer(id)}
+            season = String.to_integer(season)
+            Map.update(acc, key, %{season => 1}, &Map.update(&1, season, 1, fn n -> n + 1 end))
+        end
+
+      _ ->
+        %{}
+    end
   end
 
   # ── days ───────────────────────────────────────────────────────────

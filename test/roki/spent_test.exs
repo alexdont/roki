@@ -71,6 +71,63 @@ defmodule Roki.SpentTest do
     assert Spent.of_kind(entries, :manga) == []
   end
 
+  defp show(seconds) do
+    %{
+      titles: [
+        %{
+          type: "tv",
+          id: 110_316,
+          title: "Alice in Borderland",
+          seconds: seconds,
+          off: 0,
+          anime: false,
+          last_seen: @now
+        }
+      ],
+      seasons: %{{"tv", 110_316} => %{1 => 8, 2 => 2}}
+    }
+  end
+
+  test "a season given a date of its own becomes its own entry, with its share" do
+    # Eight episodes of season one, two of season two: four fifths and one fifth.
+    entries = Spent.watched(show(10_000), %{}, %{{"tv", 110_316, 1} => @long_ago})
+
+    assert [s1, rest] = entries
+    assert s1.title == "Alice in Borderland · S1"
+    assert s1.at == @long_ago
+    assert s1.seconds == 8000
+
+    # What is left stays with the show, on the show's own date.
+    assert rest.title == "Alice in Borderland"
+    assert rest.at == @now
+    assert rest.seconds == 2000
+
+    # And the show still adds up to what laev said.
+    assert Spent.total(entries) == 10_000
+  end
+
+  test "dating every season leaves nothing on the title" do
+    entries =
+      Spent.watched(show(10_000), %{}, %{
+        {"tv", 110_316, 1} => @long_ago,
+        {"tv", 110_316, 2} => @now
+      })
+
+    assert Enum.map(entries, & &1.title) == [
+             "Alice in Borderland · S1",
+             "Alice in Borderland · S2"
+           ]
+
+    assert Spent.total(entries) == 10_000
+    assert Spent.total(Spent.within(entries, 7, @now)) == 2000
+  end
+
+  test "a show nobody has dated by season is one entry as before" do
+    assert [one] = Spent.watched(show(10_000), %{}, %{})
+    assert one.title == "Alice in Borderland"
+    assert one.seconds == 10_000
+  end
+
   test "the heatmap puts a title on the date it counts under, not the day it played" do
     played_today = stats(@now)
     backdated = Spent.watched(played_today, %{{"mal", 5114} => @long_ago})

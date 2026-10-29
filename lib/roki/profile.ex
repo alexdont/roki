@@ -495,6 +495,53 @@ defmodule Roki.Profile do
   end
 
   @doc """
+  When this account says it watched each *season*: `%{{type, id, season} => unix}`.
+
+  Separate from `watch_dates/1` because laev has no answer to give here — a show is one row in
+  its watched list however many of its seasons were watched years apart.
+  """
+  def season_dates(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!("select type, id, season, at from roki_season_dates where user_uuid = $1", [bin])
+
+    Map.new(rows, fn [type, id, season, at] ->
+      {{type, id, season}, at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix()}
+    end)
+  end
+
+  @doc "Say when one season was watched. A `nil` date takes the answer back."
+  def set_season_date(uuid, type, id, season, nil)
+      when is_binary(type) and is_integer(id) and is_integer(season) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    Repo.query!(
+      "delete from roki_season_dates where user_uuid = $1 and type = $2 and id = $3 and season = $4",
+      [bin, type, id, season]
+    )
+
+    :ok
+  end
+
+  def set_season_date(uuid, type, id, season, %Date{} = date)
+      when is_binary(type) and is_integer(id) and is_integer(season) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    # Midday, so a day is the same day whichever way a timezone leans.
+    at = NaiveDateTime.new!(date, ~T[12:00:00])
+    now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+    Repo.query!(
+      "insert into roki_season_dates (user_uuid, type, id, season, at, inserted_at, updated_at) " <>
+        "values ($1, $2, $3, $4, $5, $6, $6) " <>
+        "on conflict (user_uuid, type, id, season) do update set at = excluded.at, updated_at = excluded.updated_at",
+      [bin, type, id, season, at, now]
+    )
+
+    :ok
+  end
+
+  @doc """
   When this account says it watched each title, for the ones where it has said so: `%{{type,
   id} => unix}`.
 

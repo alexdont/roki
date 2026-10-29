@@ -57,7 +57,8 @@ defmodule RokiWeb.StatsLive do
     assign(socket,
       read: Spent.read(uuid),
       reading_activity: Roki.Manga.Library.list_reading_activity(uuid),
-      watch_dates: Roki.Profile.watch_dates(uuid)
+      watch_dates: Roki.Profile.watch_dates(uuid),
+      season_dates: Roki.Profile.season_dates(uuid)
     )
   end
 
@@ -168,7 +169,7 @@ defmodule RokiWeb.StatsLive do
   defp assign_view(assigns) do
     now = System.os_time(:second)
 
-    watched = Spent.watched(assigns[:data], assigns.watch_dates)
+    watched = Spent.watched(assigns[:data], assigns.watch_dates, assigns.season_dates)
     all = Spent.sort(watched ++ assigns.read)
     in_window = Spent.within(all, days_of(assigns.range), now)
     visible_all = Spent.of_kind(in_window, assigns.kind)

@@ -52,22 +52,74 @@ defmodule Roki.Spent do
   anything marked or backdated is a different thing — a film given a date in 2019 belongs in
   2019, and something played once while testing belongs wherever its owner put it, not in this
   week.
-  """
-  def watched(stats, dates \\ %{})
 
-  def watched(%{titles: titles}, dates) do
-    for t <- titles do
-      %{
-        kind: if(t.anime, do: :anime, else: String.to_existing_atom(t.type)),
-        title: t.title,
-        seconds: t.seconds,
-        off: t.off,
-        at: Map.get(dates, {t.type, t.id}, t.last_seen)
-      }
+  `season_dates` is `Roki.Profile.season_dates/1`, and it splits a show. A season with a date
+  of its own becomes an entry of its own, carrying its share of the show's time; what is left
+  stays with the title. The share is by episodes watched — `stats.seasons` counts them, one
+  file per episode — so a show whose first season is eight episodes and second is two gives
+  the first four fifths of the hours.
+
+  That share is proportional rather than measured: laev times a show as one number, and
+  episodes of a show are close enough in length for the division to be fair. The shares are
+  made to sum back to laev's figure exactly, so splitting a show never changes a total — it
+  only moves time to the date it belongs under.
+  """
+  def watched(stats, dates \\ %{}, season_dates \\ %{})
+
+  def watched(%{titles: titles} = stats, dates, season_dates) do
+    seasons = Map.get(stats, :seasons, %{})
+
+    Enum.flat_map(titles, fn t ->
+      key = {t.type, t.id}
+      at = Map.get(dates, key, t.last_seen)
+      split(t, at, seasons[key], season_dates)
+    end)
+  end
+
+  def watched(_, _dates, _season_dates), do: []
+
+  # A show with no season dated, or nothing to divide by, is one entry as it always was.
+  defp split(t, at, counts, season_dates) do
+    dated =
+      for {season, episodes} <- counts || %{},
+          when_at = season_dates[{t.type, t.id, season}],
+          do: {season, episodes, when_at}
+
+    total_episodes = counts |> Kernel.||(%{}) |> Map.values() |> Enum.sum()
+
+    if dated == [] or total_episodes == 0 do
+      [entry(t, t.title, t.seconds, t.off, at)]
+    else
+      parts =
+        for {season, episodes, when_at} <- Enum.sort(dated) do
+          share = fn whole -> div(whole * episodes, total_episodes) end
+          entry(t, "#{t.title} · S#{season}", share.(t.seconds), share.(t.off), when_at)
+        end
+
+      # Whatever the division left over stays with the title, so the show still adds up to
+      # laev's own figure however its seasons are dated.
+      rest =
+        entry(
+          t,
+          t.title,
+          t.seconds - Enum.sum(Enum.map(parts, & &1.seconds)),
+          t.off - Enum.sum(Enum.map(parts, & &1.off)),
+          at
+        )
+
+      if rest.seconds > 0, do: parts ++ [rest], else: parts
     end
   end
 
-  def watched(_, _dates), do: []
+  defp entry(t, title, seconds, off, at) do
+    %{
+      kind: if(t.anime, do: :anime, else: String.to_existing_atom(t.type)),
+      title: title,
+      seconds: seconds,
+      off: max(off, 0),
+      at: at
+    }
+  end
 
   @doc "What was read, from the reader's own tally, as entries."
   def read(uuid) when is_binary(uuid) do
