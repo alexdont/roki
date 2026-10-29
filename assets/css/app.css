@@ -159,19 +159,27 @@ body::before {
    changes. */
 .site-header { padding-top: env(safe-area-inset-top, 0px); }
 
-/* The strip reader's shell pulls itself up past the status bar (`top: -env(safe-area-inset-top)`
-   in the manhwa package) so a chapter can run under the clock. Installed to the home screen that
-   hides the top of the page behind the status bar, which is not where it belongs — the first
-   thing a snap lands on ends up under the time. Pin the top to the safe area instead. Where
-   there is no inset this changes nothing, so it is right whichever way the status bar is set and
-   needs no reinstall to take effect. The bottom keeps the package's full bleed, so nothing shows
-   through at the home indicator. */
-#fresco-strip-shell {
-  top: env(safe-area-inset-top, 0px) !important;
-}
-
-#fresco-strip-reader {
-  height: calc(100lvh - env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)) !important;
+/* The readers run their art to the top of the screen, with the clock over it — the strip shell
+   pulls itself up past the safe-area inset to do it. A flat bar across that strip would be a
+   white band over the top of every page; a scrim is enough to keep the clock readable and is
+   gone by the time it reaches the art. Drawn only over the status bar's own height, so where
+   there is no inset (a browser tab, a desktop) there is nothing to draw and nothing is drawn. */
+body:has(#fresco-strip-shell)::after,
+body:has(#fresco-paged-shell)::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(env(safe-area-inset-top, 0px) * 1.15);
+  z-index: 120;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.55),
+    rgb(0 0 0 / 0.3) 55%,
+    transparent
+  );
 }
 
 /* The manga reader is a page you scroll for minutes at a time, often thousands of pixels of
