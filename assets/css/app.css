@@ -159,11 +159,23 @@ body::before {
    changes. */
 .site-header { padding-top: env(safe-area-inset-top, 0px); }
 
-/* The readers run their art to the top of the screen, with the clock over it — the strip shell
-   pulls itself up past the safe-area inset to do it. A flat bar across that strip would be a
-   white band over the top of every page; a scrim is enough to keep the clock readable and is
-   gone by the time it reaches the art. Drawn only over the status bar's own height, so where
-   there is no inset (a browser tab, a desktop) there is nothing to draw and nothing is drawn. */
+/* The strip reader's shell pulls itself up past the safe-area inset so a chapter can run under
+   the clock. That hides the top of the page behind the status bar, which is not wanted here:
+   the page starts below the bar and nothing is lost to it. The bottom keeps the package's full
+   bleed, so nothing shows through at the home indicator. */
+#fresco-strip-shell {
+  top: env(safe-area-inset-top, 0px) !important;
+}
+
+#fresco-strip-reader {
+  height: calc(100lvh - env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* What is left in that strip is the page behind the status bar, which on a reading page is a
+   flat white band — bright, and over the top of everything. A scrim across it instead: strongest
+   at the very top where the clock sits, gone by the time it meets the page. Drawn only over the
+   status bar's own height, so where there is no inset (a browser tab, a desktop) there is
+   nothing to draw and nothing is drawn. */
 body:has(#fresco-strip-shell)::after,
 body:has(#fresco-paged-shell)::after {
   content: "";
