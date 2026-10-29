@@ -2,6 +2,9 @@
 //
 //   1. On a phone, move the page when the carousel turns by itself (every six seconds).
 //   2. Change the size of a chip when it is lit, which pushes every chip after it along.
+//   3. Open a mood's page when a chip is tapped on a touch screen. A tap is the only way to look
+//      there, so it shows the mood in the carousel; the "Show me" button inside the slide opens
+//      the page. With a mouse it is the other way about: hover to look, click to open.
 //
 // The first, in detail:
 //
@@ -100,6 +103,56 @@ const BASE = process.env.BASE || "http://localhost:4000"
     }
     await b.close()
     check(`${label}: no chip changes size or moves, whichever is lit`, changed.length === 0, changed.length ? `${changed.length} changes, e.g. ${changed.slice(0, 3).join("; ")}` : `${rest.length} chips, ${rest.length} states`)
+  }
+
+  // 5. A touch screen: a tap shows the mood and does not leave the page.
+  {
+    const b = await chromium.launch({args: ["--disable-dev-shm-usage", "--no-sandbox", "--disable-gpu", "--single-process", "--no-zygote"]})
+    const p = await (await b.newContext({viewport: {width: 390, height: 780}, hasTouch: true, isMobile: true})).newPage()
+    await p.goto(`${BASE}/home`, {waitUntil: "networkidle"})
+    await p.waitForSelector("[data-mood-chip]")
+    const lit = () => p.evaluate(() => document.querySelector('[data-mood-chip][aria-selected="true"]')?.dataset.moodChip)
+    const slide = () => p.evaluate(() => [...document.querySelectorAll("[data-mood]")].find((s) => !s.classList.contains("opacity-0"))?.dataset.mood)
+    const path = () => new URL(p.url()).pathname
+
+    const order = await p.evaluate(() => [...document.querySelectorAll("[data-mood-chip]")].map((c) => c.dataset.moodChip))
+    const taps = [order[2], order[5], order[3]]
+    let stayed = true, switched = true
+    for (const slug of taps) {
+      await p.tap(`[data-mood-chip="${slug}"]`)
+      await p.waitForTimeout(700)
+      if (path() !== "/home") stayed = false
+      if ((await lit()) !== slug || (await slide()) !== slug) switched = false
+    }
+    check("phone: tapping chips one after another stays on the page", stayed, `at ${path()}`)
+    check("phone: and each tap shows that mood, chip and slide together", switched, `last: ${await lit()} / ${await slide()}`)
+
+    // The turning must not be left held by the tap: it goes on from the mood chosen.
+    const chosen = taps[taps.length - 1]
+    await p.waitForTimeout(7000)
+    const next = order[(order.indexOf(chosen) + 1) % order.length]
+    check("phone: the carousel keeps turning after a tap, from the mood chosen", (await lit()) === next, `${chosen} -> ${await lit()} (expected ${next})`)
+
+    await p.locator(`[data-mood="${await lit()}"] a`, {hasText: "Show me"}).tap()
+    await p.waitForURL(/\/mood\//, {timeout: 8000}).catch(() => {})
+    check("phone: the Show me button inside the slide opens the mood's page", path().startsWith("/mood/"), path())
+    await b.close()
+  }
+
+  // 6. A mouse: hovering shows the mood, and clicking opens its page.
+  {
+    const b = await chromium.launch({args: ["--disable-dev-shm-usage", "--no-sandbox", "--disable-gpu", "--single-process", "--no-zygote"]})
+    const p = await (await b.newContext({viewport: {width: 1280, height: 800}})).newPage()
+    await p.goto(`${BASE}/home`, {waitUntil: "networkidle"})
+    await p.waitForSelector("[data-mood-chip]")
+    await p.hover('[data-mood-chip="thrill"]')
+    await p.waitForTimeout(700)
+    const litNow = await p.evaluate(() => document.querySelector('[data-mood-chip][aria-selected="true"]')?.dataset.moodChip)
+    check("desktop: hovering a chip shows that mood without leaving the page", litNow === "thrill" && new URL(p.url()).pathname === "/home")
+    await p.click('[data-mood-chip="thrill"]')
+    await p.waitForURL(/\/mood\/thrill/, {timeout: 8000}).catch(() => {})
+    check("desktop: clicking a chip opens that mood's page", new URL(p.url()).pathname === "/mood/thrill", new URL(p.url()).pathname)
+    await b.close()
   }
 
   const failed = results.filter((r) => !r).length

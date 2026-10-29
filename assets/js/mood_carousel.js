@@ -2,6 +2,11 @@
 // (or focusing) a mood shows it and holds it; leaving lets the turning go on. The chip of the
 // shown mood is lit and carries a thin bar that fills as its turn runs. Only one slide is visible
 // at a time, so hidden slides' lazy images are not fetched until they are shown.
+//
+// A chip is a link to the mood's page, and what pressing it does depends on the device. With a
+// mouse it opens the page: you have already seen the mood by hovering over it. On a touch screen
+// there is no hovering, so the press is the only way to look, and it shows the mood in the
+// carousel instead — the page is opened by the "Show me" button inside the slide.
 export const MoodCarousel = {
   mounted() {
     this.every = Number(this.el.dataset.every) || 6000
@@ -19,6 +24,21 @@ export const MoodCarousel = {
       chip.addEventListener("mouseleave", () => { this.held = false; this.arm() })
       chip.addEventListener("blur", () => { this.held = false; this.arm() })
     })
+    // Delegated, so it keeps working when the page re-renders the chips.
+    this.el.addEventListener("click", (e) => {
+      const chip = e.target.closest && e.target.closest("[data-mood-chip]")
+      if (!chip || !this.el.contains(chip) || !this.touchOnly()) return
+
+      // Not the page: the mood. A press with a modifier is left alone, as it is anywhere.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      // The emulated hover that comes before a tap holds the carousel; a tap is a choice, not a
+      // finger resting on it, so the turning goes on from the mood chosen.
+      this.held = false
+      this.go(chip.dataset.moodChip)
+      this.arm()
+    }, true)
     this.el.addEventListener("mouseenter", () => { this.held = true; this.freeze() })
     this.el.addEventListener("mouseleave", () => { this.held = false; this.arm() })
     this.onVisibility = () => { this.visible = !document.hidden; this.visible ? this.arm() : this.freeze() }
@@ -41,6 +61,11 @@ export const MoodCarousel = {
   destroyed() {
     clearTimeout(this.timer)
     document.removeEventListener("visibilitychange", this.onVisibility)
+  },
+
+  // A device that cannot hover — a phone or a tablet, whatever the width of its screen.
+  touchOnly() {
+    return matchMedia("(hover: none)").matches
   },
 
   go(slug) {
