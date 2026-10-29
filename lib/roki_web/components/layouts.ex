@@ -101,6 +101,7 @@ defmodule RokiWeb.Layouts do
       <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-1 px-3 sm:px-6 lg:px-8">
         <a
           href={~p"/home"}
+          data-no-reload
           class="flex items-center gap-2 pr-1.5 text-lg font-bold tracking-tight min-[420px]:pr-3"
           aria-label="roki — home"
         >
@@ -202,6 +203,7 @@ defmodule RokiWeb.Layouts do
             <div
               :if={@username}
               id="account-pop"
+              data-no-reload
               class="absolute right-3 top-full z-50 mt-1 hidden w-[min(18rem,calc(100vw-1.5rem))] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl sm:right-0"
               phx-click-away={JS.hide(to: "#account-pop")}
               phx-window-keydown={JS.hide(to: "#account-pop")}
@@ -364,6 +366,7 @@ defmodule RokiWeb.Layouts do
 
       <nav
         id="mobile-nav"
+        data-no-reload
         aria-label="Sections"
         class="absolute inset-x-3 top-full z-50 mt-1 hidden rounded-box border border-base-300 bg-base-100 p-2 shadow-xl md:hidden"
         phx-click-away={JS.hide(to: "#mobile-nav")}
@@ -373,6 +376,7 @@ defmodule RokiWeb.Layouts do
         <.link
           :for={{label, href} <- @sections}
           navigate={href}
+          phx-click={JS.hide(to: "#mobile-nav")}
           class={[
             "flex items-center justify-between rounded-lg px-4 py-3 text-base font-medium",
             if(active?(@current_path, href),
@@ -465,7 +469,7 @@ defmodule RokiWeb.Layouts do
       current_path={@path}
       flush
     >
-      <nav class="mx-auto flex max-w-6xl flex-wrap gap-2 px-4 pt-6">
+      <nav data-no-reload class="mx-auto flex max-w-6xl flex-wrap gap-2 px-4 pt-6">
         <a
           :for={{label, href} <- @nav}
           href={href}
@@ -658,6 +662,7 @@ defmodule RokiWeb.Layouts do
     ~H"""
     <.link
       navigate={@href}
+      data-no-reload
       class={[
         "flex items-center border-b-2 px-3 text-sm font-medium transition hover:bg-base-200",
         if(@active,
@@ -682,6 +687,7 @@ defmodule RokiWeb.Layouts do
     ~H"""
     <.link
       navigate={@href}
+      data-no-reload
       aria-label={@label}
       title={@label}
       class={[

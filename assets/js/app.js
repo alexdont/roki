@@ -278,6 +278,46 @@ liveSocket.connect()
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
 
+// A link to the page you are already on does nothing.
+//
+// Clicking "Movies" on the Movies page used to load it again, and clicking it quickly loaded it
+// again and again. Only the nav links that opt in (`data-no-reload`) behave this way, and only for
+// the exact address: /movies/603 is not /movies, and /manga?q=berserk is not /manga, so the same
+// link still takes you back up from there. A modified click (new tab, new window) and a link that
+// opens elsewhere are left alone.
+//
+// It is a capture-phase click handler rather than something in the layout because the reader's
+// pages are plain controller pages with no LiveView to ask, and because LiveView's own link
+// handler would otherwise navigate first. The link's own `phx-click` still runs, since on the
+// menus it is what closes them.
+document.addEventListener(
+  "click",
+  (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    const link = e.target instanceof Element ? e.target.closest("a[href]") : null
+    if (!link || !link.closest("[data-no-reload]") || link.target || link.hasAttribute("download")) return
+
+    const here = new URL(window.location.href)
+    const there = new URL(link.href, here)
+    const bare = (path) => path.replace(/\/+$/, "") || "/"
+    if (there.origin !== here.origin || bare(there.pathname) !== bare(here.pathname) || there.search !== here.search) return
+
+    e.preventDefault()
+    e.stopImmediatePropagation()
+
+    // A menu the click was in should still close. Where there is a LiveView the link's own
+    // `phx-click` does it; the reader's pages have none, so the panel is put away by hand
+    // (nothing patches those pages, so nothing can put it back).
+    const close = link.getAttribute("phx-click")
+    if (close && window.liveSocket.main) window.liveSocket.execJS(link, close)
+    else {
+      const panel = link.closest("#account-pop, #mobile-nav")
+      if (panel) panel.style.display = "none"
+    }
+  },
+  true
+)
+
 // The lines below enable quality of life phoenix_live_reload
 // development features:
 //

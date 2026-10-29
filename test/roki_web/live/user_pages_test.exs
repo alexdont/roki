@@ -35,7 +35,9 @@ defmodule RokiWeb.UserPagesTest do
   end
 
   test "the logo takes you to the featured page", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/lists")
-    assert html =~ ~s(href="/home" class="flex items-center gap-2 pr-1.5 text-lg font-bold)
+    {:ok, view, _html} = live(conn, ~p"/lists")
+
+    # By what the link is, not by the order its attributes happen to be written in.
+    assert has_element?(view, ~s|header a[href="/home"][aria-label="roki — home"]|)
   end
 end
