@@ -308,7 +308,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       assert html =~ "1,350"
       assert html =~ "films watched"
       # The ghost that used to stand in for them is not drawn.
-      refute html =~ "w-[7.5rem]"
+      refute html =~ "w-[8.1rem]"
     end
 
     test "are drawn as placeholders when nothing is kept, in cells of their own", %{
@@ -319,7 +319,7 @@ defmodule RokiWeb.ShelfLoadingTest do
 
       {:ok, _view, html} = live(conn, "/shelftest/home")
 
-      assert html =~ "w-[7.5rem]"
+      assert html =~ "w-[8.1rem]"
       refute html =~ "films watched"
       # The strip is a grid on a phone, so a late figure can only change its own cell.
       assert html =~ "grid-cols-2"
@@ -373,6 +373,64 @@ defmodule RokiWeb.ShelfLoadingTest do
 
       assert {:ok, measured} = Roki.Profile.totals(user.uuid)
       assert {:ok, ^measured} = Roki.Profile.kept_totals(user.uuid)
+    end
+  end
+
+  describe "the strip's layout" do
+    test "'all stats' is its own link beside the sync button, not a cell in the wrapping row", %{
+      conn: conn,
+      user: user
+    } do
+      connect!(user)
+      Roki.Laev.remember_shelf(user.uuid, shelf(7))
+
+      Roki.Laev.remember_totals(user.uuid, %{
+        totals: %{seconds: 3600, films: 1, episodes: 1},
+        films: %{}
+      })
+
+      {:ok, view, _} = live(conn, "/shelftest/home")
+
+      # A link inside a wrapping row is the first thing to drop to a second line when the
+      # figures are wide, so it is not inside it.
+      assert has_element?(view, ~s|a[href="/shelftest/stats"]|, "all stats")
+      refute has_element?(view, ~s|a[href="/shelftest/stats"].grid|, "all stats")
+    end
+
+    test "the reading figures are pinned to the end of the row, so those before them cannot move them",
+         %{conn: conn, user: user} do
+      {:ok, _} =
+        Roki.Manga.Library.save_manga(user.uuid, %{
+          source: "mangafreak",
+          slug: "o",
+          title: "O",
+          cover_url: "https://example.invalid/o.jpg"
+        })
+
+      Roki.Repo.query!("update saved_manga set reading_seconds = 3600, last_chapter = '5'")
+      connect!(user)
+      Roki.Laev.remember_shelf(user.uuid, shelf(7))
+
+      {:ok, view, _} = live(conn, "/shelftest/home")
+
+      assert has_element?(view, "span.sm\\:ml-auto", "read")
+    end
+
+    test "a placeholder is drawn in the same cell the figure will be, without a reserved width",
+         %{
+           conn: conn,
+           user: user
+         } do
+      connect!(user)
+      Roki.Laev.remember_shelf(user.uuid, shelf(7))
+
+      {:ok, _view, html} = live(conn, "/shelftest/home")
+
+      # Sized like the figure it stands for…
+      assert html =~ "w-[8.1rem]"
+      # …and no cell reserves room for the widest figure there could ever be, which is what made
+      # the row wrap on an ordinary laptop.
+      refute html =~ "sm:min-w-["
     end
   end
 end

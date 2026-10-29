@@ -560,60 +560,80 @@ defmodule RokiWeb.UserHomeLive do
             first, so numbers arriving later only ever fill space already reserved. --%>
       <div class="space-y-1.5">
         <div class="flex items-start gap-1">
-          <%!-- Every figure sits in a cell of its own. On a phone the cells are a two-column grid,
-                so a number arriving at a different width than its placeholder can only change the
-                inside of its own cell; in a wrapping row it would push everything after it along
-                and re-wrap the lines. From `sm` up there is room for one line, and the cells that
-                arrive late hold a minimum width instead. --%>
+          <%!-- Every figure sits in a cell of its own, so a figure arriving at a different width
+                than its placeholder cannot push anything it does not have to.
+
+                On a phone the cells are a two-column grid: each one can only change the inside
+                of itself.
+
+                From `sm` up they are one wrapping row, and it is kept compact rather than
+                reserved: the reading pair is pinned to the right end of the row by an automatic
+                margin, so it stays where it is whatever the cells before it turn out to be, and
+                the placeholders are sized like the figures they stand for. (Reserving room for the
+                widest a figure could ever be made the row wrap on an ordinary laptop, and sent
+                "all stats" to a second line.) "All stats" is not in the row at all: a link inside
+                a wrapping row is the first thing to drop when the figures are wide. --%>
           <.link
             navigate={~p"/#{@username}/stats"}
             class="grid min-h-5 min-w-0 flex-1 grid-cols-2 items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:flex sm:flex-wrap sm:gap-y-0.5"
           >
-            <span :if={@data} class="whitespace-nowrap sm:min-w-[13ch]">
+            <span :if={@data} class="whitespace-nowrap">
               <b class="text-base-content">{@data.tally.behind}</b> in progress
             </span>
-            <span :if={@data} class="whitespace-nowrap sm:min-w-[26ch]">
+            <span :if={@data} class="whitespace-nowrap">
               <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
               <span class="sm:hidden">finished</span>
               <span class="hidden sm:inline">series &amp; anime finished</span>
             </span>
-            <span :if={!@data} class="sm:min-w-[13ch]"><.sk class="block w-[5.5rem]" /></span>
-            <span :if={!@data} class="sm:min-w-[26ch]"><.sk class="block w-[4.5rem]" /></span>
+            <%!-- The placeholders are about as wide as the figures usually are, so the row comes out the
+                 same shape with them in it as with the figures. --%>
+            <span :if={!@data} class="block"><.sk class="block w-[5.7rem]" /></span>
+            <span :if={!@data} class="block"><.sk class="block w-[4rem] sm:w-[10.9rem]" /></span>
 
             <%= cond do %>
               <% match?(%{totals: _}, @stats) -> %>
-                <span class="whitespace-nowrap sm:min-w-[19ch]">
+                <span class="whitespace-nowrap">
                   <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
                 </span>
-                <span class="whitespace-nowrap sm:min-w-[16ch]">
+                <span class="whitespace-nowrap">
                   <b class="text-base-content">{thousands(@stats.totals.films)}</b> films watched
                 </span>
-                <span class="hidden whitespace-nowrap sm:inline sm:min-w-[13ch]">
+                <span class="hidden whitespace-nowrap sm:inline">
                   <b class="text-base-content">{thousands(@stats.totals.episodes)}</b> episodes
                 </span>
               <% match?({:error, _}, @stats) -> %>
-                <span class="col-span-2 text-base-content/40">time watched unavailable</span>
+                <span class="col-span-2 text-base-content/40 sm:col-span-1">
+                  time watched unavailable
+                </span>
               <% true -> %>
-                <%!-- A placeholder stands in a cell as wide as the figure's, so nothing after it
-                     moves when the figure arrives. --%>
-                <span class="sm:min-w-[19ch]"><.sk class="block w-[7.5rem]" /></span>
-                <span class="sm:min-w-[16ch]"><.sk class="block w-[6rem]" /></span>
-                <span class="hidden sm:block sm:min-w-[13ch]"><.sk class="block w-24" /></span>
+                <span class="block"><.sk class="block w-[8.1rem]" /></span>
+                <span class="block"><.sk class="block w-[7.9rem]" /></span>
+                <span class="hidden sm:block"><.sk class="block w-[6.1rem]" /></span>
             <% end %>
 
-            <%!-- Reading, last: it is known from the first paint, so it never has to wait for
-                 the watching numbers it sits beside. --%>
-            <span :if={@manga_totals.series > 0} class="whitespace-nowrap sm:min-w-[15ch]">
+            <%!-- Reading: known from the first paint, and on desktop pinned to the right end of
+                 the row so the figures before it cannot move it. --%>
+            <span
+              :if={@manga_totals.series > 0}
+              class="whitespace-nowrap sm:ml-auto"
+            >
               <b class="text-base-content">{Roki.Laev.duration(@manga_totals.seconds)}</b> read
             </span>
             <span
               :if={@manga_totals.chapters > 0}
-              class="hidden whitespace-nowrap sm:inline sm:min-w-[14ch]"
+              class={[
+                "hidden whitespace-nowrap sm:inline",
+                @manga_totals.series == 0 && "sm:ml-auto"
+              ]}
             >
               <b class="text-base-content">{thousands(@manga_totals.chapters)}</b> chapters
             </span>
-
-            <span class="ml-auto hidden h-5 items-center text-xs text-base-content/50 sm:flex">all stats →</span>
+          </.link>
+          <.link
+            navigate={~p"/#{@username}/stats"}
+            class="hidden h-5 shrink-0 items-center whitespace-nowrap px-1 text-xs text-base-content/50 transition hover:text-base-content sm:flex"
+          >
+            all stats →
           </.link>
           <%!-- Sync is a small icon at the end of the line; it spins while it works. --%>
           <button
