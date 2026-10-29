@@ -55,7 +55,7 @@ defmodule RokiWeb.StatsLive do
     uuid = socket.assigns.uuid
 
     assign(socket,
-      read: Spent.read(uuid),
+      read: Roki.Manga.Library.list_reading_stats(uuid),
       reading_activity: Roki.Manga.Library.list_reading_activity(uuid),
       watch_dates: Roki.Profile.watch_dates(uuid),
       season_dates: Roki.Profile.season_dates(uuid)
@@ -169,9 +169,18 @@ defmodule RokiWeb.StatsLive do
   defp assign_view(assigns) do
     now = System.os_time(:second)
 
+    days_back = days_of(assigns.range)
     watched = Spent.watched(assigns[:data], assigns.watch_dates, assigns.season_dates)
-    all = Spent.sort(watched ++ assigns.read)
-    in_window = Spent.within(all, days_of(assigns.range), now)
+
+    # The two halves are narrowed differently because they are known differently: reading has a
+    # day-by-day log, so a window over it is exact; watching is one number per title, so a
+    # window holds the titles touched in it, whole.
+    in_window =
+      Spent.sort(
+        Spent.within(watched, days_back, now) ++
+          Spent.read(assigns.read, assigns.reading_activity, days_back, now)
+      )
+
     visible_all = Spent.of_kind(in_window, assigns.kind)
 
     days = Spent.days(watched, assigns.reading_activity)
@@ -280,8 +289,9 @@ defmodule RokiWeb.StatsLive do
       <h2 class="text-xl font-semibold">Where the time went</h2>
 
       <p :if={@range != :all} class="text-sm text-base-content/60">
-        What you were on in this window, with all the time you have spent on it — a series you
-        have been reading for a year counts its year.
+        Reading is counted from its day-by-day log, so this is exactly what these days hold.
+        Watching is one number per title, so a title you were on in this window brings all of
+        its time with it.
       </p>
 
       <p :if={@all == []} class="py-8 text-center text-base-content/60">Nothing in this window.</p>

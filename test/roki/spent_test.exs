@@ -169,7 +169,8 @@ defmodule Roki.SpentTest do
     {:ok, bin} = Ecto.UUID.dump(user.uuid)
     Roki.Repo.query!("update saved_manga set reading_seconds = 1800 where user_id = $1", [bin])
 
-    read = Spent.read(user.uuid)
+    rows = Roki.Manga.Library.list_reading_stats(user.uuid)
+    read = Spent.read(rows, %{}, nil)
     assert [%{kind: :manga, title: "Berserk", seconds: 1800}] = read
 
     both = Spent.sort(Spent.watched(stats(@now)) ++ read)

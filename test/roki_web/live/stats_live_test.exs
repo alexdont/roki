@@ -74,19 +74,33 @@ defmodule RokiWeb.StatsLiveTest do
     assert html =~ "Nothing in this window."
   end
 
-  test "a window keeps what was touched inside it", %{conn: conn, user: user, bin: bin} do
-    read!(user, "Long Ago", 7200)
+  test "a window over reading is what those days hold, not the whole title", %{
+    conn: conn,
+    user: user,
+    bin: bin
+  } do
+    read!(user, "Long Ago", 36_000)
 
+    # Read on one day, 200 days back. The title's own total is ten hours; that day holds one.
     Roki.Repo.query!(
-      "update saved_manga set updated_at = now() - interval '200 days' where user_id = $1",
+      "insert into reading_activity (user_id, date, source, slug, title, reading_seconds, chapters_read, inserted_at, updated_at) " <>
+        "values ($1, current_date - 200, 'mangadex', 'long-ago', 'Long Ago', 3600, 3, now(), now())",
       [bin]
     )
 
+    # Nothing was read this week, so nothing is in it.
     {:ok, _view, html} = live(conn, "/statstest/stats?range=week")
     refute html =~ "Long Ago"
 
+    # The year holds that one day, and only what that day holds.
     {:ok, _view, html} = live(conn, "/statstest/stats?range=year")
     assert html =~ "Long Ago"
+    assert html =~ "1h"
+    refute html =~ "10h"
+
+    # All time is the whole tally, including time entered by hand with no day on it.
+    {:ok, _view, html} = live(conn, "/statstest/stats?range=all")
+    assert html =~ "10h"
   end
 
   test "the heatmap counts the days reading was logged on", %{conn: conn, user: user} do

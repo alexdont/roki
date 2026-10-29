@@ -14,9 +14,13 @@ defmodule Roki.Spent do
   a year counts its year.
 
   **When something counts.** Whatever this account says: the date set on the watched page where
-  there is one, laev's last play otherwise, and for reading the day a series was last opened.
-  `days/2` places the same entries on the same dates, so the heatmap and the list are two
-  drawings of one thing rather than two sources that disagree.
+  there is one, laev's last play otherwise, and for reading the last day the log says it was
+  read.
+
+  **The two halves are not narrowed the same way, because they are not known the same way.**
+  Reading is logged day by day, so a window over it holds exactly what those days hold.
+  Watching is one number per title, so a window holds the titles touched in it, whole. The page
+  says so where it matters.
   """
 
   @kinds [movie: "Films", tv: "Shows", anime: "Anime", manga: "Manga"]
@@ -121,9 +125,26 @@ defmodule Roki.Spent do
     }
   end
 
-  @doc "What was read, from the reader's own tally, as entries."
-  def read(uuid) when is_binary(uuid) do
-    for m <- Roki.Manga.Library.list_reading_stats(uuid) do
+  @doc """
+  What was read, as entries, already narrowed to the window.
+
+  Reading is the one half that is logged day by day, so a window over it is the real thing
+  rather than a title's whole history carried in because it was touched. That matters: a series
+  read over months, with hours of off-site time entered by hand, was landing its entire total
+  in "the last 30 days" on the strength of one chapter.
+
+  All time is the whole tally, on-site and off, since off-site time is a figure with no day
+  attached and belongs nowhere else. A window is only what the log holds for those days.
+
+  The date an entry counts under is the last day it was actually read, not when its row was
+  last written — an import or a cover repair touches a row without anyone reading anything.
+  """
+  def read(rows, activity, days, now \\ nil)
+
+  def read(rows, activity, nil, _now) do
+    last = last_read(activity)
+
+    for m <- rows do
       on = m.reading_seconds_adjusted || m.reading_seconds || 0
       off = m.reading_seconds_offsite || 0
 
@@ -132,10 +153,44 @@ defmodule Roki.Spent do
         title: m.title,
         seconds: on + off,
         off: off,
-        at: m.updated_at && DateTime.to_unix(DateTime.from_naive!(m.updated_at, "Etc/UTC"))
+        at: last[{m.source, m.slug}] || naive_unix(m.updated_at)
       }
     end
   end
+
+  def read(rows, activity, days, now) do
+    cutoff = Date.add(today(now), -days)
+
+    windowed =
+      for {date, items} <- activity || %{}, Date.compare(date, cutoff) != :lt, do: {date, items}
+
+    seconds =
+      for {_date, items} <- windowed, i <- items, reduce: %{} do
+        acc -> Map.update(acc, {i.source, i.slug}, i.seconds || 0, &(&1 + (i.seconds || 0)))
+      end
+
+    last = last_read(windowed)
+    titles = Map.new(rows, &{{&1.source, &1.slug}, &1.title})
+
+    for {key, s} <- seconds, s > 0 do
+      %{kind: :manga, title: titles[key] || elem(key, 1), seconds: s, off: 0, at: last[key]}
+    end
+  end
+
+  # The last day each series was read, as a unix time.
+  defp last_read(activity) do
+    for {date, items} <- activity || %{}, i <- items, reduce: %{} do
+      acc ->
+        at = date |> DateTime.new!(~T[12:00:00], "Etc/UTC") |> DateTime.to_unix()
+        Map.update(acc, {i.source, i.slug}, at, &max(&1, at))
+    end
+  end
+
+  defp today(nil), do: Date.utc_today()
+  defp today(now), do: now |> DateTime.from_unix!() |> DateTime.to_date()
+
+  defp naive_unix(nil), do: nil
+  defp naive_unix(at), do: at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix()
 
   @doc "Longest first."
   def sort(entries), do: Enum.sort_by(entries, & &1.seconds, :desc)
