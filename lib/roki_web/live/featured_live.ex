@@ -540,15 +540,24 @@ defmodule RokiWeb.FeaturedLive do
 
           <div class="relative flex h-full flex-col justify-between p-5 text-white sm:p-8">
             <div class="max-w-xl space-y-3">
-              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+              <%!-- Numbered the way a programme numbers its films: where a pictogram would stand. --%>
+              <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
+                <span class="font-mono tabular-nums text-white">{Roki.Mood.number(m)}</span>
+                <span class="hidden h-px w-8 bg-white/40 sm:block" aria-hidden="true"></span>
                 What are you feeling like today?
               </p>
               <h1
                 class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl"
                 style={"font-family: #{m.font}; --mood: hsl(#{m.hue} 90% 62%)"}
               >
-                <span class="mr-2 text-4xl align-middle sm:text-5xl" aria-hidden="true">{m.icon}</span>{m.label}
+                {m.label}
               </h1>
+              <div
+                class="h-1 w-14 rounded-full"
+                style={"background: hsl(#{m.hue} 90% 62%)"}
+                aria-hidden="true"
+              >
+              </div>
               <p class="text-base text-white/80 sm:text-lg">{m.tagline}</p>
               <.link
                 navigate={~p"/mood/#{m.slug}"}
@@ -609,7 +618,35 @@ defmodule RokiWeb.FeaturedLive do
             class="absolute inset-0 bg-[var(--mood)] opacity-0 transition-opacity duration-300 group-aria-selected:opacity-100"
             aria-hidden="true"
           ></span>
-          <span class="relative"><span class="mr-1.5">{m.icon}</span><span class="group-aria-selected:[font-family:var(--mood-font)] group-aria-selected:text-base group-aria-selected:tracking-wide">{m.label}</span></span>
+          <%!-- The dot and the name are set three times in one cell. The two invisible copies are
+               them as they are when the chip is lit and as they are when it is not, so the chip is
+               as wide as the wider of the two all the time and the ones beside it never move; the
+               visible copy changes style inside that room, the dot and the name centred together
+               so the spare room falls evenly on both sides. (One invisible copy was not enough: a
+               mood whose typeface is slimmer than the normal one got narrower when lit, and moved
+               the rest instead.) A chip that changed size when it lit pushed every chip after it
+               along, on every turn. --%>
+          <span class="relative grid">
+            <span
+              class="invisible col-start-1 row-start-1 flex items-center gap-2 text-base leading-5 tracking-wide"
+              style={"font-family: #{m.font}"}
+              aria-hidden="true"
+            >
+              <span class="h-2 w-2 shrink-0"></span>{m.label}
+            </span>
+            <span
+              class="invisible col-start-1 row-start-1 flex items-center gap-2 leading-5"
+              aria-hidden="true"
+            >
+              <span class="h-2 w-2 shrink-0"></span>{m.label}
+            </span>
+            <span class="col-start-1 row-start-1 flex items-center justify-center gap-2 leading-5 group-aria-selected:[font-family:var(--mood-font)] group-aria-selected:text-base group-aria-selected:tracking-wide">
+              <span
+                class="h-2 w-2 shrink-0 rounded-full bg-[var(--mood)] transition-colors group-aria-selected:bg-white"
+                aria-hidden="true"
+              ></span>{m.label}
+            </span>
+          </span>
           <span
             data-mood-bar
             class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 bg-white/80"

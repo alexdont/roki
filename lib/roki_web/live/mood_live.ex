@@ -234,11 +234,14 @@ defmodule RokiWeb.MoodLive do
         class="relative isolate overflow-hidden rounded-3xl p-5 text-white sm:p-8"
         style={"background: radial-gradient(120% 140% at 0% 0%, hsl(#{@hue} 80% 48%) 0%, hsl(#{@hue} 60% 30%) 45%, hsl(#{@hue + 40} 50% 16%) 100%)"}
       >
+        <%!-- The mood's number, very large and faint, in its own typeface: the picker numbers its
+              moods, and this is the mood you arrived from. --%>
         <div
-          class="pointer-events-none absolute -right-10 -top-10 text-[11rem] opacity-20 blur-[1px] select-none"
+          class="pointer-events-none absolute -right-3 -top-8 text-[10rem] leading-none opacity-[0.16] select-none sm:text-[15rem]"
+          style={"font-family: #{@mood.font}"}
           aria-hidden="true"
         >
-          {@mood.icon}
+          {Roki.Mood.number(@mood)}
         </div>
         <div class="relative space-y-4">
           <.link

@@ -12,7 +12,8 @@ defmodule Roki.Mood do
   alias Roki.Browse
 
   # slug, label, tagline, film genre ids, show genre ids, show keyword ids, accent hue, and the
-  # typeface its name is set in (Google Fonts, linked from the root layout; `@fonts` below lists
+  # typeface its name is set in. A mood has no picture of its own: it is its name, set in its own
+  # typeface, in its own colour, and the number it has in the list (`number/1`) (Google Fonts, linked from the root layout; `@fonts` below lists
   # what to ask for there).
   # A film's Thriller or Romance has no genre on TV: TMDB's keyword stands in there, as the
   # Horror filter does on Shows (see `Roki.Genres`).
@@ -22,7 +23,6 @@ defmodule Roki.Mood do
       font: "'Creepster', cursive",
       label: "Be scared",
       tagline: "Lights off. Something is in the hallway.",
-      icon: "👻",
       movie: [27],
       tv: [],
       tv_kw: [315_058],
@@ -33,7 +33,6 @@ defmodule Roki.Mood do
       font: "'Bangers', cursive",
       label: "Laugh",
       tagline: "No thinking required. Just the good kind of stupid.",
-      icon: "😂",
       movie: [35],
       tv: [35],
       tv_kw: [],
@@ -44,7 +43,6 @@ defmodule Roki.Mood do
       font: "'Pacifico', cursive",
       label: "Fall in love",
       tagline: "Slow looks, bad timing, a very good last scene.",
-      icon: "💘",
       movie: [10749],
       tv: [],
       tv_kw: [9840],
@@ -55,7 +53,6 @@ defmodule Roki.Mood do
       font: "'Special Elite', monospace",
       label: "Feel the thrill",
       tagline: "Hold your breath. Don't trust anyone.",
-      icon: "🔪",
       movie: [53],
       tv: [80, 9648],
       tv_kw: [],
@@ -66,7 +63,6 @@ defmodule Roki.Mood do
       font: "'Black Ops One', system-ui",
       label: "Blow things up",
       tagline: "Loud, fast, and nobody reloads.",
-      icon: "💥",
       movie: [28],
       tv: [10759],
       tv_kw: [],
@@ -77,7 +73,6 @@ defmodule Roki.Mood do
       font: "'Orbitron', sans-serif",
       label: "Escape reality",
       tagline: "Other worlds, other rules, other skies.",
-      icon: "🪐",
       movie: [14, 878],
       tv: [10765],
       tv_kw: [],
@@ -88,7 +83,6 @@ defmodule Roki.Mood do
       font: "'Playfair Display', serif",
       label: "Have a good cry",
       tagline: "Tissues within reach. You'll be fine.",
-      icon: "🥲",
       movie: [18],
       tv: [18],
       tv_kw: [],
@@ -99,7 +93,6 @@ defmodule Roki.Mood do
       font: "'IM Fell English', serif",
       label: "Solve a mystery",
       tagline: "Everyone's lying. Figure out who first.",
-      icon: "🕵️",
       movie: [9648],
       tv: [9648],
       tv_kw: [],
@@ -110,7 +103,6 @@ defmodule Roki.Mood do
       font: "'Rye', serif",
       label: "Go on an adventure",
       tagline: "Pack light. Come back different.",
-      icon: "🧭",
       movie: [12],
       tv: [10759],
       tv_kw: [],
@@ -121,7 +113,6 @@ defmodule Roki.Mood do
       font: "'Fredoka', sans-serif",
       label: "Feel like a kid",
       tagline: "Bright, kind, and over before bedtime.",
-      icon: "🎈",
       movie: [16, 10751],
       tv: [16, 10762, 10751],
       tv_kw: [],
@@ -132,7 +123,6 @@ defmodule Roki.Mood do
       font: "'Cinzel', serif",
       label: "Travel back in time",
       tagline: "Real people, old wars, better clothes.",
-      icon: "🏛️",
       movie: [36, 10752],
       tv: [10768],
       tv_kw: [],
@@ -143,7 +133,6 @@ defmodule Roki.Mood do
       font: "'Courier Prime', monospace",
       label: "Something true",
       tagline: "It happened. Someone filmed it.",
-      icon: "🎥",
       movie: [99],
       tv: [99],
       tv_kw: [],
@@ -153,6 +142,22 @@ defmodule Roki.Mood do
 
   @kinds [:all, :movies, :shows, :anime]
   @sorts [popular: "Popular", newest: "Newest", top: "Top rated"]
+
+  @doc """
+  The mood's place in the list, as the two digits it is shown with: `"03"`. Moods are numbered
+  the way a programme numbers its films, which is what stands where a pictogram would.
+  """
+  def number(%{slug: slug}), do: number(slug)
+
+  def number(slug) when is_binary(slug) do
+    case Enum.find_index(@moods, &(&1.slug == slug)) do
+      nil -> "00"
+      i -> (i + 1) |> Integer.to_string() |> String.pad_leading(2, "0")
+    end
+  end
+
+  @doc "How many moods there are."
+  def count, do: length(@moods)
 
   @doc "The Google Fonts families the moods' names are set in, as the `family=` query asks for them."
   def fonts,

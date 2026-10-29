@@ -91,4 +91,68 @@ defmodule RokiWeb.FeaturedLiveTest do
       refute html =~ "See which"
     end
   end
+
+  describe "the mood picker" do
+    @emoji ~r/[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{FE0F}]/u
+
+    test "has no emoji in it: the moods are their names, their colours and their numbers", %{
+      conn: conn
+    } do
+      {:ok, view, _} = live(conn, "/home")
+      picker = view |> element("#mood-picker") |> render()
+
+      refute picker =~ @emoji
+      # Every mood is in it, numbered the way a programme numbers its films.
+      for mood <- Roki.Mood.all() do
+        assert picker =~ mood.label
+        assert picker =~ ">#{Roki.Mood.number(mood)}<"
+      end
+    end
+
+    test "each chip carries a dot in its mood's colour, in place of a picture", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/home")
+
+      for mood <- Roki.Mood.all() do
+        assert has_element?(
+                 view,
+                 ~s|[data-mood-chip="#{mood.slug}"] span.rounded-full.bg-\\[var\\(--mood\\)\\]|
+               )
+      end
+    end
+
+    test "each chip holds the room of both its states, so none changes size when it is lit", %{
+      conn: conn
+    } do
+      {:ok, view, _} = live(conn, "/home")
+
+      for mood <- Roki.Mood.all() do
+        chip = view |> element(~s|[data-mood-chip="#{mood.slug}"]|) |> render()
+
+        # Two invisible copies of the name, one set as the lit chip is and one as it is not,
+        # and the visible one on top of them: the chip is as wide as the wider, always.
+        assert length(Regex.scan(~r/class="invisible /, chip)) == 2,
+               "#{mood.slug} does not reserve both states"
+
+        assert chip =~
+                 Phoenix.HTML.safe_to_string(
+                   Phoenix.HTML.html_escape("font-family: #{mood.font}")
+                 )
+
+        # …and none of it is read out twice.
+        assert length(Regex.scan(~r/aria-hidden="true"/, chip)) >= 2
+      end
+    end
+
+    test "the title is set in the mood's own typeface, with a rule in its colour under it", %{
+      conn: conn
+    } do
+      {:ok, view, _} = live(conn, "/home")
+      scared = Roki.Mood.get("scared")
+
+      # The typeface's name has quotes in it, which the page's HTML escapes.
+      font = Phoenix.HTML.html_escape("font-family: #{scared.font}")
+      assert render(view) =~ Phoenix.HTML.safe_to_string(font)
+      assert render(view) =~ "background: hsl(#{scared.hue} 90% 62%)"
+    end
+  end
 end

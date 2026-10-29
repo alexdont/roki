@@ -67,4 +67,20 @@ defmodule RokiWeb.MoodLiveTest do
     for m <- Roki.Mood.all(), do: assert(html =~ ~s(href="/mood/#{m.slug}"))
     assert html =~ ~s(data-mood="scared")
   end
+
+  test "a mood page's band shows the mood's number, very large, instead of a picture", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, "/mood/scared")
+    band = view |> element("section.isolate") |> render()
+
+    # The typeface's name has quotes in it, which the page's HTML escapes.
+    font = Phoenix.HTML.html_escape("font-family: #{Roki.Mood.get("scared").font}")
+    assert band =~ Phoenix.HTML.safe_to_string(font)
+    assert band =~ ~r/>\s*#{Roki.Mood.number("scared")}\s*</
+
+    # Nothing in the band is a pictograph. (The posters below it carry a plain "★" for a rating,
+    # which is type, not a picture.)
+    refute band =~ ~r/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}]/u
+  end
 end

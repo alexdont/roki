@@ -45,4 +45,28 @@ defmodule Roki.MoodTest do
     assert %{"scared" => [%{title: "Held Scare"}]} = Map.take(Mood.hero_peek(), ["scared"])
     assert {:error, :no_such_mood} = Mood.page("nope")
   end
+
+  # Pictographs, symbols and the selector that turns a character into one.
+  @emoji ~r/[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{FE0F}]/u
+
+  test "a mood is a name, a typeface and a colour — it has no pictogram" do
+    for mood <- Mood.all() do
+      refute Map.has_key?(mood, :icon), "#{mood.slug} still has an icon"
+      refute mood.label =~ @emoji, "#{mood.slug}'s name has an emoji in it"
+      refute mood.tagline =~ @emoji, "#{mood.slug}'s tagline has an emoji in it"
+      assert is_binary(mood.font) and is_integer(mood.hue)
+    end
+  end
+
+  test "moods are numbered by their place in the list, as a programme numbers its films" do
+    assert Mood.count() == 12
+    assert Mood.number("scared") == "01"
+    assert Mood.number("true") == "12"
+    assert Mood.number(Mood.get("love")) == "03"
+
+    assert Enum.map(Mood.all(), &Mood.number/1) ==
+             for(n <- 1..12, do: String.pad_leading("#{n}", 2, "0"))
+
+    assert Mood.number("nope") == "00"
+  end
 end

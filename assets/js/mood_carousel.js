@@ -73,9 +73,23 @@ export const MoodCarousel = {
         bar.style.transform = "scaleX(1)"
       }
     })
-    // On a phone the chips scroll sideways: keep the lit one in view.
-    const chip = this.chips[i]
-    if (chip && chip.scrollIntoView && window.innerWidth < 640) chip.scrollIntoView({block: "nearest", inline: "center", behavior: "smooth"})
+    this.centre(this.chips[i])
+  },
+
+  // On a phone the chips scroll sideways: keep the lit one in the middle of its row.
+  //
+  // Sideways only, and by scrolling the row itself. `scrollIntoView` scrolls every ancestor that
+  // can scroll, the page included, and a mood turns on a timer: anyone reading further down the
+  // page was carried back up to the picker every six seconds, and again each time the page
+  // updated.
+  centre(chip) {
+    const row = chip && chip.parentElement
+    if (!row || window.innerWidth >= 640 || row.scrollWidth <= row.clientWidth) return
+
+    const here = chip.getBoundingClientRect()
+    const box = row.getBoundingClientRect()
+    const left = row.scrollLeft + (here.left - box.left) - (box.width - here.width) / 2
+    row.scrollTo({left: Math.max(0, left), behavior: this.reduced ? "auto" : "smooth"})
   },
 
   arm() {
