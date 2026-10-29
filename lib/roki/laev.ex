@@ -1252,14 +1252,10 @@ defmodule Roki.Laev do
   """
   def unfinished(uuid) do
     run(uuid, fn ->
-      watched = session_days()
-      marked = anime_updates()
-      measured = measured_seconds()
-
       for row <- Laev.Shelf.rows(),
           is_map(row),
           is_binary(row[:title]) or is_integer(row[:mal_id]) do
-        at = watched_at(row, watched, marked, measured)
+        at = row[:watched_at]
 
         %{
           type: row[:type],
@@ -1276,97 +1272,6 @@ defmodule Roki.Laev do
         }
       end
     end)
-  end
-
-  @doc """
-  When a title was watched, which is not the same question as when its player was last opened.
-
-  Laev's shelf answers with the later of MyAnimeList's own timestamp and its resume entry's,
-  which is right for deciding what to put in front of you next. It is wrong as a date: a
-  resume entry is written the moment a source is resolved, so **opening** a title stamps it —
-  and six seconds of testing an anime watched years ago on MyAnimeList moved three hours of
-  marked episodes into this week.
-
-  So a resume stamp has to be backed by watching before it is taken as a date. Three things
-  can back it, in order: a session in the tick log (`Laev.Stints`, the real answer since laev
-  0.1.46); failing that, a measurement worth more than a minute, which is how anything played
-  before the tick log existed proves itself; and failing both, MyAnimeList's `updated`, which
-  is a statement about watching rather than about pressing play.
-
-  A title with none of the three keeps the shelf's own answer, because then that is all there
-  is and no date at all would be worse. Nothing is discarded by this — a date only moves where
-  something better contradicts it.
-  """
-  @played_floor_s 120
-
-  def watched_at(row, session_days, anime_updates, measured) do
-    mal = if is_integer(row[:mal_id]), do: anime_updates[row[:mal_id]], else: nil
-    key = key_of(row)
-    shelf = if is_integer(row[:watched_at]), do: row[:watched_at], else: 0
-
-    cond do
-      # Watched here, measurably: the later of the two is the honest answer again.
-      is_integer(session_days[key]) -> Enum.max([session_days[key], mal || 0])
-      Map.get(measured, key, 0) >= @played_floor_s -> Enum.max([shelf, mal || 0])
-      is_integer(mal) -> mal
-      true -> shelf
-    end
-  end
-
-  # The last day each title was really watched, from laev's own tick log, as a unix time.
-  defp session_days do
-    for s <- Laev.Stints.sessions(), reduce: %{} do
-      acc ->
-        case Roki.Stints.parse(s.item) do
-          nil -> acc
-          key -> Map.update(acc, key, s.ended_at, &max(&1, s.ended_at))
-        end
-    end
-  rescue
-    _ -> %{}
-  end
-
-  # MyAnimeList's own timestamp per anime, read once rather than per row.
-  defp anime_updates do
-    for {mal_id, %{updated: at}} <- Laev.Shelf.anime_list(), is_integer(at), at > 0, into: %{} do
-      {mal_id, at}
-    end
-  rescue
-    _ -> %{}
-  end
-
-  # Seconds laev ever measured for each title, summed over its episodes. Read from the
-  # measurement files directly: the fold that would otherwise give this costs a TMDB lookup
-  # per title, and all that is needed here is "was anything really played".
-  defp measured_seconds do
-    dir = Path.join(Laev.Scope.dir(), "played")
-
-    case File.ls(dir) do
-      {:ok, names} ->
-        for name <- names, key = Roki.Stints.parse(Laev.Stints.item(name)), reduce: %{} do
-          acc ->
-            case File.read(Path.join(dir, name)) do
-              {:ok, body} ->
-                case Integer.parse(String.trim(body)) do
-                  {seconds, _} -> Map.update(acc, key, seconds, &(&1 + seconds))
-                  _ -> acc
-                end
-
-              _ ->
-                acc
-            end
-        end
-
-      _ ->
-        %{}
-    end
-  end
-
-  # How the tick log keys a title: an anime by its MyAnimeList id, everything else by TMDB's.
-  defp key_of(row) do
-    if is_integer(row[:mal_id]),
-      do: {"mal", row[:mal_id]},
-      else: {to_string(row[:type]), row[:id]}
   end
 
   defp status_of(:on_hold), do: "on_hold"
