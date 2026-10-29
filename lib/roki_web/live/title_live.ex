@@ -2051,7 +2051,7 @@ defmodule RokiWeb.TitleLive do
             value={@rating.value || 7}
             oninput="rokiScore(this)"
             data-gold={gold?(@rating) && ""}
-            style={"--thumb: #{ScoreColor.color(@rating.value || 7)}; --track: #{ScoreColor.track(if @rating.provider == :mal, do: 1, else: 0.5)}"}
+            style={"--c: #{ScoreColor.color(@rating.value || 7)}; --p: #{ScoreColor.fraction(@rating.value || 7, if(@rating.provider == :mal, do: 1, else: 0.5))}"}
             class="rate-range w-full"
             aria-label="Your rating"
           />

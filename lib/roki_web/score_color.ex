@@ -1,6 +1,6 @@
 defmodule RokiWeb.ScoreColor do
   @moduledoc """
-  The colour of a score: what the rating dialog's track, thumb and number are drawn in.
+  The colour of a score: what the rating dialog's bar, thumb and number are drawn in.
 
   **One ramp, once.** Red at 1, through yellow, to green at 7 — and from there *deepening*, toward
   emerald at 9.5, rather than coming back round. The ramp used to carry on turning past green,
@@ -10,10 +10,14 @@ defmodule RokiWeb.ScoreColor do
   start or the end.
 
   **Ten is not on the ramp.** It is the one score that is a different kind of thing — nothing
-  scores higher — so it is gold, a metal rather than a hue: set in a gradient on the number and
-  the thumb, and as a hard-edged cap at the very end of the track, so nothing in between can blend
-  toward it. Gold is defined in the stylesheet (`--gold`, `--gold-fill`); this module only says
-  *where* it is used.
+  scores higher — so it is gold, a metal rather than a hue: the whole bar, the thumb and the number
+  are set in it, and the bar glows. Gold is defined in the stylesheet (`--gold`, `--gold-fill`);
+  this module only says *where* it is used.
+
+  **The bar is the score's colour.** It is not a fixed gradient with a thumb on it: as the thumb
+  moves the whole bar becomes the colour of the score under it, filled up to the thumb and tinted
+  beyond. So the colour is one value, not a map of the whole scale, and where the thumb is
+  (`fraction/2`) is the only other thing the stylesheet needs.
 
   The colours a score has are handed to the page's script as a table (`table/0`), so the slider
   does not carry a second copy of the formula to drift from this one.
@@ -52,25 +56,11 @@ defmodule RokiWeb.ScoreColor do
   end
 
   @doc """
-  The track the thumb runs along, as a CSS gradient. `min` is where the slider starts (0.5 for a
-  TMDB rating, 1 for MyAnimeList's whole numbers), so a score sits where the thumb will.
-
-  The ramp is smooth up to 9.5, and then the last notch is gold with a hard edge: no stop on the
-  way blends toward it.
+  How far along the bar the thumb is for a score, from 0 to 1. `min` is where the slider starts
+  (0.5 for a TMDB rating, 1 for MyAnimeList's whole numbers), so the fill ends where the thumb is.
   """
-  def track(min \\ 0.5) do
-    at = fn v -> Float.round((v - min) / (10 - min) * 100, 1) end
-
-    ramp_stops = for v <- 1..9, do: "#{ramp(v)} #{at.(v)}%"
-    # The edge halfway between the last score on the ramp and ten.
-    edge = at.((@top_of_ramp + 10) / 2)
-
-    stops =
-      ramp_stops ++
-        ["#{ramp(@top_of_ramp)} #{at.(@top_of_ramp)}%", "#{ramp(@top_of_ramp)} #{edge}%"] ++
-        ["var(--gold) #{edge}%", "var(--gold) 100%"]
-
-    "linear-gradient(90deg, #{Enum.join(stops, ", ")})"
+  def fraction(v, min \\ 0.5) when is_number(v) do
+    ((v - min) / (10 - min)) |> max(0.0) |> min(1.0) |> Float.round(4)
   end
 
   @doc """

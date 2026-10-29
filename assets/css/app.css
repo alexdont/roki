@@ -538,15 +538,25 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .peek-released { margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.55; }
 
 
-/* The rating slider: a red-to-green track with a gold notch at the end, the thumb in the colour of
-   the score. Ten is not on the ramp: it is the one score nothing beats, and it is gold — a metal,
-   so a gradient rather than a yellow — on the number, the thumb and the last notch of the track.
-   `RokiWeb.ScoreColor` says where each colour is used. */
+/* The rating slider. The bar is the colour of the score under the thumb: filled up to the thumb in
+   that colour, and tinted in it beyond, so the whole bar changes as the thumb moves (red, through
+   yellow, to green — `RokiWeb.ScoreColor` says which). Ten is the one score nothing beats, and it
+   is gold, which is a metal and not a hue: the whole bar is a gold that glows and slowly shimmers.
+
+   `--c` is the colour and `--p` how far along the bar the thumb is, 0 to 1; both are set on the
+   input, by the page the first time and by `rokiScore` as it moves. */
 :root {
   --gold-light: #fff0a8;
   --gold: #f4c430;
   --gold-deep: #b8860b;
   --gold-fill: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 38%, var(--gold-deep) 74%, var(--gold) 100%);
+}
+
+/* Registered, so the bar can fade from one colour to the next instead of jumping. */
+@property --c {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: hsl(130 75% 46%);
 }
 
 /* Text in the gold: the number and the word, when the score is ten. */
@@ -560,35 +570,62 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 }
 
 .rate-range {
+  --thumb-w: 1.75rem;
+  /* Where the thumb's middle is. A native thumb does not travel the whole width of the bar: its
+     middle runs from half a thumb in to half a thumb short of the end. */
+  --fill: calc(var(--thumb-w) / 2 + (100% - var(--thumb-w)) * var(--p, 0.65));
   -webkit-appearance: none;
   appearance: none;
   height: 0.75rem;
   border-radius: 9999px;
-  background: var(--track);
   outline-offset: 4px;
+  /* Filled to the thumb, and tinted beyond it. The tint is the colour itself, thinned out over
+     whatever the dialog is on: mixing it into a grey instead pulls every colour toward that grey's
+     warmth, which turned the unfilled part of a green bar slightly yellow. */
+  background:
+    linear-gradient(90deg, var(--c) var(--fill), transparent var(--fill)),
+    color-mix(in oklab, var(--c) 24%, transparent);
+  transition: --c 0.2s ease, box-shadow 0.3s ease;
 }
 .rate-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  height: 1.75rem;
-  width: 1.75rem;
+  height: var(--thumb-w);
+  width: var(--thumb-w);
   border-radius: 9999px;
-  background: var(--thumb);
+  background: var(--c);
   border: 3px solid #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
 }
 .rate-range::-moz-range-thumb {
-  height: 1.5rem;
-  width: 1.5rem;
+  height: var(--thumb-w);
+  width: var(--thumb-w);
+  box-sizing: border-box;
   border-radius: 9999px;
-  background: var(--thumb);
+  background: var(--c);
   border: 3px solid #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
 }
 .rate-range::-moz-range-track {
   background: transparent;
 }
-/* At ten the thumb is gold, with a glow, to say so. */
+
+/* Ten: the whole bar is gold, and it glows. The light moves along it slowly; with reduced motion
+   it stays where it is. The gradient starts and ends on the same colour so it tiles, and the
+   shimmer is a sideways drift of one whole tile. */
+.rate-range[data-gold] {
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold) 22%, var(--gold-light) 50%, var(--gold) 78%, var(--gold-deep));
+  background-size: 200% 100%;
+  box-shadow: 0 0 0 1px var(--gold-deep), 0 0 16px 3px rgb(244 196 48 / 0.65), 0 0 36px 6px rgb(244 196 48 / 0.28);
+  animation: rate-shimmer 3.4s linear infinite;
+}
+@keyframes rate-shimmer {
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rate-range[data-gold] { animation: none; }
+}
+/* …and the thumb is the same gold, glowing too. */
 .rate-range[data-gold]::-webkit-slider-thumb {
   background: var(--gold-fill);
   box-shadow: 0 0 0 1px var(--gold-deep), 0 0 14px 2px rgb(244 196 48 / 0.7);

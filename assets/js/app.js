@@ -214,7 +214,7 @@ window.addEventListener("roki:reveal", e => e.target.scrollIntoView({behavior: "
 // colours are `RokiWeb.ScoreColor`'s — one scale, kept in one place, rather than a copy of its
 // formula here to drift from it. Ten is "gold", which is not a colour on the ramp but a metal, and
 // is drawn with the stylesheet's gold: a class on the number and the word, an attribute on the
-// slider for its thumb.
+// slider for its bar and thumb.
 let SCORE_WORDS = {}
 let SCORE_COLORS = {}
 window.rokiScore = input => {
@@ -240,7 +240,12 @@ window.rokiScore = input => {
   }
   if (gold) input.setAttribute("data-gold", "")
   else input.removeAttribute("data-gold")
-  input.style.setProperty("--thumb", gold ? "" : color)
+
+  // The bar is the colour of the score, filled up to the thumb: the colour, and how far along it
+  // is. (Where the slider starts is its own: 0.5 for a TMDB rating, 1 for MyAnimeList's.)
+  const min = Number(input.min), max = Number(input.max)
+  input.style.setProperty("--c", gold ? "var(--gold)" : color)
+  input.style.setProperty("--p", String(Math.min(1, Math.max(0, (v - min) / (max - min)))))
 }
 
 // Play on an external player: the server found the release and says where to open it.

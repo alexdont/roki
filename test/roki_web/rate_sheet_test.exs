@@ -70,11 +70,11 @@ defmodule RokiWeb.RateSheetTest do
       refute element(html, "rate-word") =~ "color:"
     end
 
-    test "has no ramp colour on its thumb either: the stylesheet's gold draws it" do
-      html = sheet(10.0)
+    test "fills the whole bar: the thumb is at the very end" do
+      [input] = Regex.run(~r/<input[^>]*class="rate-range[^>]*>/s, sheet(10.0))
 
-      [input] = Regex.run(~r/<input[^>]*class="rate-range[^>]*>/s, html)
-      assert input =~ "--thumb: var(--gold)"
+      assert input =~ "--c: var(--gold)"
+      assert input =~ "--p: 1.0"
     end
 
     test "turns the 'your rating' line gold too" do
@@ -103,21 +103,39 @@ defmodule RokiWeb.RateSheetTest do
     end
   end
 
-  describe "the track" do
-    test "ends in the gold notch on a TMDB slider" do
-      html = sheet(7.0)
+  describe "the bar" do
+    defp bar(html), do: hd(Regex.run(~r/<input[^>]*class="rate-range[^>]*>/s, html))
 
-      assert html =~ "var(--gold) 97.4%, var(--gold) 100%"
-      assert html =~ ~s(min="0.5")
+    test "is the colour of the score, filled as far as the thumb, on a TMDB slider" do
+      bar = bar(sheet(7.0))
+
+      assert bar =~ "--c: hsl(130 75% 46%)"
+      # Seven is 6.5 of 9.5 along a slider that starts at 0.5.
+      assert bar =~ "--p: 0.6842"
+      assert bar =~ ~s(min="0.5")
     end
 
     test "is laid out for whole numbers on a MyAnimeList slider" do
-      html = sheet(7.0, :mal)
+      bar = bar(sheet(7.0, :mal))
 
-      assert html =~ ~s(min="1")
-      assert html =~ "var(--gold) 97.2%, var(--gold) 100%"
-      # One is the very start of that slider, not 5% along it.
-      assert html =~ "hsl(0 75% 46%) 0.0%"
+      assert bar =~ ~s(min="1")
+      # Seven is 6 of 9 along a slider that starts at 1.
+      assert bar =~ "--p: 0.6667"
+    end
+
+    test "follows the score it opens on" do
+      assert bar(sheet(2.0)) =~ "--c: hsl(22 75% 46%)"
+      assert bar(sheet(2.0)) =~ "--p: 0.1579"
+      assert bar(sheet(9.5)) =~ "--c: hsl(152 80% 42%)"
+      assert bar(sheet(nil)) =~ "--c: hsl(130 75% 46%)"
+    end
+
+    test "no longer carries a fixed gradient, since the bar is the colour of the score" do
+      html = sheet(7.0)
+
+      refute html =~ "--track"
+      refute html =~ "--thumb"
+      refute html =~ "linear-gradient"
     end
   end
 

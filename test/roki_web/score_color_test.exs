@@ -1,6 +1,6 @@
 defmodule RokiWeb.ScoreColorTest do
   @moduledoc """
-  The rating scale's colours. The scale used to run red, yellow, green, and then back to yellow
+  The rating scale's colours and where the thumb sits. The scale used to run red, yellow, green, and then back to yellow
   for the top scores, so 8 looked worse than 7 and 10 looked like a yellow 4.
   """
   use ExUnit.Case, async: true
@@ -65,59 +65,32 @@ defmodule RokiWeb.ScoreColorTest do
     end
   end
 
-  describe "the track" do
-    # "hsl(…) 94.7%" -> {"hsl(…)", 94.7}
-    defp stops(track) do
-      [_, inner] = Regex.run(~r/^linear-gradient\(90deg, (.*)\)$/, track)
-
-      inner
-      |> String.split(~r/,\s(?![^()]*\))/)
-      |> Enum.map(fn stop ->
-        [color, pos] = Regex.run(~r/^(.*) ([\d.]+)%$/, stop, capture: :all_but_first)
-        {color, pos |> Float.parse() |> elem(0)}
-      end)
+  describe "where the thumb is" do
+    test "is how far along the bar the score is, from nothing to the whole of it" do
+      assert ScoreColor.fraction(0.5) == 0.0
+      assert ScoreColor.fraction(10) == 1.0
+      assert ScoreColor.fraction(5.25) == 0.5
     end
 
-    test "is a gradient left to right whose stops only move forward" do
-      positions = stops(ScoreColor.track()) |> Enum.map(&elem(&1, 1))
-
-      assert positions == Enum.sort(positions)
-      assert List.last(positions) == 100.0
-      assert Enum.all?(positions, &(&1 >= 0 and &1 <= 100))
-    end
-
-    test "ends in a gold notch with a hard edge, so nothing blends toward it" do
-      stops = stops(ScoreColor.track())
-      [{green_end, edge}, {gold_start, edge2}, {gold_end, 100.0}] = Enum.take(stops, -3)
-
-      assert gold_start == "var(--gold)" and gold_end == "var(--gold)"
-      # The edge is one position, with green on its left and gold on its right.
-      assert edge == edge2
-      assert hue(green_end) > 140
-    end
-
-    test "has no yellow, and no turning back, between green and the gold" do
-      ramp = stops(ScoreColor.track()) |> Enum.reject(fn {c, _} -> c == "var(--gold)" end)
-      hues = Enum.map(ramp, fn {c, _} -> hue(c) end)
-
-      assert hues == Enum.sort(hues)
-      assert hue(elem(List.last(ramp), 0)) > 140
-    end
-
-    test "puts a score where the thumb will be: from 0.5 for a TMDB rating, from 1 for MyAnimeList" do
-      tmdb = stops(ScoreColor.track(0.5))
-      mal = stops(ScoreColor.track(1))
-
+    test "for a TMDB rating the bar starts at 0.5, for MyAnimeList's whole numbers at 1" do
       # Seven is 6.5 of 9.5 along one slider and 6 of 9 along the other.
-      assert {_, 68.4} = Enum.find(tmdb, fn {c, _} -> c == ScoreColor.color(7) end)
-      assert {_, 66.7} = Enum.find(mal, fn {c, _} -> c == ScoreColor.color(7) end)
+      assert ScoreColor.fraction(7, 0.5) == 0.6842
+      assert ScoreColor.fraction(7, 1) == 0.6667
+      assert ScoreColor.fraction(1, 1) == 0.0
+      assert ScoreColor.fraction(10, 1) == 1.0
     end
 
-    test "is the same notch on both, a little under three per cent of the way" do
-      for min <- [0.5, 1] do
-        [{_, edge} | _] = stops(ScoreColor.track(min)) |> Enum.take(-2)
-        assert edge > 96 and edge < 98
-      end
+    test "never leaves the bar" do
+      assert ScoreColor.fraction(0, 0.5) == 0.0
+      assert ScoreColor.fraction(-3) == 0.0
+      assert ScoreColor.fraction(12) == 1.0
+    end
+
+    test "only rises with the score" do
+      fractions = for halves <- 1..20, do: ScoreColor.fraction(halves / 2)
+
+      assert fractions == Enum.sort(fractions)
+      assert Enum.uniq(fractions) == fractions
     end
   end
 
