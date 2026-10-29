@@ -159,6 +159,29 @@ body::before {
    changes. */
 .site-header { padding-top: env(safe-area-inset-top, 0px); }
 
+/* The reader runs its page into the top of the screen, under the clock, and fades out as it
+   gets there — no strip of flat colour pretending to be a bar, and no line where the page
+   stops, because it does not stop anywhere: it stops being there.
+
+   The shell is pulled up past the safe-area inset, which puts the screen's top edge one inset
+   into the element and the bottom of the status bar two. The mask is transparent either side of
+   the first and solid by the second. Where there is no inset both stops are zero and the mask
+   is a gradient between two identical points, which is to say nothing at all. */
+#fresco-strip-shell {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(env(safe-area-inset-top, 0px) * 0.95),
+    #000 calc(env(safe-area-inset-top, 0px) * 2)
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(env(safe-area-inset-top, 0px) * 0.95),
+    #000 calc(env(safe-area-inset-top, 0px) * 2)
+  );
+}
+
 /* The manga reader is a page you scroll for minutes at a time, often thousands of pixels of
    one image. A fixed background and a blended noise layer over the whole viewport are
    recomposited on every frame of that, which is what makes it feel heavier here than in the

@@ -13,16 +13,16 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="roki" />
-    <%!-- "black", not "default" and not "black-translucent".
+    <%!-- black-translucent: the page paints under the status bar rather than below a bar of its
+          own, so a chapter runs to the top of the screen and fades out there (app.css) instead
+          of stopping at a strip of flat colour.
 
-          Translucent lets the page paint under the status bar, which is the only way to put a
-          gradient up there — and it costs more than it gives: the manga reader pulls its shell
-          past the safe-area inset, so with a real inset every snap lands a status bar too high,
-          and on every other page the clock sits over the content. Default avoids both and gives
-          a bar the colour of the page, which on a reading page is white and bright.
-          Black is the third: the page is laid out below the bar, so nothing shifts anywhere,
-          and the bar is black rather than white. --%>
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+          This needs manhwa 0.1.11, which lands a snap below the status bar rather than below the
+          top of its own container — the container starts a status bar above the screen when the
+          page owns that strip, and every snap landed that far too high until it accounted for
+          it. Everywhere else the strip is the site header's own background, which pads itself by
+          the same inset. --%>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href={~p"/images/apple-touch-icon.png"} />
     <%!-- The paged reader's panel zoom, read by assets/js/panel_overlay.js. --%>
     <meta
