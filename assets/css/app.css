@@ -207,7 +207,7 @@ html.study-open .site-header { display: none; }
 
 @media (hover: hover) and (min-width: 1024px) {
   [data-card-row]:has(> [data-card][data-open]) > [data-card] {
-    transform: translateX(calc(var(--card-w) * -0.35));
+    transform: translateX(calc(var(--slide, calc(var(--card-w) * 0.35)) * -1));
   }
 
   [data-card-row]:has(> [data-card]:first-child[data-open]) > [data-card] {
@@ -217,6 +217,12 @@ html.study-open .site-header { display: none; }
   [data-card-row] > [data-card][data-open] {
     width: calc(var(--card-w) * 1.7);
   }
+}
+
+/* While a card is open the row does not snap: widening its slot changes what the nearest snap point
+   is, and the browser would nudge the row a few pixels once the card is open. */
+[data-card-row]:has(> [data-card][data-open]) {
+  scroll-snap-type: none;
 }
 
 /* The card that opens (ShelfRow / GridCards mark its poster `data-open` once the pointer has rested

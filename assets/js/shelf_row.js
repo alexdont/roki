@@ -168,10 +168,31 @@ export const cardMethods = {
       const extra = r.width * 0.35 + 12
       li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
     }
+    if (!this.grid) this.slideFor(li)
     li.dataset.open = "true"
     this.timers = []
     this.nudge(li)
     this.show(li, Date.now())
+  },
+
+  // How far the row slides left as a card opens in it. Usually the card grows evenly to both sides
+  // (0.35 of a poster each); near a chevron it is the distance that keeps the whole card clear of
+  // the chevron's strip, worked out before it opens: the card is then in its place from the start
+  // and nothing moves again afterwards (it used to be scrolled into view once open, a second jerk).
+  slideFor(li) {
+    const box = this.scroller.getBoundingClientRect()
+    const r = li.getBoundingClientRect()
+    const grow = r.width * 0.7
+    const hasLeft = this.el.dataset.start === "false"
+    const hasRight = this.el.dataset.end === "false"
+    const minLeft = box.left + (hasLeft ? 60 : 12)
+    const maxRight = box.right - (hasRight ? 60 : 12)
+    let slide = r.width * 0.35
+    const overRight = r.right + grow - slide - maxRight
+    if (overRight > 0) slide += overRight
+    const overLeft = minLeft - (r.left - slide)
+    if (overLeft > 0) slide -= overLeft
+    this.scroller.style.setProperty("--slide", `${Math.max(0, slide)}px`)
   },
 
   // In a grid the card opens over its cell and the others stay where they are in the flow: the ones
@@ -210,7 +231,6 @@ export const cardMethods = {
     if (this.hot !== li) return
 
     if (info) this.fill(li, info)
-    this.timers.push(setTimeout(() => this.reveal(li), 380))
 
     if (li.dataset.signed === "true") {
       libraryState(key).then((st) => { if (this.hot === li && st) setSaved(li, st.saved) })
@@ -231,16 +251,6 @@ export const cardMethods = {
       const next = new Image()
       next.onload = () => { if (img) { img.src = info.backdrop; img.classList.remove("blur-sm", "scale-110") } }
       next.src = info.backdrop
-    }
-  },
-
-  // A card that opened at the edge of the row is brought fully into view.
-  reveal(li) {
-    if (this.hot !== li || this.grid) return
-    const r = li.getBoundingClientRect()
-    const box = this.scroller.getBoundingClientRect()
-    if (r.right > box.right - 16) {
-      this.scroller.scrollBy({left: r.right - box.right + 56, behavior: "smooth"})
     }
   },
 
@@ -269,6 +279,7 @@ export const cardMethods = {
     const li = this.hot
     this.hot = null
     if (li) delete li.dataset.open
+    if (li && !this.grid) this.scroller.style.removeProperty("--slide")
     ;(this.nudged || []).forEach((c) => { delete c.dataset.nudge; c.style.removeProperty("--nudge") })
     this.nudged = []
     const slot = li?.querySelector("[data-card-trailer]")
