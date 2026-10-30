@@ -114,6 +114,9 @@ defmodule RokiWeb.HomeRowsTest do
 
       assert render.(true) =~ "data-card-save"
       refute render.(false) =~ "data-card-save"
+      # Save for later and mark watched are both on the card, for anyone signed in.
+      assert render.(true) =~ "data-card-watched"
+      refute render.(false) =~ "data-card-watched"
       assert render.(false) =~ ~s(href="/phoenix_kit/users/log-in")
     end
 

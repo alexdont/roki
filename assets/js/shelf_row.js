@@ -47,6 +47,26 @@ const setSaved = (li, saved) => {
   btn.title = btn.getAttribute("aria-label")
 }
 
+// The watched mark's button: the same two-state icon as the save one, and the poster greys out like
+// any watched title (as the old card did), without waiting for the page.
+const setWatched = (li, watched) => {
+  const btn = li.querySelector("[data-card-watched]")
+  if (btn) {
+    btn.querySelector("[data-off]")?.classList.toggle("hidden", !!watched)
+    btn.querySelector("[data-on]")?.classList.toggle("hidden", !watched)
+    const series = li.dataset.key.startsWith("tv/")
+    btn.setAttribute(
+      "aria-label",
+      watched
+        ? `${series ? "Completed" : "Watched"} (click to mark as not watched)`
+        : series ? "Mark as completed" : "Mark as watched"
+    )
+    btn.title = btn.getAttribute("aria-label")
+  }
+  li.querySelector("a.poster-card")?.classList.toggle("opacity-50", !!watched)
+  li.querySelector("a.poster-card img")?.classList.toggle("grayscale", !!watched)
+}
+
 export const ShelfRow = {
   mounted() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
@@ -165,8 +185,10 @@ export const cardMethods = {
       if ((this.hot && !this.hot.contains(to)) || (this.cand && !this.cand.contains(to))) this.leave()
     })
     this.scroller.addEventListener("click", (e) => {
-      const btn = e.target.closest?.("[data-card-save]")
-      if (btn) { e.preventDefault(); this.toggleSaved(btn.closest("[data-card]")) }
+      const save = e.target.closest?.("[data-card-save]")
+      if (save) { e.preventDefault(); this.toggle(save.closest("[data-card]"), "saved"); return }
+      const seen = e.target.closest?.("[data-card-watched]")
+      if (seen) { e.preventDefault(); this.toggle(seen.closest("[data-card]"), "watched") }
     })
   },
 
@@ -252,7 +274,9 @@ export const cardMethods = {
     if (info) this.fill(li, info)
 
     if (li.dataset.signed === "true") {
-      libraryState(key).then((st) => { if (this.hot === li && st) setSaved(li, st.saved) })
+      libraryState(key).then((st) => {
+        if (this.hot === li && st) { setSaved(li, st.saved); setWatched(li, st.watched) }
+      })
     }
     if (info?.trailer) {
       const wait = Math.max(0, TRAILER_MS - (Date.now() - started))
@@ -308,22 +332,25 @@ export const cardMethods = {
     }
   },
 
-  async toggleSaved(li) {
+  // Save for later, or mark watched: the server answers with where the title stands for this account,
+  // and both buttons are drawn from that.
+  async toggle(li, what) {
     if (!li) return
     try {
-      const res = await fetch(`/library/${li.dataset.key}/saved`, {
+      const res = await fetch(`/library/${li.dataset.key}/${what}`, {
         method: "POST",
         credentials: "same-origin",
         headers: {"x-csrf-token": csrf(), accept: "application/json"},
       })
       if (res.ok) {
-        const saved = (await res.json()).saved
-        setSaved(li, saved)
+        const st = await res.json()
+        setSaved(li, st.saved)
+        setWatched(li, st.watched)
         // On the Saved list, taking a title off drops its tile (a hidden button the page listens to).
-        if (!saved) li.querySelector("[phx-click=unsave]")?.click()
+        if (what === "saved" && !st.saved) li.querySelector("[phx-click=unsave]")?.click()
       }
     } catch (_e) {
-      // the button stays as it was
+      // the buttons stay as they were
     }
   },
 }

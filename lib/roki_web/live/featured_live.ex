@@ -1013,6 +1013,23 @@ defmodule RokiWeb.FeaturedLive do
             <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
             <span data-on class="hidden"><.icon name="hero-check" class="h-5 w-5" /></span>
           </button>
+          <button
+            :if={@signed_in?}
+            type="button"
+            data-card-watched
+            class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+            aria-label={
+              if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
+            }
+            title={
+              if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
+            }
+          >
+            <span data-off class="flex"><.icon name="hero-check-circle" class="h-5 w-5" /></span>
+            <span data-on class="hidden">
+              <.icon name="hero-check-circle-solid" class="h-5 w-5 text-emerald-400" />
+            </span>
+          </button>
           <.link
             navigate={@title_href}
             class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
