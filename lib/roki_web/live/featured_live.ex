@@ -375,7 +375,9 @@ defmodule RokiWeb.FeaturedLive do
 
       <.pitch :if={@visitor?} class="hidden lg:block" />
 
-      <div class="mx-auto max-w-6xl space-y-4 px-4 pb-8 pt-4 sm:px-6 lg:px-8">
+      <%!-- Activity has its own wrapper: on a wide screen it runs the whole width, with the same left
+            gutter as the rows above, and its cards scroll out to the edge of the window. --%>
+      <div :if={@uuid} class="mx-auto max-w-6xl px-4 pt-4 sm:px-6 lg:max-w-none lg:px-12 xl:px-16">
         <%!-- What people did lately, as one row to scroll along (or ignore): finished, started, saved,
             rated, put on an earlier day. Narrowed by kind and by whose. A group opens as a list. --%>
         <section :if={@uuid} class="space-y-2" aria-label="Activity">
@@ -445,7 +447,7 @@ defmodule RokiWeb.FeaturedLive do
 
           <ul
             :if={@activity not in [nil, []]}
-            class="-mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:scroll-px-0 sm:px-0"
+            class="-mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:scroll-px-0 sm:px-0 lg:-mx-12 lg:scroll-px-12 lg:px-12 xl:-mx-16 xl:scroll-px-16 xl:px-16"
           >
             <li :for={{run, i} <- @activity |> Enum.take(30) |> Enum.with_index()} class="contents">
               <.activity_card run={run} i={i} />
@@ -454,7 +456,9 @@ defmodule RokiWeb.FeaturedLive do
 
           <.activity_group :if={@activity_open} run={@activity_open} />
         </section>
+      </div>
 
+      <div class="mx-auto max-w-6xl space-y-4 px-4 pb-8 pt-4 sm:px-6 lg:px-8">
         <div
           :if={@loading? and @error == nil}
           class="flex items-center justify-center gap-3 py-24 text-base-content/60 lg:hidden"

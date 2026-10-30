@@ -71,6 +71,8 @@ defmodule RokiWeb.FeaturedLiveTest do
       html = render_async(view, 3000)
       assert html =~ "saved 2 films"
       assert html =~ "See which"
+      # Full width on a wide screen: the section's wrapper has no maximum width there.
+      assert has_element?(view, ~s|div[class~="lg:max-w-none"] section[aria-label="Activity"]|)
       refute html =~ ~s(aria-label="Titles in this group")
 
       html = view |> element(~s(button[phx-click="activity_open"])) |> render_click()
