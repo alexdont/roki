@@ -507,11 +507,15 @@ defmodule Roki.Link do
 
   @doc """
   "We watched it": mark the next episode for everyone in the link, whatever the page's "just me"
-  says. `{:ok, %{season, episode}}`, or `{:error, :not_linked | :paused | :nothing_next}`.
+  says. `{:ok, %{season, episode}}`, or `{:error, :not_linked | :not_linked_yet | :paused |
+  :nothing_next}` (`:not_linked_yet`: nobody else has accepted).
   """
   def watched_together(uuid, tmdb_id) do
     with %{members: members} <- active(uuid, tmdb_id) || {:error, :not_linked},
          %{paused: false} <- Enum.find(members, &(&1.uuid == uuid)) || {:error, :not_linked},
+         true <-
+           Enum.any?(members, &(&1.status == "active" and &1.uuid != uuid)) ||
+             {:error, :not_linked_yet},
          {:ok, title} <- watch().title("tv", tmdb_id, uuid),
          %{season: s, episode: e} <-
            watch().next_unwatched(uuid, title) || {:error, :nothing_next} do

@@ -1049,7 +1049,7 @@ defmodule RokiWeb.TitleLive do
         phx-click={JS.show(to: "#link-sheet", display: "flex")}
         class={[
           "btn btn-sm ml-auto h-10 max-w-60 gap-2 whitespace-nowrap rounded-full px-4",
-          @link_state != :none && "btn-primary"
+          @link_state not in [:none, :pending] && "btn-primary"
         ]}
         title={link_title(@link_state)}
         aria-label={link_title(@link_state)}
@@ -1557,8 +1557,8 @@ defmodule RokiWeb.TitleLive do
           class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
         >
           <.icon
-            name={if @link_state == :none, do: "hero-link", else: "hero-link-solid"}
-            class={["h-5 w-5", @link_state != :none && "text-primary"]}
+            name={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
+            class={["h-5 w-5", @link_state not in [:none, :pending] && "text-primary"]}
           />
           <span class="truncate">{link_label(@link_state)}</span>
         </button>
@@ -2069,10 +2069,12 @@ defmodule RokiWeb.TitleLive do
 
   defp link_label(:none), do: "Link progress"
   defp link_label(:invited), do: "Link request"
+  defp link_label(:pending), do: "Link pending"
   defp link_label({:linked, names}), do: "Linked with " <> Enum.join(names, ", ")
 
   defp link_title(:none), do: "Link this show's progress with friends"
   defp link_title(:invited), do: "A friend asked to link progress on this show"
+  defp link_title(:pending), do: "Invitation sent: nothing is shared until they accept"
   defp link_title({:linked, _}), do: "Progress linked: open to pause, add someone or unlink"
 
   attr :uuid, :string, required: true

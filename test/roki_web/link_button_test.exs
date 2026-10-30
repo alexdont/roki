@@ -28,6 +28,11 @@ defmodule RokiWeb.LinkButtonTest do
 
   test "it says where the link stands" do
     assert pills("tv", :invited) =~ "Link request"
+
+    # Invited, nobody has accepted: it says so and is not lit like a live link.
+    pending = pills("tv", :pending)
+    assert pending =~ "Link pending"
+    refute pending =~ "btn-primary"
     html = pills("tv", {:linked, ["max", "sam"]})
     assert html =~ "Linked with max, sam"
     assert html =~ "btn-primary"

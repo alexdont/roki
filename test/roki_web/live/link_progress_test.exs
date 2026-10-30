@@ -195,4 +195,36 @@ defmodule RokiWeb.LinkProgressTest do
     assert html =~ "reloads=1"
     assert MapSet.member?(FakeWatch.get(max), {1, 4})
   end
+
+  test "before anyone accepts it says so, and the button is greyed out", %{
+    conn: conn,
+    alex: alex,
+    max: max
+  } do
+    Roki.LinkFakeWatch.put(alex, for(e <- 1..3, do: {1, e}))
+    {:ok, _id} = Link.invite(alex, @show, [max])
+
+    {:ok, view, _} = host(conn, alex)
+    html = render_async(view)
+
+    assert html =~ "Not linked yet"
+    assert html =~ "Waiting for panelmax to accept. Nothing is shared until they do."
+    refute html =~ "Progress linked with"
+    refute html =~ "Pause link"
+    refute html =~ "Just me"
+
+    # The button is there but disabled, and says why.
+    assert html =~ ~r/<button[^>]*phx-click="we_watched"[^>]*disabled/
+    refute html =~ "We watched S1E"
+
+    # Even a click that gets through changes nothing.
+    assert {:error, :not_linked_yet} = Link.watched_together(alex, @show)
+    assert Roki.LinkFakeWatch.get(alex) == MapSet.new(for e <- 1..3, do: {1, e})
+    assert Link.together(alex).episodes == 0
+
+    # The invitation can be taken back.
+    view |> element("button", "Cancel invitation") |> render_click()
+    assert Link.active(alex, @show) == nil
+    assert Link.invitation(max, @show) == nil
+  end
 end

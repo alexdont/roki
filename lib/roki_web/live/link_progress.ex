@@ -49,6 +49,7 @@ defmodule RokiWeb.LinkProgress do
 
     state =
       cond do
+        link && names(link, uuid) == [] -> :pending
         link -> {:linked, names(link, uuid)}
         invitation -> :invited
         true -> :none
@@ -114,6 +115,9 @@ defmodule RokiWeb.LinkProgress do
 
       {:error, :paused} ->
         {:noreply, assign(socket, notice: "The link is paused. Resume it first.")}
+
+      {:error, :not_linked_yet} ->
+        {:noreply, assign(socket, notice: "Not linked yet: nobody has accepted.")}
 
       {:error, :nothing_next} ->
         {:noreply, assign(socket, notice: "Nothing further to mark.")}
@@ -298,20 +302,27 @@ defmodule RokiWeb.LinkProgress do
       assign(assigns,
         names: names(assigns.link, assigns.uuid),
         waiting: waiting(assigns.link),
-        paused?: me(assigns.link, assigns.uuid).paused
+        paused?: me(assigns.link, assigns.uuid).paused,
+        linked?: names(assigns.link, assigns.uuid) != []
       )
 
     ~H"""
     <div class="space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <.icon name="hero-link-solid" class="h-4 w-4 text-primary" />
-        <span class="font-medium">
+        <.icon
+          name={if @linked?, do: "hero-link-solid", else: "hero-link"}
+          class={["h-4 w-4", @linked? && "text-primary", !@linked? && "text-base-content/50"]}
+        />
+        <span :if={@linked?} class="font-medium">
           Progress linked with {Enum.join(@names, ", ")}
         </span>
-        <span :if={@paused?} class="badge badge-warning badge-sm">Paused</span>
+        <span :if={!@linked?} class="font-medium text-base-content/70">Not linked yet</span>
+        <span :if={@paused? and @linked?} class="badge badge-warning badge-sm">Paused</span>
       </div>
       <p :if={@waiting != []} class="text-xs text-base-content/60">
-        Waiting for {Enum.join(@waiting, ", ")} to accept.
+        Waiting for {Enum.join(@waiting, ", ")} to accept.{if !@linked?,
+          do: " Nothing is shared until they do.",
+          else: ""}
       </p>
       <p :if={@paused?} class="text-xs text-base-content/60">
         Paused: what you mark is not shared, and you don't get theirs.
@@ -325,21 +336,30 @@ defmodule RokiWeb.LinkProgress do
         type="button"
         phx-click="we_watched"
         phx-target={@target}
-        disabled={@paused? or not is_map(@next_up)}
-        class="btn btn-primary btn-sm h-auto min-h-9 w-full justify-start gap-2 rounded-xl px-3 py-2 text-left sm:w-auto"
+        disabled={!@linked? or @paused? or not is_map(@next_up)}
+        class={[
+          "btn btn-sm h-auto min-h-9 w-full justify-start gap-2 rounded-xl px-3 py-2 text-left sm:w-auto",
+          if(@linked? and not @paused?,
+            do: "btn-primary",
+            else: "border-0 bg-base-300 text-base-content/50 shadow-none"
+          )
+        ]}
       >
         <.icon name="hero-check-circle" class="h-5 w-5 shrink-0" />
-        <span :if={is_map(@next_up)} class="min-w-0">
+        <span :if={!@linked?} class="font-semibold">Not linked yet</span>
+        <span :if={@linked? and is_map(@next_up)} class="min-w-0">
           <span class="block font-semibold">We watched S{@next_up.season}E{@next_up.episode}</span>
           <span :if={@next_up[:name]} class="block truncate text-xs font-normal opacity-80">
             {@next_up.name}
           </span>
         </span>
-        <span :if={@next_up == nil} class="font-semibold">Finding the next episode…</span>
-        <span :if={@next_up == :done} class="font-semibold">You're all caught up</span>
+        <span :if={@linked? and @next_up == nil} class="font-semibold">
+          Finding the next episode…
+        </span>
+        <span :if={@linked? and @next_up == :done} class="font-semibold">You're all caught up</span>
       </button>
 
-      <div class="flex flex-wrap items-center gap-2">
+      <div :if={@linked?} class="flex flex-wrap items-center gap-2">
         <label class="flex cursor-pointer items-center gap-2 rounded-full bg-base-200 px-3 py-1.5">
           <input
             type="checkbox"
@@ -394,9 +414,28 @@ defmodule RokiWeb.LinkProgress do
           Unlink
         </button>
       </div>
-      <p :if={@solo?} class="text-xs text-base-content/60">
+      <p :if={@solo? and @linked?} class="text-xs text-base-content/60">
         Just me is on: what you mark on this page stays on your account.
       </p>
+      <div :if={!@linked?} class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          phx-click="pick"
+          phx-target={@target}
+          class="btn btn-sm rounded-full border-0 bg-base-200"
+        >
+          Add someone
+        </button>
+        <button
+          type="button"
+          phx-click="leave"
+          phx-target={@target}
+          data-confirm="Cancel this invitation?"
+          class="btn btn-sm btn-ghost rounded-full text-error"
+        >
+          Cancel invitation
+        </button>
+      </div>
     </div>
     """
   end
