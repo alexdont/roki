@@ -110,8 +110,8 @@ defmodule RokiWeb.SeasonButtonTest do
       assert button =~ "btn-success"
       refute button =~ "Season watched"
       assert button =~ "2 still to air"
-      # The season's name in the picker carries a tick only once it is complete.
-      refute html =~ "Miniseries ✓"
+      # The season in the picker carries a green eye only once it is complete.
+      refute html =~ "text-success"
     end
 
     test "all eight out and ticked: solid green, and the season is ticked in the picker" do
@@ -120,7 +120,7 @@ defmodule RokiWeb.SeasonButtonTest do
       assert button(html) =~ ~s(data-season="complete")
       refute button(html) =~ "btn-outline"
       assert button(html) =~ "btn-success"
-      assert html =~ "Miniseries ✓"
+      assert html =~ "hero-eye-solid h-5 w-5 shrink-0 text-success"
     end
 
     test "five of eight ticked: neither" do
@@ -128,7 +128,7 @@ defmodule RokiWeb.SeasonButtonTest do
 
       assert button(html) =~ ~s(data-season="open")
       refute button(html) =~ "btn-success"
-      refute html =~ "Miniseries ✓"
+      refute html =~ "text-success"
     end
 
     test "an episode that has not aired has no tick button of its own" do

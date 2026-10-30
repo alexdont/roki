@@ -1608,30 +1608,54 @@ defmodule RokiWeb.TitleLive do
       <%!-- The season: which one, and the whole of it watched — the dropdown, and the same
             square watched button the episode rows carry. --%>
       <div class="flex gap-2">
-        <form
-          :if={@sections != []}
-          phx-change="select_season"
-          id="season-form"
-          class="min-w-0 flex-1"
-        >
-          <select
-            name="season"
+        <%!-- The season: the site's own list rather than the browser's, so it looks and behaves the same
+              on every system, can show where each season stands, and takes any styling. --%>
+        <div :if={@sections != []} id="season-picker" class="relative min-w-0 flex-1">
+          <button
+            type="button"
+            phx-click={JS.toggle(to: "#season-picker-panel", display: "block")}
+            aria-haspopup="listbox"
             aria-label="Season"
-            class="select select-bordered h-12 w-full rounded-full px-5 text-base font-semibold sm:text-lg"
+            class="flex h-12 w-full items-center justify-between gap-3 rounded-full border border-base-300 bg-base-100/80 px-5 text-left text-base font-semibold transition hover:border-primary/50 sm:text-lg"
           >
-            <option
+            <span class="truncate">{@section && @section.label}</span>
+            <.icon name="hero-chevron-down-micro" class="h-5 w-5 shrink-0 text-base-content/60" />
+          </button>
+          <div
+            id="season-picker-panel"
+            role="listbox"
+            class="absolute left-0 right-0 top-full z-40 mt-2 hidden max-h-[22rem] overflow-y-auto rounded-2xl border border-base-300 bg-base-100 p-1.5 shadow-2xl"
+            phx-click-away={JS.hide(to: "#season-picker-panel")}
+            phx-window-keydown={JS.hide(to: "#season-picker-panel")}
+            phx-key="escape"
+          >
+            <.link
               :for={sec <- @sections}
-              value={sec.key}
-              selected={@section && sec.key == @section.key}
-              class={
-                season_done?(sec, @section, @episodes, @watched, @season_counts) &&
-                  "text-base-content/40"
-              }
+              patch={~p"/title/tv/#{@title_id}/episodes?#{[s: sec.key]}"}
+              phx-click={JS.hide(to: "#season-picker-panel")}
+              role="option"
+              aria-selected={to_string(@section != nil and sec.key == @section.key)}
+              class={[
+                "flex items-center gap-3 rounded-xl px-4 py-3 text-base transition hover:bg-base-200",
+                @section && sec.key == @section.key && "bg-base-200 font-semibold text-primary"
+              ]}
             >
-              {season_label(sec, season_done?(sec, @section, @episodes, @watched, @season_counts))}
-            </option>
-          </select>
-        </form>
+              <% done? = season_done?(sec, @section, @episodes, @watched, @season_counts) %>
+              <span class={["min-w-0 flex-1 truncate", done? && "text-base-content/45"]}>
+                {sec.label}
+              </span>
+              <span
+                :if={!done? and is_integer(sec.total) and sec.total > 0}
+                class="shrink-0 text-xs tabular-nums text-base-content/50"
+              >
+                {if @section && sec.key == @section.key,
+                  do: Enum.count(@episodes || [], &MapSet.member?(@watched, &1.number)),
+                  else: Map.get(@season_counts, sec.key, 0)}/{sec.total}
+              </span>
+              <.icon :if={done?} name="hero-eye-solid" class="h-5 w-5 shrink-0 text-success" />
+            </.link>
+          </div>
+        </div>
         <%!-- MyAnimeList rates by season: the season picked is the one rated. --%>
         <button
           :if={@can_play? and @rating.state == :ok and @rating.provider == :mal}
@@ -1769,8 +1793,6 @@ defmodule RokiWeb.TitleLive do
     </section>
     """
   end
-
-  defp season_label(sec, done?), do: sec.label <> if(done?, do: " ✓", else: "")
 
   # A season is done when every episode of it is marked. The open season is judged from the list
   # on screen (so it follows a tap at once); the others from laev's counts, no extra lookups.
