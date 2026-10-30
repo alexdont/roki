@@ -671,7 +671,7 @@ defmodule RokiWeb.TitleLive do
 
             <%!-- The comments come right after the cast: they matter more than more like this. --%>
             <div :if={@title.type in ["movie", "tv"]} class="px-4 sm:px-6 lg:px-12 xl:px-16">
-              <div class="max-w-5xl">
+              <div>
                 <.title_comments
                   id="title-comments"
                   title={@title}
@@ -963,7 +963,7 @@ defmodule RokiWeb.TitleLive do
           </a>
         </p>
 
-        <div class="flex flex-wrap items-center gap-3 pt-2">
+        <div class="flex flex-wrap items-center gap-2 pt-2 sm:gap-3">
           <.play_button
             title={@title}
             play={@play}
@@ -978,6 +978,7 @@ defmodule RokiWeb.TitleLive do
             icon="hero-play-circle"
             label="Watch the trailer"
             text="Trailer"
+            text_class="max-sm:hidden"
             class="lg:hidden"
           />
           <.glass_btn
@@ -1108,6 +1109,7 @@ defmodule RokiWeb.TitleLive do
   attr :on, :boolean, default: false
   attr :busy, :boolean, default: false
   attr :text, :string, default: nil
+  attr :text_class, :string, default: nil
   attr :tone, :atom, default: :white
   attr :class, :string, default: nil
 
@@ -1135,15 +1137,17 @@ defmodule RokiWeb.TitleLive do
     >
       <span :if={@busy} class="loading loading-spinner loading-sm"></span>
       <.icon :if={!@busy} name={@icon} class="h-5 w-5" />
-      <span :if={@text} class="max-w-40 truncate text-sm font-semibold">{@text}</span>
+      <span :if={@text} class={["max-w-40 truncate text-sm font-semibold", @text_class]}>
+        {@text}
+      </span>
     </button>
     """
   end
 
   defp glass_class(on, tone, text) do
     [
-      "flex h-12 items-center justify-center gap-1.5 rounded-full border text-white backdrop-blur-md transition",
-      if(text, do: "px-4", else: "w-12"),
+      "flex h-10 items-center justify-center gap-1.5 rounded-full border sm:h-12 text-white backdrop-blur-md transition",
+      if(text, do: "px-3 sm:px-4", else: "w-10 sm:w-12"),
       cond do
         on and tone == :success ->
           "border-emerald-300/70 bg-emerald-500/40 hover:bg-emerald-500/55"
