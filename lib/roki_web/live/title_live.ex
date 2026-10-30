@@ -953,7 +953,7 @@ defmodule RokiWeb.TitleLive do
 
         <p
           :if={@title.overview}
-          class="max-w-2xl text-sm leading-relaxed text-white/85 sm:text-base xl:text-lg"
+          class="max-w-2xl text-sm lg:hidden leading-relaxed text-white/85 sm:text-base xl:text-lg"
         >
           <span class="line-clamp-3">{@title.overview}</span>
           <a
