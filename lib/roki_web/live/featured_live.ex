@@ -968,7 +968,7 @@ defmodule RokiWeb.FeaturedLive do
         <ul
           data-row-scroller
           data-card-row
-          class="-mb-[1.25rem] -mt-3 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-16 pt-4 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
+          class="-mt-3 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-4 pt-4 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
         >
           <.shelf_card
             :for={i <- @shelf.items}
@@ -1040,11 +1040,11 @@ defmodule RokiWeb.FeaturedLive do
 
       <div
         data-card-panel
-        class="pointer-events-none absolute inset-x-0 -bottom-16 -top-2 z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300"
+        class="pointer-events-none absolute inset-0 z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300"
       >
         <.link
           navigate={@title_href}
-          class="relative block aspect-video shrink-0 overflow-hidden bg-neutral-800"
+          class="relative block aspect-[2/1] shrink-0 overflow-hidden bg-neutral-800"
         >
           <img
             :if={@picture}
@@ -1117,8 +1117,13 @@ defmodule RokiWeb.FeaturedLive do
               <span :if={@item[:year]}>{@item.year}</span>
               <span data-card-runtime></span>
             </p>
-            <p data-card-overview class="mt-1 line-clamp-3 text-xs leading-snug text-white/75"></p>
-            <p data-card-genres class="mt-1 truncate text-xs text-white/50"></p>
+            <p
+              data-card-overview
+              class="mt-1 hidden line-clamp-2 text-xs min-[1800px]:block leading-snug text-white/75"
+            >
+            </p>
+            <p data-card-genres class="mt-1 hidden truncate text-xs min-[1800px]:block text-white/50">
+            </p>
           </div>
         </div>
       </div>

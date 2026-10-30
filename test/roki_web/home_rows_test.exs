@@ -110,11 +110,14 @@ defmodule RokiWeb.HomeRowsTest do
       assert render.(false) =~ ~s(href="/phoenix_kit/users/log-in")
     end
 
-    test "the rows keep the old hover card off their posters, and room for a card that opens", %{
-      html: html
-    } do
+    test "the rows keep the old hover card off their posters, and the card that opens is no taller",
+         %{
+           html: html
+         } do
       assert html =~ "data-card-row"
-      assert html =~ "pb-16"
+      # The card that opens is exactly as tall as the poster: no gap grows under a row.
+      assert html =~ "absolute inset-0 z-30"
+      refute html =~ "-bottom-16"
     end
   end
 
