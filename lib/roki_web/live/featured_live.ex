@@ -954,7 +954,7 @@ defmodule RokiWeb.FeaturedLive do
     <div
       data-card-panel
       class={[
-        "pointer-events-none absolute z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 ",
+        "@container pointer-events-none absolute z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 ",
         @class
       ]}
     >
@@ -1035,11 +1035,10 @@ defmodule RokiWeb.FeaturedLive do
           </p>
           <p
             data-card-overview
-            class="mt-1 hidden line-clamp-2 text-xs min-[1800px]:block leading-snug text-white/75"
+            class="mt-1 hidden line-clamp-2 text-xs @[323px]:[display:-webkit-box] leading-snug text-white/75"
           >
           </p>
-          <p data-card-genres class="mt-1 hidden truncate text-xs min-[1800px]:block text-white/50">
-          </p>
+          <p data-card-genres class="mt-1 hidden truncate text-xs @[374px]:block text-white/50"></p>
         </div>
       </div>
     </div>
