@@ -1296,7 +1296,7 @@ defmodule RokiWeb.TitleLive do
           data-row-prev
           aria-label={"Scroll #{@title} back"}
           class={[
-            "absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100",
+            "absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex hover:opacity-100 focus-visible:opacity-100",
             if(@cards?, do: "top-4 h-[calc(var(--card-w)*1.5)]", else: "inset-y-0")
           ]}
         >
@@ -1307,7 +1307,7 @@ defmodule RokiWeb.TitleLive do
           data-row-next
           aria-label={"Scroll #{@title} forward"}
           class={[
-            "absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100",
+            "absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex hover:opacity-100 focus-visible:opacity-100",
             if(@cards?, do: "top-4 h-[calc(var(--card-w)*1.5)]", else: "inset-y-0")
           ]}
         >

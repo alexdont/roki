@@ -557,7 +557,7 @@ defmodule RokiWeb.FeaturedLive do
           type="button"
           data-row-prev
           aria-label="Scroll Lists back"
-          class="absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100 inset-y-0"
+          class="absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex hover:opacity-100 focus-visible:opacity-100 inset-y-0"
         >
           <.icon name="hero-chevron-left" class="h-10 w-10 drop-shadow" />
         </button>
@@ -565,7 +565,7 @@ defmodule RokiWeb.FeaturedLive do
           type="button"
           data-row-next
           aria-label="Scroll Lists forward"
-          class="absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100 inset-y-0"
+          class="absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex hover:opacity-100 focus-visible:opacity-100 inset-y-0"
         >
           <.icon name="hero-chevron-right" class="h-10 w-10 drop-shadow" />
         </button>
@@ -894,7 +894,7 @@ defmodule RokiWeb.FeaturedLive do
           type="button"
           data-row-prev
           aria-label={"Scroll #{@title} back"}
-          class="absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100 top-4 h-[calc(var(--card-w)*1.5)]"
+          class="absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex hover:opacity-100 focus-visible:opacity-100 top-4 h-[calc(var(--card-w)*1.5)]"
         >
           <.icon name="hero-chevron-left" class="h-10 w-10 drop-shadow" />
         </button>
@@ -902,7 +902,7 @@ defmodule RokiWeb.FeaturedLive do
           type="button"
           data-row-next
           aria-label={"Scroll #{@title} forward"}
-          class="absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100 top-4 h-[calc(var(--card-w)*1.5)]"
+          class="absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex hover:opacity-100 focus-visible:opacity-100 top-4 h-[calc(var(--card-w)*1.5)]"
         >
           <.icon name="hero-chevron-right" class="h-10 w-10 drop-shadow" />
         </button>
