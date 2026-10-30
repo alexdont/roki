@@ -984,7 +984,7 @@ defmodule RokiWeb.FeaturedLive do
         <ul
           data-row-scroller
           data-card-row
-          class="-mb-[3.25rem] -mt-3 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-16 pt-4 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
+          class="-mb-[1.25rem] -mt-3 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-16 pt-4 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
         >
           <.shelf_card
             :for={i <- @shelf.items}
