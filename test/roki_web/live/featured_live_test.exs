@@ -180,4 +180,35 @@ defmodule RokiWeb.FeaturedLiveTest do
       assert has_element?(view, ~s|header form[role="search"] input#search-input-wide|)
     end
   end
+
+  describe "the Lists row" do
+    test "starts with six lists and draws six more each time it is asked", %{conn: conn} do
+      for kind <- Roki.Featured.kinds() do
+        Roki.Featured.seed(kind, 1, [
+          %{id: 1, type: "movie", title: "Film 1", poster: nil, year: "2020"}
+        ])
+      end
+
+      {:ok, view, _} = live(conn, "/home")
+      render_async(view, 3000)
+      render_async(view, 3000)
+
+      tiles = fn ->
+        view
+        |> element("#row-lists")
+        |> render()
+        |> then(&length(Regex.scan(~r/href="\/lists\/[^"]+"/, &1)))
+      end
+
+      assert tiles.() == 6
+      assert has_element?(view, ~s|#row-lists[data-more="true"]|)
+
+      render_hook(view, "row_more", %{"kind" => "lists"})
+      assert tiles.() == 12
+
+      # Asking for what does not exist does nothing.
+      render_hook(view, "row_more", %{"kind" => "nonsense"})
+      assert tiles.() == 12
+    end
+  end
 end

@@ -50,12 +50,15 @@ export const ShelfRow = {
   mounted() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
     this.el.querySelector("[data-row-prev]")?.addEventListener("click", () => this.step(-1))
-    this.el.querySelector("[data-row-next]")?.addEventListener("click", () => this.step(1))
+    this.el.querySelector("[data-row-next]")?.addEventListener("click", () => this.next())
     this.sync = () => {
       const s = this.scroller
       if (!s) return
+      const end = s.scrollLeft + s.clientWidth >= s.scrollWidth - 2
       this.el.dataset.start = String(s.scrollLeft <= 2)
-      this.el.dataset.end = String(s.scrollLeft + s.clientWidth >= s.scrollWidth - 2)
+      // At the end of what is drawn there may still be more to draw: only then is it the end.
+      this.el.dataset.end = String(end && !this.more())
+      this.near()
     }
     this.scroller?.addEventListener("scroll", this.sync, {passive: true})
     window.addEventListener("resize", this.sync)
@@ -66,7 +69,38 @@ export const ShelfRow = {
   // The page re-renders as posters arrive: the attributes set here are the first to go.
   updated() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
+    this.asked = false
     this.sync()
+  },
+
+  // A row that draws what is in view and the rest on demand (`data-more`): there is more to ask for.
+  more() {
+    return this.el.dataset.more === "true"
+  },
+
+  // Close to the end of what is drawn: ask the page for the next of it, once until it has come.
+  near() {
+    const s = this.scroller
+    if (!s || !this.more() || this.asked) return
+    if (s.scrollWidth - (s.scrollLeft + s.clientWidth) < s.clientWidth * 0.6) this.ask()
+  },
+
+  ask(then) {
+    this.asked = true
+    this.pushEvent("row_more", {kind: this.el.dataset.kind}, () => {
+      // The reply comes with the new tiles; let them be laid out before moving over them.
+      if (then) setTimeout(then, 90)
+    })
+  },
+
+  next() {
+    const s = this.scroller
+    if (s && this.more() && !this.asked && s.scrollWidth - (s.scrollLeft + s.clientWidth) < s.clientWidth * 1.6) {
+      this.step(1)
+      this.ask(() => this.step(1))
+    } else {
+      this.step(1)
+    }
   },
 
   destroyed() {

@@ -129,11 +129,12 @@ defmodule RokiWeb.HomeRowsTest do
         keys: []
       }
 
-    defp lists_html(lists, total, posters \\ %{}) do
+    defp lists_html(lists, total, posters \\ %{}, more? \\ false) do
       render_component(&RokiWeb.FeaturedLive.lists_row/1,
         lists: lists,
         total: total,
-        posters: posters
+        posters: posters,
+        more?: more?
       )
     end
 
@@ -147,6 +148,15 @@ defmodule RokiWeb.HomeRowsTest do
       assert html =~ "All 70 lists"
       assert html =~ "See All 70"
       assert html =~ ~s(href="/lists")
+    end
+
+    test "says whether there are more to ask for, and what to ask for them as" do
+      html = lists_html(Enum.map(1..6, &list/1), 70, %{}, true)
+      assert html =~ ~s(data-kind="lists")
+      assert html =~ ~s(data-more="true")
+
+      done = lists_html(Enum.map(1..6, &list/1), 6, %{}, false)
+      assert done =~ ~s(data-more="false")
     end
 
     test "draws a list's posters when the site has them, and its progress when it is known" do

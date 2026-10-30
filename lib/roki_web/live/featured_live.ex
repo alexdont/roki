@@ -13,8 +13,10 @@ defmodule RokiWeb.FeaturedLive do
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Featured
 
-  # How many lists the row starts with; the rest are a tap away on the Lists page.
-  @lists_shown 12
+  # The Lists row draws six to begin with and six more each time it is scrolled to its end (or the
+  # chevron is pressed); the rest are on the Lists page.
+  @lists_first 6
+  @lists_chunk 6
 
   @titles %{movies: "Trending movies", shows: "Trending shows", anime: "Anime airing now"}
 
@@ -37,7 +39,7 @@ defmodule RokiWeb.FeaturedLive do
       # The mood picker: what is held already is drawn in the first render, the rest arrives.
       |> assign(:moods, Roki.Mood.hero_peek())
       |> assign(:list_posters, %{})
-      |> assign(:lists_shown, @lists_shown)
+      |> assign(:lists_shown, @lists_first)
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
   end
@@ -88,6 +90,24 @@ defmodule RokiWeb.FeaturedLive do
   def handle_event("activity_close", _params, socket),
     do: {:noreply, assign(socket, :activity_open, nil)}
 
+  # The Lists row has been scrolled to its end: draw the next few, with their posters.
+  def handle_event("row_more", %{"kind" => "lists"}, socket) do
+    %{lists: lists, lists_shown: shown} = socket.assigns
+    total = length(lists)
+
+    if shown >= total do
+      {:noreply, socket}
+    else
+      next = min(shown + @lists_chunk, total)
+      fresh = Enum.slice(lists, shown, next - shown)
+
+      {:noreply,
+       socket
+       |> assign(:lists_shown, next)
+       |> start_async({:list_posters, shown}, fn -> Roki.Lists.previews(fresh) end)}
+    end
+  end
+
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   @impl true
@@ -104,7 +124,7 @@ defmodule RokiWeb.FeaturedLive do
 
     socket =
       start_async(socket, :list_posters, fn ->
-        Roki.Lists.previews(Enum.take(lists, @lists_shown))
+        Roki.Lists.previews(Enum.take(lists, @lists_first))
       end)
 
     # How far through each list a signed-in user is — static data, so it never waits on TMDB.
@@ -171,10 +191,14 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async(:moods, _other, socket), do: {:noreply, socket}
 
-  def handle_async(:list_posters, {:ok, %{} = posters}, socket),
-    do: {:noreply, assign(socket, :list_posters, posters)}
+  def handle_async(name, {:ok, %{} = posters}, socket)
+      when name == :list_posters or (is_tuple(name) and elem(name, 0) == :list_posters),
+      do:
+        {:noreply, assign(socket, :list_posters, Map.merge(socket.assigns.list_posters, posters))}
 
-  def handle_async(:list_posters, _other, socket), do: {:noreply, socket}
+  def handle_async(name, _other, socket)
+      when name == :list_posters or (is_tuple(name) and elem(name, 0) == :list_posters),
+      do: {:noreply, socket}
 
   # (A filter change keeps the old list on screen until the new one is in.)
 
@@ -503,6 +527,7 @@ defmodule RokiWeb.FeaturedLive do
         :if={not @loading?}
         lists={Enum.take(@lists, @lists_shown)}
         total={length(@lists)}
+        more?={@lists_shown < length(@lists)}
         posters={@list_posters}
       />
     </Layouts.app>
@@ -511,6 +536,7 @@ defmodule RokiWeb.FeaturedLive do
 
   attr :lists, :list, required: true
   attr :total, :integer, required: true
+  attr :more?, :boolean, default: false
   attr :posters, :map, default: %{}
 
   # The curated franchise lists as a row of their own, like the rows of films: a dozen to begin
@@ -523,6 +549,8 @@ defmodule RokiWeb.FeaturedLive do
     <section
       id="row-lists"
       phx-hook="ShelfRow"
+      data-kind="lists"
+      data-more={to_string(@more?)}
       data-start="true"
       data-end="false"
       class="group/row pb-10 pt-2"
