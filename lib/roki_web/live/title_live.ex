@@ -1290,22 +1290,28 @@ defmodule RokiWeb.TitleLive do
       <h2 class="mb-3 px-4 text-2xl font-semibold tracking-tight sm:px-6 lg:px-12 xl:px-16">
         {@title}
       </h2>
-      <div class="relative">
+      <div class="relative [--card-w:clamp(9rem,11.2vw,14rem)]">
         <button
           type="button"
           data-row-prev
           aria-label={"Scroll #{@title} back"}
-          class="absolute left-2 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition hover:bg-black/80 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100"
+          class={[
+            "absolute left-0 justify-start rounded-l-xl bg-gradient-to-r pl-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100",
+            if(@cards?, do: "top-4 h-[calc(var(--card-w)*1.5)]", else: "inset-y-0")
+          ]}
         >
-          <.icon name="hero-chevron-left" class="h-6 w-6" />
+          <.icon name="hero-chevron-left" class="h-10 w-10 drop-shadow" />
         </button>
         <button
           type="button"
           data-row-next
           aria-label={"Scroll #{@title} forward"}
-          class="absolute right-2 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition hover:bg-black/80 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100"
+          class={[
+            "absolute right-0 justify-end rounded-r-xl bg-gradient-to-l pr-2 z-30 hidden w-14 items-center from-black/60 via-black/25 to-transparent text-white opacity-0 transition hover:from-black/75 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100",
+            if(@cards?, do: "top-4 h-[calc(var(--card-w)*1.5)]", else: "inset-y-0")
+          ]}
         >
-          <.icon name="hero-chevron-right" class="h-6 w-6" />
+          <.icon name="hero-chevron-right" class="h-10 w-10 drop-shadow" />
         </button>
         <ul
           data-row-scroller
