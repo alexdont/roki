@@ -17,10 +17,10 @@ defmodule RokiWeb.WatchComponents do
 
   def cache_note(assigns) do
     ~H"""
-    <div class="flex flex-wrap items-center gap-2 text-sm text-base-content/70">
+    <div class="flex flex-wrap items-center gap-2 rounded-2xl border border-base-300/70 bg-base-100/60 px-4 py-3 text-sm text-base-content/70">
       <span class="badge badge-success badge-outline gap-1">⚡ cached sources</span>
       <span>found {ago(@at)}, nothing to check.</span>
-      <button phx-click="retry" class="btn btn-xs" disabled={@busy}>Retry</button>
+      <button phx-click="retry" class="btn btn-xs rounded-full" disabled={@busy}>Retry</button>
       <span class="text-base-content/50">looks for new ones</span>
     </div>
     """
@@ -42,7 +42,7 @@ defmodule RokiWeb.WatchComponents do
   @doc "A line with a bar: what is being checked and how far."
   def progress_line(assigns) do
     ~H"""
-    <div class="space-y-2 rounded-box bg-base-200 p-4 text-sm">
+    <div class="space-y-3 rounded-2xl border border-base-300/70 bg-base-100/60 p-4 text-sm">
       <div class="flex flex-wrap items-center gap-3">
         <span class="loading loading-spinner loading-sm"></span>
         <span>{if @probe, do: "Checking releases", else: @text}</span>
@@ -87,7 +87,7 @@ defmodule RokiWeb.WatchComponents do
         <li
           :for={c <- @checks}
           class={[
-            "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
+            "flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors",
             c.state == :ok && "bg-success/15",
             c.state == :checking && "bg-base-200",
             match?({:bad, _}, c.state) && "opacity-45",
@@ -128,7 +128,7 @@ defmodule RokiWeb.WatchComponents do
   """
   def heavy_offer(assigns) do
     ~H"""
-    <div class="space-y-2 rounded-box bg-base-200 p-4 text-sm">
+    <div class="space-y-3 rounded-2xl border border-base-300/70 bg-base-100/60 p-4 text-sm">
       <p>
         Search again including releases the server has to re-encode (HEVC and similar)? That is heavy for
         the server — one is enough to slow it down for others. Otherwise use an external player.
@@ -145,8 +145,11 @@ defmodule RokiWeb.WatchComponents do
   @doc "The wait after a release is chosen: the video is being got ready, and then the page opens."
   def starting(assigns) do
     ~H"""
-    <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-6" id="starting">
-      <div class="w-full max-w-sm space-y-4 rounded-2xl bg-base-100 p-6 shadow-2xl">
+    <div
+      class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+      id="starting"
+    >
+      <div class="w-full max-w-sm space-y-4 rounded-3xl bg-base-100 p-6 shadow-2xl">
         <div class="flex items-center gap-3">
           <span class="loading loading-spinner loading-md text-primary"></span>
           <h2 class="text-lg font-bold">Getting the video ready</h2>
@@ -168,9 +171,12 @@ defmodule RokiWeb.WatchComponents do
   """
   def auto_start(assigns) do
     ~H"""
-    <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-6" id="auto-start">
+    <div
+      class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+      id="auto-start"
+    >
       <div
-        class="w-full max-w-sm space-y-4 rounded-2xl bg-base-100 p-6 shadow-2xl"
+        class="w-full max-w-sm space-y-4 rounded-3xl bg-base-100 p-6 shadow-2xl"
         phx-click-away="cancel_auto"
         phx-window-keydown="cancel_auto"
         phx-key="escape"
@@ -226,7 +232,7 @@ defmodule RokiWeb.WatchComponents do
 
     ~H"""
     <section class="space-y-3">
-      <h2 class="text-xl font-semibold">
+      <h2 class="text-2xl font-semibold tracking-tight">
         Releases
         <span class="text-sm font-normal text-base-content/60">{length(@entries)} playable</span>
       </h2>
@@ -237,8 +243,11 @@ defmodule RokiWeb.WatchComponents do
       <p :if={@entries == []} class="alert alert-warning text-sm">
         Nothing at {Resolver.label(@limit)} or below was found. Switch to External player.
       </p>
-      <ul :if={@entries != []} class="divide-y divide-base-300 rounded-box border border-base-300">
-        <li :for={{{source, stream}, i} <- @entries} class="flex items-center gap-3 p-3">
+      <ul :if={@entries != []} class="space-y-2">
+        <li
+          :for={{{source, stream}, i} <- @entries}
+          class="flex items-center gap-3 rounded-2xl border border-base-300 bg-base-100/70 p-4 transition hover:border-primary/40"
+        >
           <div class="min-w-0 flex-1 space-y-1">
             <div class="truncate text-sm font-medium" title={source.name}>{source.name}</div>
             <div class="flex flex-wrap items-center gap-1.5 text-xs">
@@ -264,7 +273,12 @@ defmodule RokiWeb.WatchComponents do
               <span :if={subs(stream) != ""} class="text-base-content/60">💬 {subs(stream)}</span>
             </div>
           </div>
-          <button phx-click="choose" phx-value-idx={i} class="btn btn-sm" disabled={@busy}>
+          <button
+            phx-click="choose"
+            phx-value-idx={i}
+            class="btn btn-sm btn-primary rounded-full px-5"
+            disabled={@busy}
+          >
             {cond do
               @current && elem(@current, 0).hash == source.hash -> "Selected"
               @mode == :external -> "Open"
@@ -276,7 +290,7 @@ defmodule RokiWeb.WatchComponents do
             phx-click="choose"
             phx-value-idx={i}
             phx-value-via="external"
-            class="btn btn-sm btn-ghost"
+            class="btn btn-sm btn-ghost rounded-full"
             title="Open this release in your external player"
             disabled={@busy}
           >
@@ -284,7 +298,12 @@ defmodule RokiWeb.WatchComponents do
           </button>
         </li>
       </ul>
-      <button :if={@rest != []} phx-click="more" class="btn btn-sm btn-ghost" disabled={@busy}>
+      <button
+        :if={@rest != []}
+        phx-click="more"
+        class="btn btn-sm btn-ghost rounded-full"
+        disabled={@busy}
+      >
         Load more — check {min(length(@rest), 8)} of {length(@rest)} unchecked
       </button>
     </section>

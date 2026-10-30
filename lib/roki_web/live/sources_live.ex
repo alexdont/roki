@@ -529,44 +529,80 @@ defmodule RokiWeb.SourcesLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path="/sources"
     >
-      <div class="space-y-6">
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="min-w-0 flex-1">
-            <.link
-              navigate={back_path(@type, @id)}
-              class="text-sm text-base-content/60 hover:text-primary"
-            >
-              ← {if @title, do: @title.title, else: "Back"}
-            </.link>
-            <h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-              Sources<span class="text-base-content/50">{now_playing(
-                @title || %{type: @type},
-                @season,
-                @episode
-              )}</span>
-            </h1>
+      <%!-- The top, as on the other pages: the title's picture under the floating header, which title
+            and which episode this is about, and the way back. --%>
+      <section class="relative z-20 flex min-h-[clamp(18rem,40svh,26rem)] flex-col justify-end text-white">
+        <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
+          <img
+            :if={@title && @title[:backdrop]}
+            src={Roki.Images.local(@title.backdrop)}
+            alt=""
+            class="h-full w-full object-cover opacity-70"
+          />
+          <div class="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-black/10"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50">
           </div>
-          <div :if={(@next || @prev) && @external == nil} class="flex gap-2">
+        </div>
+
+        <div class="flex flex-col gap-5 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
+          <div class="flex items-end gap-5">
+            <img
+              :if={@title && @title[:poster]}
+              src={Roki.Images.local(@title.poster)}
+              alt=""
+              class="hidden h-44 w-auto shrink-0 rounded-xl shadow-2xl ring-1 ring-white/15 sm:block"
+            />
+            <div class="min-w-0 flex-1 space-y-3">
+              <.link
+                navigate={back_path(@type, @id)}
+                class="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/25 bg-black/30 px-3.5 text-sm font-medium backdrop-blur-md transition hover:border-white/60 hover:bg-black/45"
+              >
+                <.icon name="hero-arrow-left-micro" class="h-4 w-4" />
+                {if @title, do: "Back to " <> @title.title, else: "Back"}
+              </.link>
+              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+                Choose a release
+              </p>
+              <h1 class="text-4xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-5xl xl:text-6xl">
+                {if @title, do: @title.title, else: "Sources"}
+              </h1>
+              <p class="text-lg text-white/75">
+                <span :if={@title}>{[@title[:year]] |> Enum.filter(& &1) |> Enum.join(" · ")}</span>
+                <span>{now_playing(@title || %{type: @type}, @season, @episode)}</span>
+              </p>
+            </div>
+          </div>
+
+          <div :if={(@next || @prev) && @external == nil} class="flex flex-wrap gap-2">
             <button
               :if={@prev}
               phx-click="previous"
-              class="btn btn-sm gap-1.5"
+              class="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/25 bg-black/30 px-4 text-sm font-semibold backdrop-blur-md transition hover:border-white/60 hover:bg-black/45"
               title="The episode before"
             >
               <.icon name="hero-backward" class="h-4 w-4" />
               <span class="hidden sm:inline">Previous ·</span> {elem(@prev, 2)}
             </button>
-            <button :if={@next} phx-click="next" class="btn btn-sm gap-1.5" title="The next episode">
+            <button
+              :if={@next}
+              phx-click="next"
+              class="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/25 bg-black/30 px-4 text-sm font-semibold backdrop-blur-md transition hover:border-white/60 hover:bg-black/45"
+              title="The next episode"
+            >
               <span class="hidden sm:inline">Next ·</span> {elem(@next, 2)}
               <.icon name="hero-forward" class="h-4 w-4" />
             </button>
           </div>
         </div>
+      </section>
 
+      <div class="space-y-6 px-4 pb-12 pt-6 sm:px-6 lg:px-12 xl:px-16">
         <div :if={@uuid == nil} class="alert text-sm">
           <span>Log in, and connect your debrid account through laev, to watch here.</span>
           <a href="/phoenix_kit/users/log-in" class="btn btn-sm">Log in</a>
