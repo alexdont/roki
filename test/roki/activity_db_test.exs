@@ -57,4 +57,13 @@ defmodule Roki.ActivityDbTest do
 
     assert "activ3" in names and "activ4" in names
   end
+
+  test "what a deleted account did is not shown as someone" do
+    u = register("activ4")
+    Activity.insert_now(u.uuid, film(4), "finished")
+    assert [%{username: "activ4"}] = Activity.recent(10)
+
+    Roki.Repo.query!("delete from phoenix_kit_users where uuid = $1", [Ecto.UUID.dump!(u.uuid)])
+    assert Activity.recent(10) == []
+  end
 end

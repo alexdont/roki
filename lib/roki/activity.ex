@@ -482,7 +482,7 @@ defmodule Roki.Activity do
         select a.user_uuid::text, coalesce(nullif(u.username, ''), 'someone'), a.type, a.tmdb_id,
                a.season, a.episode, a.title, a.poster, a.at, a.kind, a.seconds, a.watched_on, a.score
           from roki_activity a
-          left join phoenix_kit_users u on u.uuid = a.user_uuid
+          join phoenix_kit_users u on u.uuid = a.user_uuid
          where a.at > $1
            and coalesce(u.username, '') <> all($2)
            and a.kind = any($3)
