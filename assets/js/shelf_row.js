@@ -9,7 +9,8 @@
 // the page did not carry — length, genres, the wide picture, the trailer — and, a moment after it
 // opened, swaps the picture for the trailer playing muted. Leaving the card stops it.
 const cache = new Map()
-const OPEN_MS = 320 // a grid card's CSS delay before it opens
+const STILL_MS = 260 // how long the pointer must rest on a poster before it opens
+const STILL_PX = 5 // …and how little it may drift while it does
 const TRAILER_MS = 1500 // how long the picture is shown before the trailer replaces it
 
 const csrf = () => document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || ""
@@ -64,7 +65,6 @@ export const ShelfRow = {
     window.addEventListener("resize", this.sync)
     this.sync()
     this.cards()
-    if (matchMedia("(hover: hover) and (min-width: 1024px)").matches && this.scroller && !this.grid) this.watchEdges()
   },
 
   // The page re-renders as posters arrive: the attributes set here are the first to go.
@@ -121,42 +121,41 @@ export const ShelfRow = {
 export const cardMethods = {
   // ── the cards ──────────────────────────────────────────────────────
 
-  // A poster close to a chevron does not open: a card that grew under the strip would be closed
-  // again as the pointer reached for the chevron, which is the jump. Such a poster is marked on the
-  // row (`data-edge-zone`, read by the CSS) while the pointer is over it. "Close" is the strip (56px)
-  // plus how far an opened card spreads past its poster (0.35 of one) and a little.
-  watchEdges() {
-    this.el.addEventListener("mouseover", (e) => {
-      const li = e.target.closest?.("[data-card]")
-      if (!li) return
-      const box = this.scroller.getBoundingClientRect()
-      const r = li.getBoundingClientRect()
-      const reach = 56 + r.width * 0.35 + 8
-      const near =
-        (this.el.dataset.start === "false" && r.left - box.left < reach) ||
-        (this.el.dataset.end === "false" && box.right - r.right < reach)
-      if (near) this.el.dataset.edgeZone = ""
-      else delete this.el.dataset.edgeZone
-    })
-    this.el.addEventListener("mouseleave", () => { delete this.el.dataset.edgeZone })
-  },
-
   cards() {
     // A pointer that hovers, on a screen with room for a card that opens.
     if (!this.scroller || !matchMedia("(hover: hover) and (min-width: 1024px)").matches) return
     this.hot = null
 
-    this.scroller.addEventListener("mouseover", (e) => {
+    // A poster opens only when the pointer has come to rest on it: one passed over on the way to a
+    // chevron, or across the row, opens nothing. Every move more than a few pixels starts the wait
+    // again; leaving the poster closes it (or cancels the wait).
+    this.scroller.addEventListener("mousemove", (e) => {
       const li = e.target.closest?.("[data-card]")
-      if (li && li !== this.hot) this.open(li)
+      if (!li) { this.leave(); return }
+      if (li === this.hot) return
+      const moved = !this.at || Math.hypot(e.clientX - this.at.x, e.clientY - this.at.y) > STILL_PX
+      if (li !== this.cand || moved) {
+        this.at = {x: e.clientX, y: e.clientY}
+        this.cand = li
+        clearTimeout(this.stillTimer)
+        this.stillTimer = setTimeout(() => { if (this.cand === li) this.open(li) }, STILL_MS)
+      }
     })
     this.scroller.addEventListener("mouseout", (e) => {
-      if (this.hot && !this.hot.contains(e.relatedTarget)) this.close()
+      const to = e.relatedTarget
+      if ((this.hot && !this.hot.contains(to)) || (this.cand && !this.cand.contains(to))) this.leave()
     })
     this.scroller.addEventListener("click", (e) => {
       const btn = e.target.closest?.("[data-card-save]")
       if (btn) { e.preventDefault(); this.toggleSaved(btn.closest("[data-card]")) }
     })
+  },
+
+  leave() {
+    clearTimeout(this.stillTimer)
+    this.cand = null
+    this.at = null
+    this.close()
   },
 
   open(li) {
@@ -169,8 +168,10 @@ export const cardMethods = {
       const extra = r.width * 0.35 + 12
       li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
     }
-    const started = Date.now()
-    this.timers = [setTimeout(() => { this.nudge(li); this.show(li, started) }, OPEN_MS)]
+    li.dataset.open = "true"
+    this.timers = []
+    this.nudge(li)
+    this.show(li, Date.now())
   },
 
   // In a grid the card opens over its cell and the others stay where they are in the flow: the ones
@@ -215,7 +216,7 @@ export const cardMethods = {
       libraryState(key).then((st) => { if (this.hot === li && st) setSaved(li, st.saved) })
     }
     if (info?.trailer) {
-      const wait = Math.max(0, TRAILER_MS - (Date.now() - started - OPEN_MS))
+      const wait = Math.max(0, TRAILER_MS - (Date.now() - started))
       this.timers.push(setTimeout(() => { if (this.hot === li) this.play(li, info.trailer) }, wait))
     }
   },
@@ -267,6 +268,7 @@ export const cardMethods = {
     this.timers = []
     const li = this.hot
     this.hot = null
+    if (li) delete li.dataset.open
     ;(this.nudged || []).forEach((c) => { delete c.dataset.nudge; c.style.removeProperty("--nudge") })
     this.nudged = []
     const slot = li?.querySelector("[data-card-trailer]")
