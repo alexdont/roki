@@ -45,10 +45,24 @@ defmodule RokiWeb.LinkProgress do
 
   defp refresh(%{assigns: %{uuid: uuid, title: %{id: id}}} = socket) do
     link = Link.active(uuid, id)
+    invitation = if(link, do: nil, else: Link.invitation(uuid, id))
+
+    state =
+      cond do
+        link -> {:linked, names(link, uuid)}
+        invitation -> :invited
+        true -> :none
+      end
+
+    # The page shows it on its own buttons: "Link progress", "Link request", "Linked with Max".
+    if state != socket.assigns[:reported] do
+      send(self(), {:link_state, state})
+    end
 
     assign(socket,
+      reported: state,
       link: link,
-      invitation: if(link, do: nil, else: Link.invitation(uuid, id)),
+      invitation: invitation,
       undoable?: link != nil and Link.undoable?(uuid, link.id),
       rounds: if(link, do: Link.rounds(uuid, id), else: [])
     )

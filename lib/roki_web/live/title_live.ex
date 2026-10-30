@@ -48,6 +48,7 @@ defmodule RokiWeb.TitleLive do
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         lib_busy: false,
         solo?: false,
+        link_state: :none,
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
@@ -566,6 +567,9 @@ defmodule RokiWeb.TitleLive do
   def handle_info({:link_solo, solo?}, socket), do: {:noreply, assign(socket, :solo?, solo?)}
   def handle_info(:link_reload, socket), do: {:noreply, reload_marks(socket)}
 
+  def handle_info({:link_state, state}, socket),
+    do: {:noreply, assign(socket, :link_state, state)}
+
   def handle_info({:link_marked, id}, %{assigns: %{id: id}} = socket),
     do: {:noreply, reload_marks(socket)}
 
@@ -633,6 +637,8 @@ defmodule RokiWeb.TitleLive do
           error={@rating_error}
           label={rate_label(@sections, @rate_mal)}
         />
+
+        <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
 
         <.hero
           mal={@rate_mal}
@@ -931,6 +937,7 @@ defmodule RokiWeb.TitleLive do
                 lib={@lib}
                 busy={@lib_busy}
                 rating={@rating}
+                link_state={@link_state}
               />
             </div>
           </div>
@@ -982,6 +989,7 @@ defmodule RokiWeb.TitleLive do
   attr :lib, :map, required: true
   attr :busy, :boolean, default: false
   attr :rating, :map, required: true
+  attr :link_state, :any, default: :none
 
   # The icon classes below are built from a name, which Tailwind cannot see, so they are spelled
   # out here: hero-bookmark hero-bookmark-solid hero-pause-circle hero-pause-circle-solid
@@ -989,7 +997,8 @@ defmodule RokiWeb.TitleLive do
   # What the terminal app has on a title: saved for later, watched (and back), and your rating —
   # as pills with their words, the same colours as the hover card on a poster. Hold is in the
   # "…" menu (it is rare, and was here twice).
-  defp action_pills(assigns) do
+  @doc false
+  def action_pills(assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2">
       <.pill
@@ -1027,6 +1036,23 @@ defmodule RokiWeb.TitleLive do
         <span class="font-semibold text-warning">{avg_text(@title)}</span>
         <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
         <span :if={!@rating.value} class="text-base-content/60">Rate</span>
+      </button>
+
+      <%!-- A show can be linked with friends: episodes any of you marks are marked for all.
+            At the right end of the row, under the player switch. --%>
+      <button
+        :if={@title.type == "tv"}
+        type="button"
+        phx-click={JS.show(to: "#link-sheet", display: "flex")}
+        class={[
+          "btn btn-sm ml-auto h-10 max-w-60 gap-2 whitespace-nowrap rounded-full px-4",
+          @link_state != :none && "btn-primary"
+        ]}
+        title={link_title(@link_state)}
+        aria-label={link_title(@link_state)}
+      >
+        <.icon name="hero-link" class="h-5 w-5 shrink-0" />
+        <span class="truncate">{link_label(@link_state)}</span>
       </button>
     </div>
     """
@@ -1488,6 +1514,8 @@ defmodule RokiWeb.TitleLive do
   attr :linked?, :boolean, default: false
   attr :lib, :map, required: true
   attr :mal, :any, default: nil
+  attr :link?, :boolean, default: false
+  attr :link_state, :any, default: :none
 
   defp more_menu(assigns) do
     assigns =
@@ -1519,6 +1547,18 @@ defmodule RokiWeb.TitleLive do
         phx-window-keydown={JS.hide(to: "##{@id}")}
         phx-key="escape"
       >
+        <button
+          :if={@link?}
+          type="button"
+          phx-click={JS.show(to: "#link-sheet", display: "flex") |> JS.hide(to: "##{@id}")}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon
+            name={if @link_state == :none, do: "hero-link", else: "hero-link-solid"}
+            class={["h-5 w-5", @link_state != :none && "text-primary"]}
+          />
+          <span class="truncate">{link_label(@link_state)}</span>
+        </button>
         <button
           :if={@hold?}
           type="button"
@@ -1622,7 +1662,15 @@ defmodule RokiWeb.TitleLive do
           <p class="mt-0.5 text-xs text-base-content/60">{meta(@title)}</p>
         </div>
 
-        <.more_menu id="more-menu-phone" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
+        <.more_menu
+          id="more-menu-phone"
+          title={@title}
+          linked?={@linked?}
+          lib={@lib}
+          mal={@mal}
+          link?={@linked? and @title.type == "tv"}
+          link_state={@link_state}
+        />
       </div>
 
       <%!-- The poster takes all the height there is between the title and the synopsis; the
@@ -2012,6 +2060,50 @@ defmodule RokiWeb.TitleLive do
         {label}
       </option>
     </optgroup>
+    """
+  end
+
+  defp link_label(:none), do: "Link progress"
+  defp link_label(:invited), do: "Link request"
+  defp link_label({:linked, names}), do: "Linked with " <> Enum.join(names, ", ")
+
+  defp link_title(:none), do: "Link this show's progress with friends"
+  defp link_title(:invited), do: "A friend asked to link progress on this show"
+  defp link_title({:linked, _}), do: "Progress linked: open to pause, add someone or unlink"
+
+  attr :uuid, :string, required: true
+  attr :title, :map, required: true
+
+  # The link panel (RokiWeb.LinkProgress) in a sheet, for the title's own page. The episodes page
+  # has the same panel inline.
+  defp link_sheet(assigns) do
+    ~H"""
+    <div
+      id="link-sheet"
+      class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50 sm:items-center sm:justify-center"
+      phx-window-keydown={JS.hide(to: "#link-sheet")}
+      phx-key="escape"
+    >
+      <div
+        class="max-h-[85svh] w-full overflow-y-auto rounded-t-2xl bg-base-100 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl"
+        phx-click-away={JS.hide(to: "#link-sheet")}
+      >
+        <div class="mb-3 flex items-start gap-3">
+          <h2 class="min-w-0 flex-1 text-lg font-bold leading-tight">
+            Link progress · {@title.title}
+          </h2>
+          <button
+            type="button"
+            phx-click={JS.hide(to: "#link-sheet")}
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="h-5 w-5" />
+          </button>
+        </div>
+        <.live_component module={RokiWeb.LinkProgress} id="link-progress" uuid={@uuid} title={@title} />
+      </div>
+    </div>
     """
   end
 
