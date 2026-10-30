@@ -47,6 +47,7 @@ defmodule RokiWeb.TitleLive do
         cached: MapSet.new(),
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         lib_busy: false,
+        solo?: false,
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
@@ -70,9 +71,13 @@ defmodule RokiWeb.TitleLive do
         phase: :idle
       )
 
-    if connected?(socket),
-      do: start_async(socket, :title, fn -> load_title(type, id, uuid) end),
-      else: socket
+    if connected?(socket) do
+      # Marks carried in from a friend this account is linked with (Roki.Link).
+      if uuid, do: Phoenix.PubSub.subscribe(Roki.PubSub, "link:#{uuid}")
+      start_async(socket, :title, fn -> load_title(type, id, uuid) end)
+    else
+      socket
+    end
   end
 
   # How this device plays: the page tells us (`player` in the socket params, from the browser's
@@ -335,14 +340,14 @@ defmodule RokiWeb.TitleLive do
   end
 
   def handle_event("toggle_watched", _params, %{assigns: %{lib_busy: false}} = socket) do
-    %{uuid: uuid, title: title, lib: lib} = socket.assigns
+    %{uuid: uuid, title: title, lib: lib, solo?: solo?} = socket.assigns
     new = not lib.all_watched?
 
     {:noreply,
      socket
      |> assign(:lib_busy, true)
      |> start_async(:bulk, fn ->
-       Watch.set_series_watched(uuid, title, new)
+       Watch.set_series_watched(uuid, title, new, solo: solo?)
        {new, Watch.library(uuid, title)}
      end)}
   end
@@ -389,11 +394,11 @@ defmodule RokiWeb.TitleLive do
   end
 
   def handle_event("toggle_episode", %{"season" => s, "episode" => e}, socket) do
-    %{uuid: uuid, title: title, watched: watched} = socket.assigns
+    %{uuid: uuid, title: title, watched: watched, solo?: solo?} = socket.assigns
 
     with season when is_integer(season) <- to_int(s), ep when is_integer(ep) <- to_int(e) do
       new = not MapSet.member?(watched, ep)
-      Watch.set_watched(uuid, title, season, ep, new)
+      Watch.set_watched(uuid, title, season, ep, new, solo: solo?)
 
       {:noreply,
        socket
@@ -407,10 +412,10 @@ defmodule RokiWeb.TitleLive do
   # The whole season on screen: all marked, or — when they all are — all cleared.
   def handle_event("toggle_season", _params, %{assigns: %{episodes: eps}} = socket)
       when is_list(eps) do
-    %{uuid: uuid, title: title, season: season, watched: watched} = socket.assigns
+    %{uuid: uuid, title: title, season: season, watched: watched, solo?: solo?} = socket.assigns
     out = for e <- eps, e.aired?, do: e.number
     all? = out != [] and Enum.all?(out, &MapSet.member?(watched, &1))
-    Watch.set_many_watched(uuid, title, Enum.map(out, &{season, &1}), not all?)
+    Watch.set_many_watched(uuid, title, Enum.map(out, &{season, &1}), not all?, solo: solo?)
 
     {:noreply,
      socket
@@ -556,6 +561,21 @@ defmodule RokiWeb.TitleLive do
 
   def handle_async(:episodes, _other, socket), do: {:noreply, assign(socket, episodes: [])}
 
+  # The link panel (RokiWeb.LinkProgress), and marks carried in from a friend.
+  @impl true
+  def handle_info({:link_solo, solo?}, socket), do: {:noreply, assign(socket, :solo?, solo?)}
+  def handle_info(:link_reload, socket), do: {:noreply, reload_marks(socket)}
+
+  def handle_info({:link_marked, id}, %{assigns: %{id: id}} = socket),
+    do: {:noreply, reload_marks(socket)}
+
+  def handle_info(_other, socket), do: {:noreply, socket}
+
+  defp reload_marks(%{assigns: %{live_action: :episodes, section: %{} = sec}} = socket),
+    do: load_episodes(socket, sec)
+
+  defp reload_marks(socket), do: socket
+
   # ── view ───────────────────────────────────────────────────────────
 
   @impl true
@@ -687,6 +707,14 @@ defmodule RokiWeb.TitleLive do
           label={rate_label(@sections, @rate_mal)}
         />
         <.access_notice uuid={@uuid} linked?={@linked?} />
+
+        <.live_component
+          :if={@linked? and @uuid}
+          module={RokiWeb.LinkProgress}
+          id="link-progress"
+          uuid={@uuid}
+          title={@title}
+        />
 
         <.episodes
           title={@title}

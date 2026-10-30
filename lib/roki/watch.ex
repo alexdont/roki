@@ -503,7 +503,7 @@ defmodule Roki.Watch do
   end
 
   @doc "Mark a film or one episode watched, or clear the mark. Sent to the user's other devices."
-  def set_watched(uuid, title, season, episode, watched?) do
+  def set_watched(uuid, title, season, episode, watched?, opts \\ []) do
     ctx =
       Roki.Laev.run(uuid, fn ->
         ctx = build_ctx(title, season, episode)
@@ -519,11 +519,17 @@ defmodule Roki.Watch do
 
     if title.type == "tv", do: follow_episodes(uuid, title, [ctx], watched?)
 
+    if watched? and title.type == "tv" and is_integer(season) and is_integer(episode),
+      do: Roki.Link.mirror(uuid, title.id, [{season, episode}], opts)
+
     library_changed(uuid)
   end
 
-  @doc "Mark several episodes (`[{season, episode}]`) at once."
-  def set_many_watched(uuid, title, pairs, watched?) do
+  @doc """
+  Mark several episodes (`[{season, episode}]`) at once. They are carried to the people this show's
+  progress is linked with (`Roki.Link`) unless `solo: true` or `mirrored: true` is given.
+  """
+  def set_many_watched(uuid, title, pairs, watched?, opts \\ []) do
     ctxs =
       Roki.Laev.run(uuid, fn ->
         for {s, e} <- pairs do
@@ -535,8 +541,48 @@ defmodule Roki.Watch do
 
     if watched?, do: scrobble(uuid, ctxs)
     if title.type == "tv", do: follow_episodes(uuid, title, ctxs, watched?)
+    if watched? and title.type == "tv", do: Roki.Link.mirror(uuid, title.id, pairs, opts)
 
     library_changed(uuid)
+  end
+
+  @doc """
+  What makes an episode a finale: `%{last: n, series_end?: boolean}` — the number of the last aired
+  episode of the season, and whether finishing it finishes a show that has ended.
+  """
+  def finale_facts(uuid, title, season) do
+    with {:ok, eps} <- episodes(title.id, season, uuid) do
+      aired = Enum.filter(eps, & &1.aired?)
+      last_season = aired_seasons(title) |> Enum.map(& &1.number) |> Enum.max(fn -> nil end)
+
+      %{
+        last: aired |> Enum.map(& &1.number) |> Enum.max(fn -> nil end),
+        series_end?:
+          title[:status] in ["Ended", "Canceled"] and season == last_season and aired == eps
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The episodes of a show that have aired and are marked watched on this account:
+  `MapSet` of `{season, episode}`, TMDB's numbers.
+  """
+  def watched_pairs(uuid, %{type: "tv"} = title) do
+    aired =
+      for s <- aired_seasons(title),
+          {:ok, eps} <- [episodes(title.id, s.number, uuid)],
+          e <- eps,
+          e.aired?,
+          do: {s.number, e.number}
+
+    Roki.Laev.run(uuid, fn ->
+      for {s, e} <- aired,
+          Laev.Position.finished?(build_ctx(title, s, e)),
+          into: MapSet.new(),
+          do: {s, e}
+    end)
   end
 
   @doc """
@@ -556,7 +602,7 @@ defmodule Roki.Watch do
 
     pairs = for {number, eps} <- seasons, e <- eps, e.aired?, do: {number, e.number}
 
-    set_many_watched(uuid, title, pairs, watched?)
+    set_many_watched(uuid, title, pairs, watched?, Keyword.take(opts, [:solo]))
 
     if watched? and Keyword.get(opts, :only_if_over, false) and not over?(title, seasons) do
       :ok
@@ -1184,8 +1230,19 @@ defmodule Roki.Watch do
     |> tap(fn _ ->
       Roki.Activity.record(uuid, ctx)
       Roki.Profile.forget_history(uuid)
+      mirror_ctx(uuid, ctx)
     end)
   end
+
+  # An episode marked by playing or by "mark watched", carried to the people the show is linked with.
+  defp mirror_ctx(uuid, %{type: "tv", tmdb_id: id, season: s} = ctx) when is_integer(s) do
+    case ctx[:tmdb_episode] || ctx[:episode] do
+      e when is_integer(e) -> Roki.Link.mirror(uuid, id, [{s, e}])
+      _ -> :ok
+    end
+  end
+
+  defp mirror_ctx(_uuid, _ctx), do: :ok
 
   @doc """
   Whether the sources page starts the best source by itself (with a pop-up that can be
@@ -1948,6 +2005,7 @@ defmodule Roki.Watch do
         scrobble(uuid, [ctx])
         Roki.Activity.record(uuid, ctx)
         Roki.Profile.forget_history(uuid)
+        mirror_ctx(uuid, ctx)
       end
     end)
   end
@@ -1973,6 +2031,7 @@ defmodule Roki.Watch do
       scrobble(uuid, [ctx])
       Roki.Activity.record(uuid, ctx)
       Roki.Profile.forget_history(uuid)
+      mirror_ctx(uuid, ctx)
     end
 
     new?
