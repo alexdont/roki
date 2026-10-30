@@ -960,7 +960,7 @@ defmodule RokiWeb.FeaturedLive do
     >
       <.link
         navigate={@title_href}
-        class="relative block aspect-[5/2] shrink-0 overflow-hidden bg-neutral-800"
+        class="relative block min-h-[7rem] flex-1 overflow-hidden bg-neutral-800"
       >
         <img
           :if={@picture}
@@ -983,7 +983,7 @@ defmodule RokiWeb.FeaturedLive do
         </p>
       </.link>
 
-      <div class="flex min-h-0 flex-1 flex-col justify-between gap-1.5 p-3">
+      <div class="flex shrink-0 flex-col justify-start gap-3 p-3">
         <div class="flex items-center gap-2">
           <.link
             navigate={@play_href}
