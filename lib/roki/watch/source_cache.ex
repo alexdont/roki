@@ -77,6 +77,25 @@ defmodule Roki.Watch.SourceCache do
     _ -> :ok
   end
 
+  @doc """
+  A release that would not start: it is no longer the one to go straight to, and it is taken out of
+  the kept list, so the next Play (or the sources page) does not offer it first and fail the same way.
+  """
+  def mark_bad(uuid, key, hash) do
+    with {:ok, bin} <- File.read(path(uuid, key)),
+         %{} = entry <- :erlang.binary_to_term(bin, [:safe]) do
+      write(uuid, key, %{
+        entry
+        | playable: Enum.reject(entry.playable, fn {source, _} -> source.hash == hash end),
+          good: if(entry.good == hash, do: nil, else: entry.good)
+      })
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
   def delete(uuid, key), do: File.rm(path(uuid, key)) && :ok
 
   @doc "Everything cached and still fresh: a `MapSet` of `{type, id, season, episode}`."

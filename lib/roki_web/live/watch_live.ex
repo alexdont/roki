@@ -215,6 +215,8 @@ defmodule RokiWeb.WatchLive do
       {:error, reason} ->
         tried = [source.hash | tried]
         send(parent, {:tried, token, tried})
+        # A release that would not start is not kept as the one to go straight to.
+        if res.key and skippable?(reason), do: SourceCache.mark_bad(uuid, res.key, source.hash)
         next = if auto? and left > 0 and skippable?(reason), do: next_pair(res, tried, caps)
 
         if next do
