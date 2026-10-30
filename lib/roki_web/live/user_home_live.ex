@@ -575,20 +575,19 @@ defmodule RokiWeb.UserHomeLive do
                 a wrapping row is the first thing to drop when the figures are wide. --%>
           <.link
             navigate={~p"/#{@username}/stats"}
-            class="grid min-h-5 min-w-0 flex-1 grid-cols-2 items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:flex sm:flex-wrap sm:gap-y-0.5"
+            class="flex min-h-5 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:gap-y-0.5"
           >
-            <span :if={@data} class="whitespace-nowrap">
+            <span :if={@data} class="hidden whitespace-nowrap sm:inline">
               <b class="text-base-content">{@data.tally.behind}</b> in progress
             </span>
-            <span :if={@data} class="whitespace-nowrap">
+            <span :if={@data} class="hidden whitespace-nowrap sm:inline">
               <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
-              <span class="sm:hidden">finished</span>
-              <span class="hidden sm:inline">series &amp; anime finished</span>
+              series &amp; anime finished
             </span>
             <%!-- The placeholders are about as wide as the figures usually are, so the row comes out the
                  same shape with them in it as with the figures. --%>
-            <span :if={!@data} class="block"><.sk class="block w-[5.7rem]" /></span>
-            <span :if={!@data} class="block"><.sk class="block w-[4rem] sm:w-[10.9rem]" /></span>
+            <span :if={!@data} class="hidden sm:block"><.sk class="block w-[5.7rem]" /></span>
+            <span :if={!@data} class="hidden sm:block"><.sk class="block w-[10.9rem]" /></span>
 
             <%= cond do %>
               <% match?(%{totals: _}, @stats) -> %>
@@ -596,7 +595,8 @@ defmodule RokiWeb.UserHomeLive do
                   <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
                 </span>
                 <span class="whitespace-nowrap">
-                  <b class="text-base-content">{thousands(@stats.totals.films)}</b> films watched
+                  <b class="text-base-content">{thousands(@stats.totals.films)}</b>
+                  <span class="sm:hidden">films</span><span class="hidden sm:inline">films watched</span>
                 </span>
                 <span class="hidden whitespace-nowrap sm:inline">
                   <b class="text-base-content">{thousands(@stats.totals.episodes)}</b> episodes
@@ -607,7 +607,7 @@ defmodule RokiWeb.UserHomeLive do
                 </span>
               <% true -> %>
                 <span class="block"><.sk class="block w-[8.1rem]" /></span>
-                <span class="block"><.sk class="block w-[7.9rem]" /></span>
+                <span class="block"><.sk class="block w-[4.9rem] sm:w-[7.9rem]" /></span>
                 <span class="hidden sm:block"><.sk class="block w-[6.1rem]" /></span>
             <% end %>
 
