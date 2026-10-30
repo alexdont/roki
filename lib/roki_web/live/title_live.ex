@@ -599,30 +599,25 @@ defmodule RokiWeb.TitleLive do
 
   @impl true
   def render(assigns) do
-    # A title's page on a phone is exactly one screen: nothing sits below it (Play opens the next
-    # page), so it does not scroll.
-    assigns =
-      assign(
-        assigns,
-        :locked?,
-        assigns.live_action == :show and assigns.title != nil and assigns.linked? and
-          assigns.title_error == nil
-      )
+    # The show page runs edge to edge once its title is in; before that (and on the episodes page)
+    # it has the padded column it always had.
+    assigns = assign(assigns, :full?, assigns.live_action == :show and assigns.title != nil)
 
     ~H"""
-    <%!-- Flush: this page lays itself out. Below a wide screen it has the padding and width it always
-          had; on one the hero runs to the edges of the window under a floating header. --%>
+    <%!-- Flush: this page lays itself out. The hero runs to the edges of the window under a header
+          that floats over it, on a phone as on a wide screen; the sections below carry their own
+          gutters. --%>
     <Layouts.app
       socket={@socket}
       flash={@flash}
       flush
-      bleed={@live_action == :show}
-      overlay={@title != nil and @live_action == :show}
+      bleed={@full?}
+      overlay={@full?}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/title/#{@type}/#{@id}"}
     >
-      <div class={["px-4 py-8 sm:px-6", if(@live_action == :show, do: "lg:p-0", else: "lg:px-8")]}>
-        <div class={["mx-auto max-w-6xl space-y-4", @live_action == :show && "lg:max-w-none"]}>
+      <div class={if @full?, do: "", else: "px-4 py-8 sm:px-6 lg:px-8"}>
+        <div class={["mx-auto space-y-4", if(@full?, do: "max-w-none", else: "max-w-6xl")]}>
           <p :if={@title_error} class="alert alert-error">
             {if @uuid,
               do: "Couldn't load this title just now. Try again in a minute.",
@@ -635,24 +630,6 @@ defmodule RokiWeb.TitleLive do
           </div>
 
           <div :if={@title && @live_action == :show} class="space-y-8">
-            <.phone_hero
-              title={@title}
-              play={@play}
-              resume={@resume}
-              resume_secs={@resume_secs}
-              phase={@phase}
-              season={@season}
-              mode={@mode}
-              linked?={@linked?}
-              lib={@lib}
-              lib_busy={@lib_busy}
-              rating={@rating}
-              locked?={@locked?}
-              mal={@rate_mal}
-              link_state={@link_state}
-              trailer={@trailer}
-            />
-
             <.rate_sheet
               :if={@linked?}
               title={@title}
@@ -663,25 +640,6 @@ defmodule RokiWeb.TitleLive do
 
             <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
             <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
-
-            <.hero
-              mal={@rate_mal}
-              link_state={@link_state}
-              trailer={@trailer}
-              study={@study}
-              rating={@rating}
-              title={@title}
-              play={@play}
-              resume={@resume}
-              resume_secs={@resume_secs}
-              phase={@phase}
-              season={@season}
-              mode={@mode}
-              linked?={@linked?}
-              lib={@lib}
-              lib_busy={@lib_busy}
-              cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
-            />
 
             <.cinema_hero
               mal={@rate_mal}
@@ -704,26 +662,15 @@ defmodule RokiWeb.TitleLive do
 
             <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
 
-            <div class="lg:px-12 xl:px-16"><.access_notice uuid={@uuid} linked?={@linked?} /></div>
+            <div class="px-4 sm:px-6 lg:px-12 xl:px-16">
+              <.access_notice uuid={@uuid} linked?={@linked?} />
+            </div>
 
             <.facts_panel title={@title} credits={@credits} />
             <.cast_row cast={@credits.cast} />
 
-            <%!-- A phone has one column, so its comments come after the details. A wide screen has them
-              in the hero, under the Play controls. --%>
-            <div :if={@title.type in ["movie", "tv"]} class="sm:hidden">
-              <.title_comments
-                id="title-comments-phone"
-                title={@title}
-                user={assigns[:phoenix_kit_current_user]}
-              />
-            </div>
-
-            <%!-- On a wide screen the comments come right after the cast: they matter more than more like this. --%>
-            <div
-              :if={@title.type in ["movie", "tv"]}
-              class="hidden sm:block lg:px-12 xl:px-16"
-            >
+            <%!-- The comments come right after the cast: they matter more than more like this. --%>
+            <div :if={@title.type in ["movie", "tv"]} class="px-4 sm:px-6 lg:px-12 xl:px-16">
               <div class="max-w-5xl">
                 <.title_comments
                   id="title-comments"
@@ -733,7 +680,7 @@ defmodule RokiWeb.TitleLive do
               </div>
             </div>
 
-            <%!-- Last. A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
+            <%!-- Last. --%>
             <.similar_row
               items={@similar}
               seen={@similar_seen}
@@ -741,10 +688,7 @@ defmodule RokiWeb.TitleLive do
               signed_in?={@uuid != nil}
             />
 
-            <div class="hidden lg:block lg:h-12" aria-hidden="true"></div>
-
-            <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
-            <div :if={!@locked?} class="h-36 sm:hidden" aria-hidden="true"></div>
+            <div class="h-12" aria-hidden="true"></div>
           </div>
 
           <div :if={@title && @live_action == :episodes} class="space-y-6">
@@ -875,145 +819,6 @@ defmodule RokiWeb.TitleLive do
     """
   end
 
-  attr :cached?, :boolean, default: false
-  attr :title, :map, required: true
-  attr :resume, :any, default: nil
-  attr :resume_secs, :any, default: nil
-
-  attr :play, :map,
-    default: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
-
-  attr :phase, :any, required: true
-  attr :season, :any, default: nil
-  attr :mode, :atom, required: true
-  attr :linked?, :boolean, default: false
-  attr :lib, :map, required: true
-  attr :lib_busy, :boolean, default: false
-  attr :rating, :map, required: true
-  attr :mal, :any, default: nil
-  attr :link_state, :any, default: :none
-  attr :trailer, :any, default: nil
-  attr :study, :map, default: nil
-
-  slot :inner_block,
-    doc:
-      "more for the right-hand column, under the Play controls (the comments, on a wide screen)"
-
-  defp hero(assigns) do
-    ~H"""
-    <section class="hidden space-y-6 sm:block lg:hidden">
-      <%!-- The banner: the film's own backdrop, washed into the page colour so the words stay readable
-            in the light and the dark theme alike; the poster stands on it. --%>
-      <div class="relative isolate rounded-3xl border border-base-300/70 bg-base-200">
-        <%!-- The backdrop is clipped to the banner's corners; the banner itself is not, so the
-              "…" menu can open below its edge. --%>
-        <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl">
-          <img
-            :if={@title.backdrop}
-            src={Roki.Images.local(@title.backdrop)}
-            alt=""
-            class="h-full w-full object-cover opacity-60"
-          />
-          <div class="absolute inset-0 bg-gradient-to-r from-base-100 via-base-100/90 to-base-100/55">
-          </div>
-          <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-base-100/70 to-transparent">
-          </div>
-        </div>
-
-        <div class="flex gap-8 p-6 lg:p-8">
-          <div class="w-48 shrink-0 lg:w-60">
-            <img
-              :if={@title.poster}
-              src={Roki.Images.local(@title.poster)}
-              alt={@title.title}
-              class="aspect-[2/3] w-full rounded-2xl bg-base-300 object-cover shadow-2xl ring-1 ring-black/10"
-            />
-            <div :if={!@title.poster} class="aspect-[2/3] w-full rounded-2xl bg-base-300"></div>
-          </div>
-
-          <div class="flex min-w-0 flex-1 flex-col gap-4">
-            <div class="flex items-start gap-3">
-              <div class="min-w-0 flex-1 space-y-2">
-                <h1 class="text-3xl font-bold leading-tight tracking-tight lg:text-5xl">
-                  {@title.title}
-                </h1>
-                <.facts_row title={@title} rating={@rating} linked?={@linked?} />
-                <p :if={@title.tagline} class="italic text-base-content/60">{@title.tagline}</p>
-              </div>
-              <.more_menu id="more-menu-desk" title={@title} linked?={@linked?} lib={@lib} mal={@mal} />
-            </div>
-
-            <p :if={@title.overview} class="max-w-3xl leading-relaxed text-base-content/85">
-              {@title.overview}
-            </p>
-
-            <div class="mt-auto space-y-4 pt-2">
-              <div class="flex flex-wrap items-center gap-3">
-                <.play_button
-                  title={@title}
-                  play={@play}
-                  resume={@resume}
-                  resume_secs={@resume_secs}
-                  busy?={match?({:working, _}, @phase)}
-                  class="h-12 min-w-[14rem] rounded-xl text-lg lg:h-14 lg:text-xl"
-                />
-                <button
-                  :if={@linked? and @study}
-                  type="button"
-                  phx-click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
-                  class="btn btn-outline h-12 gap-2 rounded-xl lg:h-14"
-                  title="Watch this in languages you choose, leaving your settings alone"
-                >
-                  <.icon name="hero-academic-cap" class="h-5 w-5" /> Study
-                </button>
-                <button
-                  :if={@trailer}
-                  type="button"
-                  phx-click={open_trailer()}
-                  class="btn btn-ghost h-12 gap-2 rounded-xl lg:h-14"
-                  title="Watch the trailer"
-                >
-                  <.icon name="hero-play-circle" class="h-5 w-5" /> Trailer
-                </button>
-                <.link
-                  :if={@linked? and @title.type == "movie"}
-                  navigate={~p"/sources/movie/#{@title.id}"}
-                  class="btn btn-ghost h-12 gap-2 rounded-xl lg:h-14"
-                  title="Choose which release to play"
-                >
-                  <.icon name="hero-queue-list" class="h-5 w-5" /> Sources
-                </.link>
-                <span
-                  :if={@cached?}
-                  class="badge badge-success badge-outline gap-1"
-                  title="Sources are cached: plays right away"
-                >
-                  ⚡ cached
-                </span>
-                <%!-- Where Play opens it, right beside it. --%>
-                <Layouts.player_switch :if={@linked?} class="ml-auto" />
-              </div>
-
-              <%!-- Away from Play: a slip here should not save or hold a title. --%>
-              <.action_pills
-                :if={@linked?}
-                title={@title}
-                lib={@lib}
-                busy={@lib_busy}
-                rating={@rating}
-                link_state={@link_state}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <%!-- More for under the banner (the comments, on a wide screen). --%>
-      <div>{render_slot(@inner_block)}</div>
-    </section>
-    """
-  end
-
   # ── the wide-screen page: a hero the picture runs through, then rows ────────────────
 
   # Where each thing is drawn from: the film's own backdrop at its largest (the hero is the width of
@@ -1072,7 +877,7 @@ defmodule RokiWeb.TitleLive do
       id="hero"
       phx-hook="HeroTrailer"
       data-key={@trailer}
-      class="group/hero relative isolate hidden min-h-[clamp(34rem,80svh,54rem)] overflow-hidden bg-neutral-900 text-white lg:flex lg:flex-col lg:justify-end"
+      class="group/hero relative isolate flex min-h-[clamp(34rem,86svh,54rem)] flex-col justify-end overflow-hidden bg-neutral-900 text-white lg:min-h-[clamp(34rem,80svh,54rem)]"
       aria-label={@title.title}
     >
       <img
@@ -1100,7 +905,10 @@ defmodule RokiWeb.TitleLive do
       >
       </div>
 
-      <div class="absolute right-12 top-20 z-20 xl:right-16" data-hero-content>
+      <div
+        class="absolute right-4 top-16 z-20 sm:right-6 lg:right-12 lg:top-20 xl:right-16"
+        data-hero-content
+      >
         <.more_menu
           id="more-menu-cinema"
           title={@title}
@@ -1113,10 +921,10 @@ defmodule RokiWeb.TitleLive do
 
       <div
         data-hero-content
-        class="relative z-10 flex max-w-4xl flex-col gap-4 px-12 pb-14 pt-32 xl:px-16"
+        class="relative z-10 flex max-w-4xl flex-col gap-3 px-4 pb-6 pt-32 sm:px-6 lg:gap-4 lg:px-12 lg:pb-14 xl:px-16"
       >
         <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{@kind}</p>
-        <h1 class="text-5xl font-bold leading-[1.02] tracking-tight drop-shadow-lg xl:text-7xl">
+        <h1 class="text-4xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-5xl xl:text-7xl">
           {@title.title}
         </h1>
 
@@ -1142,7 +950,10 @@ defmodule RokiWeb.TitleLive do
 
         <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>
 
-        <p :if={@title.overview} class="max-w-2xl text-base leading-relaxed text-white/85 xl:text-lg">
+        <p
+          :if={@title.overview}
+          class="max-w-2xl text-sm leading-relaxed text-white/85 sm:text-base xl:text-lg"
+        >
           <span class="line-clamp-3">{@title.overview}</span>
           <a
             href="#details"
@@ -1159,7 +970,15 @@ defmodule RokiWeb.TitleLive do
             resume={@resume}
             resume_secs={@resume_secs}
             busy?={match?({:working, _}, @phase)}
-            class="h-14 min-w-[14rem] rounded-full text-xl"
+            class="h-14 w-full rounded-full text-xl sm:w-auto sm:min-w-[14rem]"
+          />
+          <.glass_btn
+            :if={@trailer}
+            click={open_trailer()}
+            icon="hero-play-circle"
+            label="Watch the trailer"
+            text="Trailer"
+            class="lg:hidden"
           />
           <.glass_btn
             :if={@linked? and @study}
@@ -1226,8 +1045,13 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- Where Play opens it, and the trailer's controls: pause (it plays once, it does not loop),
             sound, full screen. --%>
-      <div class="absolute bottom-10 right-12 z-20 flex items-center gap-3 xl:right-16">
-        <span data-hero-content><Layouts.player_switch :if={@linked?} /></span>
+      <div class="relative z-20 flex items-center gap-3 px-4 pb-8 sm:px-6 lg:absolute lg:bottom-10 lg:right-12 lg:justify-end lg:p-0 xl:right-16">
+        <span data-hero-content class="flex items-center gap-2">
+          <span class="text-[0.65rem] font-semibold uppercase tracking-wider text-white/60 lg:hidden">
+            Watch in
+          </span>
+          <Layouts.player_switch :if={@linked?} />
+        </span>
         <button
           :if={@trailer}
           type="button"
@@ -1275,7 +1099,7 @@ defmodule RokiWeb.TitleLive do
 
   defp hero_ctl,
     do:
-      "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55"
+      "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 max-lg:hidden"
 
   attr :click, :any, default: nil
   attr :href, :any, default: nil
@@ -1285,6 +1109,7 @@ defmodule RokiWeb.TitleLive do
   attr :busy, :boolean, default: false
   attr :text, :string, default: nil
   attr :tone, :atom, default: :white
+  attr :class, :string, default: nil
 
   # A round glass button for an action on the hero: an icon, the words as its tooltip, lit when it
   # is on. (A score or a name rides beside the icon when there is one.)
@@ -1293,7 +1118,7 @@ defmodule RokiWeb.TitleLive do
     <.link
       :if={@href}
       navigate={@href}
-      class={glass_class(@on, @tone, @text)}
+      class={[glass_class(@on, @tone, @text), @class]}
       title={@label}
       aria-label={@label}
     >
@@ -1304,7 +1129,7 @@ defmodule RokiWeb.TitleLive do
       type="button"
       phx-click={@click}
       disabled={@busy}
-      class={glass_class(@on, @tone, @text)}
+      class={[glass_class(@on, @tone, @text), @class]}
       title={@label}
       aria-label={@label}
     >
@@ -1361,8 +1186,8 @@ defmodule RokiWeb.TitleLive do
     assigns = assign(assigns, facts: facts)
 
     ~H"""
-    <section id="details" class="hidden scroll-mt-20 px-12 lg:block xl:px-16" aria-label="Details">
-      <div class="flex gap-8 rounded-3xl border border-base-300/70 bg-base-100/70 p-6 shadow-sm backdrop-blur lg:p-8">
+    <section id="details" class="scroll-mt-20 px-4 sm:px-6 lg:px-12 xl:px-16" aria-label="Details">
+      <div class="flex gap-8 rounded-3xl border border-base-300/70 bg-base-100/70 p-5 shadow-sm backdrop-blur sm:p-6 lg:p-8">
         <img
           :if={@title.poster}
           src={Roki.Images.local(@title.poster)}
@@ -1377,7 +1202,7 @@ defmodule RokiWeb.TitleLive do
               {@title.overview}
             </p>
           </div>
-          <dl class="grid grid-cols-2 gap-x-8 gap-y-5 text-sm xl:grid-cols-3">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-5 text-sm lg:gap-x-8 xl:grid-cols-3">
             <div :for={{label, value} <- @facts} class="min-w-0">
               <dt class="text-xs font-medium uppercase tracking-wider text-base-content/50">
                 {label}
@@ -1422,7 +1247,7 @@ defmodule RokiWeb.TitleLive do
     default: false,
     doc: "its items open into cards on hover (the home page's)"
 
-  attr :class, :string, default: "hidden lg:block"
+  attr :class, :string, default: nil
   slot :inner_block, required: true
 
   # A row that scrolls sideways, with the chevron on the side the pointer is over (`ShelfRow`):
@@ -1437,7 +1262,9 @@ defmodule RokiWeb.TitleLive do
       class={["group/row", @class]}
       aria-label={@title}
     >
-      <h2 class="mb-3 px-12 text-2xl font-semibold tracking-tight xl:px-16">{@title}</h2>
+      <h2 class="mb-3 px-4 text-2xl font-semibold tracking-tight sm:px-6 lg:px-12 xl:px-16">
+        {@title}
+      </h2>
       <div class="relative">
         <button
           type="button"
@@ -1459,7 +1286,7 @@ defmodule RokiWeb.TitleLive do
           data-row-scroller
           data-card-row={@cards?}
           class={[
-            "flex snap-x scroll-px-12 gap-4 overflow-x-auto scroll-smooth px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16",
+            "flex snap-x scroll-px-4 gap-3 overflow-x-auto scroll-smooth px-4 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:gap-4 lg:px-12 xl:scroll-px-16 xl:px-16",
             if(@cards?, do: "-mb-[3.25rem] -mt-3 pb-16 pt-4", else: "pb-3 pt-1")
           ]}
         >
@@ -1509,7 +1336,6 @@ defmodule RokiWeb.TitleLive do
       id="row-similar"
       title="More like this"
       cards?
-      class="hidden sm:block lg:block"
     >
       <RokiWeb.FeaturedLive.shelf_card
         :for={i <- Enum.take(@items, 20)}
@@ -1521,138 +1347,6 @@ defmodule RokiWeb.TitleLive do
         signed_in?={@signed_in?}
       />
     </.scroll_row>
-    """
-  end
-
-  attr :title, :map, required: true
-  attr :rating, :map, required: true
-  attr :linked?, :boolean, default: false
-
-  # Year, length and the rest as quiet chips, the score beside them (yours in its own colour once
-  # you have rated it; a click changes it).
-  defp facts_row(assigns) do
-    assigns =
-      assign(
-        assigns,
-        :chips,
-        Enum.filter(
-          [
-            assigns.title.year,
-            assigns.title.minutes && "#{assigns.title.minutes} min",
-            seasons_text(assigns.title),
-            episodes_text(assigns.title)
-          ],
-          & &1
-        )
-      )
-
-    ~H"""
-    <div class="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
-      <span :for={c <- @chips} class="rounded-full bg-base-content/10 px-3 py-1 font-medium">{c}</span>
-      <span
-        :for={g <- Enum.take(@title.genres, 3)}
-        class="rounded-full border border-base-content/20 px-3 py-1 text-base-content/70"
-      >
-        {g}
-      </span>
-    </div>
-    """
-  end
-
-  attr :title, :map, required: true
-  attr :lib, :map, required: true
-  attr :busy, :boolean, default: false
-  attr :rating, :map, required: true
-  attr :link_state, :any, default: :none
-
-  # The icon classes below are built from a name, which Tailwind cannot see, so they are spelled
-  # out here: hero-bookmark hero-bookmark-solid hero-pause-circle hero-pause-circle-solid
-  # hero-check-circle hero-check-circle-solid
-  # What the terminal app has on a title: saved for later, watched (and back), and your rating —
-  # as pills with their words, the same colours as the hover card on a poster. Hold is in the
-  # "…" menu (it is rare, and was here twice).
-  @doc false
-  def action_pills(assigns) do
-    ~H"""
-    <div class="flex flex-wrap items-center gap-2">
-      <.pill
-        event="toggle_saved"
-        on={@lib.saved?}
-        icon="bookmark"
-        on_class="btn-primary"
-        label={if @lib.saved?, do: "Saved", else: "Save"}
-        title={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
-      />
-      <%!-- A film is watched or not; a series is completed or not (episodes below one by one).
-            The same button marks and unmarks. --%>
-      <.pill
-        event="toggle_watched"
-        on={watched_state?(@title, @lib)}
-        icon="check-circle"
-        on_class="btn-success"
-        busy={@busy}
-        label={pill_watched_label(@title, @lib)}
-        title={
-          if watched_state?(@title, @lib),
-            do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
-            else: watched_label(@title, @lib)
-        }
-      />
-
-      <%!-- TMDB's average, and — once you have rated it — yours beside it in another colour. --%>
-      <button
-        phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-        class="btn btn-sm h-10 w-40 gap-2 rounded-full px-4"
-        title={if @rating.value, do: "Your rating — click to change it", else: "Rate it on TMDB"}
-        aria-label="Rate it"
-      >
-        <.icon name="hero-star-solid" class="h-4 w-4 text-warning" />
-        <span class="font-semibold text-warning">{avg_text(@title)}</span>
-        <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
-        <span :if={!@rating.value} class="text-base-content/60">Rate</span>
-      </button>
-
-      <%!-- A show can be linked with friends: episodes any of you marks are marked for all.
-            At the right end of the row, under the player switch. --%>
-      <button
-        :if={@title.type == "tv"}
-        type="button"
-        phx-click={JS.show(to: "#link-sheet", display: "flex")}
-        class={[
-          "btn btn-sm ml-auto h-10 max-w-60 gap-2 whitespace-nowrap rounded-full px-4",
-          @link_state not in [:none, :pending] && "btn-primary"
-        ]}
-        title={link_title(@link_state)}
-        aria-label={link_title(@link_state)}
-      >
-        <.icon name="hero-link" class="h-5 w-5 shrink-0" />
-        <span class="truncate">{link_label(@link_state)}</span>
-      </button>
-    </div>
-    """
-  end
-
-  attr :event, :string, required: true
-  attr :on, :boolean, required: true
-  attr :icon, :string, required: true
-  attr :on_class, :string, required: true
-  attr :label, :string, required: true
-  attr :title, :string, required: true
-  attr :busy, :boolean, default: false
-
-  defp pill(assigns) do
-    ~H"""
-    <button
-      phx-click={@event}
-      disabled={@busy}
-      class={["btn btn-sm h-10 w-40 gap-2 whitespace-nowrap rounded-full px-4", @on && @on_class]}
-      title={@title}
-      aria-label={@title}
-    >
-      <span :if={@busy} class="loading loading-spinner loading-sm"></span>
-      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-5 w-5" />
-      {@label}
-    </button>
     """
   end
 
@@ -1713,11 +1407,6 @@ defmodule RokiWeb.TitleLive do
 
   defp watched_state?(%{type: "movie"}, lib), do: lib.watched?
   defp watched_state?(_title, lib), do: lib.all_watched?
-
-  # The same, short enough for a pill of one width.
-  defp pill_watched_label(%{type: "movie"} = title, lib), do: watched_label(title, lib)
-  defp pill_watched_label(_title, %{all_watched?: true}), do: "Completed"
-  defp pill_watched_label(_title, _lib), do: "Mark completed"
 
   defp watched_label(%{type: "movie"}, %{watched?: true}), do: "Watched"
   defp watched_label(%{type: "movie"}, _lib), do: "Mark watched"
@@ -2212,284 +1901,6 @@ defmodule RokiWeb.TitleLive do
     mal ++ [{"Open on TMDB", "https://www.themoviedb.org/#{kind}/#{t.id}"}] ++ imdb
   end
 
-  attr :title, :map, required: true
-  attr :resume, :any, default: nil
-  attr :resume_secs, :any, default: nil
-
-  attr :play, :map,
-    default: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
-
-  attr :phase, :any, required: true
-  attr :season, :any, default: nil
-  attr :mode, :atom, required: true
-  attr :linked?, :boolean, default: false
-  attr :lib, :map, required: true
-  attr :lib_busy, :boolean, default: false
-  attr :rating, :map, required: true
-  attr :locked?, :boolean, default: false
-  attr :mal, :any, default: nil
-  attr :link_state, :any, default: :none
-  attr :trailer, :any, default: nil
-
-  # One screen on a phone: the title and its details on top, a large poster with the three icon
-  # buttons beside it, the synopsis (tap for the full text and more facts), and Play pinned to
-  # the bottom with where it plays just above it. Wider screens use `hero/1`.
-  defp phone_hero(assigns) do
-    assigns = assign(assigns, :busy?, match?({:working, _}, assigns.phase))
-
-    ~H"""
-    <section class={[
-      "-mt-4 flex h-[calc(100svh-4.5rem-1px)] flex-col gap-3 pb-[calc(7rem+max(0.75rem,env(safe-area-inset-bottom)))] sm:hidden",
-      @locked? && "-mb-9"
-    ]}>
-      <div class="relative flex shrink-0 items-start gap-2">
-        <div class="min-w-0 flex-1">
-          <h1 class="text-2xl font-bold leading-tight tracking-tight">{@title.title}</h1>
-          <p class="mt-0.5 text-xs text-base-content/60">{meta(@title)}</p>
-        </div>
-
-        <.more_menu
-          id="more-menu-phone"
-          title={@title}
-          linked?={@linked?}
-          lib={@lib}
-          mal={@mal}
-          link?={@linked? and @title.type == "tv"}
-          link_state={@link_state}
-          trailer={@trailer}
-        />
-      </div>
-
-      <%!-- The poster takes all the height there is between the title and the synopsis; the
-            three buttons are a strip against the right edge of the screen. --%>
-      <%!-- The row is a size container: the poster is sized in its units (two thirds of its height,
-            but never more than 62% of its width), so it never depends on its own content — a
-            percentage height plus an aspect ratio collapses to nothing in Safari. --%>
-      <%!-- The poster row and the synopsis are one block, sized in its units (a size container): the
-            row is as tall as the poster can be — the block's height less the synopsis, or what its
-            width allows — and the synopsis follows it directly, so there is no gap between them. --%>
-      <div class="flex min-h-0 flex-1 flex-col gap-3 [container-type:size]">
-        <div class="flex h-[min(calc(100cqh-7rem),105cqw)] shrink-0 gap-3 px-4">
-          <div class="relative aspect-[2/3] w-[min(calc((100cqh-7rem)*0.66667),70cqw)] shrink-0 self-start overflow-hidden rounded-2xl bg-base-300 shadow-xl ring-1 ring-black/10">
-            <img
-              :if={@title.poster}
-              src={Roki.Images.local(@title.poster)}
-              alt={@title.title}
-              class="absolute inset-0 h-full w-full object-cover"
-            />
-          </div>
-
-          <%!-- Icons only: saved, watched, rating — three tiles sharing the poster's height, the icon
-              centred in each. The state is the colour; the label is the tooltip. --%>
-          <%!-- As tall as the poster, never taller: the poster's height is 1.5 x its width, which on a
-              narrow screen is the width cap and not the row's height. --%>
-          <div
-            :if={@linked?}
-            class="flex h-[min(calc(100cqh-7rem),105cqw)] min-w-0 flex-1 flex-col gap-2 self-start"
-          >
-            <.round_btn
-              event="toggle_saved"
-              on={@lib.saved?}
-              icon="bookmark"
-              label={if @lib.saved?, do: "Saved for later (tap to remove)", else: "Save for later"}
-              on_class="btn-primary"
-            />
-            <.round_btn
-              event="toggle_watched"
-              on={watched_state?(@title, @lib)}
-              icon="check-circle"
-              label={
-                if watched_state?(@title, @lib),
-                  do: "Completed (tap to unmark)",
-                  else: watched_label(@title, @lib)
-              }
-              on_class="btn-success"
-              busy={@lib_busy}
-            />
-            <.rate_tile title={@title} rating={@rating} />
-          </div>
-        </div>
-
-        <button
-          :if={@title.overview}
-          type="button"
-          phx-click={JS.show(to: "#about-sheet", display: "flex")}
-          class="shrink-0 text-left"
-          aria-label="Read the full description and more details"
-        >
-          <span class="line-clamp-4 text-sm text-base-content/80">{@title.overview}</span>
-          <span class="flex items-center gap-1 text-xs font-medium text-primary">
-            More <.icon name="hero-chevron-up-micro" class="h-4 w-4" />
-          </span>
-        </button>
-      </div>
-
-      <%!-- Glued to the bottom edge of the screen: where it plays, then Play. --%>
-      <div class="fixed inset-x-0 bottom-0 z-30 space-y-2 rounded-t-3xl border-t border-base-300 bg-base-100/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur [&_.btn]:rounded-2xl">
-        <div :if={@linked?} class="flex items-center justify-between gap-3">
-          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Watch in</span>
-          <Layouts.player_switch size="sm" />
-        </div>
-        <.play_button
-          split?
-          title={@title}
-          play={@play}
-          resume={@resume}
-          resume_secs={@resume_secs}
-          busy?={@busy?}
-          class="h-14 w-full text-xl"
-        />
-      </div>
-
-      <.about_sheet title={@title} />
-
-      <%!-- While the page is exactly one screen, it is not a page you can drag: the document is
-            locked in place (and unlocked as soon as there is more below, e.g. after Play). --%>
-      <style :if={@locked?}>
-        @media (max-width: 639px) {
-          html, body { overflow: hidden; height: 100%; overscroll-behavior: none; }
-        }
-      </style>
-    </section>
-    """
-  end
-
-  attr :event, :string, required: true
-  attr :on, :boolean, required: true
-  attr :icon, :string, required: true
-  attr :label, :string, required: true
-  attr :on_class, :string, required: true
-  attr :busy, :boolean, default: false
-
-  defp round_btn(assigns) do
-    ~H"""
-    <button
-      phx-click={@event}
-      disabled={@busy}
-      class={[
-        "btn h-auto min-h-0 w-full flex-1 rounded-2xl px-0 shadow-sm",
-        if(@on, do: @on_class, else: "border-base-300 bg-base-100")
-      ]}
-      title={@label}
-      aria-label={@label}
-    >
-      <span :if={@busy} class="loading loading-spinner"></span>
-      <.icon :if={!@busy} name={"hero-#{@icon}#{if @on, do: "-solid"}"} class="h-8 w-8" />
-    </button>
-    """
-  end
-
-  attr :title, :map, required: true
-
-  # The synopsis in full and everything else TMDB says about the title, in a sheet that slides up
-  # from the bottom; tap outside, the cross, or Escape to close.
-  defp about_sheet(assigns) do
-    assigns = assign(assigns, :facts, facts(assigns.title))
-
-    ~H"""
-    <div
-      id="about-sheet"
-      class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50"
-      phx-window-keydown={JS.hide(to: "#about-sheet")}
-      phx-key="escape"
-    >
-      <div
-        class="max-h-[85svh] w-full overflow-y-auto rounded-t-2xl bg-base-100 p-5 pb-8 shadow-2xl"
-        phx-click-away={JS.hide(to: "#about-sheet")}
-      >
-        <div class="flex items-start gap-3">
-          <div class="min-w-0 flex-1">
-            <h2 class="text-lg font-bold leading-tight">{@title.title}</h2>
-            <p
-              :if={@title.original_title && @title.original_title != @title.title}
-              class="text-xs text-base-content/60"
-            >
-              {@title.original_title}
-            </p>
-          </div>
-          <button
-            type="button"
-            phx-click={JS.hide(to: "#about-sheet")}
-            class="btn btn-ghost btn-sm btn-circle"
-            aria-label="Close"
-          >
-            <.icon name="hero-x-mark" class="h-5 w-5" />
-          </button>
-        </div>
-
-        <p :if={@title.tagline} class="mt-2 text-sm italic text-base-content/60">{@title.tagline}</p>
-
-        <div :if={@title.genres != []} class="mt-3 flex flex-wrap gap-1.5">
-          <span :for={g <- @title.genres} class="badge badge-ghost">{g}</span>
-        </div>
-
-        <p :if={@title.overview} class="mt-4 text-sm leading-relaxed text-base-content/90">
-          {@title.overview}
-        </p>
-
-        <dl class="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <%= for {label, value} <- @facts do %>
-            <dt class="text-base-content/50">{label}</dt>
-            <dd>{value}</dd>
-          <% end %>
-        </dl>
-      </div>
-    </div>
-    """
-  end
-
-  # What the sheet lists besides the genres: only what TMDB knows.
-  defp facts(t) do
-    [
-      {"Released", date_text(t.date, t.type)},
-      {"Last aired",
-       t.type == "tv" && t.last_air_date != t.date && date_text(t.last_air_date, "tv")},
-      {"Runtime", t.minutes && "#{t.minutes} min"},
-      {"Seasons", t.type == "tv" && t.seasons != [] && length(t.seasons)},
-      {"Episodes", t.episodes_total && t.episodes_total > 0 && t.episodes_total},
-      {"Rating",
-       t.vote && t.vote > 0 &&
-         "★ #{Float.round(t.vote * 1.0, 1)}#{if t.vote_count && t.vote_count > 0, do: " (#{thousands(t.vote_count)} votes)"}"},
-      {"Status", t.status},
-      {"Language", t.language && Watch.language(t.language)},
-      {"Also spoken", also_spoken(t)},
-      {"Country", t.countries != [] && Enum.join(t.countries, ", ")},
-      {(t.type == "tv" && "Network") || "Studio",
-       (t.type == "tv" && t.networks != [] && Enum.join(Enum.take(t.networks, 3), ", ")) ||
-         (t.studios != [] && Enum.join(Enum.take(t.studios, 3), ", "))}
-    ]
-    |> Enum.filter(fn {_label, value} -> value not in [nil, false, ""] end)
-  end
-
-  defp also_spoken(t) do
-    others = t.spoken -- [t.language && Watch.language(t.language)]
-    if others == [], do: nil, else: Enum.join(others, ", ")
-  end
-
-  # "18 Dec 1968 (57 years ago)" — or "(in 55 days)" for what is not out yet.
-  defp date_text(nil, _type), do: nil
-
-  defp date_text(iso, _type) do
-    case Date.from_iso8601(iso) do
-      {:ok, d} ->
-        days = Date.diff(Date.utc_today(), d)
-
-        ago =
-          cond do
-            days < 0 -> "in #{-days} days"
-            days == 0 -> "today"
-            days < 60 -> "#{days} days ago"
-            days < 730 -> "#{div(days, 30)} months ago"
-            true -> "#{div(days, 365)} years ago"
-          end
-
-        "#{Calendar.strftime(d, "%-d %b %Y")} (#{ago})"
-
-      _ ->
-        iso
-    end
-  end
-
   defp thousands(n) when is_integer(n),
     do:
       n
@@ -2499,27 +1910,6 @@ defmodule RokiWeb.TitleLive do
       |> String.reverse()
 
   defp thousands(n), do: to_string(n)
-
-  attr :title, :map, required: true
-  attr :rating, :map, required: true
-
-  # The phone's rating tile: TMDB's average on top, yours under it once you have rated.
-  defp rate_tile(assigns) do
-    ~H"""
-    <button
-      phx-click={JS.show(to: "#rate-sheet", display: "flex")}
-      class="btn h-auto min-h-0 w-full flex-1 flex-col gap-0 rounded-2xl border-base-300 bg-base-100 px-0 leading-tight shadow-sm"
-      title="Rate it on TMDB"
-      aria-label="Rate it on TMDB"
-    >
-      <span class="flex items-center gap-1 text-base font-bold text-warning">
-        <.icon name="hero-star-solid" class="h-4 w-4" />{avg_text(@title)}
-      </span>
-      <span :if={@rating.value} class="text-sm font-bold text-info">You {fmt_rating(@rating.value)}</span>
-      <span :if={!@rating.value} class="text-xs font-normal text-base-content/60">Rate</span>
-    </button>
-    """
-  end
 
   attr :title, :map, required: true
   attr :study, :map, required: true

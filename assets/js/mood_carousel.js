@@ -39,6 +39,16 @@ export const MoodCarousel = {
       this.go(chip.dataset.moodChip)
       this.arm()
     }, true)
+    // The chevrons step through the moods; like a tap on a chip, a press is a choice, so the
+    // turning goes on from the mood chosen.
+    this.el.addEventListener("click", (e) => {
+      const b = e.target.closest && e.target.closest("[data-mood-prev],[data-mood-next]")
+      if (!b || !this.el.contains(b)) return
+      const n = this.slides.length
+      const step = b.hasAttribute("data-mood-next") ? 1 : -1
+      this.show((this.index + step + n) % n)
+      this.arm()
+    })
     this.el.addEventListener("mouseenter", () => { this.held = true; this.freeze() })
     this.el.addEventListener("mouseleave", () => { this.held = false; this.arm() })
     this.onVisibility = () => { this.visible = !document.hidden; this.visible ? this.arm() : this.freeze() }
@@ -110,7 +120,7 @@ export const MoodCarousel = {
   // updated.
   centre(chip) {
     const row = chip && chip.parentElement
-    if (!row || window.innerWidth >= 640 || row.scrollWidth <= row.clientWidth) return
+    if (!row || window.innerWidth >= 1024 || row.scrollWidth <= row.clientWidth) return
 
     const here = chip.getBoundingClientRect()
     const box = row.getBoundingClientRect()

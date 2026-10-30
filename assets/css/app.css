@@ -225,7 +225,7 @@ html.study-open .site-header { display: none; }
   }
 }
 
-/* The home page on a wide screen: its picture runs to the top of the window and the header floats
+/* The home page and a title's page: the picture runs to the top of the window and the header floats
    over it — clear, white, with a soft dark fade for the words — until the page is scrolled, when it
    settles into the frosted bar above. `data-scrolled` is on <html> (set by app.js) because the
    header is part of a LiveView's markup, and a class set from outside it is lost at the next patch. */
@@ -237,7 +237,7 @@ html.study-open .site-header { display: none; }
   --roki-b300: var(--color-base-300);
 }
 
-@media (min-width: 1024px) {
+@media all {
   .site-header--overlay {
     position: fixed;
     left: 0;
@@ -295,6 +295,10 @@ html.study-open .site-header { display: none; }
   border: 0;
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+[data-hero][data-no-fs="true"] [data-hero-ctl="full"] {
+  display: none;
 }
 
 [data-hero]:fullscreen {

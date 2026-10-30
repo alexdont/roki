@@ -397,11 +397,7 @@ defmodule RokiWeb.FeaturedLive do
     >
       <%!-- Flush: the page lays itself out. On a wide screen the mood carousel and the rows reach
             the edges of the window; everything else keeps the old gutters and width. --%>
-      <.pitch :if={@visitor?} class="lg:hidden" />
-
-      <div class="px-4 pt-8 sm:px-6 lg:p-0">
-        <.mood_picker moods={@moods} />
-      </div>
+      <.mood_picker moods={@moods} />
 
       <.shelf_rows
         shelves={@shelves}
@@ -411,7 +407,7 @@ defmodule RokiWeb.FeaturedLive do
         signed_in?={@uuid != nil}
       />
 
-      <.pitch :if={@visitor?} class="hidden lg:block" />
+      <.pitch :if={@visitor?} />
 
       <%!-- Activity has its own wrapper: on a wide screen it runs the whole width, with the same left
             gutter as the rows above, and its cards scroll out to the edge of the window. --%>
@@ -726,13 +722,29 @@ defmodule RokiWeb.FeaturedLive do
       id="mood-picker"
       phx-hook="MoodCarousel"
       data-every="6000"
-      class="relative space-y-3 lg:space-y-0"
+      class="relative"
       aria-label="What are you feeling like today?"
     >
+      <button
+        type="button"
+        data-mood-prev
+        aria-label="Previous mood"
+        class="absolute left-2 sm:left-4 lg:left-6 top-[42%] z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 sm:h-11 sm:w-11"
+      >
+        <.icon name="hero-chevron-left" class="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        data-mood-next
+        aria-label="Next mood"
+        class="absolute right-2 sm:right-4 lg:right-6 top-[42%] z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 sm:h-11 sm:w-11"
+      >
+        <.icon name="hero-chevron-right" class="h-5 w-5" />
+      </button>
       <%!-- The slides are stacked in one grid cell, so the box is as tall as the tallest of them:
             a long title or a tagline that wraps makes every slide taller, and never squeezes the
             posters or the button, whatever the width of the screen. --%>
-      <div class="relative grid min-h-[26rem] grid-cols-[minmax(0,1fr)] overflow-hidden rounded-3xl bg-base-300 shadow-xl sm:min-h-[28rem] lg:min-h-[clamp(30rem,62svh,44rem)] lg:rounded-none lg:shadow-none">
+      <div class="relative grid min-h-[clamp(30rem,78svh,46rem)] grid-cols-[minmax(0,1fr)] overflow-hidden bg-base-300 lg:min-h-[clamp(30rem,62svh,44rem)]">
         <%!-- One slide per mood; the hook shows one. --%>
         <div
           :for={{m, i} <- Enum.with_index(@all)}
@@ -754,20 +766,15 @@ defmodule RokiWeb.FeaturedLive do
           />
           <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true">
           </div>
-          <div
-            class="absolute inset-0 lg:hidden"
-            style={"background: linear-gradient(90deg, hsl(#{m.hue} 70% 12% / 0.96) 0%, hsl(#{m.hue} 70% 12% / 0.80) 45%, hsl(#{m.hue} 70% 12% / 0.25) 100%), linear-gradient(0deg, hsl(#{m.hue} 70% 10% / 0.9) 0%, transparent 45%)"}
-          >
-          </div>
           <%!-- Wide screens: the picture is the point. Dark where the words are, clear on the right,
                 and a fade along the bottom for the posters' edge to sit against. --%>
           <div
-            class="absolute inset-0 hidden lg:block"
+            class="absolute inset-0"
             style={"background: linear-gradient(90deg, hsl(#{m.hue} 60% 7% / 0.92) 0%, hsl(#{m.hue} 60% 7% / 0.62) 32%, hsl(#{m.hue} 60% 7% / 0.08) 66%, transparent 100%), linear-gradient(0deg, hsl(#{m.hue} 60% 6% / 0.82) 0%, transparent 38%), linear-gradient(180deg, hsl(#{m.hue} 60% 6% / 0.4) 0%, transparent 22%)"}
           >
           </div>
 
-          <div class="relative flex w-full flex-col justify-between gap-6 p-5 text-white sm:p-8 lg:justify-end lg:px-12 lg:pb-20 xl:px-16">
+          <div class="relative flex w-full flex-col justify-end gap-6 px-4 pb-24 pt-28 text-white sm:px-6 lg:px-12 lg:pb-20 xl:px-16">
             <div class="max-w-xl space-y-3 sm:max-w-3xl lg:max-w-4xl lg:space-y-4">
               <%!-- Numbered the way a programme numbers its films: where a pictogram would stand. --%>
               <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
@@ -794,35 +801,6 @@ defmodule RokiWeb.FeaturedLive do
               >
                 Show me <.icon name="hero-arrow-right" class="h-4 w-4" />
               </.link>
-            </div>
-
-            <%!-- What is popular in it right now; each poster is its title. --%>
-            <div
-              :if={items != []}
-              class="-mx-5 flex shrink-0 gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-8 sm:px-8 lg:hidden"
-            >
-              <.link
-                :for={t <- Enum.take(items, 10)}
-                navigate={~p"/title/#{t.type}/#{t.id}"}
-                class="w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-white/10 shadow-lg ring-1 ring-white/20 transition hover:-translate-y-1 hover:ring-white/60 sm:w-24"
-                title={t.title}
-              >
-                <img
-                  :if={t.poster}
-                  src={Roki.Images.local(t.poster)}
-                  alt={t.title}
-                  loading="lazy"
-                  class="aspect-[2/3] h-auto w-full object-cover"
-                />
-                <div :if={!t.poster} class="aspect-[2/3] w-full"></div>
-              </.link>
-            </div>
-            <div :if={items == []} class="flex shrink-0 gap-2 lg:hidden">
-              <div
-                :for={_ <- 1..6}
-                class="aspect-[2/3] w-[4.5rem] shrink-0 animate-pulse rounded-lg bg-white/15 sm:w-24"
-              >
-              </div>
             </div>
           </div>
         </div>
@@ -859,7 +837,7 @@ defmodule RokiWeb.FeaturedLive do
 
       <%!-- The moods, in a row: the shown one is lit, with a thin line that fills as its turn runs. --%>
       <div
-        class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 lg:hidden"
+        class="absolute inset-x-0 bottom-5 z-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:px-6 lg:hidden"
         role="tablist"
         aria-label="Moods"
       >
@@ -869,7 +847,7 @@ defmodule RokiWeb.FeaturedLive do
           data-mood-chip={m.slug}
           role="tab"
           aria-selected={to_string(i == 0)}
-          class="group relative shrink-0 overflow-hidden rounded-full border border-base-300 bg-base-100 px-3.5 py-2 text-sm font-semibold transition hover:border-base-content/30 aria-selected:border-transparent aria-selected:text-white aria-selected:shadow-md"
+          class="group relative shrink-0 overflow-hidden rounded-full border border-white/25 bg-black/30 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-md transition hover:border-white/50 aria-selected:border-transparent aria-selected:shadow-md"
           style={"--mood: hsl(#{m.hue} 75% 45%); --mood-font: #{m.font}"}
         >
           <span
@@ -935,7 +913,7 @@ defmodule RokiWeb.FeaturedLive do
       ])
 
     ~H"""
-    <div class="hidden space-y-9 pb-6 pt-8 lg:block">
+    <div class="space-y-7 pb-4 pt-6 lg:space-y-9 lg:pb-6 lg:pt-8">
       <.shelf_row
         :for={{kind, title, href} <- @rows}
         kind={kind}
@@ -973,7 +951,7 @@ defmodule RokiWeb.FeaturedLive do
       class="group/row"
       aria-label={@title}
     >
-      <div class="mb-3 flex items-baseline justify-between gap-4 px-12 xl:px-16">
+      <div class="mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
         <h2 class="text-2xl font-semibold tracking-tight">{@title}</h2>
         <.link
           navigate={@href}
@@ -1006,7 +984,7 @@ defmodule RokiWeb.FeaturedLive do
         <ul
           data-row-scroller
           data-card-row
-          class="-mb-[3.25rem] -mt-3 flex snap-x scroll-px-12 gap-4 overflow-x-auto scroll-smooth px-12 pb-16 pt-4 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
+          class="-mb-[3.25rem] -mt-3 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-16 pt-4 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
         >
           <.shelf_card
             :for={i <- @shelf.items}

@@ -2,7 +2,13 @@
 # in Roki.Link can be tried without TMDB or laev files.
 defmodule Roki.LinkFakeWatch do
   def start, do: Agent.start_link(fn -> %{} end, name: __MODULE__)
-  def stop, do: if(Process.whereis(__MODULE__), do: Agent.stop(__MODULE__))
+
+  def stop do
+    if Process.whereis(__MODULE__), do: Agent.stop(__MODULE__)
+  catch
+    :exit, _ -> :ok
+  end
+
   def put(uuid, pairs), do: Agent.update(__MODULE__, &Map.put(&1, uuid, MapSet.new(pairs)))
   def get(uuid), do: Agent.get(__MODULE__, &Map.get(&1, uuid, MapSet.new()))
 

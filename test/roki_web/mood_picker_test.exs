@@ -24,9 +24,16 @@ defmodule RokiWeb.MoodPickerTest do
     refute html =~ ~r/(^|[" ])h-\[26rem\]/
   end
 
-  test "the posters keep their shape and their row its size", %{html: html} do
-    assert html =~ ~r/class="[^"]*aspect-\[2\/3\][^"]*shrink-0/
-    assert html =~ "aspect-[2/3]"
+  test "chevrons step through the moods", %{html: html} do
+    assert html =~ "data-mood-prev"
+    assert html =~ "data-mood-next"
+    assert html =~ ~s(aria-label="Next mood")
+  end
+
+  test "the picture is full-bleed on a phone too: no poster strip, no rounded card", %{html: html} do
+    refute html =~ "aspect-[2/3]"
+    refute html =~ "rounded-3xl"
+    assert html =~ "min-h-[clamp(30rem,78svh,46rem)]"
   end
 
   test "on a wide screen the moods are bars in the picture, and the chip row and poster strip give way",
@@ -34,8 +41,9 @@ defmodule RokiWeb.MoodPickerTest do
     # Twelve bars and twelve chips: the hook lights both by mood.
     assert length(Regex.scan(~r/data-mood-chip=/, html)) == 2 * length(Roki.Mood.all())
     assert html =~ "group/bar"
-    assert html =~ ~r/class="[^"]*sm:flex-wrap[^"]*lg:hidden"/
+    # On a phone the chips are glass, laid over the bottom of the picture.
+    assert html =~ ~r/class="absolute inset-x-0 bottom-5[^"]*lg:hidden"/
+    assert html =~ "backdrop-blur-md"
     assert html =~ "lg:min-h-"
-    assert html =~ "lg:rounded-none"
   end
 end

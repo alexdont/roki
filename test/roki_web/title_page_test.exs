@@ -65,8 +65,6 @@ defmodule RokiWeb.TitlePageTest do
       assert html =~ ~s(data-key="abc123xyz")
       assert html =~ "https://www.youtube.com/watch?v=abc123xyz"
       assert html =~ "Trailer"
-      # The phone's menu has it too.
-      assert html =~ "Watch trailer"
     end
 
     test "one without has neither", %{conn: conn} do
@@ -76,7 +74,7 @@ defmodule RokiWeb.TitlePageTest do
       html = render_async(view, 8000)
 
       refute html =~ ~s(id="trailer-sheet")
-      refute html =~ "Watch trailer"
+      refute html =~ ~s(data-key="abc123xyz")
     end
   end
 

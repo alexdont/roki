@@ -47,8 +47,8 @@ defmodule RokiWeb.HomeRowsTest do
     for href <- ~w(/movies /shows /anime), do: assert(html =~ ~s(href="#{href}"))
     assert length(Regex.scan(~r/data-row-next/, html)) == 3
     assert length(Regex.scan(~r/data-row-prev/, html)) == 3
-    # Only on a wide screen.
-    assert html =~ ~r/class="hidden [^"]*lg:block"/
+    # The rows are on every width now: a phone swipes them.
+    refute html =~ ~r/class="hidden space-y-9/
   end
 
   test "the score is in the top left of a poster, with no caption under it", %{html: html} do

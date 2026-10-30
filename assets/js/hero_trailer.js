@@ -18,6 +18,8 @@ export const HeroTrailer = {
     // What the picture and the controls are told (as data attributes on the hero, for CSS), kept
     // here because a page patch can drop attributes it did not put there.
     this.flags = {}
+    // A phone's browser cannot take a page element full screen: no button for it.
+    if (!document.fullscreenEnabled) this.set({noFs: "true"})
     this.userPaused = false
     this.autoPaused = false
     this.frame = null
