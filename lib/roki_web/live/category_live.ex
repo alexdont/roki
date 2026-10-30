@@ -568,6 +568,7 @@ defmodule RokiWeb.CategoryLive do
               seen={MapSet.member?(@seen, {i.type, i.id})}
               upcoming={@upcoming}
               compact
+              title?={false}
               rating_corner={:top_left}
             />
           </li>
