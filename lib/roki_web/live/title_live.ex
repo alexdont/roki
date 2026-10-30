@@ -1350,6 +1350,7 @@ defmodule RokiWeb.TitleLive do
 
   # 8.0 → "8", 8.5 → "8.5"
   defp provider_name(:mal), do: "MyAnimeList"
+  defp provider_name(:roki), do: "Roki"
   defp provider_name(_), do: "TMDB"
 
   # The languages the Study dialog starts on: the ones remembered for this title, else the
@@ -2169,7 +2170,9 @@ defmodule RokiWeb.TitleLive do
               <span class="font-semibold text-warning">★ {avg_text(@title)}</span>
               on TMDB<span :if={@title.vote_count && @title.vote_count > 0}> · {thousands(
                 @title.vote_count
-              )} votes</span><span :if={@rating.provider == :mal}> · your score goes to MyAnimeList</span>
+              )} votes</span><span :if={@rating.provider == :mal}> · your score goes to MyAnimeList</span><span :if={
+                @rating.provider == :roki
+              }> · your score is kept on Roki</span>
             </p>
           </div>
           <button
@@ -2182,19 +2185,6 @@ defmodule RokiWeb.TitleLive do
           </button>
         </div>
 
-        <div :if={@rating.state == :no_account and @rating.provider != :mal} class="mt-4 space-y-3">
-          <p class="text-sm text-base-content/70">
-            Your rating is saved on your own TMDB account, so it is yours and only yours. You
-            have not linked one yet: it takes a minute, TMDB is free, and you come straight back
-            here to rate.
-          </p>
-          <a
-            href={~p"/tmdb/link?#{[return: "/title/#{@title.type}/#{@title.id}"]}"}
-            class="btn btn-primary btn-sm"
-          >
-            Link my TMDB account
-          </a>
-        </div>
         <p
           :if={@rating.state == :no_account and @rating.provider == :mal}
           class="mt-4 text-sm text-base-content/70"
@@ -2250,6 +2240,14 @@ defmodule RokiWeb.TitleLive do
               Remove
             </button>
           </div>
+          <p :if={@rating.provider == :roki} class="text-center text-xs text-base-content/60">
+            Kept on Roki.
+            <a
+              href={~p"/tmdb/link?#{[return: "/title/#{@title.type}/#{@title.id}"]}"}
+              class="link"
+            >Link a TMDB account</a>
+            to send your ratings there too.
+          </p>
           <p :if={@rating.value} class="text-center text-xs text-base-content/60">
             Your rating:
             <span class={["font-semibold", (gold?(@rating) && "rate-gold") || "text-info"]}>

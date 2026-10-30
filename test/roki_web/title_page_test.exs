@@ -50,6 +50,30 @@ defmodule RokiWeb.TitlePageTest do
     assert Process.alive?(view.pid)
   end
 
+  describe "rating without a TMDB account" do
+    test "the rating is kept on Roki, and survives a refresh from TMDB", %{conn: conn, user: user} do
+      {:ok, view, _} = live(conn, "/title/tv/209867")
+      html = render_async(view, 8000)
+      assert html =~ "your score is kept on Roki"
+      assert html =~ "Link a TMDB account"
+      refute html =~ "Link my TMDB account"
+
+      view |> element("#rate-form") |> render_submit(%{"value" => "8.5"})
+      render_async(view, 8000)
+
+      assert {:ok, 8.5} = Roki.Profile.rating(user.uuid, {"tv", 209_867})
+      assert Roki.Profile.ratings(user.uuid)[{"tv", 209_867}] == 8.5
+
+      # A rating copied from TMDB is replaced on a refresh; one made here is not.
+      Roki.Profile.forget_tmdb_ratings(user.uuid)
+      assert {:ok, 8.5} = Roki.Profile.rating(user.uuid, {"tv", 209_867})
+
+      render_click(view, "clear_rating", %{})
+      render_async(view, 8000)
+      assert Roki.Profile.rating(user.uuid, {"tv", 209_867}) != {:ok, 8.5}
+    end
+  end
+
   describe "the trailer" do
     setup do
       on_exit(fn -> Roki.TTLCache.delete({:trailer, "tv", 209_867}) end)

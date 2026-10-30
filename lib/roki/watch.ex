@@ -321,8 +321,9 @@ defmodule Roki.Watch do
 
   @doc """
   Your own rating of a title: `{provider, {:ok, 8.5 | nil}}` with `provider` `:tmdb` or `:mal`
-  (MyAnimeList scores are whole numbers), or `{:tmdb, :no_account}` when no TMDB account is
-  linked in laev (ratings are sent with a TMDB session, which laev holds).
+  (MyAnimeList scores are whole numbers), or `{:roki, {:ok, 8.5 | nil}}` when no TMDB account is
+  linked in laev (ratings are sent with a TMDB session, which laev holds): the rating then
+  lives on Roki alone.
   """
   def my_rating(uuid, title, entry \\ nil) do
     Roki.Laev.run(uuid, fn ->
@@ -334,7 +335,12 @@ defmodule Roki.Watch do
           :tmdb -> {title.type, title.id}
         end
 
-      provider = if match?({:mal, _}, target), do: :mal, else: :tmdb
+      provider =
+        cond do
+          match?({:mal, _}, target) -> :mal
+          Laev.Tmdb.account?() -> :tmdb
+          true -> :roki
+        end
 
       # The site's own copy of the ratings answers first: a rating it has, or none when the
       # copy was made lately (an hour's worth of lag at most against a rating made elsewhere).
@@ -354,7 +360,7 @@ defmodule Roki.Watch do
               end
 
             :tmdb ->
-              if Laev.Tmdb.account?() do
+              if provider == :tmdb do
                 {:tmdb,
                  {:ok,
                   if(title.type == "movie",
@@ -362,7 +368,7 @@ defmodule Roki.Watch do
                     else: Laev.Tmdb.tv_rating(title.id)
                   )}}
               else
-                {:tmdb, :no_account}
+                {:roki, {:ok, nil}}
               end
           end
       end
@@ -391,15 +397,22 @@ defmodule Roki.Watch do
             end
 
           :tmdb ->
-            result =
-              if title.type == "movie",
-                do: Laev.Tmdb.rate_movie(title.id, value),
-                else: Laev.Tmdb.rate_tv(title.id, value)
+            if Laev.Tmdb.account?() do
+              result =
+                if title.type == "movie",
+                  do: Laev.Tmdb.rate_movie(title.id, value),
+                  else: Laev.Tmdb.rate_tv(title.id, value)
 
-            with {:ok, rating} <- result,
-                 do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
+              with {:ok, rating} <- result,
+                   do: Roki.Profile.note_rating(uuid, {title.type, title.id}, rating)
 
-            result
+              result
+            else
+              # No TMDB account to send it to: the rating is kept on Roki, in TMDB's half steps.
+              rating = (value * 2) |> round() |> max(1) |> min(20) |> Kernel./(2)
+              Roki.Profile.note_rating(uuid, {title.type, title.id}, rating, local: true)
+              {:ok, rating}
+            end
         end
       end)
 
@@ -458,9 +471,11 @@ defmodule Roki.Watch do
 
         :tmdb ->
           result =
-            if title.type == "movie",
-              do: Laev.Tmdb.clear_movie_rating(title.id),
-              else: Laev.Tmdb.clear_tv_rating(title.id)
+            cond do
+              not Laev.Tmdb.account?() -> :ok
+              title.type == "movie" -> Laev.Tmdb.clear_movie_rating(title.id)
+              true -> Laev.Tmdb.clear_tv_rating(title.id)
+            end
 
           if result == :ok, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, nil)
           result

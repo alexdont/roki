@@ -1226,10 +1226,14 @@ defmodule Roki.Profile do
 
   @doc """
   A rating made or taken back on the site, noted here at once: `target` is `{"mal", id}` or
-  `{"movie" | "tv", id}`, `score` the rating or nil for none.
+  `{"movie" | "tv", id}`, `score` the rating or nil for none. `local: true` marks a rating that
+  exists only on Roki (no TMDB account to send it to), which a refresh from TMDB never replaces.
   """
-  def note_rating(uuid, {type, id}, score)
+  def note_rating(uuid, target, score, opts \\ [])
+
+  def note_rating(uuid, {type, id}, score, opts)
       when is_binary(uuid) and is_binary(type) and is_integer(id) do
+    local = Keyword.get(opts, :local, false)
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
     if is_number(score) and score > 0 do
@@ -1237,10 +1241,10 @@ defmodule Roki.Profile do
 
       Repo.query!(
         """
-        insert into roki_ratings (user_uuid, type, id, score, rated_at) values ($1, $2, $3, $4, $5)
-        on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = excluded.rated_at
+        insert into roki_ratings (user_uuid, type, id, score, rated_at, local) values ($1, $2, $3, $4, $5, $6)
+        on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = excluded.rated_at, local = excluded.local
         """,
-        [bin, type, id, score * 1.0, now]
+        [bin, type, id, score * 1.0, now, local]
       )
     else
       Repo.query!("delete from roki_ratings where user_uuid = $1 and type = $2 and id = $3", [
@@ -1253,7 +1257,7 @@ defmodule Roki.Profile do
     :ok
   end
 
-  def note_rating(_uuid, _target, _score), do: :ok
+  def note_rating(_uuid, _target, _score, _opts), do: :ok
 
   @doc """
   Copy the user's ratings here from TMDB (their account's rated films and shows) and
@@ -1322,7 +1326,10 @@ defmodule Roki.Profile do
   def forget_tmdb_ratings(uuid) when is_binary(uuid) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 
-    Repo.query!("delete from roki_ratings where user_uuid = $1 and type in ('movie', 'tv')", [bin])
+    Repo.query!(
+      "delete from roki_ratings where user_uuid = $1 and type in ('movie', 'tv') and not local",
+      [bin]
+    )
 
     TTLCache.delete({:ratings_refresh, uuid})
     :ok
@@ -1336,7 +1343,9 @@ defmodule Roki.Profile do
     {:ok, outcome} =
       Repo.transaction(fn ->
         %{rows: [[old]]} =
-          Repo.query!("select count(*) from roki_ratings where user_uuid = $1", [bin])
+          Repo.query!("select count(*) from roki_ratings where user_uuid = $1 and not local", [
+            bin
+          ])
 
         # A failed page costs twenty ratings, so anything more than a few fewer than the copy
         # already holds is taken for a failed read; a handful taken back on TMDB is not.
@@ -1349,7 +1358,7 @@ defmodule Roki.Profile do
             "ratings read for #{uuid} returned #{length(rows)}, copy holds #{old}: merged, not replaced"
           )
         else
-          Repo.query!("delete from roki_ratings where user_uuid = $1", [bin])
+          Repo.query!("delete from roki_ratings where user_uuid = $1 and not local", [bin])
         end
 
         rows
@@ -1366,7 +1375,7 @@ defmodule Roki.Profile do
           Repo.query!(
             "insert into roki_ratings (user_uuid, type, id, score, rated_at) values " <>
               Enum.join(values, ", ") <>
-              " on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = coalesce(excluded.rated_at, roki_ratings.rated_at)",
+              " on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = coalesce(excluded.rated_at, roki_ratings.rated_at) where not roki_ratings.local",
             [bin | params]
           )
         end)
