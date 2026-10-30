@@ -12,6 +12,8 @@ const AUTOPLAY_MS = 2000
 
 // How long a paused trailer is held on its frozen frame before the backdrop replaces it.
 const PAUSE_FADE_MS = 4000
+// How long YouTube's own play/pause mark stays over a fresh start.
+const BEZEL_MS = 1400
 
 export const HeroTrailer = {
   mounted() {
@@ -68,6 +70,7 @@ export const HeroTrailer = {
   destroyed() {
     clearTimeout(this.timer)
     clearTimeout(this.fadeTimer)
+    clearTimeout(this.liveTimer)
     window.removeEventListener("message", this.onMessage)
     document.removeEventListener("visibilitychange", this.onHidden)
     document.removeEventListener("fullscreenchange", this.onFullscreen)
@@ -111,7 +114,15 @@ export const HeroTrailer = {
 
   playerState(state) {
     clearTimeout(this.fadeTimer)
-    if (state === 1) this.set({heroPlaying: "true", heroLive: "true", heroEnded: "false"})
+    clearTimeout(this.liveTimer)
+    if (state === 1) {
+      this.set({heroPlaying: "true", heroEnded: "false"})
+      // YouTube flashes its own big play/pause mark over the middle of the picture whenever the
+      // state changes, and the page cannot reach into the frame to hide it. The first start waits
+      // it out before the video is shown; the sound and the controls do not wait.
+      if (this.flags.heroLive === "true") return
+      this.liveTimer = setTimeout(() => this.set({heroLive: "true"}), BEZEL_MS)
+    }
     else if (state === 2) {
       this.set({heroPlaying: "false"})
       // Held for a while, the frozen frame gives way to the wide picture; play brings the video back.
