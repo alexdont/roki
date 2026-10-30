@@ -117,4 +117,51 @@ defmodule RokiWeb.HomeRowsTest do
       assert html =~ "pb-16"
     end
   end
+
+  describe "the Lists row" do
+    defp list(i, watched \\ nil),
+      do: %{
+        slug: "list-#{i}",
+        name: "List #{i}",
+        kind: :curated,
+        count: 50,
+        watched: watched,
+        keys: []
+      }
+
+    defp lists_html(lists, total, posters \\ %{}) do
+      render_component(&RokiWeb.FeaturedLive.lists_row/1,
+        lists: lists,
+        total: total,
+        posters: posters
+      )
+    end
+
+    test "is a scrolling row of its own with a tile that opens the rest" do
+      html = lists_html(Enum.map(1..12, &list/1), 70)
+
+      assert html =~ ~s(id="row-lists")
+      assert html =~ ~s(phx-hook="ShelfRow")
+      assert html =~ "data-row-scroller"
+      assert length(Regex.scan(~r/href="\/lists\/list-\d+"/, html)) == 12
+      assert html =~ "All 70 lists"
+      assert html =~ "See All 70"
+      assert html =~ ~s(href="/lists")
+    end
+
+    test "draws a list's posters when the site has them, and its progress when it is known" do
+      html =
+        lists_html([list(1, 25)], 1, %{"list-1" => ["https://image.tmdb.org/t/p/w342/a.jpg"]})
+
+      assert html =~ "a.jpg"
+      assert html =~ "25/50 watched"
+      assert html =~ "width: 50%"
+    end
+
+    test "has no posters or progress line to show for a list with neither" do
+      html = lists_html([list(1)], 1)
+      refute html =~ "<img"
+      refute html =~ "width: "
+    end
+  end
 end

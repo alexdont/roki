@@ -153,7 +153,7 @@ defmodule Roki.Search do
 
   defp imdb(uuid, id) do
     case Laev.Tmdb.find_imdb(id) do
-      {:ok, title} -> {:ok, {[title], false, franchises(uuid, [title])}}
+      {:ok, title} -> {:ok, {[title], false, franchises(uuid, "", [title])}}
       {:error, :not_found} -> {:ok, {[], false, []}}
       error -> error
     end
@@ -172,7 +172,7 @@ defmodule Roki.Search do
         results = oks |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq_by(&{&1.type, &1.id})
         more? = Enum.any?(oks, &elem(&1, 2))
         titles = rank_titles(results, text, year)
-        {:ok, {titles, more?, if(page == 1, do: franchises(uuid, titles), else: [])}}
+        {:ok, {titles, more?, if(page == 1, do: franchises(uuid, text, titles), else: [])}}
     end
   end
 
@@ -235,12 +235,18 @@ defmodule Roki.Search do
 
   # ── franchises ─────────────────────────────────────────────────────
 
-  # Curated lists the results belong to, then TMDB's own collection when the
-  # results point at one; smallest list first.
-  defp franchises(uuid, titles) do
-    (Laev.Franchises.detect(titles) ++ List.wrap(collection_franchise(uuid, titles)))
+  # First the lists the search names itself ("marvel", "star wars the last jedi" — the results
+  # need not belong to them: a list is found by its name), then the curated lists the results
+  # belong to and TMDB's own collection when the results point at one, smallest first.
+  defp franchises(uuid, query, titles) do
+    named = Lists.matching(query)
+
+    found =
+      (Laev.Franchises.detect(titles) ++ List.wrap(collection_franchise(uuid, titles)))
+      |> Enum.sort_by(&length(&1.entries))
+
+    (named ++ found)
     |> Enum.uniq_by(& &1.name)
-    |> Enum.sort_by(&length(&1.entries))
     |> Enum.map(&Lists.summary/1)
   end
 

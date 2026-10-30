@@ -8,11 +8,13 @@ defmodule RokiWeb.FeaturedLive do
   """
   use RokiWeb, :live_view
 
-  import RokiWeb.ListComponents
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Featured
+
+  # How many lists the row starts with; the rest are a tap away on the Lists page.
+  @lists_shown 12
 
   @titles %{movies: "Trending movies", shows: "Trending shows", anime: "Anime airing now"}
 
@@ -34,6 +36,8 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
       # The mood picker: what is held already is drawn in the first render, the rest arrives.
       |> assign(:moods, Roki.Mood.hero_peek())
+      |> assign(:list_posters, %{})
+      |> assign(:lists_shown, @lists_shown)
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
   end
@@ -98,6 +102,11 @@ defmodule RokiWeb.FeaturedLive do
     socket = load_activity(socket)
     socket = start_async(socket, :moods, fn -> Roki.Mood.hero(uuid) end)
 
+    socket =
+      start_async(socket, :list_posters, fn ->
+        Roki.Lists.previews(Enum.take(lists, @lists_shown))
+      end)
+
     # How far through each list a signed-in user is — static data, so it never waits on TMDB.
     if uuid,
       do: start_async(socket, :progress, fn -> Roki.Lists.with_progress(uuid, lists) end),
@@ -161,6 +170,11 @@ defmodule RokiWeb.FeaturedLive do
     do: {:noreply, assign(socket, :moods, Map.merge(socket.assigns.moods, moods))}
 
   def handle_async(:moods, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:list_posters, {:ok, %{} = posters}, socket),
+    do: {:noreply, assign(socket, :list_posters, posters)}
+
+  def handle_async(:list_posters, _other, socket), do: {:noreply, socket}
 
   # (A filter change keeps the old list on screen until the new one is in.)
 
@@ -482,23 +496,167 @@ defmodule RokiWeb.FeaturedLive do
             upcoming={@upcoming}
             cached_titles={@cached_titles}
           />
-
-          <%!-- Last, and only once the shelves above have settled, so it can never push
-              anything down. Curated franchises and TMDB collections, start to finish. --%>
-          <section :if={not @loading?} class="space-y-3">
-            <div class="flex items-baseline justify-between gap-3">
-              <h2 class="text-xl font-semibold">Lists</h2>
-              <p class="hidden text-sm text-base-content/60 sm:block">
-                Franchises start to finish, in release order
-              </p>
-            </div>
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <.list_card :for={l <- @lists} list={l} />
-            </div>
-          </section>
         </div>
       </div>
+      <%!-- Last, and only once the shelves above have settled, so it can never push anything down. --%>
+      <.lists_row
+        :if={not @loading?}
+        lists={Enum.take(@lists, @lists_shown)}
+        total={length(@lists)}
+        posters={@list_posters}
+      />
     </Layouts.app>
+    """
+  end
+
+  attr :lists, :list, required: true
+  attr :total, :integer, required: true
+  attr :posters, :map, default: %{}
+
+  # The curated franchise lists as a row of their own, like the rows of films: a dozen to begin
+  # with and a tile that opens the rest (all seventy at once was most of the page). Each is a dark
+  # card tinted by its own colour, with a fan of its posters when the site has them and, for someone
+  # signed in, a thin line for how far through it they are.
+  @doc false
+  def lists_row(assigns) do
+    ~H"""
+    <section
+      id="row-lists"
+      phx-hook="ShelfRow"
+      data-start="true"
+      data-end="false"
+      class="group/row pb-10 pt-2"
+      aria-label="Lists"
+    >
+      <div class="mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
+        <div>
+          <h2 class="text-2xl font-semibold tracking-tight">Lists</h2>
+          <p class="hidden text-sm text-base-content/60 sm:block">
+            Franchises, start to finish, in release order
+          </p>
+        </div>
+        <.link
+          navigate={~p"/lists"}
+          class="flex items-center gap-0.5 text-sm font-medium text-base-content/60 transition hover:text-base-content lg:opacity-0 lg:group-hover/row:opacity-100 lg:focus-visible:opacity-100"
+        >
+          See All {@total} <.icon name="hero-chevron-right-micro" class="h-4 w-4" />
+        </.link>
+      </div>
+
+      <div class="relative">
+        <button
+          type="button"
+          data-row-prev
+          aria-label="Scroll Lists back"
+          class="absolute inset-y-0 left-0 z-10 hidden w-16 items-center justify-start bg-gradient-to-r from-black/55 to-transparent pl-3 text-white opacity-0 transition lg:group-hover/row:group-data-[start=false]/row:flex lg:group-hover/row:group-data-[start=false]/row:opacity-100"
+        >
+          <.icon name="hero-chevron-left" class="h-8 w-8 drop-shadow" />
+        </button>
+        <button
+          type="button"
+          data-row-next
+          aria-label="Scroll Lists forward"
+          class="absolute inset-y-0 right-0 z-10 hidden w-16 items-center justify-end bg-gradient-to-l from-black/55 to-transparent pr-3 text-white opacity-0 transition lg:group-hover/row:group-data-[end=false]/row:flex lg:group-hover/row:group-data-[end=false]/row:opacity-100"
+        >
+          <.icon name="hero-chevron-right" class="h-8 w-8 drop-shadow" />
+        </button>
+
+        <ul
+          data-row-scroller
+          class="flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-3 pt-1 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 xl:scroll-px-16 xl:px-16"
+        >
+          <.list_tile
+            :for={{l, i} <- Enum.with_index(@lists)}
+            list={l}
+            index={i}
+            posters={Map.get(@posters, l.slug, [])}
+          />
+          <li class="shrink-0 snap-start">
+            <.link
+              navigate={~p"/lists"}
+              class="group/all flex h-[calc(var(--card-w)*1.5)] w-[calc(var(--card-w)*1.15)] flex-col items-center justify-center gap-3 rounded-box border border-dashed border-base-content/20 text-base-content/60 transition hover:border-primary/60 hover:text-base-content"
+            >
+              <span class="flex h-12 w-12 items-center justify-center rounded-full border border-current transition group-hover/all:border-primary group-hover/all:text-primary">
+                <.icon name="hero-arrow-right" class="h-6 w-6" />
+              </span>
+              <span class="px-3 text-center text-sm font-medium leading-snug">
+                All {@total} lists
+              </span>
+            </.link>
+          </li>
+        </ul>
+      </div>
+    </section>
+    """
+  end
+
+  attr :list, :map, required: true
+  attr :index, :integer, default: 0
+  attr :posters, :list, default: []
+
+  defp list_tile(assigns) do
+    list = assigns.list
+
+    assigns =
+      assign(assigns,
+        # The golden angle round the colour wheel: neighbours are never alike, however many.
+        hue: rem(round(assigns.index * 137.508) + 190, 360),
+        progress: RokiWeb.ListComponents.progress(list),
+        percent:
+          if(is_integer(list[:watched]) and list.count > 0,
+            do: min(100, round(list.watched * 100 / list.count)),
+            else: nil
+          )
+      )
+
+    ~H"""
+    <li class="shrink-0 snap-start">
+      <.link
+        navigate={~p"/lists/#{@list.slug}"}
+        class="group/tile relative flex h-[calc(var(--card-w)*1.5)] w-[calc(var(--card-w)*2)] flex-col justify-end overflow-hidden rounded-box bg-neutral-950 p-4 text-white shadow-lg ring-1 ring-white/10 transition duration-300 hover:-translate-y-1 hover:ring-white/40 hover:shadow-2xl"
+        style={"--hue: #{@hue}"}
+      >
+        <div
+          class="absolute inset-0"
+          style="background: radial-gradient(120% 90% at 88% -10%, hsl(var(--hue) 85% 48% / 0.55), transparent 62%), linear-gradient(160deg, hsl(var(--hue) 45% 15%) 0%, hsl(var(--hue) 55% 6%) 100%)"
+          aria-hidden="true"
+        >
+        </div>
+        <div
+          class="absolute inset-0 opacity-[0.07] mix-blend-overlay"
+          style="background-image: linear-gradient(rgb(255 255 255 / 0.8) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.8) 1px, transparent 1px); background-size: 22px 22px"
+          aria-hidden="true"
+        >
+        </div>
+
+        <div :if={@posters != []} class="absolute right-4 top-4 flex -space-x-9">
+          <img
+            :for={{url, i} <- Enum.with_index(@posters)}
+            src={Roki.Images.local(url)}
+            alt=""
+            loading="lazy"
+            class="aspect-[2/3] h-[calc(var(--card-w)*0.92)] rounded-md object-cover shadow-xl ring-1 ring-white/25 transition duration-300 group-hover/tile:-translate-y-1"
+            style={"transform: rotate(#{Enum.at([-7, 0, 7], i, 0)}deg); z-index: #{3 - i}"}
+          />
+        </div>
+
+        <div class="relative">
+          <p class="line-clamp-2 text-xl font-semibold leading-tight tracking-tight drop-shadow">
+            {@list.name}
+          </p>
+          <p class="mt-0.5 text-xs text-white/65">
+            {@list.count} titles{if @progress, do: " · #{@progress}"}
+          </p>
+          <div :if={@percent} class="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-white/15">
+            <div
+              class="h-full rounded-full bg-gradient-to-r from-cyan-300 to-primary"
+              style={"width: #{@percent}%"}
+            >
+            </div>
+          </div>
+        </div>
+      </.link>
+    </li>
     """
   end
 

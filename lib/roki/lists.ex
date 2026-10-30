@@ -41,6 +41,74 @@ defmodule Roki.Lists do
 
   def summaries, do: Enum.map(curated(), &summary/1)
 
+  @doc """
+  The curated lists that a search names, best match first, at most five. A list is named by the
+  query when it is the same words (`"star wars"`), when the query goes on from them
+  (`"star wars the last jedi"`), when the query (four letters or more) is the start of them (`"marv"`), or — from four
+  letters — the start of one of their words (`"ball"` for Dragon Ball). Accents, case and
+  punctuation do not matter; under three letters nothing is named.
+  """
+  def matching(query) when is_binary(query) do
+    q = fold(query)
+
+    if String.length(q) < 3 do
+      []
+    else
+      curated()
+      |> Enum.flat_map(fn f ->
+        case match_rank(fold(f.name), q) do
+          nil -> []
+          rank -> [{rank, f}]
+        end
+      end)
+      |> Enum.sort_by(fn {rank, f} -> {rank, -length(f.entries), f.name} end)
+      |> Enum.take(5)
+      |> Enum.map(&elem(&1, 1))
+    end
+  end
+
+  def matching(_), do: []
+
+  defp match_rank(name, q) do
+    cond do
+      name == q -> 0
+      String.length(name) >= 3 and String.contains?(" " <> q <> " ", " " <> name <> " ") -> 1
+      String.length(q) >= 4 and String.starts_with?(name, q) -> 2
+      String.length(q) >= 4 and String.contains?(" " <> name, " " <> q) -> 3
+      true -> nil
+    end
+  end
+
+  defp fold(text) do
+    text
+    |> String.normalize(:nfd)
+    |> String.replace(~r/\p{Mn}/u, "")
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, " ")
+    |> String.trim()
+  end
+
+  @doc """
+  A few posters for each list, for the cards of the Featured page: `%{slug => [url]}`. Only
+  titles the site has already kept a picture of are used (one query, no TMDB), so a list whose
+  titles nobody has opened simply has none, and its card is drawn without.
+  """
+  def previews(summaries, per \\ 3) do
+    firsts = Map.new(summaries, &{&1.slug, Enum.take(&1.keys, 14)})
+    cards = Roki.Titles.cards(firsts |> Map.values() |> List.flatten())
+
+    Map.new(firsts, fn {slug, keys} ->
+      posters =
+        keys
+        |> Enum.map(&cards[&1])
+        |> Enum.filter(&(&1 && &1.poster))
+        |> Enum.take(per)
+        |> Enum.map(& &1.poster)
+
+      {slug, posters}
+    end)
+  end
+
   defp slug_of(%{source: :tmdb, id: id}), do: "collection-#{id}"
   defp slug_of(f), do: slug(f.name)
 
