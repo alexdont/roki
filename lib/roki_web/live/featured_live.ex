@@ -872,7 +872,7 @@ defmodule RokiWeb.FeaturedLive do
       data-card
       data-key={@key}
       data-signed={to_string(@signed_in?)}
-      class="group/card relative h-[calc(var(--card-w)*1.5)] w-[var(--card-w)] shrink-0 snap-start transition-[width] duration-300 ease-out hover:z-20 hover:w-[calc(var(--card-w)*2.25)] hover:delay-300 motion-reduce:transition-none"
+      class="group/card relative h-[calc(var(--card-w)*1.5)] w-[var(--card-w)] shrink-0 snap-start hover:z-20"
     >
       <div class="h-full w-[var(--card-w)]">
         <.poster
@@ -888,7 +888,7 @@ defmodule RokiWeb.FeaturedLive do
 
       <div
         data-card-panel
-        class="pointer-events-none absolute inset-x-0 -bottom-14 -top-3 z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300"
+        class="pointer-events-none absolute inset-x-0 -bottom-8 -top-2 z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300"
       >
         <.link
           navigate={@title_href}

@@ -113,8 +113,7 @@ defmodule RokiWeb.HomeRowsTest do
       html: html
     } do
       assert html =~ "data-card-row"
-      assert html =~ "hover:w-[calc(var(--card-w)*2.25)]"
-      assert html =~ "hover:delay-300"
+      assert html =~ "pb-16"
     end
   end
 end

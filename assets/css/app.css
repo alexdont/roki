@@ -195,6 +195,36 @@ html.study-open .site-header { display: none; }
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
 }
 
+/* The home page's rows: a poster that opens into a wider card. The slot widens by 0.7 of a poster
+   and the whole row slides half of that to the left, so the card grows evenly to both sides —
+   the cards on its left make way left and those on its right make way right. (The first card
+   stays put and grows to the right: there is no room to its left.) The slide waits as long as the
+   widening does, and nothing waits when the pointer leaves. */
+[data-card-row] > [data-card] {
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (hover: hover) and (min-width: 1024px) {
+  [data-card-row]:has(> [data-card]:hover) > [data-card] {
+    transform: translateX(calc(var(--card-w) * -0.35));
+    transition-delay: 0.3s;
+  }
+
+  [data-card-row]:has(> [data-card]:first-child:hover) > [data-card] {
+    transform: none;
+  }
+
+  [data-card-row] > [data-card]:hover {
+    width: calc(var(--card-w) * 1.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-card-row] > [data-card] {
+    transition: none;
+  }
+}
+
 /* The home page on a wide screen: its picture runs to the top of the window and the header floats
    over it — clear, white, with a soft dark fade for the words — until the page is scrolled, when it
    settles into the frosted bar above. `data-scrolled` is on <html> (set by app.js) because the
