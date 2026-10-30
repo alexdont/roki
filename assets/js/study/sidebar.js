@@ -791,8 +791,9 @@ export const StudySidebar = {
       evaluate()
       $("[data-role=close]").addEventListener("click", () => {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-        if (history.length > 1) history.back()
-        else window.location.assign(this.el.dataset.home || "/home")
+        // Always to the title (a film's page, a show's episode list), never "back": back is the sources
+        // list, which starts the release that has just failed all over again.
+        window.location.assign(this.el.dataset.home || "/home")
       })
     }
 

@@ -1009,7 +1009,7 @@ defmodule RokiWeb.WatchLive do
       seasons={if @title, do: @title.seasons, else: []}
       season={@season}
       label={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
-      home={if @title, do: ~p"/title/#{@type}/#{@id}", else: ~p"/home"}
+      home={if @title, do: back_path(assigns), else: ~p"/home"}
     />
     <style :if={@player}>
       html, body { overflow: hidden; height: 100%; overscroll-behavior: none; }
