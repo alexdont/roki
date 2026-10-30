@@ -936,6 +936,169 @@ defmodule RokiWeb.FeaturedLive do
     """
   end
 
+  attr :item, :map, required: true
+  attr :key, :string, required: true
+  attr :kind, :atom, required: true
+  attr :picture, :string, default: nil
+  attr :title_href, :string, default: nil
+  attr :play_href, :string, default: nil
+  attr :signed_in?, :boolean, default: false
+  attr :class, :any, default: nil
+
+  # What opens over a poster: the wide picture (the trailer, after a moment), Play, save and more,
+  # and the facts. Where it sits is the caller's (`class`): over the whole slot in a row, over the
+  # middle of the cell in a grid. What it shows beyond the poster comes from `/card/:type/:id`.
+  @doc false
+  def card_panel(assigns) do
+    ~H"""
+    <div
+      data-card-panel
+      class={[
+        "pointer-events-none absolute z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300",
+        @class
+      ]}
+    >
+      <.link
+        navigate={@title_href}
+        class="relative block aspect-[2/1] shrink-0 overflow-hidden bg-neutral-800"
+      >
+        <img
+          :if={@picture}
+          data-card-img
+          src={@picture}
+          alt=""
+          class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
+        />
+        <div
+          data-card-trailer
+          id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}"}
+          phx-update="ignore"
+          class="absolute inset-0 opacity-0 transition-opacity duration-500"
+        >
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
+        </div>
+        <p class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight drop-shadow">
+          {@item.title}
+        </p>
+      </.link>
+
+      <div class="flex min-h-0 flex-1 flex-col justify-between gap-1.5 p-3">
+        <div class="flex items-center gap-2">
+          <.link
+            navigate={@play_href}
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
+            aria-label={"Play #{@item.title}"}
+            title="Play"
+          >
+            <.icon name="hero-play-solid" class="h-5 w-5" />
+          </.link>
+          <.link
+            :if={!@signed_in?}
+            navigate={~p"/phoenix_kit/users/log-in"}
+            class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+            aria-label="Log in to save"
+            title="Log in to save"
+          >
+            <.icon name="hero-plus" class="h-5 w-5" />
+          </.link>
+          <button
+            :if={@signed_in?}
+            type="button"
+            data-card-save
+            class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+            aria-label="Save for later"
+            title="Save for later"
+          >
+            <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
+            <span data-on class="hidden"><.icon name="hero-check" class="h-5 w-5" /></span>
+          </button>
+          <.link
+            navigate={@title_href}
+            class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+            aria-label={"More about #{@item.title}"}
+            title="More info"
+          >
+            <.icon name="hero-chevron-down" class="h-5 w-5" />
+          </.link>
+        </div>
+        <div>
+          <p class="flex items-center gap-2 text-xs text-white/80">
+            <span
+              :if={is_number(@item[:vote]) and @item.vote > 0}
+              class="font-semibold text-emerald-400"
+            >
+              ★ {Float.round(@item.vote * 1.0, 1)}
+            </span>
+            <span :if={@item[:year]}>{@item.year}</span>
+            <span data-card-runtime></span>
+          </p>
+          <p
+            data-card-overview
+            class="mt-1 hidden line-clamp-2 text-xs min-[1800px]:block leading-snug text-white/75"
+          >
+          </p>
+          <p data-card-genres class="mt-1 hidden truncate text-xs min-[1800px]:block text-white/50">
+          </p>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :kind, :atom, required: true
+  attr :item, :map, required: true
+  attr :seen, :boolean, default: false
+  attr :upcoming, :map, default: %{}
+  attr :signed_in?, :boolean, default: false
+  slot :inner_block, doc: "under the poster, outside the card that opens"
+
+  # A title in a grid: the poster, and — on a wide screen with a mouse — the same card that opens
+  # in the rows, laid over the middle of the cell (a grid has no room to push its neighbours aside).
+  # A card at the edge of the grid opens towards the middle (`GridCards` marks it `data-edge`).
+  @doc false
+  def grid_card(assigns) do
+    kind = if assigns.item.type == "movie", do: "movie", else: "tv"
+
+    assigns =
+      assign(assigns,
+        key: "#{kind}/#{assigns.item.id}",
+        title_href: RokiWeb.PosterComponents.href(assigns.item),
+        play_href:
+          if(kind == "movie",
+            do: ~p"/sources/movie/#{assigns.item.id}?#{[auto: 1]}",
+            else: RokiWeb.PosterComponents.href(assigns.item)
+          ),
+        picture: assigns.item[:poster] && Roki.Images.local(assigns.item.poster)
+      )
+
+    ~H"""
+    <li data-card data-key={@key} data-signed={to_string(@signed_in?)} class="space-y-1">
+      <div class="group/card relative hover:z-20">
+        <.poster
+          item={@item}
+          seen={@seen}
+          upcoming={@upcoming}
+          compact
+          title?={false}
+          rating_corner={:top_left}
+        />
+        <.card_panel
+          item={@item}
+          key={@key}
+          kind={@kind}
+          picture={@picture}
+          title_href={@title_href}
+          play_href={@play_href}
+          signed_in?={@signed_in?}
+          class="inset-y-0 left-1/2 w-[170%] [translate:-50%_0] max-lg:hidden"
+        />
+      </div>
+      {render_slot(@inner_block)}
+    </li>
+    """
+  end
+
   attr :kind, :atom, required: true
   attr :item, :map, required: true
   attr :seen, :boolean, default: false
@@ -982,95 +1145,16 @@ defmodule RokiWeb.FeaturedLive do
         />
       </div>
 
-      <div
-        data-card-panel
-        class="pointer-events-none absolute inset-0 z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300"
-      >
-        <.link
-          navigate={@title_href}
-          class="relative block aspect-[2/1] shrink-0 overflow-hidden bg-neutral-800"
-        >
-          <img
-            :if={@picture}
-            data-card-img
-            src={@picture}
-            alt=""
-            class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
-          />
-          <div
-            data-card-trailer
-            id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}"}
-            phx-update="ignore"
-            class="absolute inset-0 opacity-0 transition-opacity duration-500"
-          >
-          </div>
-          <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
-          </div>
-          <p class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight drop-shadow">
-            {@item.title}
-          </p>
-        </.link>
-
-        <div class="flex min-h-0 flex-1 flex-col justify-between gap-1.5 p-3">
-          <div class="flex items-center gap-2">
-            <.link
-              navigate={@play_href}
-              class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
-              aria-label={"Play #{@item.title}"}
-              title="Play"
-            >
-              <.icon name="hero-play-solid" class="h-5 w-5" />
-            </.link>
-            <.link
-              :if={!@signed_in?}
-              navigate={~p"/phoenix_kit/users/log-in"}
-              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label="Log in to save"
-              title="Log in to save"
-            >
-              <.icon name="hero-plus" class="h-5 w-5" />
-            </.link>
-            <button
-              :if={@signed_in?}
-              type="button"
-              data-card-save
-              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label="Save for later"
-              title="Save for later"
-            >
-              <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
-              <span data-on class="hidden"><.icon name="hero-check" class="h-5 w-5" /></span>
-            </button>
-            <.link
-              navigate={@title_href}
-              class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label={"More about #{@item.title}"}
-              title="More info"
-            >
-              <.icon name="hero-chevron-down" class="h-5 w-5" />
-            </.link>
-          </div>
-          <div>
-            <p class="flex items-center gap-2 text-xs text-white/80">
-              <span
-                :if={is_number(@item[:vote]) and @item.vote > 0}
-                class="font-semibold text-emerald-400"
-              >
-                ★ {Float.round(@item.vote * 1.0, 1)}
-              </span>
-              <span :if={@item[:year]}>{@item.year}</span>
-              <span data-card-runtime></span>
-            </p>
-            <p
-              data-card-overview
-              class="mt-1 hidden line-clamp-2 text-xs min-[1800px]:block leading-snug text-white/75"
-            >
-            </p>
-            <p data-card-genres class="mt-1 hidden truncate text-xs min-[1800px]:block text-white/50">
-            </p>
-          </div>
-        </div>
-      </div>
+      <.card_panel
+        item={@item}
+        key={@key}
+        kind={@kind}
+        picture={@picture}
+        title_href={@title_href}
+        play_href={@play_href}
+        signed_in?={@signed_in?}
+        class="inset-0"
+      />
     </li>
     """
   end

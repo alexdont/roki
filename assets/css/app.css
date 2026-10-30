@@ -219,6 +219,18 @@ html.study-open .site-header { display: none; }
   }
 }
 
+/* A card that opens over a poster in a grid, at the grid's edge: it opens towards the middle. */
+[data-card][data-edge="left"] [data-card-panel] {
+  left: 0;
+  translate: none;
+}
+
+[data-card][data-edge="right"] [data-card-panel] {
+  left: auto;
+  right: 0;
+  translate: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-card-row] > [data-card] {
     transition: none;

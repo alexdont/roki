@@ -116,7 +116,7 @@ defmodule RokiWeb.HomeRowsTest do
          } do
       assert html =~ "data-card-row"
       # The card that opens is exactly as tall as the poster: no gap grows under a row.
-      assert html =~ "absolute inset-0 z-30"
+      assert html =~ ~r/data-card-panel[^>]*\binset-0\b/
       refute html =~ "-bottom-16"
     end
   end

@@ -114,7 +114,10 @@ export const ShelfRow = {
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
     s.scrollBy({left: dir * Math.max(240, s.clientWidth * 0.85), behavior: reduced ? "auto" : "smooth"})
   },
+}
 
+// What opens over a poster, shared with the grids (`GridCards`): both hooks carry these.
+export const cardMethods = {
   // ── the cards ──────────────────────────────────────────────────────
 
   cards() {
@@ -138,6 +141,13 @@ export const ShelfRow = {
   open(li) {
     this.close()
     this.hot = li
+    if (this.grid) {
+      // A card of 1.7 poster-widths opens around the middle of its cell: at the grid's edge it opens
+      // towards the middle instead, so it never leaves the window.
+      const r = li.getBoundingClientRect()
+      const extra = r.width * 0.35 + 12
+      li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
+    }
     const started = Date.now()
     this.timers = [setTimeout(() => this.show(li, started), OPEN_MS)]
   },
@@ -174,7 +184,7 @@ export const ShelfRow = {
 
   // A card that opened at the edge of the row is brought fully into view.
   reveal(li) {
-    if (this.hot !== li) return
+    if (this.hot !== li || this.grid) return
     const r = li.getBoundingClientRect()
     const box = this.scroller.getBoundingClientRect()
     if (r.right > box.right - 16) {
@@ -221,9 +231,16 @@ export const ShelfRow = {
         credentials: "same-origin",
         headers: {"x-csrf-token": csrf(), accept: "application/json"},
       })
-      if (res.ok) setSaved(li, (await res.json()).saved)
+      if (res.ok) {
+        const saved = (await res.json()).saved
+        setSaved(li, saved)
+        // On the Saved list, taking a title off drops its tile (a hidden button the page listens to).
+        if (!saved) li.querySelector("[phx-click=unsave]")?.click()
+      }
     } catch (_e) {
       // the button stays as it was
     }
   },
 }
+
+Object.assign(ShelfRow, cardMethods)

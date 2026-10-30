@@ -12,8 +12,6 @@ defmodule RokiWeb.CategoryLive do
   """
   use RokiWeb, :live_view
 
-  import RokiWeb.PosterComponents
-
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Browse
 
@@ -553,26 +551,26 @@ defmodule RokiWeb.CategoryLive do
           </li>
         </ul>
 
-        <ul
-          :if={@items != []}
-          id="grid"
-          phx-hook="FillGrid"
-          data-more={to_string(@more?)}
-          data-page={@page}
-          data-restore-y={@place_y}
-          class={["grid gap-4", @grid]}
-        >
-          <li :for={i <- @items} class="space-y-1 transition duration-200 hover:-translate-y-1">
-            <.poster
+        <%!-- The hover cards' hook is on a box around the grid: the grid has `FillGrid` already. --%>
+        <div :if={@items != []} id="grid-cards" phx-hook="GridCards">
+          <ul
+            id="grid"
+            phx-hook="FillGrid"
+            data-more={to_string(@more?)}
+            data-page={@page}
+            data-restore-y={@place_y}
+            class={["grid gap-4", @grid]}
+          >
+            <RokiWeb.FeaturedLive.grid_card
+              :for={i <- @items}
+              kind={@kind}
               item={i}
               seen={MapSet.member?(@seen, {i.type, i.id})}
               upcoming={@upcoming}
-              compact
-              title?={false}
-              rating_corner={:top_left}
+              signed_in?={@uuid != nil}
             />
-          </li>
-        </ul>
+          </ul>
+        </div>
 
         <%!-- The end of the list: the next page is asked for as it comes into view. --%>
         <div
