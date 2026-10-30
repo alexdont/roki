@@ -20,7 +20,8 @@ defmodule RokiWeb.MoodPickerTest do
              length(Roki.Mood.all())
 
     assert html =~ "grid-cols-[minmax(0,1fr)]"
-    refute html =~ "h-[26rem]"
+    # No fixed height any more (min-h is the floor, not a cap).
+    refute html =~ ~r/(^|[" ])h-\[26rem\]/
   end
 
   test "the posters keep their shape and their row its size", %{html: html} do
