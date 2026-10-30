@@ -628,6 +628,7 @@ defmodule RokiWeb.TitleLive do
           rating={@rating}
           locked?={@locked?}
           mal={@rate_mal}
+          link_state={@link_state}
         />
 
         <.rate_sheet
@@ -642,6 +643,7 @@ defmodule RokiWeb.TitleLive do
 
         <.hero
           mal={@rate_mal}
+          link_state={@link_state}
           study={@study}
           rating={@rating}
           title={@title}
@@ -838,6 +840,7 @@ defmodule RokiWeb.TitleLive do
   attr :lib_busy, :boolean, default: false
   attr :rating, :map, required: true
   attr :mal, :any, default: nil
+  attr :link_state, :any, default: :none
   attr :study, :map, default: nil
 
   slot :inner_block,
@@ -1644,6 +1647,7 @@ defmodule RokiWeb.TitleLive do
   attr :rating, :map, required: true
   attr :locked?, :boolean, default: false
   attr :mal, :any, default: nil
+  attr :link_state, :any, default: :none
 
   # One screen on a phone: the title and its details on top, a large poster with the three icon
   # buttons beside it, the synopsis (tap for the full text and more facts), and Play pinned to
