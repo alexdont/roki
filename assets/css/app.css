@@ -219,6 +219,12 @@ html.study-open .site-header { display: none; }
   }
 }
 
+/* A poster that opens into a card does not also zoom on hover: the zoomed picture would sit under the
+   widening card and be seen shrinking back as it grows. */
+[data-card] a.poster-card img {
+  scale: none !important;
+}
+
 /* While a card is open the row does not snap: widening its slot changes what the nearest snap point
    is, and the browser would nudge the row a few pixels once the card is open. */
 [data-card-row]:has(> [data-card][data-open]) {
