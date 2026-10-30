@@ -949,57 +949,6 @@ defmodule RokiWeb.TitleLive do
           </span>
         </div>
 
-        <%!-- What you have done with it, apart from watching it: save, mark watched, rate, link. --%>
-        <div :if={@linked?} class="flex flex-wrap items-center gap-2 sm:gap-3">
-          <.glass_btn
-            :if={@linked?}
-            click="toggle_saved"
-            icon={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
-            on={@lib.saved?}
-            text={if @lib.saved?, do: "Saved", else: "Save"}
-            text_class="max-lg:hidden"
-            label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
-          />
-          <.glass_btn
-            :if={@linked?}
-            click="toggle_watched"
-            icon={
-              if watched_state?(@title, @lib),
-                do: "hero-check-circle-solid",
-                else: "hero-check-circle"
-            }
-            on={watched_state?(@title, @lib)}
-            tone={:success}
-            busy={@lib_busy}
-            text={if watched_state?(@title, @lib), do: "Watched", else: "Mark watched"}
-            text_class="max-lg:hidden"
-            label={
-              if watched_state?(@title, @lib),
-                do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
-                else: watched_label(@title, @lib)
-            }
-          />
-          <.glass_btn
-            :if={@linked?}
-            click={JS.show(to: "#rate-sheet", display: "flex")}
-            icon={if @rating.value, do: "hero-star-solid", else: "hero-star"}
-            on={@rating.value != nil}
-            tone={:amber}
-            text={if @rating.value, do: fmt_rating(@rating.value), else: "Rate"}
-            text_class={!@rating.value && "max-lg:hidden"}
-            label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
-          />
-          <.glass_btn
-            :if={@linked? and @title.type == "tv"}
-            click={JS.show(to: "#link-sheet", display: "flex")}
-            icon={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
-            on={@link_state not in [:none, :pending]}
-            text={link_label(@link_state)}
-            text_class={!match?({:linked, _}, @link_state) && "max-lg:hidden"}
-            label={link_title(@link_state)}
-          />
-        </div>
-
         <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>
 
         <p
@@ -1046,6 +995,49 @@ defmodule RokiWeb.TitleLive do
             icon="hero-academic-cap"
             label="Study: watch in languages you choose"
           />
+          <%!-- Your record of it, apart from watching it: a gap sets it off from the buttons before. --%>
+          <div :if={@linked?} class="flex items-center gap-2 sm:ml-3 sm:gap-3 lg:ml-5">
+            <.glass_btn
+              :if={@linked?}
+              click="toggle_saved"
+              icon={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
+              on={@lib.saved?}
+              label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
+            />
+            <.glass_btn
+              :if={@linked?}
+              click="toggle_watched"
+              icon={
+                if watched_state?(@title, @lib),
+                  do: "hero-check-circle-solid",
+                  else: "hero-check-circle"
+              }
+              on={watched_state?(@title, @lib)}
+              tone={:success}
+              busy={@lib_busy}
+              label={
+                if watched_state?(@title, @lib),
+                  do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
+                  else: watched_label(@title, @lib)
+              }
+            />
+            <.glass_btn
+              :if={@linked?}
+              click={JS.show(to: "#rate-sheet", display: "flex")}
+              icon={if @rating.value, do: "hero-star-solid", else: "hero-star"}
+              on={@rating.value != nil}
+              tone={:amber}
+              text={if @rating.value, do: fmt_rating(@rating.value)}
+              label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
+            />
+            <.glass_btn
+              :if={@linked? and @title.type == "tv"}
+              click={JS.show(to: "#link-sheet", display: "flex")}
+              icon={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
+              on={@link_state not in [:none, :pending]}
+              label={link_title(@link_state)}
+            />
+          </div>
         </div>
       </div>
 
