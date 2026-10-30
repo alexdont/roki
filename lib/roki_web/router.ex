@@ -248,6 +248,7 @@ defmodule RokiWeb.Router do
 
     get "/stream/:id/:file", StreamController, :file
     get "/peek/:type/:id", PeekController, :show
+    get "/card/:type/:id", CardController, :show
     get "/library/:type/:id", LibraryController, :show
     get "/dict/:lang", DictController, :show
     get "/hevc-test", PageController, :hevc_test

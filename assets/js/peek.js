@@ -199,6 +199,8 @@ export function setupPeek() {
 
   document.addEventListener("mouseover", (e) => {
     const el = e.target.closest?.("[data-peek-title]")
+    // The home page's rows open a card of their own (shelf_row.js).
+    if (el?.closest("[data-card-row]")) return
     if (el && el === current) clearTimeout(hideTimer)
     if (!el || el === current || within(el, e.relatedTarget)) return
     hide()

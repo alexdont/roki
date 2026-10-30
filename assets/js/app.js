@@ -30,6 +30,7 @@ import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
 import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
 import {ShelfRow} from "./shelf_row"
+import {TrailerSheet} from "./trailer_sheet"
 
 // The home page's header floats clear over its picture until the page is scrolled (see the
 // `.site-header--overlay` rules). The mark is on <html>, which no LiveView patch touches.
@@ -211,7 +212,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, ShelfRow},
+  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, ShelfRow, TrailerSheet},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.

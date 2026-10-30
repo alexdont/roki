@@ -49,6 +49,7 @@ defmodule RokiWeb.TitleLive do
         lib_busy: false,
         solo?: false,
         link_state: :none,
+        trailer: nil,
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
@@ -476,6 +477,7 @@ defmodule RokiWeb.TitleLive do
        end
      end)
      |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title, sections) end)
+     |> start_async(:trailer, fn -> Roki.Trailers.key(title.type, title.id, uuid) end)
      |> select()}
   end
 
@@ -483,6 +485,12 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, similar: cards, similar_seen: seen)}
 
   def handle_async(:similar, _other, socket), do: {:noreply, socket}
+
+  # TMDB lists a trailer's YouTube address; nothing here means the page simply has no button.
+  def handle_async(:trailer, {:ok, key}, socket) when is_binary(key),
+    do: {:noreply, assign(socket, :trailer, key)}
+
+  def handle_async(:trailer, _other, socket), do: {:noreply, socket}
 
   def handle_async(:study, {:ok, %{} = choice}, socket),
     do: {:noreply, assign(socket, :study, choice)}
@@ -629,6 +637,7 @@ defmodule RokiWeb.TitleLive do
           locked?={@locked?}
           mal={@rate_mal}
           link_state={@link_state}
+          trailer={@trailer}
         />
 
         <.rate_sheet
@@ -640,10 +649,12 @@ defmodule RokiWeb.TitleLive do
         />
 
         <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
+        <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
 
         <.hero
           mal={@rate_mal}
           link_state={@link_state}
+          trailer={@trailer}
           study={@study}
           rating={@rating}
           title={@title}
@@ -841,6 +852,7 @@ defmodule RokiWeb.TitleLive do
   attr :rating, :map, required: true
   attr :mal, :any, default: nil
   attr :link_state, :any, default: :none
+  attr :trailer, :any, default: nil
   attr :study, :map, default: nil
 
   slot :inner_block,
@@ -913,6 +925,15 @@ defmodule RokiWeb.TitleLive do
                   title="Watch this in languages you choose, leaving your settings alone"
                 >
                   <.icon name="hero-academic-cap" class="h-5 w-5" /> Study
+                </button>
+                <button
+                  :if={@trailer}
+                  type="button"
+                  phx-click={open_trailer()}
+                  class="btn btn-ghost h-12 gap-2 rounded-xl lg:h-14"
+                  title="Watch the trailer"
+                >
+                  <.icon name="hero-play-circle" class="h-5 w-5" /> Trailer
                 </button>
                 <.link
                   :if={@linked? and @title.type == "movie"}
@@ -1519,6 +1540,7 @@ defmodule RokiWeb.TitleLive do
   attr :mal, :any, default: nil
   attr :link?, :boolean, default: false
   attr :link_state, :any, default: :none
+  attr :trailer, :any, default: nil
 
   defp more_menu(assigns) do
     assigns =
@@ -1550,6 +1572,14 @@ defmodule RokiWeb.TitleLive do
         phx-window-keydown={JS.hide(to: "##{@id}")}
         phx-key="escape"
       >
+        <button
+          :if={@trailer}
+          type="button"
+          phx-click={open_trailer() |> JS.hide(to: "##{@id}")}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-play-circle" class="h-5 w-5" /> Watch trailer
+        </button>
         <button
           :if={@link?}
           type="button"
@@ -1648,6 +1678,7 @@ defmodule RokiWeb.TitleLive do
   attr :locked?, :boolean, default: false
   attr :mal, :any, default: nil
   attr :link_state, :any, default: :none
+  attr :trailer, :any, default: nil
 
   # One screen on a phone: the title and its details on top, a large poster with the three icon
   # buttons beside it, the synopsis (tap for the full text and more facts), and Play pinned to
@@ -1674,6 +1705,7 @@ defmodule RokiWeb.TitleLive do
           mal={@mal}
           link?={@linked? and @title.type == "tv"}
           link_state={@link_state}
+          trailer={@trailer}
         />
       </div>
 
@@ -2064,6 +2096,63 @@ defmodule RokiWeb.TitleLive do
         {label}
       </option>
     </optgroup>
+    """
+  end
+
+  defp open_trailer,
+    do:
+      JS.show(to: "#trailer-sheet", display: "flex")
+      |> JS.dispatch("roki:trailer-open", to: "#trailer-sheet")
+
+  defp close_trailer,
+    do: JS.hide(to: "#trailer-sheet") |> JS.dispatch("roki:trailer-close", to: "#trailer-sheet")
+
+  attr :key, :string, required: true
+  attr :title, :map, required: true
+
+  # The trailer, played here (a YouTube embed made when the sheet opens), with a way out to YouTube.
+  @doc false
+  def trailer_sheet(assigns) do
+    ~H"""
+    <div
+      id="trailer-sheet"
+      phx-hook="TrailerSheet"
+      data-key={@key}
+      class="fixed inset-0 z-[70] !m-0 hidden items-center justify-center bg-black/85 p-3 sm:p-8"
+      phx-window-keydown={close_trailer()}
+      phx-key="escape"
+    >
+      <div class="w-full max-w-5xl" phx-click-away={close_trailer()}>
+        <div class="mb-2 flex items-center justify-between gap-3 text-white">
+          <h2 class="min-w-0 truncate text-lg font-semibold">{@title.title} · Trailer</h2>
+          <div class="flex shrink-0 items-center gap-1">
+            <a
+              href={"https://www.youtube.com/watch?v=#{@key}"}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-ghost btn-sm gap-1 text-white"
+            >
+              Open on YouTube <.icon name="hero-arrow-top-right-on-square" class="h-4 w-4" />
+            </a>
+            <button
+              type="button"
+              phx-click={close_trailer()}
+              class="btn btn-ghost btn-sm btn-circle text-white"
+              aria-label="Close"
+            >
+              <.icon name="hero-x-mark" class="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <div
+          id="trailer-frame"
+          data-trailer-frame
+          phx-update="ignore"
+          class="aspect-video w-full overflow-hidden rounded-xl bg-black"
+        >
+        </div>
+      </div>
+    </div>
     """
   end
 

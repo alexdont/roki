@@ -370,6 +370,7 @@ defmodule RokiWeb.FeaturedLive do
         seen={@seen}
         upcoming={@upcoming}
         cached_titles={@cached_titles}
+        signed_in?={@uuid != nil}
       />
 
       <.pitch :if={@visitor?} class="hidden lg:block" />
@@ -730,6 +731,8 @@ defmodule RokiWeb.FeaturedLive do
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
 
+  attr :signed_in?, :boolean, default: false
+
   # A wide screen: one row each for films, shows and anime, side by side in nothing but scrolling.
   # (A phone has the three together as one grid, `popular_now/1`.)
   @doc false
@@ -752,6 +755,7 @@ defmodule RokiWeb.FeaturedLive do
         seen={@seen}
         upcoming={@upcoming}
         cached_titles={@cached_titles}
+        signed_in?={@signed_in?}
       />
     </div>
     """
@@ -764,6 +768,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :seen, :any, required: true
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
+  attr :signed_in?, :boolean, default: false
 
   # The chevrons belong to the row: they appear when the pointer is over it, the right one while
   # there is more to the right, the left one once it has been scrolled (`ShelfRow` keeps
@@ -806,24 +811,22 @@ defmodule RokiWeb.FeaturedLive do
           <.icon name="hero-chevron-right" class="h-8 w-8 drop-shadow" />
         </button>
 
+        <%!-- Room above and below the cards for a card that opens taller than the poster: the padding
+              is taken back with negative margins, so the row takes the space it always did. --%>
         <ul
           data-row-scroller
-          class="flex snap-x scroll-px-12 gap-4 overflow-x-auto scroll-smooth px-12 pb-3 pt-1 [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
+          data-card-row
+          class="-mb-[3.25rem] -mt-3 flex snap-x scroll-px-12 gap-4 overflow-x-auto scroll-smooth px-12 pb-16 pt-4 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
         >
-          <li
+          <.shelf_card
             :for={i <- @shelf.items}
-            class="w-[clamp(9rem,11.2vw,14rem)] shrink-0 snap-start"
-          >
-            <.poster
-              item={i}
-              seen={MapSet.member?(@seen, {i.type, i.id})}
-              cached_titles={@cached_titles}
-              upcoming={@upcoming}
-              compact
-              title?={false}
-              rating_corner={:top_left}
-            />
-          </li>
+            kind={@kind}
+            item={i}
+            seen={MapSet.member?(@seen, {i.type, i.id})}
+            cached_titles={@cached_titles}
+            upcoming={@upcoming}
+            signed_in?={@signed_in?}
+          />
           <li
             :for={_ <- if(@shelf.items == [] and @shelf.loading?, do: 1..9, else: [])}
             class="w-[clamp(9rem,11.2vw,14rem)] shrink-0"
@@ -834,6 +837,139 @@ defmodule RokiWeb.FeaturedLive do
         </ul>
       </div>
     </section>
+    """
+  end
+
+  attr :kind, :atom, required: true
+  attr :item, :map, required: true
+  attr :seen, :boolean, default: false
+  attr :upcoming, :map, default: %{}
+  attr :cached_titles, :any, default: nil
+  attr :signed_in?, :boolean, default: false
+
+  # One title in a row: a poster, and — when the pointer rests on it, on a wide screen with a
+  # mouse — a card that opens around it. The card is wider and a little taller, with a wide picture
+  # (the trailer, after a moment), Play, save and more, and the facts. The neighbours make way as
+  # the poster's slot widens. What it shows beyond the poster comes from `/card/:type/:id`, fetched
+  # by the `ShelfRow` hook once the card is open.
+  defp shelf_card(assigns) do
+    kind = if assigns.item.type == "movie", do: "movie", else: "tv"
+
+    assigns =
+      assign(assigns,
+        key: "#{kind}/#{assigns.item.id}",
+        title_href: RokiWeb.PosterComponents.href(assigns.item),
+        play_href:
+          if(kind == "movie",
+            do: ~p"/sources/movie/#{assigns.item.id}?#{[auto: 1]}",
+            else: RokiWeb.PosterComponents.href(assigns.item)
+          ),
+        picture: assigns.item[:poster] && Roki.Images.local(assigns.item.poster)
+      )
+
+    ~H"""
+    <li
+      data-card
+      data-key={@key}
+      data-signed={to_string(@signed_in?)}
+      class="group/card relative h-[calc(var(--card-w)*1.5)] w-[var(--card-w)] shrink-0 snap-start transition-[width] duration-300 ease-out hover:z-20 hover:w-[calc(var(--card-w)*2.25)] hover:delay-300 motion-reduce:transition-none"
+    >
+      <div class="h-full w-[var(--card-w)]">
+        <.poster
+          item={@item}
+          seen={@seen}
+          cached_titles={@cached_titles}
+          upcoming={@upcoming}
+          compact
+          title?={false}
+          rating_corner={:top_left}
+        />
+      </div>
+
+      <div
+        data-card-panel
+        class="pointer-events-none absolute inset-x-0 -bottom-14 -top-3 z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300"
+      >
+        <.link
+          navigate={@title_href}
+          class="relative block aspect-video shrink-0 overflow-hidden bg-neutral-800"
+        >
+          <img
+            :if={@picture}
+            data-card-img
+            src={@picture}
+            alt=""
+            class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
+          />
+          <div
+            data-card-trailer
+            id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}"}
+            phx-update="ignore"
+            class="absolute inset-0 opacity-0 transition-opacity duration-500"
+          >
+          </div>
+          <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
+          </div>
+          <p class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight drop-shadow">
+            {@item.title}
+          </p>
+        </.link>
+
+        <div class="flex min-h-0 flex-1 flex-col justify-between gap-1.5 p-3">
+          <div class="flex items-center gap-2">
+            <.link
+              navigate={@play_href}
+              class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
+              aria-label={"Play #{@item.title}"}
+              title="Play"
+            >
+              <.icon name="hero-play-solid" class="h-5 w-5" />
+            </.link>
+            <.link
+              :if={!@signed_in?}
+              navigate={~p"/phoenix_kit/users/log-in"}
+              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label="Log in to save"
+              title="Log in to save"
+            >
+              <.icon name="hero-plus" class="h-5 w-5" />
+            </.link>
+            <button
+              :if={@signed_in?}
+              type="button"
+              data-card-save
+              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label="Save for later"
+              title="Save for later"
+            >
+              <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
+              <span data-on class="hidden"><.icon name="hero-check" class="h-5 w-5" /></span>
+            </button>
+            <.link
+              navigate={@title_href}
+              class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label={"More about #{@item.title}"}
+              title="More info"
+            >
+              <.icon name="hero-chevron-down" class="h-5 w-5" />
+            </.link>
+          </div>
+          <div>
+            <p class="flex items-center gap-2 text-xs text-white/80">
+              <span
+                :if={is_number(@item[:vote]) and @item.vote > 0}
+                class="font-semibold text-emerald-400"
+              >
+                ★ {Float.round(@item.vote * 1.0, 1)}
+              </span>
+              <span :if={@item[:year]}>{@item.year}</span>
+              <span data-card-runtime></span>
+            </p>
+            <p data-card-genres class="truncate text-xs text-white/60"></p>
+          </div>
+        </div>
+      </div>
+    </li>
     """
   end
 

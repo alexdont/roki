@@ -49,4 +49,34 @@ defmodule RokiWeb.TitlePageTest do
     assert html =~ "Link progress"
     assert Process.alive?(view.pid)
   end
+
+  describe "the trailer" do
+    setup do
+      on_exit(fn -> Roki.TTLCache.delete({:trailer, "tv", 209_867}) end)
+    end
+
+    test "a title with one has a Trailer button, and a player sheet for it", %{conn: conn} do
+      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, "abc123xyz"})
+      {:ok, view, _} = live(conn, "/title/tv/209867")
+      render_async(view, 8000)
+      html = render_async(view, 8000)
+
+      assert html =~ ~s(id="trailer-sheet")
+      assert html =~ ~s(data-key="abc123xyz")
+      assert html =~ "https://www.youtube.com/watch?v=abc123xyz"
+      assert html =~ "Trailer"
+      # The phone's menu has it too.
+      assert html =~ "Watch trailer"
+    end
+
+    test "one without has neither", %{conn: conn} do
+      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, nil})
+      {:ok, view, _} = live(conn, "/title/tv/209867")
+      render_async(view, 8000)
+      html = render_async(view, 8000)
+
+      refute html =~ ~s(id="trailer-sheet")
+      refute html =~ "Watch trailer"
+    end
+  end
 end

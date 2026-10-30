@@ -76,4 +76,45 @@ defmodule RokiWeb.HomeRowsTest do
     refute html =~ "left-1.5 top-1.5 flex items-center gap-1"
     assert html =~ "bottom-1.5 right-1.5"
   end
+
+  describe "the card that opens on a poster" do
+    test "carries what the hook needs: the key, the player slot, Play, save and more", %{
+      html: html
+    } do
+      assert html =~ ~s(data-key="movie/1")
+      assert html =~ ~s(data-key="tv/3")
+      # The player is made by the hook, and the page must never touch it again.
+      assert html =~ ~r/data-card-trailer[^>]*phx-update="ignore"/
+      assert html =~ ~s(href="/sources/movie/1?auto=1")
+      assert html =~ ~s(aria-label="More about Title 1")
+      # A show's Play is its page, where "continue" is worked out.
+      refute html =~ "/sources/tv/3"
+    end
+
+    test "save is a button for someone signed in and a way to log in for a visitor" do
+      shelves = %{movies: shelf([item(1, "movie", 7.5)]), shows: shelf([]), anime: shelf([])}
+
+      render = fn signed_in? ->
+        render_component(&RokiWeb.FeaturedLive.shelf_rows/1,
+          shelves: shelves,
+          seen: MapSet.new(),
+          upcoming: %{},
+          cached_titles: nil,
+          signed_in?: signed_in?
+        )
+      end
+
+      assert render.(true) =~ "data-card-save"
+      refute render.(false) =~ "data-card-save"
+      assert render.(false) =~ ~s(href="/phoenix_kit/users/log-in")
+    end
+
+    test "the rows keep the old hover card off their posters, and room for a card that opens", %{
+      html: html
+    } do
+      assert html =~ "data-card-row"
+      assert html =~ "hover:w-[calc(var(--card-w)*2.25)]"
+      assert html =~ "hover:delay-300"
+    end
+  end
 end
