@@ -49,6 +49,7 @@ defmodule RokiWeb.CategoryLive do
        place_y: nil,
        size: stored_size(socket),
        items: [],
+       hero: nil,
        page: 0,
        more?: false,
        loading?: true,
@@ -330,7 +331,7 @@ defmodule RokiWeb.CategoryLive do
         do: start_async(socket, {:dates, n}, fn -> Roki.Watch.upcoming(uuid, fresh) end),
         else: socket
 
-    {:noreply, socket}
+    {:noreply, maybe_hero(socket)}
   end
 
   def handle_async({:page, _view, _n}, {:ok, {:error, reason}}, socket),
@@ -343,6 +344,24 @@ defmodule RokiWeb.CategoryLive do
     do: {:noreply, update(socket, :upcoming, &Map.merge(&1, found))}
 
   def handle_async({:dates, _n}, _other, socket), do: {:noreply, socket}
+
+  # The picture across the top: the backdrop of the first title, asked for once and kept while
+  # the order or the genre changes under it.
+  def handle_async(:hero, {:ok, url}, socket) when is_binary(url),
+    do: {:noreply, assign(socket, :hero, url)}
+
+  def handle_async(:hero, _other, socket), do: {:noreply, socket}
+
+  defp maybe_hero(%{assigns: %{hero: nil, items: [first | _], uuid: uuid}} = socket) do
+    start_async(socket, :hero, fn ->
+      case Roki.Watch.title(first.type, first.id, uuid) do
+        {:ok, t} -> t[:backdrop]
+        _ -> nil
+      end
+    end)
+  end
+
+  defp maybe_hero(socket), do: socket
 
   @impl true
   def render(assigns) do
@@ -358,181 +377,221 @@ defmodule RokiWeb.CategoryLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@kind}"}
     >
       <%!-- The title on the left; on the right what is listed (a season for anime, the order) and
             the poster size — one row, one height. The panels open under the group. --%>
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h1 class="min-w-[6rem] flex-1 text-2xl font-bold tracking-tight sm:text-3xl">{@title}</h1>
-
-        <div class="relative flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
-          <.picker
-            :if={@kind == :anime}
-            id="season-picker"
-            label="Season"
-            value={season_text(@season)}
-          >
-            <.season_panel season={@season} count={@season_count} now={@now} error={@season_error} />
-          </.picker>
-
-          <.picker
-            :if={@kind == :anime or @season == nil}
-            id="order-picker"
-            label="Order"
-            value={sort_text(@sorts, @sort, @corner)}
-          >
-            <div class="p-1">
-              <button
-                :for={{key, label} <- @sorts}
-                phx-click={JS.push("sort", value: %{sort: key}) |> JS.hide(to: "#order-picker-panel")}
-                class={[
-                  "flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-base font-medium hover:bg-base-200",
-                  @sort == key && "bg-base-200 text-primary"
-                ]}
-              >
-                {label}
-                <.icon :if={@sort == key} name="hero-check-micro" class="h-5 w-5" />
-              </button>
-            </div>
-          </.picker>
-
-          <.picker
-            :if={@sort != :corner}
-            id="genre-picker"
-            label="Genre"
-            value={if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
-          >
-            <div class="grid grid-cols-2 gap-0.5 p-1">
-              <button
-                phx-click={
-                  JS.push("genre", value: %{genre: ""}) |> JS.hide(to: "#genre-picker-panel")
-                }
-                class={[
-                  "col-span-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base font-medium hover:bg-base-200",
-                  @genre == nil && "bg-base-200 text-primary"
-                ]}
-              >
-                All genres <.icon :if={@genre == nil} name="hero-check-micro" class="h-5 w-5" />
-              </button>
-              <button
-                :for={{slug, label} <- Roki.Genres.browse_options(@kind)}
-                phx-click={
-                  JS.push("genre", value: %{genre: slug}) |> JS.hide(to: "#genre-picker-panel")
-                }
-                class={[
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base hover:bg-base-200",
-                  @genre == slug && "bg-base-200 font-medium text-primary"
-                ]}
-              >
-                {label}
-                <.icon :if={@genre == slug} name="hero-check-micro" class="h-5 w-5" />
-              </button>
-            </div>
-          </.picker>
-
-          <%!-- The ranking's week: any season Anime Corner has polled, any week of it. --%>
-          <.picker
-            :if={@kind == :anime and @sort == :corner}
-            id="week-picker"
-            label="Week"
-            value={week_text(@corner, @season || @now)}
-          >
-            <.week_panel
-              kind={@kind}
-              season={@season || @now}
-              corner={@corner}
-              loading?={@loading?}
-              now={@now}
-            />
-          </.picker>
-
-          <div class="join ml-auto" role="group" aria-label="Grid size">
-            <button
-              :for={{size, label} <- [{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}]}
-              phx-click="size"
-              phx-value-size={size}
-              title={"#{label} posters"}
-              aria-label={"#{label} posters"}
-              class={["btn btn-square join-item h-12 w-12", @size == size && "btn-active"]}
-            >
-              <.size_icon size={size} />
-            </button>
+      <%!-- A picture across the top, from the first of what is listed, under the floating header. The
+            picture is clipped by its own box, not the section's: the pickers' panels open past it. --%>
+      <section class="relative z-20 flex min-h-[clamp(18rem,42svh,28rem)] flex-col justify-end text-white">
+        <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
+          <img
+            :if={@hero}
+            src={Roki.Images.local(@hero)}
+            alt=""
+            class="h-full w-full object-cover opacity-80"
+          />
+          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-black/10"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/50">
           </div>
         </div>
+
+        <div class="flex flex-col gap-5 px-4 pb-6 pt-28 sm:px-6 lg:px-12 xl:px-16">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+              {if @kind == :anime and @season,
+                do: season_text(@season),
+                else: sort_text(@sorts, @sort, @corner)}
+            </p>
+            <h1 class="text-5xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-6xl xl:text-7xl">
+              {@title}
+            </h1>
+          </div>
+
+          <div class="relative flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
+            <.picker
+              :if={@kind == :anime}
+              id="season-picker"
+              label="Season"
+              value={season_text(@season)}
+            >
+              <.season_panel season={@season} count={@season_count} now={@now} error={@season_error} />
+            </.picker>
+
+            <.picker
+              :if={@kind == :anime or @season == nil}
+              id="order-picker"
+              label="Order"
+              value={sort_text(@sorts, @sort, @corner)}
+            >
+              <div class="p-1">
+                <button
+                  :for={{key, label} <- @sorts}
+                  phx-click={
+                    JS.push("sort", value: %{sort: key}) |> JS.hide(to: "#order-picker-panel")
+                  }
+                  class={[
+                    "flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-base font-medium hover:bg-base-200",
+                    @sort == key && "bg-base-200 text-primary"
+                  ]}
+                >
+                  {label}
+                  <.icon :if={@sort == key} name="hero-check-micro" class="h-5 w-5" />
+                </button>
+              </div>
+            </.picker>
+
+            <.picker
+              :if={@sort != :corner}
+              id="genre-picker"
+              label="Genre"
+              value={if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
+            >
+              <div class="grid grid-cols-2 gap-0.5 p-1">
+                <button
+                  phx-click={
+                    JS.push("genre", value: %{genre: ""}) |> JS.hide(to: "#genre-picker-panel")
+                  }
+                  class={[
+                    "col-span-2 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base font-medium hover:bg-base-200",
+                    @genre == nil && "bg-base-200 text-primary"
+                  ]}
+                >
+                  All genres <.icon :if={@genre == nil} name="hero-check-micro" class="h-5 w-5" />
+                </button>
+                <button
+                  :for={{slug, label} <- Roki.Genres.browse_options(@kind)}
+                  phx-click={
+                    JS.push("genre", value: %{genre: slug}) |> JS.hide(to: "#genre-picker-panel")
+                  }
+                  class={[
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-base hover:bg-base-200",
+                    @genre == slug && "bg-base-200 font-medium text-primary"
+                  ]}
+                >
+                  {label}
+                  <.icon :if={@genre == slug} name="hero-check-micro" class="h-5 w-5" />
+                </button>
+              </div>
+            </.picker>
+
+            <%!-- The ranking's week: any season Anime Corner has polled, any week of it. --%>
+            <.picker
+              :if={@kind == :anime and @sort == :corner}
+              id="week-picker"
+              label="Week"
+              value={week_text(@corner, @season || @now)}
+            >
+              <.week_panel
+                kind={@kind}
+                season={@season || @now}
+                corner={@corner}
+                loading?={@loading?}
+                now={@now}
+              />
+            </.picker>
+
+            <div
+              class="join ml-auto overflow-hidden rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md"
+              role="group"
+              aria-label="Grid size"
+            >
+              <button
+                :for={{size, label} <- [{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}]}
+                phx-click="size"
+                phx-value-size={size}
+                title={"#{label} posters"}
+                aria-label={"#{label} posters"}
+                class={[
+                  "btn btn-square btn-ghost join-item h-12 w-12 border-0 text-white hover:bg-white/15",
+                  @size == size && "bg-white/25"
+                ]}
+              >
+                <.size_icon size={size} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="space-y-4 px-4 pb-12 pt-6 sm:px-6 lg:px-12 xl:px-16">
+        <%!-- Where the ranking comes from, and what of it is not on TMDB. --%>
+        <p :if={@sort == :corner and @corner} class="text-sm text-base-content/70">
+          Anime Corner's weekly poll, {String.downcase(Roki.AnimeCorner.week_label(@corner.week))} of {Laev.Season.label(
+            @season || @now
+          )}: {length(@items)} titles as people voted them.
+          <span :if={@corner.missing != []}>
+            Not found on TMDB: {Enum.join(@corner.missing, ", ")}.
+          </span>
+          <a href={@corner.url} target="_blank" rel="noopener" class="link">Open the post</a>
+        </p>
+        <p
+          :if={
+            @sort == :corner and @corner == nil and not @loading? and @error == nil and @items == []
+          }
+          class="alert text-sm"
+        >
+          Anime Corner has not posted a ranking for {Laev.Season.label(@season || @now)} yet.
+        </p>
+
+        <p :if={@error == :no_tmdb_key} class="alert text-sm">
+          Log in with a connected laev account to browse — titles are looked up with your own TMDB key.
+        </p>
+        <p :if={@error not in [nil, :no_tmdb_key]} class="alert alert-error text-sm">
+          Couldn't reach TMDB just now. Try again in a minute.
+        </p>
+
+        <%!-- The same grid as the real one, so nothing moves when the posters arrive. --%>
+        <ul :if={@items == [] and @loading?} class={["grid gap-4", @grid]} aria-busy="true">
+          <li :for={_ <- 1..12} class="space-y-1">
+            <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
+            <div class="skeleton h-5 w-3/4 rounded"></div>
+          </li>
+        </ul>
+
+        <ul
+          :if={@items != []}
+          id="grid"
+          phx-hook="FillGrid"
+          data-more={to_string(@more?)}
+          data-page={@page}
+          data-restore-y={@place_y}
+          class={["grid gap-4", @grid]}
+        >
+          <li :for={i <- @items} class="space-y-1 transition duration-200 hover:-translate-y-1">
+            <.poster
+              item={i}
+              seen={MapSet.member?(@seen, {i.type, i.id})}
+              upcoming={@upcoming}
+              compact
+              rating_corner={:top_left}
+            />
+          </li>
+        </ul>
+
+        <%!-- The end of the list: the next page is asked for as it comes into view. --%>
+        <div
+          :if={@items != [] and (@more? or @loading?)}
+          id="grid-more"
+          phx-hook="InfiniteScroll"
+          data-event="more"
+          data-active={to_string(@more? and not @loading?)}
+          class="flex min-h-16 items-center justify-center pt-4"
+        >
+          <span :if={@loading?} class="loading loading-spinner loading-md text-base-content/50"></span>
+        </div>
+
+        <p
+          :if={@items == [] and not @loading? and @error == nil and @sort != :corner}
+          class="py-16 text-center text-base-content/60"
+        >
+          Nothing here.
+        </p>
       </div>
-
-      <%!-- Where the ranking comes from, and what of it is not on TMDB. --%>
-      <p :if={@sort == :corner and @corner} class="text-sm text-base-content/70">
-        Anime Corner's weekly poll, {String.downcase(Roki.AnimeCorner.week_label(@corner.week))} of {Laev.Season.label(
-          @season || @now
-        )}: {length(@items)} titles as people voted them.
-        <span :if={@corner.missing != []}>
-          Not found on TMDB: {Enum.join(@corner.missing, ", ")}.
-        </span>
-        <a href={@corner.url} target="_blank" rel="noopener" class="link">Open the post</a>
-      </p>
-      <p
-        :if={@sort == :corner and @corner == nil and not @loading? and @error == nil and @items == []}
-        class="alert text-sm"
-      >
-        Anime Corner has not posted a ranking for {Laev.Season.label(@season || @now)} yet.
-      </p>
-
-      <p :if={@error == :no_tmdb_key} class="alert text-sm">
-        Log in with a connected laev account to browse — titles are looked up with your own TMDB key.
-      </p>
-      <p :if={@error not in [nil, :no_tmdb_key]} class="alert alert-error text-sm">
-        Couldn't reach TMDB just now. Try again in a minute.
-      </p>
-
-      <%!-- The same grid as the real one, so nothing moves when the posters arrive. --%>
-      <ul :if={@items == [] and @loading?} class={["grid gap-4", @grid]} aria-busy="true">
-        <li :for={_ <- 1..12} class="space-y-1">
-          <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
-          <div class="skeleton h-5 w-3/4 rounded"></div>
-        </li>
-      </ul>
-
-      <ul
-        :if={@items != []}
-        id="grid"
-        phx-hook="FillGrid"
-        data-more={to_string(@more?)}
-        data-page={@page}
-        data-restore-y={@place_y}
-        class={["grid gap-4", @grid]}
-      >
-        <li :for={i <- @items} class="space-y-1">
-          <.poster
-            item={i}
-            seen={MapSet.member?(@seen, {i.type, i.id})}
-            cached_titles={@cached_titles}
-            upcoming={@upcoming}
-            compact
-          />
-        </li>
-      </ul>
-
-      <%!-- The end of the list: the next page is asked for as it comes into view. --%>
-      <div
-        :if={@items != [] and (@more? or @loading?)}
-        id="grid-more"
-        phx-hook="InfiniteScroll"
-        data-event="more"
-        data-active={to_string(@more? and not @loading?)}
-        class="flex min-h-16 items-center justify-center pt-4"
-      >
-        <span :if={@loading?} class="loading loading-spinner loading-md text-base-content/50"></span>
-      </div>
-
-      <p
-        :if={@items == [] and not @loading? and @error == nil and @sort != :corner}
-        class="py-16 text-center text-base-content/60"
-      >
-        Nothing here.
-      </p>
     </Layouts.app>
     """
   end
@@ -549,20 +608,20 @@ defmodule RokiWeb.CategoryLive do
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}-panel", display: "block")}
-        class="btn h-12 min-h-0 w-full justify-between gap-2 border-2 border-primary/40 bg-base-100 px-3 text-left font-semibold hover:border-primary"
+        class="btn h-12 min-h-0 w-full justify-between gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-left font-semibold text-white backdrop-blur-md hover:border-white/60 hover:bg-black/45"
         aria-haspopup="listbox"
       >
         <span class="min-w-0">
-          <span class="block text-[0.6rem] font-medium uppercase leading-none tracking-wide text-base-content/50">
+          <span class="block text-[0.6rem] font-medium uppercase leading-none tracking-wide text-white/60">
             {@label}
           </span>
-          <span class="block truncate text-base leading-tight text-primary">{@value}</span>
+          <span class="block truncate text-base leading-tight text-white">{@value}</span>
         </span>
-        <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 text-primary" />
+        <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 text-white/80" />
       </button>
       <div
         id={"#{@id}-panel"}
-        class="absolute right-0 top-full z-40 mt-1 hidden w-80 max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 shadow-xl"
+        class="absolute right-0 top-full z-40 mt-2 hidden w-80 max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
         phx-click-away={JS.hide(to: "##{@id}-panel")}
         phx-window-keydown={JS.hide(to: "##{@id}-panel")}
         phx-key="escape"
