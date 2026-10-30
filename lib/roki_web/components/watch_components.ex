@@ -244,57 +244,68 @@ defmodule RokiWeb.WatchComponents do
         Nothing at {Resolver.label(@limit)} or below was found. Switch to External player.
       </p>
       <ul :if={@entries != []} class="space-y-2">
-        <li
-          :for={{{source, stream}, i} <- @entries}
-          class="flex items-center gap-3 rounded-2xl border border-base-300 bg-base-100/70 p-4 transition hover:border-primary/40"
-        >
-          <div class="min-w-0 flex-1 space-y-1">
-            <div class="truncate text-sm font-medium" title={source.name}>{source.name}</div>
-            <div class="flex flex-wrap items-center gap-1.5 text-xs">
-              <span :if={source.resolution} class="badge badge-sm badge-primary">
-                {Resolver.label(source.resolution)}
-              </span>
-              <span class="badge badge-sm badge-ghost">{source.size_human}</span>
-              <span class="badge badge-sm badge-ghost">{provider(stream)}</span>
-              <span
-                :if={Watch.heavy?(source, @caps)}
-                class="badge badge-sm badge-warning"
-                title="Not h264, and not a codec this browser decodes: re-encoded on the server, slower to start"
-              >
-                re-encoded
-              </span>
-              <span :if={source[:cached] == :library} class="badge badge-sm badge-success">
-                in your library
-              </span>
-              <span :if={source[:codec]} class="badge badge-sm badge-ghost">{source.codec}</span>
-              <span :if={langs(source, stream) != ""} class="text-base-content/60">
-                🔊 {langs(source, stream)}
-              </span>
-              <span :if={subs(stream) != ""} class="text-base-content/60">💬 {subs(stream)}</span>
+        <%!-- The whole row starts the release: one press, nowhere on it that does nothing. How it
+              opens (in the browser or in an external player) is the Browser/VLC choice in the
+              account menu. --%>
+        <li :for={{{source, stream}, i} <- @entries}>
+          <% selected? = @current && elem(@current, 0).hash == source.hash %>
+          <button
+            type="button"
+            phx-click="choose"
+            phx-value-idx={i}
+            disabled={@busy}
+            aria-label={"#{if @mode == :external, do: "Open", else: "Play"} #{source.name}"}
+            class={[
+              "group flex w-full items-center gap-4 rounded-2xl border bg-base-100/70 p-4 text-left transition hover:border-primary/60 hover:bg-base-100 disabled:cursor-wait disabled:opacity-60",
+              selected? && "border-primary ring-1 ring-primary/40",
+              !selected? && "border-base-300"
+            ]}
+          >
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <div class="truncate text-sm font-medium" title={source.name}>{source.name}</div>
+              <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                <span :if={source.resolution} class="badge badge-sm badge-primary">
+                  {Resolver.label(source.resolution)}
+                </span>
+                <span class="badge badge-sm badge-ghost">{source.size_human}</span>
+                <span class="badge badge-sm badge-ghost">{provider(stream)}</span>
+                <span
+                  :if={Watch.heavy?(source, @caps)}
+                  class="badge badge-sm badge-warning"
+                  title="Not h264, and not a codec this browser decodes: re-encoded on the server, slower to start"
+                >
+                  re-encoded
+                </span>
+                <span :if={source[:cached] == :library} class="badge badge-sm badge-success">
+                  in your library
+                </span>
+                <span :if={source[:codec]} class="badge badge-sm badge-ghost">{source.codec}</span>
+                <span :if={langs(source, stream) != ""} class="text-base-content/60">
+                  🔊 {langs(source, stream)}
+                </span>
+                <span :if={subs(stream) != ""} class="text-base-content/60">💬 {subs(stream)}</span>
+              </div>
             </div>
-          </div>
-          <button
-            phx-click="choose"
-            phx-value-idx={i}
-            class="btn btn-sm btn-primary rounded-full px-5"
-            disabled={@busy}
-          >
-            {cond do
-              @current && elem(@current, 0).hash == source.hash -> "Selected"
-              @mode == :external -> "Open"
-              true -> "Play"
-            end}
-          </button>
-          <button
-            :if={@mode == :browser}
-            phx-click="choose"
-            phx-value-idx={i}
-            phx-value-via="external"
-            class="btn btn-sm btn-ghost rounded-full"
-            title="Open this release in your external player"
-            disabled={@busy}
-          >
-            External
+            <span
+              class={[
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition",
+                selected? && "bg-primary text-primary-content",
+                !selected? &&
+                  "bg-base-200 text-base-content/50 group-hover:bg-primary group-hover:text-primary-content"
+              ]}
+              aria-hidden="true"
+            >
+              <.icon
+                name={
+                  cond do
+                    selected? -> "hero-check"
+                    @mode == :external -> "hero-arrow-top-right-on-square"
+                    true -> "hero-play-solid"
+                  end
+                }
+                class="h-5 w-5"
+              />
+            </span>
           </button>
         </li>
       </ul>
