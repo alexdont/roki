@@ -472,35 +472,59 @@ defmodule RokiWeb.WatchedLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}/watched"}
     >
-      <p :if={@user == nil} class="py-24 text-center text-base-content/60">
+      <p :if={@user == nil} class="px-4 pb-24 pt-40 text-center text-base-content/60">
         There is no one called <strong>{@username}</strong> here.
       </p>
 
-      <div :if={@visible?} class={["space-y-6", @select? && "pb-28"]}>
+      <%!-- The top: a dark picture under the floating header with whose list it is, and how long. --%>
+      <section
+        :if={@visible?}
+        class="relative z-20 flex min-h-[clamp(14rem,30svh,20rem)] flex-col justify-end text-white"
+      >
+        <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
+          <div class="absolute inset-0 bg-gradient-to-br from-primary/40 via-neutral-900 to-secondary/30">
+          </div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/40">
+          </div>
+        </div>
+        <div class="flex flex-col gap-3 px-4 pb-6 pt-28 sm:px-6 lg:px-12 xl:px-16">
+          <.link
+            navigate={"/#{@username}"}
+            class="flex w-fit items-center gap-2 text-white/80 hover:text-white"
+          >
+            <.user_avatar user={@user} size="sm" />
+            <span class="font-semibold">{@user.username}</span>
+          </.link>
+          <div class="flex items-baseline gap-3">
+            <h1 class="text-4xl font-bold tracking-tight drop-shadow-lg sm:text-5xl xl:text-6xl">
+              Watched
+            </h1>
+            <span :if={is_list(@history)} class="text-lg tabular-nums text-white/70">
+              {length(@items)}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <div
+        :if={@visible?}
+        class={[
+          "space-y-6 px-4 pb-12 pt-4 [overflow-x:clip] sm:px-6 lg:px-12 xl:px-16",
+          @select? && "pb-28"
+        ]}
+      >
         <%!-- The header. On a phone: a slim title bar that stays at the top (Select always in
               reach), then the search with the view switch, then the kind tabs with the sort in
               a small menu. On a wide screen the same pieces become one toolbar (the wrappers
               vanish with `contents` and `order-*` lays the pieces out). --%>
-        <div class="contents lg:sticky lg:top-0 lg:z-30 lg:-mx-8 lg:flex lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 lg:border-b lg:border-base-300/60 lg:bg-base-100/90 lg:px-8 lg:py-3 lg:backdrop-blur">
-          <div class="sticky top-0 z-30 -mx-4 flex items-center gap-2.5 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
-            <.link
-              navigate={"/#{@username}"}
-              class="flex min-w-0 shrink-0 items-center gap-2 text-base-content/70 hover:text-base-content lg:order-1"
-            >
-              <span class="lg:hidden"><.user_avatar user={@user} size="sm" /></span>
-              <span class="hidden lg:block"><.user_avatar user={@user} size="md" /></span>
-              <span class="hidden truncate font-semibold lg:inline">{@user.username}</span>
-            </.link>
-            <h1 class="text-xl font-bold sm:text-2xl lg:order-2 lg:text-3xl">Watched</h1>
-            <span
-              :if={is_list(@history)}
-              class="rounded-full bg-base-200 px-2 py-0.5 text-xs font-medium tabular-nums text-base-content/60 lg:order-3 lg:bg-transparent lg:px-0 lg:text-sm"
-            >{length(@items)}</span>
-
+        <div class="contents lg:sticky lg:top-14 lg:z-30 lg:-mx-12 lg:flex lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 lg:border-b lg:border-base-300/60 lg:bg-base-100/90 lg:px-12 lg:py-3 lg:backdrop-blur xl:-mx-16 xl:px-16">
+          <div class="sticky top-14 z-30 -mx-4 flex items-center gap-2.5 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
             <%!-- Select mode, for the owner: one button, on and off. --%>
             <button
               :if={@owner?}

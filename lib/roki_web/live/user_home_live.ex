@@ -899,7 +899,7 @@ defmodule RokiWeb.UserHomeLive do
         :if={@shown and @items != []}
         class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
       >
-        <.tile :for={i <- @items} item={i} kind={String.to_atom(@id)}>
+        <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={String.to_atom(@id)}>
           <%!-- No badge: everything here is saved. Taking a title off in its hover card clicks this
                 to drop the tile (assets/js/peek.js), so the list closes up without a refresh. --%>
           <button
@@ -912,7 +912,7 @@ defmodule RokiWeb.UserHomeLive do
             phx-value-type={i.type}
             phx-value-id={i.id}
           ></button>
-        </.tile>
+        </RokiWeb.FeaturedLive.tile>
       </ul>
     </section>
     """
@@ -957,7 +957,7 @@ defmodule RokiWeb.UserHomeLive do
         <div :for={group <- @groups} class="space-y-2">
           <h3 class="text-sm font-medium text-base-content/60">{month_label(hd(group))}</h3>
           <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-            <.tile :for={i <- group} item={i} kind={:completed}>
+            <RokiWeb.FeaturedLive.tile :for={i <- group} item={i} kind={:completed}>
               <% score = Roki.Profile.score_for(@ratings, i) %>
               <div
                 :if={i.dated? or score != nil}
@@ -968,7 +968,7 @@ defmodule RokiWeb.UserHomeLive do
                   score
                 )}</span>
               </div>
-            </.tile>
+            </RokiWeb.FeaturedLive.tile>
           </ul>
         </div>
         <button :if={@more > 0} phx-click="more_completed" class="btn btn-ghost btn-sm">
@@ -1020,32 +1020,9 @@ defmodule RokiWeb.UserHomeLive do
         :if={@items != []}
         class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
       >
-        <.tile :for={i <- @items} item={i} kind={:watchlist} />
+        <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={:watchlist} />
       </ul>
     </section>
-    """
-  end
-
-  attr :item, :map, required: true
-  attr :kind, :atom, required: true
-  slot :inner_block
-
-  # One title in a list: a film or a show opens into the card the home page's rows have (the
-  # `GridCards` hook, on the shelf); anything else — a manga — is a plain poster.
-  defp tile(%{item: %{type: type}} = assigns) when type in ["movie", "tv"] do
-    ~H"""
-    <RokiWeb.FeaturedLive.grid_card kind={@kind} item={@item} signed_in?>
-      {render_slot(@inner_block)}
-    </RokiWeb.FeaturedLive.grid_card>
-    """
-  end
-
-  defp tile(assigns) do
-    ~H"""
-    <li class="space-y-1">
-      <.poster item={@item} compact title?={false} />
-      {render_slot(@inner_block)}
-    </li>
     """
   end
 

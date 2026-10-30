@@ -12,7 +12,6 @@ defmodule RokiWeb.ProfileLive do
   use RokiWeb, :live_view
   use PhoenixKitComments.Embed
 
-  import RokiWeb.PosterComponents
   import PhoenixKitWeb.Components.Core.UserInfo, only: [user_avatar: 1]
 
   alias PhoenixKit.Users.Auth.Scope
@@ -479,70 +478,133 @@ defmodule RokiWeb.ProfileLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}"}
     >
-      <p :if={@user == nil} class="py-24 text-center text-base-content/60">
+      <p :if={@user == nil} class="px-4 pb-24 pt-40 text-center text-base-content/60">
         There is no one called <strong>{@username}</strong> here.
       </p>
 
-      <div :if={@visible?} class="space-y-10">
-        <section class="overflow-hidden rounded-box bg-base-200">
-          <div
-            class={[
-              "relative h-40 w-full bg-cover bg-center sm:h-60",
-              !@banner && "bg-gradient-to-r from-primary/40 via-base-300 to-secondary/40"
-            ]}
-            style={@banner && "background-image: url('#{@banner}')"}
-          >
-            <button
-              :if={@owner?}
-              type="button"
-              phx-click="edit"
-              class="btn btn-sm absolute right-3 top-3 shadow"
+      <div :if={@visible?}>
+        <%!-- The top: the banner across the window under the floating header, the person on it. --%>
+        <section class="relative z-20 flex min-h-[clamp(22rem,52svh,34rem)] flex-col justify-end text-white [--color-base-content:#fff]">
+          <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
+            <div
+              class={[
+                "h-full w-full bg-cover bg-center",
+                !@banner && "bg-gradient-to-r from-primary/60 via-neutral-800 to-secondary/60"
+              ]}
+              style={@banner && "background-image: url('#{@banner}')"}
             >
-              <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit profile
-            </button>
-          </div>
-          <%!-- The avatar is PhoenixKit's biggest, and overlaps the banner. On a phone it is drawn
-                smaller and the name goes under it, clear of the banner, rather than beside it. --%>
-          <div class="-mt-12 flex flex-col gap-y-2 px-4 pb-4 sm:-mt-16 sm:flex-row sm:flex-wrap sm:items-end sm:gap-x-4 sm:gap-y-3 sm:px-6">
-            <div class="w-24 shrink-0 rounded-full ring-4 ring-base-200 sm:w-40 [&_.avatar>div]:!h-24 [&_.avatar>div]:!w-24 sm:[&_.avatar>div]:!h-40 sm:[&_.avatar>div]:!w-40">
-              <.user_avatar user={@user} size="xl" />
             </div>
-            <div class="min-w-0 flex-1 pt-1 sm:pb-1 sm:pt-0">
-              <h1 class="truncate text-2xl font-bold sm:text-3xl">{@user.username}</h1>
-              <p :if={joined(@user)} class="text-sm text-base-content/60">
-                On roki since {joined(@user)}
-              </p>
+            <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-black/10">
             </div>
-            <.friend_bar
-              :if={@friends_on?}
-              username={@username}
-              owner?={@owner?}
-              signed_in?={@viewer != nil}
-              relation={@relation}
-              count={@friend_count}
-              pending={@pending_count}
-            />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50">
+            </div>
           </div>
-          <p :if={@profile.bio != ""} class="whitespace-pre-line px-4 pb-4 sm:px-6">{@profile.bio}</p>
-          <%!-- Nothing written yet: a place held for it; the owner presses it and writes there. --%>
-          <p :if={@profile.bio == "" and @owner? and not @bio_editing?} class="px-4 pb-4 sm:px-6">
-            <button
-              type="button"
-              phx-click="bio_edit"
-              class="text-left italic text-base-content/50 hover:text-base-content"
+
+          <div class="flex flex-col gap-5 px-4 pb-6 pt-28 sm:px-6 lg:px-12 xl:px-16">
+            <div class="flex flex-wrap items-end gap-x-5 gap-y-3">
+              <%!-- The avatar is PhoenixKit's biggest; on a phone it is drawn smaller. --%>
+              <div class="w-24 shrink-0 rounded-full ring-4 ring-white/25 sm:w-36 [&_.avatar>div]:!h-24 [&_.avatar>div]:!w-24 sm:[&_.avatar>div]:!h-36 sm:[&_.avatar>div]:!w-36">
+                <.user_avatar user={@user} size="xl" />
+              </div>
+              <div class="min-w-0 flex-1 pb-1">
+                <h1 class="truncate text-4xl font-bold tracking-tight drop-shadow-lg sm:text-5xl xl:text-6xl">
+                  {@user.username}
+                </h1>
+                <p :if={joined(@user)} class="text-sm text-white/70">
+                  On roki since {joined(@user)}
+                </p>
+              </div>
+              <div class="flex w-full flex-wrap items-center gap-2 pb-1 sm:w-auto">
+                <.friend_bar
+                  :if={@friends_on?}
+                  username={@username}
+                  owner?={@owner?}
+                  signed_in?={@viewer != nil}
+                  relation={@relation}
+                  count={@friend_count}
+                  pending={@pending_count}
+                />
+                <button
+                  :if={@owner?}
+                  type="button"
+                  phx-click="edit"
+                  class="btn btn-sm gap-1.5 rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md hover:border-white/60 hover:bg-black/45"
+                >
+                  <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit profile
+                </button>
+              </div>
+            </div>
+
+            <p :if={@profile.bio != ""} class="max-w-3xl whitespace-pre-line text-white/90">
+              {@profile.bio}
+            </p>
+            <%!-- Nothing written yet: a place held for it; the owner presses it and writes there. --%>
+            <p :if={@profile.bio == "" and @owner? and not @bio_editing?}>
+              <button
+                type="button"
+                phx-click="bio_edit"
+                class="text-left italic text-white/60 hover:text-white"
+              >
+                Say something about yourself — a few words, a favourite quote, what you are into. Press here to write it.
+              </button>
+            </p>
+            <p
+              :if={@profile.bio == "" and not @owner?}
+              class="italic text-white/50"
             >
-              Say something about yourself — a few words, a favourite quote, what you are into. Press here to write it.
-            </button>
-          </p>
+              {@username} hasn't written anything here yet.
+            </p>
+
+            <%!-- The numbers, as the thing they are: big, with a word under each. --%>
+            <div class="flex flex-wrap gap-x-10 gap-y-3">
+              <.link navigate={"/#{@username}/watched"} class="group">
+                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                  {if @watched, do: thousands(@watched), else: "…"}
+                </div>
+                <div class="text-xs font-medium uppercase tracking-wide text-white/60 group-hover:text-white">
+                  Watched →
+                </div>
+              </.link>
+              <div>
+                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                  {if @films, do: thousands(@films), else: "…"}
+                </div>
+                <div class="text-xs font-medium uppercase tracking-wide text-white/60">Films</div>
+              </div>
+              <div>
+                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                  {stat(@stats, :episodes)}
+                </div>
+                <div class="text-xs font-medium uppercase tracking-wide text-white/60">Episodes</div>
+              </div>
+              <div>
+                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                  {stat(@stats, :hours)}
+                </div>
+                <div class="text-xs font-medium uppercase tracking-wide text-white/60">
+                  Hours watched
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div
+          id="profile-cards"
+          phx-hook="GridCards"
+          class="space-y-10 px-4 pb-12 pt-8 [overflow-x:clip] sm:px-6 lg:px-12 xl:px-16"
+        >
           <form
             :if={@bio_editing?}
             id="bio-form"
             phx-submit="bio_save"
-            class="flex flex-wrap items-center gap-2 px-4 pb-4 sm:px-6"
+            class="flex flex-wrap items-center gap-2"
           >
             <input
               type="text"
@@ -558,217 +620,170 @@ defmodule RokiWeb.ProfileLive do
             <button type="submit" class="btn btn-primary">Done</button>
             <button type="button" phx-click="bio_cancel" class="btn btn-ghost">Cancel</button>
           </form>
-          <p
-            :if={@profile.bio == "" and not @owner?}
-            class="px-4 pb-4 italic text-base-content/40 sm:px-6"
+          <p :if={@error != nil and not @editing?} class="text-sm text-error">{@error}</p>
+          <p :if={@notice} class="text-sm text-success">{@notice}</p>
+
+          <.edit_panel
+            :if={@owner? and @editing?}
+            profile={@profile}
+            uploads={@uploads}
+            error={@error}
+            banner={@banner}
+            user={@user}
+          />
+
+          <%!-- The shelves. A visitor sees the ones with something on them. --%>
+          <section
+            :for={{kind, label} <- Profile.shelves()}
+            :if={show_shelf?(kind, @owner?, @viewer, @favorites)}
+            class="space-y-3"
           >
-            {@username} hasn't written anything here yet.
-          </p>
-          <p :if={@error != nil and not @editing?} class="px-4 pb-4 text-sm text-error sm:px-6">
-            {@error}
-          </p>
-
-          <%!-- The numbers, as the thing they are: big, with a word under each. --%>
-          <div class="grid grid-cols-2 gap-px overflow-hidden border-t border-base-300 bg-base-300 sm:grid-cols-4">
-            <.link
-              navigate={"/#{@username}/watched"}
-              class="group bg-base-200 px-4 py-4 transition hover:bg-base-100 sm:px-6"
-            >
-              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                {if @watched, do: thousands(@watched), else: "…"}
-              </div>
-              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60 group-hover:text-primary">
-                Watched →
-              </div>
-            </.link>
-            <div class="bg-base-200 px-4 py-4 sm:px-6">
-              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                {if @films, do: thousands(@films), else: "…"}
-              </div>
-              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">
-                Films
-              </div>
-            </div>
-            <div class="bg-base-200 px-4 py-4 sm:px-6">
-              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                {stat(@stats, :episodes)}
-              </div>
-              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">
-                Episodes
-              </div>
-            </div>
-            <div class="bg-base-200 px-4 py-4 sm:px-6">
-              <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                {stat(@stats, :hours)}
-              </div>
-              <div class="text-xs font-medium uppercase tracking-wide text-base-content/60">
-                Hours watched
-              </div>
-            </div>
-          </div>
-          <p :if={@notice} class="mx-4 my-4 text-sm text-success sm:mx-6">{@notice}</p>
-        </section>
-
-        <.edit_panel
-          :if={@owner? and @editing?}
-          profile={@profile}
-          uploads={@uploads}
-          error={@error}
-          banner={@banner}
-          user={@user}
-        />
-
-        <%!-- The shelves. A visitor sees the ones with something on them. --%>
-        <section
-          :for={{kind, label} <- Profile.shelves()}
-          :if={show_shelf?(kind, @owner?, @viewer, @favorites)}
-          class="space-y-3"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="text-xl font-semibold">{shelf_title(@profile, kind, label)}</h2>
-            <button
-              :if={@owner? and @favorites != nil}
-              type="button"
-              phx-click="shelf_edit"
-              phx-value-kind={kind}
-              class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}
-            >
-              <.icon
-                name={if @shelf == kind, do: "hero-check", else: "hero-pencil-square"}
-                class="h-3.5 w-3.5"
-              />
-              {if @shelf == kind, do: "Done", else: "Edit"}
-            </button>
-          </div>
-
-          <ul
-            :if={@favorites == nil}
-            class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
-            aria-busy="true"
-          >
-            <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
-          </ul>
-
-          <%!-- Looking: the posters as they are, each a link to its page. --%>
-          <ul
-            :if={@shelf != kind and (@favorites[kind] || []) != []}
-            class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
-          >
-            <li :for={i <- @favorites[kind]} class="space-y-1">
-              <.poster
-                item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)}
-                cached_titles={@cached_titles}
-                compact
-                title?={false}
-              />
-            </li>
-          </ul>
-          <p
-            :if={@shelf != kind and @favorites != nil and (@favorites[kind] || []) == []}
-            class="text-sm text-base-content/50"
-          >
-            {if @owner?,
-              do: "Nothing on this shelf yet. Press Edit to add what you loved.",
-              else: "Nothing here yet."}
-          </p>
-
-          <%!-- Editing: a cross in a corner takes one off, the grip along the bottom drags it to
-                a new place, and the empty places open the picker. --%>
-          <div :if={@owner? and @shelf == kind and @favorites != nil} class="space-y-2">
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  class="toggle toggle-primary toggle-sm"
-                  checked={Profile.ranked?(@profile, kind)}
-                  phx-click="shelf_ranked"
-                  phx-value-kind={kind}
-                /> Rank them 1 to {Profile.top()}
-              </label>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-2xl font-semibold tracking-tight">
+                {shelf_title(@profile, kind, label)}
+              </h2>
               <button
+                :if={@owner? and @favorites != nil}
                 type="button"
-                phx-click="pick_open"
+                phx-click="shelf_edit"
                 phx-value-kind={kind}
-                class="btn btn-sm btn-outline btn-primary rounded-full"
+                class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}
               >
-                <.icon name="hero-squares-plus" class="h-4 w-4" />
-                {if kind == :manga, do: "Choose from read", else: "Choose from watched"}
+                <.icon
+                  name={if @shelf == kind, do: "hero-check", else: "hero-pencil-square"}
+                  class="h-3.5 w-3.5"
+                />
+                {if @shelf == kind, do: "Done", else: "Edit"}
               </button>
-              <p class="text-sm text-base-content/60">
-                {if Profile.ranked?(@profile, kind),
-                  do: "The numbers show: the order matters. Drag a poster to reorder.",
-                  else: "Just your favourites, none above another. Drag to arrange them as you like."} × takes one off; an empty place adds more.
-              </p>
             </div>
+
             <ul
-              id={"shelf-#{kind}"}
-              phx-hook="SortableGrid"
-              data-sortable-event="shelf_reorder"
-              data-sortable-scope-kind={kind}
+              :if={@favorites == nil}
+              class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
+              aria-busy="true"
+            >
+              <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
+            </ul>
+
+            <%!-- Looking: the posters as they are, each a link to its page. --%>
+            <ul
+              :if={@shelf != kind and (@favorites[kind] || []) != []}
               class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
             >
-              <li
+              <RokiWeb.FeaturedLive.tile
                 :for={i <- @favorites[kind]}
-                id={"fav-#{kind}-#{i.type || "mal"}-#{i.id || i.mal_id}"}
-                data-id={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                class="sortable-item cursor-grab touch-none select-none space-y-1 active:cursor-grabbing"
-              >
-                <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
-                  <img
-                    :if={i.poster}
-                    src={Roki.Images.local(i.poster)}
-                    alt={i.title}
-                    class="h-full w-full object-cover"
-                    draggable="false"
-                  />
-                  <span
-                    :if={!i.poster}
-                    class="flex h-full items-center justify-center p-2 text-center text-xs"
-                  >{i.title}</span>
-                  <span
-                    :if={Profile.ranked?(@profile, kind)}
-                    class="badge badge-primary badge-xs absolute bottom-1 right-1 shadow sm:badge-sm sm:bottom-auto sm:right-1.5 sm:top-1.5"
-                  >#{i.position}</span>
-                  <button
-                    type="button"
-                    phx-click="shelf_remove"
-                    phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                    class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-6 min-h-0 w-6 p-0 shadow sm:left-1.5 sm:top-1.5"
-                    aria-label={"Take #{i.title} off the shelf"}
-                  >
-                    <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </li>
-              <%!-- Not "sortable-ignore": that filter makes SortableJS cancel the touch, and the
-                    tap never becomes a click on a phone. Only .sortable-item is draggable anyway. --%>
-              <li :for={_ <- 1..places_left(@favorites, kind)//1}>
+                item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)}
+                kind={kind}
+              />
+            </ul>
+            <p
+              :if={@shelf != kind and @favorites != nil and (@favorites[kind] || []) == []}
+              class="text-sm text-base-content/50"
+            >
+              {if @owner?,
+                do: "Nothing on this shelf yet. Press Edit to add what you loved.",
+                else: "Nothing here yet."}
+            </p>
+
+            <%!-- Editing: a cross in a corner takes one off, the grip along the bottom drags it to
+                a new place, and the empty places open the picker. --%>
+            <div :if={@owner? and @shelf == kind and @favorites != nil} class="space-y-2">
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-primary toggle-sm"
+                    checked={Profile.ranked?(@profile, kind)}
+                    phx-click="shelf_ranked"
+                    phx-value-kind={kind}
+                  /> Rank them 1 to {Profile.top()}
+                </label>
                 <button
                   type="button"
                   phx-click="pick_open"
                   phx-value-kind={kind}
-                  class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-1 rounded-box border-2 border-dashed border-primary/50 text-primary transition hover:border-primary hover:bg-primary/10"
+                  class="btn btn-sm btn-outline btn-primary rounded-full"
                 >
-                  <.icon name="hero-plus" class="h-5 w-5 sm:h-6 sm:w-6" />
-                  <span class="hidden text-xs font-medium sm:block">Add</span>
+                  <.icon name="hero-squares-plus" class="h-4 w-4" />
+                  {if kind == :manga, do: "Choose from read", else: "Choose from watched"}
                 </button>
-              </li>
-            </ul>
-          </div>
-        </section>
+                <p class="text-sm text-base-content/60">
+                  {if Profile.ranked?(@profile, kind),
+                    do: "The numbers show: the order matters. Drag a poster to reorder.",
+                    else:
+                      "Just your favourites, none above another. Drag to arrange them as you like."} × takes one off; an empty place adds more.
+                </p>
+              </div>
+              <ul
+                id={"shelf-#{kind}"}
+                phx-hook="SortableGrid"
+                data-sortable-event="shelf_reorder"
+                data-sortable-scope-kind={kind}
+                class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
+              >
+                <li
+                  :for={i <- @favorites[kind]}
+                  id={"fav-#{kind}-#{i.type || "mal"}-#{i.id || i.mal_id}"}
+                  data-id={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
+                  class="sortable-item cursor-grab touch-none select-none space-y-1 active:cursor-grabbing"
+                >
+                  <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
+                    <img
+                      :if={i.poster}
+                      src={Roki.Images.local(i.poster)}
+                      alt={i.title}
+                      class="h-full w-full object-cover"
+                      draggable="false"
+                    />
+                    <span
+                      :if={!i.poster}
+                      class="flex h-full items-center justify-center p-2 text-center text-xs"
+                    >{i.title}</span>
+                    <span
+                      :if={Profile.ranked?(@profile, kind)}
+                      class="badge badge-primary badge-xs absolute bottom-1 right-1 shadow sm:badge-sm sm:bottom-auto sm:right-1.5 sm:top-1.5"
+                    >#{i.position}</span>
+                    <button
+                      type="button"
+                      phx-click="shelf_remove"
+                      phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
+                      class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-6 min-h-0 w-6 p-0 shadow sm:left-1.5 sm:top-1.5"
+                      aria-label={"Take #{i.title} off the shelf"}
+                    >
+                      <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </li>
+                <%!-- Not "sortable-ignore": that filter makes SortableJS cancel the touch, and the
+                    tap never becomes a click on a phone. Only .sortable-item is draggable anyway. --%>
+                <li :for={_ <- 1..places_left(@favorites, kind)//1}>
+                  <button
+                    type="button"
+                    phx-click="pick_open"
+                    phx-value-kind={kind}
+                    class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-1 rounded-box border-2 border-dashed border-primary/50 text-primary transition hover:border-primary hover:bg-primary/10"
+                  >
+                    <.icon name="hero-plus" class="h-5 w-5 sm:h-6 sm:w-6" />
+                    <span class="hidden text-xs font-medium sm:block">Add</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </section>
 
-        <%!-- Whatever anyone wants to say to them: comments, a thread of replies. Plain text, so it
+          <%!-- Whatever anyone wants to say to them: comments, a thread of replies. Plain text, so it
               needs no editor script. --%>
-        <section class="space-y-3" aria-label="Comments">
-          <.live_component
-            module={PhoenixKitComments.Web.CommentsComponent}
-            id="profile-comments"
-            resource_type="profile"
-            resource_uuid={@uuid}
-            current_user={@viewer}
-            rich_text={false}
-          />
-        </section>
+          <section class="space-y-3" aria-label="Comments">
+            <.live_component
+              module={PhoenixKitComments.Web.CommentsComponent}
+              id="profile-comments"
+              resource_type="profile"
+              resource_uuid={@uuid}
+              current_user={@viewer}
+              rich_text={false}
+            />
+          </section>
+        </div>
       </div>
 
       <.picker

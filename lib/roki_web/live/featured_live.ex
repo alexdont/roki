@@ -1046,6 +1046,30 @@ defmodule RokiWeb.FeaturedLive do
     """
   end
 
+  attr :item, :map, required: true
+  attr :kind, :atom, required: true
+  slot :inner_block
+
+  # One title in a list of posters: a film or a show opens into the card the rows have (the
+  # `GridCards` hook, on a box round the list); anything else — a manga — is a plain poster.
+  @doc false
+  def tile(%{item: %{type: type}} = assigns) when type in ["movie", "tv"] do
+    ~H"""
+    <.grid_card kind={@kind} item={@item} signed_in?>
+      {render_slot(@inner_block)}
+    </.grid_card>
+    """
+  end
+
+  def tile(assigns) do
+    ~H"""
+    <li class="space-y-1">
+      <.poster item={@item} compact title?={false} />
+      {render_slot(@inner_block)}
+    </li>
+    """
+  end
+
   attr :kind, :atom, required: true
   attr :item, :map, required: true
   attr :seen, :boolean, default: false
