@@ -1073,7 +1073,13 @@ defmodule RokiWeb.FeaturedLive do
       )
 
     ~H"""
-    <li data-card data-key={@key} data-signed={to_string(@signed_in?)} class="space-y-1">
+    <li
+      data-card
+      data-grid-card
+      data-key={@key}
+      data-signed={to_string(@signed_in?)}
+      class="space-y-1"
+    >
       <div class="group/card relative hover:z-20">
         <.poster
           item={@item}

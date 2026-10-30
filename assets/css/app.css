@@ -219,6 +219,22 @@ html.study-open .site-header { display: none; }
   }
 }
 
+/* The others in a grid's row make way for a card that opens (GridCards sets --nudge): moved, not
+   reflowed. */
+[data-grid-card] {
+  transition: translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-grid-card][data-nudge] {
+  translate: var(--nudge, 0) 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-grid-card] {
+    transition: none;
+  }
+}
+
 /* A card that opens over a poster in a grid, at the grid's edge: it opens towards the middle. */
 [data-card][data-edge="left"] [data-card-panel] {
   left: 0;

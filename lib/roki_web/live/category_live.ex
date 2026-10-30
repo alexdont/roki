@@ -516,7 +516,7 @@ defmodule RokiWeb.CategoryLive do
         </div>
       </section>
 
-      <div class="space-y-4 px-4 pb-12 pt-6 sm:px-6 lg:px-12 xl:px-16">
+      <div class="space-y-4 px-4 pb-12 pt-6 [overflow-x:clip] sm:px-6 lg:px-12 xl:px-16">
         <%!-- Where the ranking comes from, and what of it is not on TMDB. --%>
         <p :if={@sort == :corner and @corner} class="text-sm text-base-content/70">
           Anime Corner's weekly poll, {String.downcase(Roki.AnimeCorner.week_label(@corner.week))} of {Laev.Season.label(

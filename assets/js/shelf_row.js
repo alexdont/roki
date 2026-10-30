@@ -149,7 +149,37 @@ export const cardMethods = {
       li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
     }
     const started = Date.now()
-    this.timers = [setTimeout(() => this.show(li, started), OPEN_MS)]
+    this.timers = [setTimeout(() => { this.nudge(li); this.show(li, started) }, OPEN_MS)]
+  },
+
+  // In a grid the card opens over its cell and the others stay where they are in the flow: the ones
+  // in its row are only moved aside a little (a translate, nothing reflows) so the card has room.
+  nudge(li) {
+    if (!this.grid || this.hot !== li) return
+    const r = li.getBoundingClientRect()
+    const wide = r.width * 0.7
+    const edge = li.dataset.edge
+    const left = edge === "left" ? 0 : edge === "right" ? wide : wide / 2
+    const right = edge === "right" ? 0 : edge === "left" ? wide : wide / 2
+
+    // The same distance for every one on a side, so they stay evenly spaced. One at the edge may
+    // slip a little off the window: the card being looked at is the one that matters.
+    const row = [...this.el.querySelectorAll("[data-grid-card]")].filter(
+      (c) => c !== li && Math.abs(c.getBoundingClientRect().top - r.top) <= 4
+    )
+    const before = row.filter((c) => c.getBoundingClientRect().left < r.left)
+    const after = row.filter((c) => c.getBoundingClientRect().left >= r.left)
+    const goLeft = left
+    const goRight = right
+
+    this.nudged = []
+    for (const [list, shift] of [[before, -goLeft], [after, goRight]]) {
+      for (const c of list) {
+        c.style.setProperty("--nudge", `${shift}px`)
+        c.dataset.nudge = "true"
+        this.nudged.push(c)
+      }
+    }
   },
 
   async show(li, started) {
@@ -216,6 +246,8 @@ export const cardMethods = {
     this.timers = []
     const li = this.hot
     this.hot = null
+    ;(this.nudged || []).forEach((c) => { delete c.dataset.nudge; c.style.removeProperty("--nudge") })
+    this.nudged = []
     const slot = li?.querySelector("[data-card-trailer]")
     if (slot) {
       slot.textContent = ""
