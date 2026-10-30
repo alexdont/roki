@@ -54,6 +54,7 @@ defmodule RokiWeb.TitleLive do
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
+        reviews: nil,
         similar: [],
         similar_seen: MapSet.new(),
         study: nil,
@@ -357,6 +358,25 @@ defmodule RokiWeb.TitleLive do
 
   def handle_event("toggle_watched", _params, socket), do: {:noreply, socket}
 
+  # The Reviews sheet: what the rating sites and the critics say. Asked for the first time it is
+  # opened, then kept for as long as the page is.
+  def handle_event("reviews_open", _params, %{assigns: %{reviews: reviews}} = socket)
+      when reviews in [nil, :error] do
+    %{title: title} = socket.assigns
+
+    {:noreply,
+     socket
+     |> assign(:reviews, :loading)
+     |> start_async(:reviews, fn ->
+       %{
+         scores: Roki.Reviews.scores(title.type, title.id),
+         critics: Roki.Reviews.critics(title.type, title.id)
+       }
+     end)}
+  end
+
+  def handle_event("reviews_open", _params, socket), do: {:noreply, socket}
+
   # Your TMDB rating (0.5–10, half steps): sent to TMDB through laev, shown beside TMDB's average.
   def handle_event("rate", %{"value" => v}, %{assigns: %{rating: %{state: :ok}}} = socket) do
     %{uuid: uuid, title: title, rate_mal: mal} = socket.assigns
@@ -515,6 +535,11 @@ defmodule RokiWeb.TitleLive do
   def handle_async(:title, {:exit, reason}, socket),
     do: {:noreply, assign(socket, :title_error, reason)}
 
+  def handle_async(:reviews, {:ok, %{} = reviews}, socket),
+    do: {:noreply, assign(socket, :reviews, reviews)}
+
+  def handle_async(:reviews, _other, socket), do: {:noreply, assign(socket, :reviews, :error)}
+
   def handle_async(:rating_load, {:ok, rating}, socket),
     do: {:noreply, assign(socket, :rating, rating_state(rating))}
 
@@ -640,6 +665,7 @@ defmodule RokiWeb.TitleLive do
 
             <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
             <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
+            <.reviews_sheet title={@title} reviews={@reviews} />
 
             <.cinema_hero
               mal={@rate_mal}
@@ -930,13 +956,17 @@ defmodule RokiWeb.TitleLive do
         </h1>
 
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/85">
-          <span
+          <button
             :if={is_number(@title.vote) and @title.vote > 0}
-            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 font-semibold backdrop-blur"
-            title="TMDB's score"
+            type="button"
+            phx-click={JS.show(to: "#reviews-sheet", display: "flex") |> JS.push("reviews_open")}
+            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 font-semibold backdrop-blur transition hover:bg-black/70"
+            title="TMDB's score — every service's, and what the critics said"
+            aria-label="Reviews and scores"
           >
             <span class="text-amber-300" aria-hidden="true">★</span>{avg_text(@title)}
-          </span>
+            <.icon name="hero-chevron-down-micro" class="h-3.5 w-3.5 text-white/60" />
+          </button>
           <span :if={@title.year}>{@title.year}</span>
           <span :if={@title.minutes}>{@title.minutes} min</span>
           <span :if={seasons_text(@title)}>{seasons_text(@title)}</span>
@@ -2034,6 +2064,110 @@ defmodule RokiWeb.TitleLive do
         {label}
       </option>
     </optgroup>
+    """
+  end
+
+  attr :title, :map, required: true
+  attr :reviews, :any, default: nil
+
+  # What the rating sites made of it, and how the critics took it. Opened from the score in the
+  # hero; what it shows is fetched the first time (`Roki.Reviews`).
+  defp reviews_sheet(assigns) do
+    ~H"""
+    <div
+      id="reviews-sheet"
+      class="fixed inset-0 z-[70] !m-0 hidden items-end bg-black/50 sm:items-center sm:justify-center"
+      phx-window-keydown={JS.hide(to: "#reviews-sheet")}
+      phx-key="escape"
+    >
+      <div
+        class="flex max-h-[88svh] w-full flex-col overflow-hidden rounded-t-2xl bg-base-100 shadow-2xl sm:max-w-2xl sm:rounded-2xl"
+        phx-click-away={JS.hide(to: "#reviews-sheet")}
+      >
+        <div class="flex items-start gap-3 border-b border-base-300 p-5">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-lg font-bold leading-tight">Reviews</h2>
+            <p class="truncate text-sm text-base-content/60">{@title.title}</p>
+          </div>
+          <button
+            type="button"
+            phx-click={JS.hide(to: "#reviews-sheet")}
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="space-y-6 overflow-y-auto p-5">
+          <div :if={@reviews in [nil, :loading]} class="space-y-4" aria-busy="true">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div :for={_ <- 1..8} class="skeleton h-20 rounded-box"></div>
+            </div>
+            <div class="skeleton h-4 w-full rounded"></div>
+            <div class="skeleton h-4 w-5/6 rounded"></div>
+          </div>
+
+          <p :if={@reviews == :error} class="text-sm text-base-content/70">
+            Couldn't reach the review sites just now. Close this and try again in a minute.
+          </p>
+
+          <%= if is_map(@reviews) do %>
+            <section :if={@reviews.scores != []} class="space-y-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+                Scores
+              </h3>
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div
+                  :for={sc <- @reviews.scores}
+                  class="rounded-box border border-base-300 bg-base-200/50 p-3"
+                >
+                  <div class="text-2xl font-bold tabular-nums leading-tight">{sc.text}</div>
+                  <div class="text-sm font-semibold leading-tight">{sc.label}</div>
+                  <div class="text-xs text-base-content/60">
+                    {sc.who}<span :if={sc.votes}> · {thousands(sc.votes)} ratings</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section :if={@reviews.critics} class="space-y-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+                What critics said
+              </h3>
+              <p
+                :for={para <- @reviews.critics.paragraphs}
+                class="text-sm leading-relaxed text-base-content/85"
+              >
+                {para}
+              </p>
+              <a
+                href={@reviews.critics.url}
+                target="_blank"
+                rel="noopener"
+                class="link text-sm font-medium"
+              >
+                Read more on Wikipedia
+              </a>
+            </section>
+
+            <p
+              :if={@reviews.scores == [] and is_nil(@reviews.critics)}
+              class="text-sm text-base-content/70"
+            >
+              Nothing to show for this one yet: the rating sites have no scores for it and there is no
+              write-up of how it was received.
+            </p>
+
+            <p class="text-xs text-base-content/45">
+              <span :if={@reviews.scores != []}>Scores from MDBList</span>
+              <span :if={@reviews.scores != [] and @reviews.critics}> · </span>
+              <span :if={@reviews.critics}>Summary from Wikipedia (CC BY-SA)</span>
+            </p>
+          <% end %>
+        </div>
+      </div>
+    </div>
     """
   end
 

@@ -50,6 +50,38 @@ defmodule RokiWeb.TitlePageTest do
     assert Process.alive?(view.pid)
   end
 
+  test "the score in the hero opens the Reviews sheet", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/title/tv/209867")
+    html = render_async(view, 8000)
+    assert html =~ ~s(id="reviews-sheet")
+    assert has_element?(view, ~s|button[aria-label="Reviews and scores"]|)
+
+    # What it shows is asked for when it is opened: held here, so nothing is fetched.
+    Roki.TTLCache.put(
+      {:mdblist, "tv", 209_867},
+      60,
+      {:ok,
+       [%{source: "imdb", order: 5, label: "IMDb", who: "Members", text: "8.9/10", votes: 86_755}]}
+    )
+
+    Roki.TTLCache.put(
+      {:critics, "tv", 209_867},
+      60,
+      {:ok,
+       %{
+         paragraphs: ["Well received."],
+         title: "Frieren",
+         url: "https://en.wikipedia.org/wiki/Frieren"
+       }}
+    )
+
+    render_hook(view, "reviews_open", %{})
+    html = render_async(view, 8000)
+    assert html =~ "8.9/10"
+    assert html =~ "Well received."
+    assert html =~ "Summary from Wikipedia (CC BY-SA)"
+  end
+
   describe "rating without a TMDB account" do
     test "the rating is kept on Roki, and survives a refresh from TMDB", %{conn: conn, user: user} do
       {:ok, view, _} = live(conn, "/title/tv/209867")
