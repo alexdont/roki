@@ -58,18 +58,19 @@ defmodule RokiWeb.UserHomeContinueTest do
       )
   end
 
-  test "it opens with one of each, in one row of two", %{conn: conn, user: user} do
+  test "it opens with the chapter you stopped on, in the picture at the top", %{
+    conn: conn,
+    user: user
+  } do
     reading!(user, "berserk", "Berserk")
 
     {:ok, view, _} = live(conn, "/continuer/home")
     html = render(view)
 
-    assert html =~ "Continue"
+    assert html =~ "Carry on"
     assert html =~ "Berserk"
-    assert html =~ "Chapter 23"
+    assert html =~ "ch. 23"
     assert html =~ "/manga/mangadex/berserk/23"
-    # Two across at every width, phones included.
-    assert html =~ ~s(class="grid grid-cols-2 gap-3")
   end
 
   test "the watching half holds its place while laev is still answering", %{
@@ -81,7 +82,7 @@ defmodule RokiWeb.UserHomeContinueTest do
     # The first render, before the shelf's data has arrived.
     {:ok, _view, html} = live(conn, "/continuer/home")
 
-    assert html =~ "Continue"
+    assert html =~ "Carry on"
     assert html =~ ~s(aria-busy="true")
     assert html =~ "skeleton"
   end

@@ -54,6 +54,7 @@ defmodule RokiWeb.ShelfLoadingTest do
     # The real strip and its sync button are there from the first paint — and no
     # "Your shelf" title, which says nothing the page does not already.
     refute html =~ "Your shelf"
+    refute html =~ "Welcome back"
     assert html =~ "all stats"
     assert html =~ ~s(aria-label="Sync now")
     # …with a placeholder grid standing where the Watchlist will be…

@@ -59,6 +59,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:open, MapSet.new())
           |> assign(:stats, kept_stats(state, uuid))
           |> assign(:pulse, nil)
+          |> assign(:hero, nil)
           |> assign(:completed, nil)
           |> assign(:ratings, if(connected?(socket), do: Roki.Profile.ratings(uuid), else: %{}))
           |> assign(:completed_shown, @completed_page)
@@ -80,9 +81,36 @@ defmodule RokiWeb.UserHomeLive do
             true -> socket
           end
 
-        {:ok, socket}
+        {:ok, maybe_hero(socket)}
     end
   end
+
+  defp maybe_hero(
+         %{assigns: %{data: %{watchlist: %{behind: [%{type: type, id: id} | _]}}}} = socket
+       )
+       when type in ["movie", "tv"] do
+    key = {type, id}
+    uuid = socket.assigns.uuid
+
+    case socket.assigns.hero do
+      {^key, _} ->
+        socket
+
+      _ ->
+        if connected?(socket) do
+          start_async(socket, :hero, fn ->
+            case Roki.Watch.title(type, id, uuid) do
+              {:ok, t} -> {key, t[:backdrop]}
+              _ -> nil
+            end
+          end)
+        else
+          socket
+        end
+    end
+  end
+
+  defp maybe_hero(socket), do: socket
 
   # The strip's last figures, when this account is connected and has any kept: on the first
   # frame, so there is no placeholder to be swapped for them. They are measured again behind the
@@ -237,7 +265,13 @@ defmodule RokiWeb.UserHomeLive do
   # The shelf comes with its progress bars worked out (`Laev.shelf/1`), so nothing is added to it
   # afterwards and nothing changes under the reader's eye when it lands.
   def handle_async(:overview, {:ok, {:ok, data}}, socket),
-    do: {:noreply, assign(socket, state: :ready, data: data, busy: nil)}
+    do: {:noreply, maybe_hero(assign(socket, state: :ready, data: data, busy: nil))}
+
+  # The picture across the top is the backdrop of what you are watching.
+  def handle_async(:hero, {:ok, {key, url}}, socket) when is_binary(url),
+    do: {:noreply, assign(socket, :hero, {key, url})}
+
+  def handle_async(:hero, _other, socket), do: {:noreply, socket}
 
   def handle_async(:completed, {:ok, items}, socket) when is_list(items),
     do:
@@ -317,24 +351,32 @@ defmodule RokiWeb.UserHomeLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/#{@username}/home"}
     >
-      <.connect_card
-        :if={@state == :not_connected and not @granted}
-        form={@form}
-        busy={@busy}
-        error={@error}
-      />
-
-      <p
-        :if={@state == :not_connected and @granted}
-        class="flex items-center justify-center gap-3 py-24 text-base-content/60"
+      <%!-- Without a shelf there is no picture to float the header over: the cards start below it. --%>
+      <div
+        :if={@state == :not_connected}
+        class="mx-auto max-w-6xl px-4 pt-24 sm:px-6 lg:px-8"
       >
-        <span :if={@busy} class="loading loading-spinner"></span>
-        {@busy || @error || "Setting up your account…"}
-      </p>
+        <.connect_card
+          :if={not @granted}
+          form={@form}
+          busy={@busy}
+          error={@error}
+        />
+
+        <p
+          :if={@granted}
+          class="flex items-center justify-center gap-3 py-24 text-base-content/60"
+        >
+          <span :if={@busy} class="loading loading-spinner"></span>
+          {@busy || @error || "Setting up your account…"}
+        </p>
+      </div>
 
       <.shelf
         :if={@state in [:loading, :ready]}
@@ -344,6 +386,7 @@ defmodule RokiWeb.UserHomeLive do
         open={@open}
         stats={@stats}
         pulse={@pulse}
+        hero={@hero}
         completed={@completed}
         completed_shown={@completed_shown}
         ratings={@ratings}
@@ -541,6 +584,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :open, :any, default: nil
   attr :stats, :any, default: nil
   attr :pulse, :any, default: nil
+  attr :hero, :any, default: nil
   attr :completed, :any, default: nil
   attr :completed_shown, :integer, default: 100
   attr :ratings, :map, default: %{}
@@ -554,237 +598,233 @@ defmodule RokiWeb.UserHomeLive do
       assign(assigns, :watching, assigns.data && List.first(assigns.data.watchlist.behind))
 
     ~H"""
-    <div class="space-y-10">
-      <%!-- Stats and the release note: small, quiet, and the same size whether loaded or
-            not — placeholders stand in at their width, and what is known at once comes
-            first, so numbers arriving later only ever fill space already reserved. --%>
-      <div class="space-y-1.5">
-        <div class="flex items-start gap-1">
-          <%!-- Every figure sits in a cell of its own, so a figure arriving at a different width
-                than its placeholder cannot push anything it does not have to.
-
-                On a phone the cells are a two-column grid: each one can only change the inside
-                of itself.
-
-                From `sm` up they are one wrapping row, and it is kept compact rather than
-                reserved: the reading pair is pinned to the right end of the row by an automatic
-                margin, so it stays where it is whatever the cells before it turn out to be, and
-                the placeholders are sized like the figures they stand for. (Reserving room for the
-                widest a figure could ever be made the row wrap on an ordinary laptop, and sent
-                "all stats" to a second line.) "All stats" is not in the row at all: a link inside
-                a wrapping row is the first thing to drop when the figures are wide. --%>
-          <.link
-            navigate={~p"/#{@username}/stats"}
-            class="flex min-h-5 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:gap-y-0.5"
-          >
-            <span :if={@data} class="hidden whitespace-nowrap lg:inline">
-              <b class="text-base-content">{@data.tally.behind}</b> in progress
-            </span>
-            <span :if={@data} class="hidden whitespace-nowrap lg:inline">
-              <b class="text-base-content">{@data.tally.series_finished + @data.tally.anime_finished}</b>
-              series &amp; anime finished
-            </span>
-            <%!-- The placeholders are about as wide as the figures usually are, so the row comes out the
-                 same shape with them in it as with the figures. --%>
-            <span :if={!@data} class="hidden lg:block"><.sk class="block w-[5.7rem]" /></span>
-            <span :if={!@data} class="hidden lg:block"><.sk class="block w-[10.9rem]" /></span>
-
-            <%= cond do %>
-              <% match?(%{totals: _}, @stats) -> %>
-                <span class="whitespace-nowrap">
-                  <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b> watched
-                </span>
-                <span class="whitespace-nowrap">
-                  <b class="text-base-content">{thousands(@stats.totals.films)}</b>
-                  <span class="lg:hidden">films</span><span class="hidden lg:inline">films watched</span>
-                </span>
-                <span class="hidden whitespace-nowrap lg:inline">
-                  <b class="text-base-content">{thousands(@stats.totals.episodes)}</b> episodes
-                </span>
-              <% match?({:error, _}, @stats) -> %>
-                <span class="col-span-2 text-base-content/40 sm:col-span-1">
-                  time watched unavailable
-                </span>
-              <% true -> %>
-                <span class="block"><.sk class="block w-[8.1rem]" /></span>
-                <span class="block"><.sk class="block w-[4.9rem] lg:w-[7.9rem]" /></span>
-                <span class="hidden lg:block"><.sk class="block w-[6.1rem]" /></span>
-            <% end %>
-
-            <%!-- Reading: known from the first paint, and on desktop pinned to the right end of
-                 the row so the figures before it cannot move it. --%>
-            <span
-              :if={@manga_totals.series > 0}
-              class="whitespace-nowrap sm:ml-auto"
-            >
-              <b class="text-base-content">{Roki.Laev.duration(@manga_totals.seconds)}</b> read
-            </span>
-            <span
-              :if={@manga_totals.chapters > 0}
-              class={[
-                "hidden whitespace-nowrap lg:inline",
-                @manga_totals.series == 0 && "sm:ml-auto"
-              ]}
-            >
-              <b class="text-base-content">{thousands(@manga_totals.chapters)}</b> chapters
-            </span>
-          </.link>
-          <.link
-            navigate={~p"/#{@username}/stats"}
-            class="hidden h-5 shrink-0 items-center whitespace-nowrap px-1 text-xs text-base-content/50 transition hover:text-base-content sm:flex"
-          >
-            all stats →
-          </.link>
-          <%!-- Sync is a small icon at the end of the line; it spins while it works. --%>
-          <button
-            type="button"
-            phx-click="sync"
-            class="btn btn-ghost btn-xs btn-square shrink-0"
-            title={@busy || "Sync now"}
-            aria-label="Sync now"
-            disabled={@busy != nil or @data == nil}
-          >
-            <.icon
-              name="hero-arrow-path"
-              class={if @busy, do: "h-4 w-4 animate-spin", else: "h-4 w-4"}
-            />
-          </button>
+    <div>
+      <%!-- The top of the page: a picture of what you are watching under the floating header, the way
+            to carry on with it, and the figures. The picture is clipped by its own box. --%>
+      <section class="relative z-20 flex min-h-[clamp(22rem,52svh,32rem)] flex-col justify-end text-white [--color-base-content:#fff]">
+        <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
+          <img
+            :if={match?({_, url} when is_binary(url), @hero)}
+            src={Roki.Images.local(elem(@hero, 1))}
+            alt=""
+            class="h-full w-full object-cover opacity-80"
+          />
+          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-black/10"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/50">
+          </div>
         </div>
-        <.pulse_line pulse={@pulse} username={@username} />
-        <p :if={@error} class="alert alert-error mt-2 text-sm">{@error}</p>
-      </div>
 
-      <%!-- Where you are, in one row: the chapter you stopped on, and the episode you are up
-            to. Two things, not two shelves — the lists below are for browsing, this is for
-            carrying on. --%>
-      <section :if={@reading || @watching || @data == nil} class="space-y-3">
-        <h2 class="text-xl font-semibold">Continue</h2>
-        <%!-- Two across at every width: on a phone they are what the page opens with, and one
-              above the other would push the lists past the fold. --%>
-        <div class="grid grid-cols-2 gap-3">
-          <a
-            :if={@reading}
-            href={~p"/manga/#{@reading.source}/#{@reading.slug}/#{@reading.last_chapter}"}
-            class="flex gap-3 rounded-box border border-base-300 p-3 transition hover:bg-base-200"
-          >
-            <img
-              :if={manga_cover(@reading)}
-              src={manga_cover(@reading)}
-              alt={@reading.title}
-              class="hidden h-24 w-16 shrink-0 rounded object-cover min-[380px]:block"
-            />
-            <span class="min-w-0 self-center">
-              <span class="block text-xs uppercase tracking-wide text-base-content/50">Reading</span>
-              <span class="block truncate font-semibold">{@reading.title}</span>
-              <span class="block text-sm text-base-content/60">
-                Chapter {@reading.last_chapter}
-              </span>
-            </span>
-          </a>
-          <.link
-            :if={@watching}
-            navigate={href(@watching)}
-            class="flex gap-3 rounded-box border border-base-300 p-3 transition hover:bg-base-200"
-          >
-            <img
-              :if={@watching.poster}
-              src={Roki.Images.local(@watching.poster)}
-              alt={@watching.title}
-              class="hidden h-24 w-16 shrink-0 rounded object-cover min-[380px]:block"
-            />
-            <span class="min-w-0 self-center">
-              <span class="block text-xs uppercase tracking-wide text-base-content/50">Watching</span>
-              <span class="block truncate font-semibold">{@watching.title}</span>
-              <span :if={@watching[:note]} class="block text-sm text-base-content/60">
-                {@watching.note}
-              </span>
-            </span>
-          </.link>
-          <%!-- Watching comes from laev, which answers a moment after the page does. Without
-                this the right half is empty and then a card appears out of nowhere; with it the
-                place is held in the card's own shape. --%>
-          <div
-            :if={@data == nil}
-            class="flex gap-3 rounded-box border border-base-300 p-3"
-            aria-busy="true"
-          >
-            <div class="skeleton hidden h-24 w-16 shrink-0 rounded min-[380px]:block"></div>
-            <div class="min-w-0 flex-1 space-y-2 self-center">
-              <div class="skeleton h-3 w-16 rounded"></div>
-              <div class="skeleton h-4 w-full rounded"></div>
-              <div class="skeleton h-3 w-2/3 rounded"></div>
+        <div class="flex flex-col gap-5 px-4 pb-6 pt-28 sm:px-6 lg:px-12 xl:px-16">
+          <div class="space-y-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+              {cond do
+                @watching || @reading -> "Carry on"
+                @data -> "Welcome back"
+                true -> nil
+              end}
+            </p>
+            <h1
+              :if={@watching}
+              class="max-w-4xl text-4xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-5xl xl:text-6xl"
+            >
+              {@watching.title}
+            </h1>
+            <div :if={@data == nil} class="skeleton h-12 w-72 max-w-full rounded"></div>
+            <p :if={@watching && @watching[:note]} class="text-lg text-white/80">{@watching.note}</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <.link
+              :if={@watching}
+              navigate={href(@watching)}
+              class="btn btn-primary btn-lg h-14 min-h-0 gap-2 rounded-full px-8 text-xl shadow-md"
+            >
+              <.icon name="hero-play-solid" class="h-6 w-6" /> Continue
+            </.link>
+            <a
+              :if={@reading}
+              href={~p"/manga/#{@reading.source}/#{@reading.slug}/#{@reading.last_chapter}"}
+              class="flex h-12 items-center gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-sm font-semibold backdrop-blur-md transition hover:border-white/60 hover:bg-black/45"
+            >
+              <.icon name="hero-book-open" class="h-5 w-5" />
+              <span class="max-w-[14rem] truncate">{@reading.title}</span>
+              <span class="text-white/60">ch. {@reading.last_chapter}</span>
+            </a>
+            <div :if={@data == nil} class="skeleton h-14 w-44 rounded-full"></div>
+          </div>
+
+          <%!-- Stats and the release note: small, quiet, and the same size whether loaded or
+                not — placeholders stand in at their width, and what is known at once comes
+                first, so numbers arriving later only ever fill space already reserved. --%>
+          <div class="space-y-1.5">
+            <div class="flex items-start gap-1">
+              <%!-- Every figure sits in a cell of its own, so a figure arriving at a different width
+                    than its placeholder cannot push anything it does not have to.
+
+                    On a phone the cells are a two-column grid: each one can only change the inside
+                    of itself.
+
+                    From `sm` up they are one wrapping row, and it is kept compact rather than
+                    reserved: the reading pair is pinned to the right end of the row by an automatic
+                    margin, so it stays where it is whatever the cells before it turn out to be, and
+                    the placeholders are sized like the figures they stand for. (Reserving room for the
+                    widest a figure could ever be made the row wrap on an ordinary laptop, and sent
+                    "all stats" to a second line.) "All stats" is not in the row at all: a link inside
+                    a wrapping row is the first thing to drop when the figures are wide. --%>
+              <.link
+                navigate={~p"/#{@username}/stats"}
+                class="flex min-h-5 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:gap-y-0.5"
+              >
+                <span :if={@data} class="hidden whitespace-nowrap lg:inline">
+                  <b class="text-base-content">{@data.tally.behind}</b> in progress
+                </span>
+                <span :if={@data} class="hidden whitespace-nowrap lg:inline">
+                  <b class="text-base-content">{@data.tally.series_finished +
+                    @data.tally.anime_finished}</b>
+                  series &amp; anime finished
+                </span>
+                <%!-- The placeholders are about as wide as the figures usually are, so the row comes out the
+                     same shape with them in it as with the figures. --%>
+                <span :if={!@data} class="hidden lg:block"><.sk class="block w-[5.7rem]" /></span>
+                <span :if={!@data} class="hidden lg:block"><.sk class="block w-[10.9rem]" /></span>
+
+                <%= cond do %>
+                  <% match?(%{totals: _}, @stats) -> %>
+                    <span class="whitespace-nowrap">
+                      <b class="text-base-content">{Roki.Laev.duration(@stats.totals.seconds)}</b>
+                      watched
+                    </span>
+                    <span class="whitespace-nowrap">
+                      <b class="text-base-content">{thousands(@stats.totals.films)}</b>
+                      <span class="lg:hidden">films</span><span class="hidden lg:inline">films watched</span>
+                    </span>
+                    <span class="hidden whitespace-nowrap lg:inline">
+                      <b class="text-base-content">{thousands(@stats.totals.episodes)}</b> episodes
+                    </span>
+                  <% match?({:error, _}, @stats) -> %>
+                    <span class="col-span-2 text-base-content/40 sm:col-span-1">
+                      time watched unavailable
+                    </span>
+                  <% true -> %>
+                    <span class="block"><.sk class="block w-[8.1rem]" /></span>
+                    <span class="block"><.sk class="block w-[4.9rem] lg:w-[7.9rem]" /></span>
+                    <span class="hidden lg:block"><.sk class="block w-[6.1rem]" /></span>
+                <% end %>
+
+                <%!-- Reading: known from the first paint, and on desktop pinned to the right end of
+                     the row so the figures before it cannot move it. --%>
+                <span
+                  :if={@manga_totals.series > 0}
+                  class="whitespace-nowrap sm:ml-auto"
+                >
+                  <b class="text-base-content">{Roki.Laev.duration(@manga_totals.seconds)}</b> read
+                </span>
+                <span
+                  :if={@manga_totals.chapters > 0}
+                  class={[
+                    "hidden whitespace-nowrap lg:inline",
+                    @manga_totals.series == 0 && "sm:ml-auto"
+                  ]}
+                >
+                  <b class="text-base-content">{thousands(@manga_totals.chapters)}</b> chapters
+                </span>
+              </.link>
+              <.link
+                navigate={~p"/#{@username}/stats"}
+                class="hidden h-5 shrink-0 items-center whitespace-nowrap px-1 text-xs text-base-content/50 transition hover:text-base-content sm:flex"
+              >
+                all stats →
+              </.link>
+              <%!-- Sync is a small icon at the end of the line; it spins while it works. --%>
+              <button
+                type="button"
+                phx-click="sync"
+                class="btn btn-ghost btn-xs btn-square shrink-0"
+                title={@busy || "Sync now"}
+                aria-label="Sync now"
+                disabled={@busy != nil or @data == nil}
+              >
+                <.icon
+                  name="hero-arrow-path"
+                  class={if @busy, do: "h-4 w-4 animate-spin", else: "h-4 w-4"}
+                />
+              </button>
             </div>
+            <.pulse_line pulse={@pulse} username={@username} />
+            <p :if={@error} class="alert alert-error mt-2 text-sm">{@error}</p>
           </div>
         </div>
       </section>
 
-      <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
+      <div class="space-y-10 px-4 pb-12 pt-8 sm:px-6 lg:px-12 xl:px-16">
+        <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
 
-      <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
-      <section :if={!@data} class="space-y-3" aria-busy="true">
-        <div class="skeleton h-7 w-40 rounded"></div>
-        <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          <li :for={_ <- 1..16} class="space-y-1">
-            <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
-            <div class="skeleton h-5 w-3/4 rounded"></div>
-            <div class="skeleton h-4 w-1/2 rounded"></div>
-          </li>
-        </ul>
-      </section>
+        <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
+        <section :if={!@data} class="space-y-3" aria-busy="true">
+          <div class="skeleton h-7 w-40 rounded"></div>
+          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+            <li :for={_ <- 1..16} class="space-y-1">
+              <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
+              <div class="skeleton h-5 w-3/4 rounded"></div>
+              <div class="skeleton h-4 w-1/2 rounded"></div>
+            </li>
+          </ul>
+        </section>
 
-      <.poster_row
-        :if={@data}
-        title="Watchlist"
-        count={length(@data.watchlist.behind)}
-        items={@data.watchlist.behind}
-        empty="Nothing in progress. Start something and it waits here for you to pick it up."
-        cached_titles={@cached_titles}
-      />
-      <.fold
-        :if={@data}
-        id="saved"
-        title="Saved"
-        items={@data.saved}
-        empty="Nothing saved yet. Hover a poster and press the bookmark to keep it for later."
-        unsave
-        open={@open}
-        cached_titles={@cached_titles}
-      />
-      <.fold
-        :if={@data}
-        id="caught_up"
-        title="Caught up"
-        items={@data.watchlist.caught_up}
-        empty="Shows where you have seen every episode so far wait here for the next one."
-        open={@open}
-        cached_titles={@cached_titles}
-      />
-      <.fold
-        :if={@data}
-        id="on_hold"
-        title="On hold"
-        items={@data.watchlist.on_hold}
-        empty="Put a show on hold from its page and it rests here, out of your way."
-        open={@open}
-        cached_titles={@cached_titles}
-      />
-      <.fold
-        :if={@data}
-        id="history"
-        title="History"
-        items={@data.continue}
-        empty="What you start watching shows up here."
-        open={@open}
-        cached_titles={@cached_titles}
-      />
-      <.completed
-        :if={@data && @completed != nil}
-        items={@completed}
-        shown={@completed_shown}
-        open={MapSet.member?(@open, "completed")}
-        ratings={@ratings}
-        cached_titles={@cached_titles}
-      />
+        <.poster_row
+          :if={@data}
+          title="Watchlist"
+          count={length(@data.watchlist.behind)}
+          items={@data.watchlist.behind}
+          empty="Nothing in progress. Start something and it waits here for you to pick it up."
+          cached_titles={@cached_titles}
+        />
+        <.fold
+          :if={@data}
+          id="saved"
+          title="Saved"
+          items={@data.saved}
+          empty="Nothing saved yet. Hover a poster and press the bookmark to keep it for later."
+          unsave
+          open={@open}
+          cached_titles={@cached_titles}
+        />
+        <.fold
+          :if={@data}
+          id="caught_up"
+          title="Caught up"
+          items={@data.watchlist.caught_up}
+          empty="Shows where you have seen every episode so far wait here for the next one."
+          open={@open}
+          cached_titles={@cached_titles}
+        />
+        <.fold
+          :if={@data}
+          id="on_hold"
+          title="On hold"
+          items={@data.watchlist.on_hold}
+          empty="Put a show on hold from its page and it rests here, out of your way."
+          open={@open}
+          cached_titles={@cached_titles}
+        />
+        <.fold
+          :if={@data}
+          id="history"
+          title="History"
+          items={@data.continue}
+          empty="What you start watching shows up here."
+          open={@open}
+          cached_titles={@cached_titles}
+        />
+        <.completed
+          :if={@data && @completed != nil}
+          items={@completed}
+          shown={@completed_shown}
+          open={MapSet.member?(@open, "completed")}
+          ratings={@ratings}
+          cached_titles={@cached_titles}
+        />
+      </div>
     </div>
     """
   end
@@ -839,7 +879,7 @@ defmodule RokiWeb.UserHomeLive do
         phx-value-id={@id}
         aria-expanded={to_string(@shown)}
         class={[
-          "flex cursor-pointer items-center gap-2 text-xl font-semibold",
+          "flex cursor-pointer items-center gap-2 text-2xl font-semibold tracking-tight",
           @items == [] && "text-base-content/60"
         ]}
       >
@@ -900,7 +940,7 @@ defmodule RokiWeb.UserHomeLive do
         phx-value-id="completed"
         aria-expanded={to_string(@open)}
         class={[
-          "flex cursor-pointer items-center gap-2 text-xl font-semibold",
+          "flex cursor-pointer items-center gap-2 text-2xl font-semibold tracking-tight",
           @items == [] && "text-base-content/60"
         ]}
       >
@@ -960,14 +1000,6 @@ defmodule RokiWeb.UserHomeLive do
 
   # The media library's copy when there is one, else the source's own address through this
   # site, which carries the headers the source asks for.
-  defp manga_cover(%{cover_file_uuid: uuid}) when is_binary(uuid) and uuid != "",
-    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "medium")
-
-  defp manga_cover(%{cover_url: url}) when is_binary(url) and url != "",
-    do: ~p"/manga/proxy/image?#{%{url: url}}"
-
-  defp manga_cover(_), do: nil
-
   attr :title, :string, required: true
   attr :count, :integer, default: nil
   attr :cached_titles, :any, default: nil
@@ -977,7 +1009,7 @@ defmodule RokiWeb.UserHomeLive do
   defp poster_row(assigns) do
     ~H"""
     <section class="space-y-3">
-      <h2 class={["text-xl font-semibold", @items == [] && "text-base-content/60"]}>
+      <h2 class={["text-2xl font-semibold tracking-tight", @items == [] && "text-base-content/60"]}>
         {@title}
         <span class="text-sm font-normal text-base-content/60">{@count}</span>
       </h2>
