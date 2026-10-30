@@ -10,6 +10,9 @@
 const YT = "https://www.youtube-nocookie.com"
 const AUTOPLAY_MS = 2000
 
+// How long a paused trailer is held on its frozen frame before the backdrop replaces it.
+const PAUSE_FADE_MS = 4000
+
 export const HeroTrailer = {
   mounted() {
     this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -64,6 +67,7 @@ export const HeroTrailer = {
 
   destroyed() {
     clearTimeout(this.timer)
+    clearTimeout(this.fadeTimer)
     window.removeEventListener("message", this.onMessage)
     document.removeEventListener("visibilitychange", this.onHidden)
     document.removeEventListener("fullscreenchange", this.onFullscreen)
@@ -106,8 +110,13 @@ export const HeroTrailer = {
   },
 
   playerState(state) {
+    clearTimeout(this.fadeTimer)
     if (state === 1) this.set({heroPlaying: "true", heroLive: "true", heroEnded: "false"})
-    else if (state === 2) this.set({heroPlaying: "false"})
+    else if (state === 2) {
+      this.set({heroPlaying: "false"})
+      // Held for a while, the frozen frame gives way to the wide picture; play brings the video back.
+      this.fadeTimer = setTimeout(() => this.set({heroLive: "false"}), PAUSE_FADE_MS)
+    }
     // Over: the picture comes back, and play starts it again.
     else if (state === 0) this.set({heroPlaying: "false", heroEnded: "true"})
   },
