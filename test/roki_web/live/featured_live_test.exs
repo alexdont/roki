@@ -112,41 +112,6 @@ defmodule RokiWeb.FeaturedLiveTest do
       end
     end
 
-    test "each chip carries a dot in its mood's colour, in place of a picture", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/home")
-
-      for mood <- Roki.Mood.all() do
-        assert has_element?(
-                 view,
-                 ~s|[data-mood-chip="#{mood.slug}"] span.rounded-full.bg-\\[var\\(--mood\\)\\]|
-               )
-      end
-    end
-
-    test "each chip holds the room of both its states, so none changes size when it is lit", %{
-      conn: conn
-    } do
-      {:ok, view, _} = live(conn, "/home")
-
-      for mood <- Roki.Mood.all() do
-        # (A wide screen has a bar for each mood too; the chip is the one with the room to keep.)
-        chip = view |> element(~s|a.group[data-mood-chip="#{mood.slug}"]|) |> render()
-
-        # Two invisible copies of the name, one set as the lit chip is and one as it is not,
-        # and the visible one on top of them: the chip is as wide as the wider, always.
-        assert length(Regex.scan(~r/class="invisible /, chip)) == 2,
-               "#{mood.slug} does not reserve both states"
-
-        assert chip =~
-                 Phoenix.HTML.safe_to_string(
-                   Phoenix.HTML.html_escape("font-family: #{mood.font}")
-                 )
-
-        # …and none of it is read out twice.
-        assert length(Regex.scan(~r/aria-hidden="true"/, chip)) >= 2
-      end
-    end
-
     test "the title is set in the mood's own typeface, with a rule in its colour under it", %{
       conn: conn
     } do
@@ -169,7 +134,8 @@ defmodule RokiWeb.FeaturedLiveTest do
       assert has_element?(view, ~s|header button[aria-label="Search"].lg\\:hidden|)
     end
 
-    test "stays an ordinary frosted bar on the pages without a picture behind it, search field included", %{conn: conn} do
+    test "stays an ordinary frosted bar on the pages without a picture behind it, search field included",
+         %{conn: conn} do
       {:ok, view, html} = live(conn, "/lists")
       refute html =~ "site-header--overlay"
       assert has_element?(view, ~s|header form[role="search"] input#search-input-wide|)

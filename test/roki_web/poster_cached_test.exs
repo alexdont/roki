@@ -5,20 +5,13 @@ defmodule RokiWeb.PosterCachedTest do
 
   @item %{type: "movie", id: 7, title: "A", poster: nil, year: "2020"}
 
-  test "a poster of a title with cached sources says so" do
-    html =
-      render_component(&RokiWeb.PosterComponents.poster/1,
-        item: @item,
-        cached_titles: MapSet.new([{"movie", 7}])
-      )
+  test "a poster never marks cached sources: the play button does" do
+    for set <- [MapSet.new([{"movie", 7}]), MapSet.new([{"movie", 8}]), nil] do
+      html =
+        render_component(&RokiWeb.PosterComponents.poster/1, item: @item, cached_titles: set)
 
-    assert html =~ "cached"
-  end
-
-  test "others, and pages that know nothing, show no tag" do
-    for set <- [MapSet.new([{"movie", 8}]), nil] do
-      refute render_component(&RokiWeb.PosterComponents.poster/1, item: @item, cached_titles: set) =~
-               "cached"
+      refute html =~ "cached"
+      refute html =~ "⚡"
     end
   end
 
@@ -77,17 +70,6 @@ defmodule RokiWeb.PosterCachedTest do
 
     assert html =~ "★ 7.5"
     refute html =~ "2020"
-  end
-
-  test "the cached mark is a small dot with a tooltip, not a label" do
-    html =
-      render_component(&RokiWeb.PosterComponents.poster/1,
-        item: @item,
-        cached_titles: MapSet.new([{"movie", 7}])
-      )
-
-    refute html =~ "⚡ cached"
-    assert html =~ ~s(title="Sources cached)
   end
 
   test "the number says seasons but the bar follows episodes once they are known" do

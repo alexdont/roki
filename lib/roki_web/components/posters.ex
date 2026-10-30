@@ -15,7 +15,8 @@ defmodule RokiWeb.PosterComponents do
 
   attr :cached_titles, :any,
     default: nil,
-    doc: "MapSet of {type, id} with cached sources: those posters say so"
+    doc:
+      "accepted for callers that still pass it; a poster no longer marks cached titles (the play button does)"
 
   attr :upcoming, :any,
     default: nil,
@@ -73,7 +74,6 @@ defmodule RokiWeb.PosterComponents do
         data-peek-title={@item.title}
         data-peek-progress={@prog && progress_text(@prog, @item)}
         data-peek-resume={@item[:resume_at] && resume_title(@item)}
-        data-peek-cached={@cached? && "true"}
         data-peek-due={@due && "Not out yet: #{due_text(@due)}"}
       >
         <img
@@ -165,17 +165,6 @@ defmodule RokiWeb.PosterComponents do
           title={"Not out yet: #{due_text(@due)}"}
         >
           <.icon_clock />
-        </span>
-        <%!-- A small dot, not a label: the hover card and the title page say what it means. --%>
-        <span
-          :if={@cached?}
-          class={[
-            "absolute right-1.5 flex h-[1.1rem] w-[1.1rem] items-center justify-center rounded-full bg-success/90 text-[0.6rem] leading-none text-success-content shadow-sm",
-            if(@item[:badge], do: "top-8", else: "top-1.5")
-          ]}
-          title="Sources cached: plays right away"
-        >
-          ⚡
         </span>
         <span
           :if={@watched?}

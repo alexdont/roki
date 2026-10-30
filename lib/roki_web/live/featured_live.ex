@@ -759,7 +759,7 @@ defmodule RokiWeb.FeaturedLive do
           >
           </div>
 
-          <div class="relative flex w-full flex-col justify-end gap-6 px-4 pb-24 pt-28 text-white sm:px-6 lg:px-12 lg:pb-20 xl:px-16">
+          <div class="relative flex w-full flex-col justify-end gap-6 px-4 pb-20 pt-28 text-white sm:px-6 lg:px-12 lg:pb-20 xl:px-16">
             <div class="max-w-xl space-y-3 sm:max-w-3xl lg:max-w-4xl lg:space-y-4">
               <%!-- Numbered the way a programme numbers its films: where a pictogram would stand. --%>
               <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
@@ -794,7 +794,7 @@ defmodule RokiWeb.FeaturedLive do
       <%!-- Wide screens: the moods as short bars in the corner of the picture, the shown one filling
             as its turn runs; hover one for its name and to see it, click to open it. --%>
       <div
-        class="absolute bottom-8 right-12 z-10 hidden items-center gap-1 lg:flex xl:right-16"
+        class="absolute inset-x-4 bottom-7 z-10 flex items-center justify-center gap-1 sm:inset-x-6 lg:inset-x-auto lg:bottom-8 lg:right-12 lg:justify-end xl:right-16"
         role="tablist"
         aria-label="Moods"
       >
@@ -805,7 +805,7 @@ defmodule RokiWeb.FeaturedLive do
           role="tab"
           aria-selected={to_string(i == 0)}
           aria-label={m.label}
-          class="group/bar relative flex h-6 w-9 items-center"
+          class="group/bar relative flex h-8 w-6 items-center sm:w-8 lg:h-6 lg:w-9"
         >
           <span class="relative block h-[3px] w-full overflow-hidden rounded-full bg-white/30 transition-colors group-hover/bar:bg-white/60 group-aria-selected/bar:bg-white/50">
             <span
@@ -817,62 +817,6 @@ defmodule RokiWeb.FeaturedLive do
           <span class="pointer-events-none absolute bottom-full right-0 mb-1 whitespace-nowrap rounded-md bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition group-hover/bar:opacity-100">
             {m.label}
           </span>
-        </.link>
-      </div>
-
-      <%!-- The moods, in a row: the shown one is lit, with a thin line that fills as its turn runs. --%>
-      <div
-        class="absolute inset-x-0 bottom-5 z-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:px-6 lg:hidden"
-        role="tablist"
-        aria-label="Moods"
-      >
-        <.link
-          :for={{m, i} <- Enum.with_index(@all)}
-          navigate={~p"/mood/#{m.slug}"}
-          data-mood-chip={m.slug}
-          role="tab"
-          aria-selected={to_string(i == 0)}
-          class="group relative shrink-0 overflow-hidden rounded-full border border-white/25 bg-black/30 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-md transition hover:border-white/50 aria-selected:border-transparent aria-selected:shadow-md"
-          style={"--mood: hsl(#{m.hue} 75% 45%); --mood-font: #{m.font}"}
-        >
-          <span
-            class="absolute inset-0 bg-[var(--mood)] opacity-0 transition-opacity duration-300 group-aria-selected:opacity-100"
-            aria-hidden="true"
-          ></span>
-          <%!-- The dot and the name are set three times in one cell. The two invisible copies are
-               them as they are when the chip is lit and as they are when it is not, so the chip is
-               as wide as the wider of the two all the time and the ones beside it never move; the
-               visible copy changes style inside that room, the dot and the name centred together
-               so the spare room falls evenly on both sides. (One invisible copy was not enough: a
-               mood whose typeface is slimmer than the normal one got narrower when lit, and moved
-               the rest instead.) A chip that changed size when it lit pushed every chip after it
-               along, on every turn. --%>
-          <span class="relative grid">
-            <span
-              class="invisible col-start-1 row-start-1 flex items-center gap-2 text-base leading-5 tracking-wide"
-              style={"font-family: #{m.font}"}
-              aria-hidden="true"
-            >
-              <span class="h-2 w-2 shrink-0"></span>{m.label}
-            </span>
-            <span
-              class="invisible col-start-1 row-start-1 flex items-center gap-2 leading-5"
-              aria-hidden="true"
-            >
-              <span class="h-2 w-2 shrink-0"></span>{m.label}
-            </span>
-            <span class="col-start-1 row-start-1 flex items-center justify-center gap-2 leading-5 group-aria-selected:[font-family:var(--mood-font)] group-aria-selected:text-base group-aria-selected:tracking-wide">
-              <span
-                class="h-2 w-2 shrink-0 rounded-full bg-[var(--mood)] transition-colors group-aria-selected:bg-white"
-                aria-hidden="true"
-              ></span>{m.label}
-            </span>
-          </span>
-          <span
-            data-mood-bar
-            class="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 bg-white/80"
-            aria-hidden="true"
-          ></span>
         </.link>
       </div>
     </section>

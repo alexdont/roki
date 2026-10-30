@@ -36,14 +36,11 @@ defmodule RokiWeb.MoodPickerTest do
     assert html =~ "min-h-[clamp(30rem,78svh,46rem)]"
   end
 
-  test "on a wide screen the moods are bars in the picture, and the chip row and poster strip give way",
-       %{html: html} do
-    # Twelve bars and twelve chips: the hook lights both by mood.
-    assert length(Regex.scan(~r/data-mood-chip=/, html)) == 2 * length(Roki.Mood.all())
+  test "the moods are the same thin bars on a phone as on a wide screen", %{html: html} do
+    # One bar for each mood, at every width: no row of labelled chips.
+    assert length(Regex.scan(~r/data-mood-chip=/, html)) == length(Roki.Mood.all())
     assert html =~ "group/bar"
-    # On a phone the chips are glass, laid over the bottom of the picture.
-    assert html =~ ~r/class="absolute inset-x-0 bottom-5[^"]*lg:hidden"/
-    assert html =~ "backdrop-blur-md"
+    refute html =~ "backdrop-blur-md px-3.5"
     assert html =~ "lg:min-h-"
   end
 end
