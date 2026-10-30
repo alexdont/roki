@@ -63,6 +63,9 @@ defmodule RokiWeb.TitlePageTest do
 
       assert html =~ ~s(id="trailer-sheet")
       assert html =~ ~s(data-key="abc123xyz")
+      # The CSS that fades the video in is keyed on this attribute: without it the sound plays
+      # over a hero that stays a still picture.
+      assert html =~ ~r/<section[^>]*\sdata-hero(=""|[\s>])/
       assert html =~ "https://www.youtube.com/watch?v=abc123xyz"
       assert html =~ "Trailer"
     end

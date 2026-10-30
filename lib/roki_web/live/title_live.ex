@@ -876,6 +876,7 @@ defmodule RokiWeb.TitleLive do
     <section
       id="hero"
       phx-hook="HeroTrailer"
+      data-hero
       data-key={@trailer}
       class="group/hero relative isolate flex min-h-[clamp(34rem,86svh,54rem)] flex-col justify-end overflow-hidden bg-neutral-900 text-white lg:min-h-[clamp(34rem,80svh,54rem)]"
       aria-label={@title.title}
