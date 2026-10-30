@@ -34,15 +34,10 @@ defmodule RokiWeb.FeaturedLiveTest do
     html = render_async(view, 3000)
 
     for kind <- ~w(movies shows anime), do: assert(html =~ ~s(href="/#{kind}"))
-    assert html =~ "Popular right now"
+    refute html =~ "Popular right now"
     refute html =~ "Load more"
-    # The grid (phones and tablets): twelve of each kind, the three lists interleaved; the same
-    # titles seeded thrice fold to one.
-    grid = ~s|section[aria-label="Popular right now"] [data-peek-title="Film |
-    assert has_element?(view, grid <> ~s|12"]|)
-    refute has_element?(view, grid <> ~s|13"]|)
 
-    # A wide screen's rows carry the whole page, to scroll along.
+    # The rows carry the whole page, to scroll along, on every width.
     assert has_element?(view, ~s|#row-movies [data-peek-title="Film 13"]|)
     assert has_element?(view, ~s|#row-movies [data-peek-title="Film 20"]|)
   end

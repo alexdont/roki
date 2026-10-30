@@ -492,31 +492,16 @@ defmodule RokiWeb.FeaturedLive do
         </section>
       </div>
 
-      <div class="mx-auto max-w-6xl space-y-4 px-4 pb-8 pt-4 sm:px-6 lg:px-8">
-        <div
-          :if={@loading? and @error == nil}
-          class="flex items-center justify-center gap-3 py-24 text-base-content/60 lg:hidden"
-        >
-          <span class="loading loading-spinner"></span> Loading what's popular…
-        </div>
-
+      <div
+        :if={@error != nil}
+        class="mx-auto max-w-6xl space-y-4 px-4 pb-8 pt-4 sm:px-6 lg:px-8"
+      >
         <p :if={@error == :no_tmdb_key} class="alert text-sm">
           Featured needs a TMDB key — set <code>TMDB_API_KEY</code> on the server.
         </p>
-        <p :if={@error not in [nil, :no_tmdb_key]} class="alert alert-error text-sm">
+        <p :if={@error != :no_tmdb_key} class="alert alert-error text-sm">
           Couldn't reach TMDB just now. Try again in a minute.
         </p>
-
-        <div class="space-y-10">
-          <%!-- Everything that is popular right now, films, shows and anime in one grid; each tab in
-              the header has the whole of its own list. --%>
-          <.popular_now
-            shelves={@shelves}
-            seen={@seen}
-            upcoming={@upcoming}
-            cached_titles={@cached_titles}
-          />
-        </div>
       </div>
       <%!-- Last, and only once the shelves above have settled, so it can never push anything down. --%>
       <.lists_row
@@ -902,7 +887,6 @@ defmodule RokiWeb.FeaturedLive do
   attr :signed_in?, :boolean, default: false
 
   # A wide screen: one row each for films, shows and anime, side by side in nothing but scrolling.
-  # (A phone has the three together as one grid, `popular_now/1`.)
   @doc false
   def shelf_rows(assigns) do
     assigns =
@@ -1140,67 +1124,5 @@ defmodule RokiWeb.FeaturedLive do
       </div>
     </li>
     """
-  end
-
-  # The three popular lists as one: film, show, anime, film, show, anime… (popularity is not
-  # comparable across them, so by rank), each poster saying what it is.
-  defp popular_now(assigns) do
-    items =
-      [:movies, :shows, :anime]
-      |> Enum.map(fn kind -> {kind, Enum.take(assigns.shelves[kind].items, 12)} end)
-      |> interleave()
-      |> Enum.uniq_by(fn {_k, i} -> {i.type, i.id} end)
-      |> Enum.take(24)
-      |> Enum.map(fn {kind, i} ->
-        Map.put(i, :kind_label, %{movies: "Film", shows: "Show", anime: "Anime"}[kind])
-      end)
-
-    assigns = assign(assigns, :items, items)
-
-    ~H"""
-    <section :if={@items != []} class="space-y-3 lg:hidden" aria-label="Popular right now">
-      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div>
-          <h2 class="text-xl font-semibold">Popular right now</h2>
-          <p class="text-sm text-base-content/60">Films, shows and anime, all together.</p>
-        </div>
-        <div class="flex gap-1.5">
-          <.link
-            :for={{kind, label} <- [movies: "Movies", shows: "Shows", anime: "Anime"]}
-            navigate={"/#{kind}"}
-            class="btn btn-sm rounded-full"
-          >
-            {label} <.icon name="hero-arrow-right-micro" class="h-4 w-4" />
-          </.link>
-        </div>
-      </div>
-      <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        <li :for={i <- @items} class="space-y-1">
-          <.poster
-            item={i}
-            seen={MapSet.member?(@seen, {i.type, i.id})}
-            cached_titles={@cached_titles}
-            upcoming={@upcoming}
-            compact
-          />
-          <p class="truncate text-[0.65rem] font-semibold uppercase tracking-wider text-base-content/45">
-            {i.kind_label}
-          </p>
-        </li>
-      </ul>
-    </section>
-    """
-  end
-
-  # [{kind, [items]}] → [{kind, item}], one of each in turn.
-  defp interleave(lists) do
-    lists = Enum.reject(lists, fn {_k, l} -> l == [] end)
-
-    if lists == [] do
-      []
-    else
-      heads = for {k, [h | _]} <- lists, do: {k, h}
-      heads ++ interleave(for {k, [_ | t]} <- lists, do: {k, t})
-    end
   end
 end
