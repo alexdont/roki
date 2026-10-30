@@ -1128,6 +1128,7 @@ defmodule RokiWeb.FeaturedLive do
           compact
           title?={false}
           rating_corner={:top_left}
+          mark?={false}
         />
         <.card_panel
           item={@item}
@@ -1188,6 +1189,7 @@ defmodule RokiWeb.FeaturedLive do
           compact
           title?={false}
           rating_corner={:top_left}
+          mark?={false}
         />
       </div>
 

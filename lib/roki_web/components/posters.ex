@@ -36,6 +36,10 @@ defmodule RokiWeb.PosterComponents do
     default: true,
     doc: "false: no title line under the poster (it stays as the hover text)"
 
+  attr :mark?, :boolean,
+    default: true,
+    doc: "false: no eye in the corner of a watched poster (it is greyed out, which says it)"
+
   def poster(assigns) do
     assigns =
       assign(
@@ -62,7 +66,8 @@ defmodule RokiWeb.PosterComponents do
       assign(
         assigns,
         :score_tl?,
-        assigns.compact and assigns.rating_corner == :top_left and not assigns.watched? and
+        assigns.compact and assigns.rating_corner == :top_left and
+          (not assigns.watched? or not assigns.mark?) and
           not is_binary(assigns.item[:partial]) and rating(assigns.item) != nil
       )
 
@@ -167,7 +172,7 @@ defmodule RokiWeb.PosterComponents do
           <.icon_clock />
         </span>
         <span
-          :if={@watched?}
+          :if={@watched? and @mark?}
           class="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-success text-success-content shadow"
           title="Watched"
         >

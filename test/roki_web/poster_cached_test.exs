@@ -15,6 +15,34 @@ defmodule RokiWeb.PosterCachedTest do
     end
   end
 
+  test "a watched poster has the eye in its corner, unless the page leaves it out" do
+    watched = Map.put(@item, :vote, 7.4)
+
+    with_mark =
+      render_component(&RokiWeb.PosterComponents.poster/1,
+        item: watched,
+        seen: true,
+        compact: true
+      )
+
+    assert with_mark =~ "hero-eye-solid"
+    assert with_mark =~ "opacity-50"
+
+    # The cards on the home page and the grids: greyed out says it; the score takes the corner.
+    bare =
+      render_component(&RokiWeb.PosterComponents.poster/1,
+        item: watched,
+        seen: true,
+        compact: true,
+        rating_corner: :top_left,
+        mark?: false
+      )
+
+    refute bare =~ "hero-eye-solid"
+    assert bare =~ "opacity-50"
+    assert bare =~ "★"
+  end
+
   test "a title in progress says where you stopped, and how much is left" do
     item = Map.merge(@item, %{resume_at: 3579, runtime: 4779})
     html = render_component(&RokiWeb.PosterComponents.poster/1, item: item)
