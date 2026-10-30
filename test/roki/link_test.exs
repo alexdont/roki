@@ -297,4 +297,86 @@ defmodule Roki.LinkTest do
       assert Roki.LinkFakeWatch.rated(max) == nil
     end
   end
+
+  describe "watching together" do
+    defp bell_count(uuid) do
+      {:ok, bin} = Ecto.UUID.dump(uuid)
+
+      Roki.Repo.query!(
+        "select count(*) from phoenix_kit_activities where action = 'roki.link_marked' and target_uuid = $1",
+        [bin]
+      ).rows
+      |> hd()
+      |> hd()
+    end
+
+    test "episodes carried are added up as time together, once each, for everyone in on them", %{
+      alex: alex,
+      max: max,
+      sam: sam
+    } do
+      {:ok, id} = Link.invite(alex, @show, [max, sam])
+      Link.accept(max, id)
+      Link.accept(sam, id)
+      Link.pause(sam, id, true)
+
+      Link.mirror(alex, @show, eps(1, 1..3))
+      # The same episodes again add nothing.
+      Link.mirror(max, @show, eps(1, 2..4))
+
+      assert %{minutes: 96, episodes: 4, shows: 1, partners: [%{name: "linkmax", minutes: 96}]} =
+               Link.together(alex)
+
+      # Sam was paused: not in on any of it.
+      assert %{minutes: 0, episodes: 0, partners: []} = Link.together(sam)
+      # Max's own 2..4 added only episode 4, but he was in on all four.
+      assert %{minutes: 96, episodes: 4} = Link.together(max)
+    end
+
+    test "just me and an alone mark are not time together", %{alex: alex, max: max} do
+      join!(alex, max)
+      Link.mirror(alex, @show, eps(1, 1..2), solo: true)
+      Link.pause(max, Link.active(alex, @show).id, true)
+      Link.mirror(alex, @show, eps(1, 3..3))
+      assert %{episodes: 0, minutes: 0} = Link.together(alex)
+    end
+
+    test "the bell rings once per show per ten minutes, and not for someone who switched it off",
+         %{alex: alex, max: max, sam: sam} do
+      {:ok, id} = Link.invite(alex, @show, [max, sam])
+      Link.accept(max, id)
+      Link.accept(sam, id)
+      Roki.Notify.set(sam, "link", false)
+
+      Link.mirror(alex, @show, eps(1, 1..1))
+      Link.mirror(alex, @show, eps(1, 2..2))
+      Link.mirror(alex, @show, eps(1, 3..4))
+
+      assert bell_count(max) == 1
+      assert bell_count(sam) == 0
+      assert bell_count(alex) == 0
+    end
+
+    test "'we watched it' marks the next episode for everyone, unless paused", %{
+      alex: alex,
+      max: max
+    } do
+      Roki.LinkFakeWatch.put(alex, eps(1, 1..3))
+      Roki.LinkFakeWatch.put(max, eps(1, 1..3))
+      join!(alex, max)
+
+      assert %{season: 1, episode: 4} = Link.next_up(alex, @show)
+      assert {:ok, %{season: 1, episode: 4}} = Link.watched_together(alex, @show)
+      assert MapSet.member?(Roki.LinkFakeWatch.get(max), {1, 4})
+      assert %{season: 1, episode: 5} = Link.next_up(max, @show)
+
+      # It does not matter whose account the tap is on.
+      assert {:ok, %{episode: 5}} = Link.watched_together(max, @show)
+      assert MapSet.member?(Roki.LinkFakeWatch.get(alex), {1, 5})
+
+      Link.pause(alex, Link.active(alex, @show).id, true)
+      assert {:error, :paused} = Link.watched_together(alex, @show)
+      assert {:error, :not_linked} = Link.watched_together(Ecto.UUID.generate(), @show)
+    end
+  end
 end

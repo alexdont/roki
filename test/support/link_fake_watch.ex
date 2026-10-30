@@ -19,6 +19,26 @@ defmodule Roki.LinkFakeWatch do
     )
   end
 
+  def episode_minutes(_uuid, _title, pairs), do: for({s, e} <- pairs, do: {s, e, 24})
+
+  # Seasons of 10 episodes: the next one after the highest watched.
+  def next_unwatched(uuid, _title) do
+    case get(uuid) |> MapSet.to_list() |> Enum.max(fn -> nil end) do
+      nil -> %{season: 1, episode: 1, name: "Episode 1"}
+      {s, 10} -> %{season: s + 1, episode: 1, name: "Episode 1"}
+      {s, e} -> %{season: s, episode: e + 1, name: "Episode #{e + 1}"}
+    end
+  end
+
+  # Like Roki.Watch.set_watched/6: mark it, then carry it to the link.
+  def set_watched(uuid, title, season, episode, true, opts \\ []) do
+    Agent.update(__MODULE__, fn m ->
+      Map.update(m, uuid, MapSet.new([{season, episode}]), &MapSet.put(&1, {season, episode}))
+    end)
+
+    Roki.Link.mirror(uuid, title.id, [{season, episode}], opts)
+  end
+
   def rated(uuid), do: Agent.get(__MODULE__, &(Map.get(&1, :rated, %{}) |> Map.get(uuid)))
 
   def set_many_watched(uuid, _title, pairs, watched?, opts) do

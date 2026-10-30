@@ -419,12 +419,18 @@ defmodule Roki.Link do
     if opts[:solo] || opts[:mirrored] do
       :ok
     else
-      with %{members: members} <- active(uuid, tmdb_id),
+      with %{members: members} = link <- active(uuid, tmdb_id),
            %{paused: false} <- Enum.find(members, &(&1.uuid == uuid)),
            {:ok, title} <- watch().title("tv", tmdb_id, uuid) do
-        for m <- members,
-            m.status == "active" and m.uuid != uuid and not m.paused,
-            do: carry(m.uuid, title, pairs, tmdb_id)
+        targets =
+          for m <- members, m.status == "active" and m.uuid != uuid and not m.paused, do: m.uuid
+
+        for t <- targets, do: carry(t, title, pairs, tmdb_id)
+
+        if targets != [] do
+          record_together(link, uuid, targets, title, pairs)
+          for t <- targets, do: tell_marked(link, uuid, t, title, pairs)
+        end
 
         open_rounds(uuid, tmdb_id, title, pairs)
       end
@@ -433,6 +439,138 @@ defmodule Roki.Link do
     end
   rescue
     _ -> :ok
+  end
+
+  # ── watching together: the record, the bell, the button ────────────
+
+  # What was watched together, with how long it ran, for the "time together" stat.
+  defp record_together(link, sender, targets, title, pairs) do
+    participants = Enum.map([sender | targets], &dump/1)
+
+    for {s, e, minutes} <- watch().episode_minutes(sender, title, pairs) do
+      rows(
+        """
+        insert into roki_link_events (link_id, tmdb_id, season, episode, minutes, participants, inserted_at)
+        values ($1, $2, $3, $4, $5, $6, now()) on conflict (link_id, season, episode) do nothing
+        """,
+        [to_bin(link.id), link.tmdb_id, s, e, minutes, participants]
+      )
+    end
+
+    :ok
+  end
+
+  @note_every_s 600
+
+  # A bell for the people the marks were carried to: at most one every ten minutes per show, so a
+  # whole evening's episodes are one note, not five. Their own switch in Settings ("link").
+  defp tell_marked(link, sender, target, title, pairs) do
+    key = {:link_note, link.id, target}
+
+    if Roki.Notify.wants?(target, "link") and not Roki.TTLCache.cached?(key) do
+      Roki.TTLCache.put(key, @note_every_s, {:ok, true})
+
+      Roki.Social.notify(
+        "link_marked",
+        sender,
+        target,
+        "#{username(sender)} marked #{describe(pairs)} of #{title.title} for you",
+        "hero-link",
+        "/title/tv/#{link.tmdb_id}/episodes"
+      )
+    end
+
+    :ok
+  end
+
+  defp describe([{s, e}]), do: "S#{s}E#{e}"
+
+  defp describe(pairs) do
+    case pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq() do
+      [s] ->
+        {lo, hi} = pairs |> Enum.map(&elem(&1, 1)) |> Enum.min_max()
+        "#{length(pairs)} episodes (S#{s}E#{lo}–E#{hi})"
+
+      _ ->
+        "#{length(pairs)} episodes"
+    end
+  end
+
+  @doc """
+  The episode that comes after the last one this person has watched, for a "we watched it"
+  button: `%{season, episode, name}`, or nil when there is nothing further.
+  """
+  def next_up(uuid, tmdb_id) do
+    with {:ok, title} <- watch().title("tv", tmdb_id, uuid),
+         do: watch().next_unwatched(uuid, title)
+  end
+
+  @doc """
+  "We watched it": mark the next episode for everyone in the link, whatever the page's "just me"
+  says. `{:ok, %{season, episode}}`, or `{:error, :not_linked | :paused | :nothing_next}`.
+  """
+  def watched_together(uuid, tmdb_id) do
+    with %{members: members} <- active(uuid, tmdb_id) || {:error, :not_linked},
+         %{paused: false} <- Enum.find(members, &(&1.uuid == uuid)) || {:error, :not_linked},
+         {:ok, title} <- watch().title("tv", tmdb_id, uuid),
+         %{season: s, episode: e} <-
+           watch().next_unwatched(uuid, title) || {:error, :nothing_next} do
+      watch().set_watched(uuid, title, s, e, true)
+      {:ok, %{season: s, episode: e}}
+    else
+      %{paused: true} -> {:error, :paused}
+      {:error, _} = error -> error
+      _ -> {:error, :not_linked}
+    end
+  end
+
+  @doc """
+  Time spent watching together, from this person's side:
+  `%{minutes, episodes, shows, partners: [%{name, minutes}], titles: [%{tmdb_id, name, minutes}]}`.
+  Only what was marked for two or more people through a link counts, from the day links existed.
+  """
+  def together(uuid) when is_binary(uuid) do
+    me = dump(uuid)
+
+    [[minutes, episodes, shows]] =
+      rows(
+        """
+        select coalesce(sum(minutes), 0)::int, count(*)::int, count(distinct tmdb_id)::int
+          from roki_link_events where $1 = any(participants)
+        """,
+        [me]
+      )
+
+    partners =
+      for [user, name, mins] <-
+            rows(
+              """
+              select p, u.username, sum(e.minutes)::int
+                from roki_link_events e
+                cross join lateral unnest(e.participants) p
+                left join phoenix_kit_users u on u.uuid = p
+               where $1 = any(e.participants) and p <> $1
+               group by p, u.username order by 3 desc limit 8
+              """,
+              [me]
+            ),
+          do: %{uuid: load(user), name: name || "someone", minutes: mins}
+
+    titles =
+      for [tmdb_id, name, mins] <-
+            rows(
+              """
+              select e.tmdb_id, t.name, sum(e.minutes)::int
+                from roki_link_events e
+                left join roki_titles t on t.type = 'tv' and t.id = e.tmdb_id
+               where $1 = any(e.participants)
+               group by e.tmdb_id, t.name order by 3 desc limit 5
+              """,
+              [me]
+            ),
+          do: %{tmdb_id: tmdb_id, name: name || "a show", minutes: mins}
+
+    %{minutes: minutes, episodes: episodes, shows: shows, partners: partners, titles: titles}
   end
 
   # ── rounds: rating a finished season together ────────────────────

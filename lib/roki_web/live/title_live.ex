@@ -714,6 +714,7 @@ defmodule RokiWeb.TitleLive do
           id="link-progress"
           uuid={@uuid}
           title={@title}
+          rev={:erlang.phash2({@season, @watched})}
         />
 
         <.episodes

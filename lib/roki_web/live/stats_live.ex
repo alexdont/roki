@@ -39,6 +39,7 @@ defmodule RokiWeb.StatsLive do
           |> assign(:range, :all)
           |> assign(:only, [])
           |> assign(:hidden, [])
+          |> assign(:together, Roki.Link.together(uuid))
           |> assign(:shown, @page)
           |> assign_reading()
 
@@ -228,6 +229,8 @@ defmodule RokiWeb.StatsLive do
         />
 
         <.detail_dialog :if={@detail} detail={@detail} offset={@offset} />
+
+        <.together :if={@together.episodes > 0} data={@together} />
 
         <.activity
           :if={@state != :loading and @days != %{}}
@@ -946,6 +949,56 @@ defmodule RokiWeb.StatsLive do
         ></span>
         more
       </div>
+    </section>
+    """
+  end
+
+  attr :data, :map, required: true
+
+  # Watching that was marked for two or more people through a linked show (Roki.Link).
+  defp together(assigns) do
+    ~H"""
+    <section class="space-y-3">
+      <h2 class="text-xl font-semibold">Together</h2>
+      <div class="grid grid-cols-3 gap-3">
+        <div class="rounded-box bg-base-200 p-3">
+          <div class="text-xs text-base-content/60">Time together</div>
+          <div class="text-lg font-bold">{Laev.duration(@data.minutes * 60)}</div>
+        </div>
+        <div class="rounded-box bg-base-200 p-3">
+          <div class="text-xs text-base-content/60">Episodes</div>
+          <div class="text-lg font-bold">{@data.episodes}</div>
+        </div>
+        <div class="rounded-box bg-base-200 p-3">
+          <div class="text-xs text-base-content/60">
+            {if @data.shows == 1, do: "Show", else: "Shows"}
+          </div>
+          <div class="text-lg font-bold">{@data.shows}</div>
+        </div>
+      </div>
+
+      <div :if={@data.partners != []} class="flex flex-wrap gap-2">
+        <span
+          :for={p <- @data.partners}
+          class="rounded-full bg-base-200 px-3 py-1 text-sm"
+          title={"#{p.name}: #{Laev.duration(p.minutes * 60)}"}
+        >
+          <.link navigate={~p"/#{p.name}"} class="font-medium hover:underline">{p.name}</.link>
+          <span class="text-base-content/60">{Laev.duration(p.minutes * 60)}</span>
+        </span>
+      </div>
+
+      <ul :if={@data.titles != []} class="space-y-1 text-sm">
+        <li :for={t <- @data.titles} class="flex items-center justify-between gap-3">
+          <.link navigate={~p"/title/tv/#{t.tmdb_id}"} class="min-w-0 truncate hover:underline">
+            {t.name}
+          </.link>
+          <span class="shrink-0 tabular-nums text-base-content/60">{Laev.duration(t.minutes * 60)}</span>
+        </li>
+      </ul>
+      <p class="text-xs text-base-content/50">
+        Counted from episodes marked for two or more of you through a linked show.
+      </p>
     </section>
     """
   end

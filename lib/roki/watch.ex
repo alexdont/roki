@@ -547,6 +547,55 @@ defmodule Roki.Watch do
   end
 
   @doc """
+  How long each episode ran, for the time watched together: `[{season, episode, minutes}]`, an
+  episode TMDB gives no length for taking the show's usual one (25 when it has none either).
+  """
+  def episode_minutes(uuid, title, pairs) do
+    by_season =
+      pairs
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.uniq()
+      |> Map.new(fn s ->
+        case episodes(title.id, s, uuid) do
+          {:ok, eps} -> {s, Map.new(eps, &{&1.number, &1.minutes})}
+          _ -> {s, %{}}
+        end
+      end)
+
+    usual = title[:minutes] || 25
+
+    for {s, e} <- pairs do
+      minutes = get_in(by_season, [s, e])
+      {s, e, if(is_integer(minutes) and minutes > 0, do: minutes, else: usual)}
+    end
+  end
+
+  @doc """
+  The first aired episode after the last one marked watched on this account:
+  `%{season, episode, name}`, or nil when there is none (or the show is done).
+  """
+  def next_unwatched(uuid, %{type: "tv"} = title) do
+    ordered =
+      for s <- aired_seasons(title),
+          {:ok, eps} <- [episodes(title.id, s.number, uuid)],
+          e <- eps,
+          e.aired?,
+          do: {s.number, e.number, e.name}
+
+    watched = watched_pairs(uuid, title)
+
+    last =
+      ordered |> Enum.filter(fn {s, e, _} -> MapSet.member?(watched, {s, e}) end) |> List.last()
+
+    from = if last, do: Enum.find_index(ordered, &(&1 == last)) + 1, else: 0
+
+    case Enum.at(ordered, from) do
+      {s, e, name} -> %{season: s, episode: e, name: name}
+      nil -> nil
+    end
+  end
+
+  @doc """
   What makes an episode a finale: `%{last: n, series_end?: boolean}` — the number of the last aired
   episode of the season, and whether finishing it finishes a show that has ended.
   """

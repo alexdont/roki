@@ -172,4 +172,27 @@ defmodule RokiWeb.LinkProgressTest do
     assert html =~ "9.5"
     assert html =~ "Average 8.8"
   end
+
+  test "the 'We watched' button names the next episode and marks it for both", %{
+    conn: conn,
+    alex: alex,
+    max: max
+  } do
+    FakeWatch.put(alex, for(e <- 1..3, do: {1, e}))
+    FakeWatch.put(max, for(e <- 1..3, do: {1, e}))
+    {:ok, id} = Link.invite(alex, @show, [max])
+    Link.accept(max, id)
+
+    {:ok, view, _} = host(conn, alex)
+    html = render_async(view)
+    assert html =~ "We watched S1E4"
+    assert html =~ "Episode 4"
+
+    view |> element("button", "We watched S1E4") |> render_click()
+    html = render_async(view)
+    assert html =~ "Marked S1E4 for everyone in the link."
+    assert html =~ "We watched S1E5"
+    assert html =~ "reloads=1"
+    assert MapSet.member?(FakeWatch.get(max), {1, 4})
+  end
 end

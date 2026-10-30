@@ -20,14 +20,27 @@ defmodule RokiWeb.LinkProgress do
        reviewing?: false,
        plan: nil,
        notice: nil,
-       friends: []
+       friends: [],
+       next_up: nil,
+       next_rev: nil
      )}
   end
 
   @impl true
   def update(assigns, socket) do
-    socket = assign(socket, assigns)
-    {:ok, refresh(socket)}
+    socket = socket |> assign(assigns) |> refresh()
+    {:ok, next_up(socket, Map.get(assigns, :rev))}
+  end
+
+  # The episode "We watched it" would mark: worked out again when the page's marks change (`rev`).
+  defp next_up(%{assigns: %{link: nil}} = socket, _rev), do: socket
+
+  defp next_up(%{assigns: %{next_rev: rev, next_up: known}} = socket, rev) when known != nil,
+    do: socket
+
+  defp next_up(socket, rev) do
+    %{uuid: uuid, title: %{id: id}} = socket.assigns
+    socket |> assign(next_rev: rev) |> start_async(:next_up, fn -> Link.next_up(uuid, id) end)
   end
 
   defp refresh(%{assigns: %{uuid: uuid, title: %{id: id}}} = socket) do
@@ -69,6 +82,30 @@ defmodule RokiWeb.LinkProgress do
 
       {:error, _} ->
         {:noreply, assign(socket, notice: "Only friends can be linked.")}
+    end
+  end
+
+  def handle_event("we_watched", _params, socket) do
+    %{uuid: uuid, title: %{id: id}} = socket.assigns
+
+    case Link.watched_together(uuid, id) do
+      {:ok, %{season: s, episode: e}} ->
+        send(self(), :link_reload)
+
+        {:noreply,
+         socket
+         |> assign(notice: "Marked S#{s}E#{e} for everyone in the link.", next_up: nil)
+         |> refresh()
+         |> next_up(nil)}
+
+      {:error, :paused} ->
+        {:noreply, assign(socket, notice: "The link is paused. Resume it first.")}
+
+      {:error, :nothing_next} ->
+        {:noreply, assign(socket, notice: "Nothing further to mark.")}
+
+      _ ->
+        {:noreply, refresh(socket)}
     end
   end
 
@@ -166,6 +203,11 @@ defmodule RokiWeb.LinkProgress do
   end
 
   @impl true
+  def handle_async(:next_up, {:ok, next}, socket),
+    do: {:noreply, assign(socket, :next_up, next || :done)}
+
+  def handle_async(:next_up, _other, socket), do: {:noreply, assign(socket, :next_up, :done)}
+
   def handle_async(:plan, {:ok, plan}, socket), do: {:noreply, assign(socket, :plan, plan)}
 
   def handle_async(:plan, _other, socket),
@@ -192,7 +234,14 @@ defmodule RokiWeb.LinkProgress do
     <div id={@id} class="rounded-2xl border border-base-300 bg-base-100 p-3 text-sm sm:p-4">
       <%= cond do %>
         <% @link -> %>
-          <.active link={@link} uuid={@uuid} solo?={@solo?} undoable?={@undoable?} target={@myself} />
+          <.active
+            link={@link}
+            uuid={@uuid}
+            solo?={@solo?}
+            undoable?={@undoable?}
+            next_up={@next_up}
+            target={@myself}
+          />
           <.finale :for={r <- @rounds} round={r} target={@myself} />
         <% @invitation -> %>
           <.invitation
@@ -227,6 +276,7 @@ defmodule RokiWeb.LinkProgress do
   attr :uuid, :string, required: true
   attr :solo?, :boolean, required: true
   attr :undoable?, :boolean, required: true
+  attr :next_up, :any, default: nil
   attr :target, :any, required: true
 
   defp active(assigns) do
@@ -255,6 +305,25 @@ defmodule RokiWeb.LinkProgress do
       <p :if={@link.fresh} class="text-xs text-base-content/60">
         Started over: only episodes marked from then on are shared.
       </p>
+
+      <%!-- One tap for the lunchtime case: the next episode, marked for everyone in the link. --%>
+      <button
+        type="button"
+        phx-click="we_watched"
+        phx-target={@target}
+        disabled={@paused? or not is_map(@next_up)}
+        class="btn btn-primary btn-sm h-auto min-h-9 w-full justify-start gap-2 rounded-xl px-3 py-2 text-left sm:w-auto"
+      >
+        <.icon name="hero-check-circle" class="h-5 w-5 shrink-0" />
+        <span :if={is_map(@next_up)} class="min-w-0">
+          <span class="block font-semibold">We watched S{@next_up.season}E{@next_up.episode}</span>
+          <span :if={@next_up[:name]} class="block truncate text-xs font-normal opacity-80">
+            {@next_up.name}
+          </span>
+        </span>
+        <span :if={@next_up == nil} class="font-semibold">Finding the next episode…</span>
+        <span :if={@next_up == :done} class="font-semibold">You're all caught up</span>
+      </button>
 
       <div class="flex flex-wrap items-center gap-2">
         <label class="flex cursor-pointer items-center gap-2 rounded-full bg-base-200 px-3 py-1.5">

@@ -390,4 +390,34 @@ defmodule RokiWeb.StatsLiveTest do
       assert has_element?(view, ~s|a[title="Put manga back"] .line-through.font-mono|, "2h")
     end
   end
+
+  test "time watched together through a link has its own section", %{conn: conn, user: user} do
+    {:ok, friend} =
+      PhoenixKit.Users.Auth.register_user(%{
+        "email" => "stats-friend@example.com",
+        "password" => "a-long-enough-password-123",
+        "username" => "statsfriend"
+      })
+
+    {:ok, [[link_id]]} =
+      {:ok,
+       Roki.Repo.query!(
+         "insert into roki_links (type, tmdb_id, created_by, status, inserted_at, updated_at) values ('tv', 99, $1, 'active', now(), now()) returning id",
+         [Ecto.UUID.dump!(user.uuid)]
+       ).rows}
+
+    for e <- 1..3 do
+      Roki.Repo.query!(
+        "insert into roki_link_events (link_id, tmdb_id, season, episode, minutes, participants, inserted_at) values ($1, 99, 1, $2, 30, $3, now())",
+        [link_id, e, [Ecto.UUID.dump!(user.uuid), Ecto.UUID.dump!(friend.uuid)]]
+      )
+    end
+
+    {:ok, view, _} = live(conn, "/statstest/stats")
+    html = render_async(view)
+    assert html =~ "Together"
+    assert html =~ "Time together"
+    assert html =~ "1h 30m"
+    assert html =~ "statsfriend"
+  end
 end

@@ -19,6 +19,9 @@ defmodule Roki.Notify do
     {"connection", "Connection problems",
      "A Real-Debrid, TorBox, MyAnimeList or TMDB login that stopped working or is about to.",
      true},
+    {"link", "Linked progress",
+     "A friend marked an episode for you on a show you have linked (one note per show every ten minutes).",
+     true},
     {"friend_activity", "What friends do",
      "A friend finished a film or rated something. Can be a lot, so it starts off.", false}
   ]
