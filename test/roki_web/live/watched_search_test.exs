@@ -32,4 +32,26 @@ defmodule RokiWeb.WatchedSearchTest do
     assert theirs =~ "Search what watchedmax watched…"
     refute theirs =~ "Search what you watched"
   end
+
+  test "the owner can show only the titles with no date", %{conn: conn, me: me} do
+    {:ok, bin} = Ecto.UUID.dump(me.uuid)
+
+    for {id, name, dated} <- [{1, "Dated Film", true}, {2, "Undated Film", false}] do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated, status) values ($1, 'movie', $2, 'movie', $2, $3, false, now(), $4, 'finished')",
+        [bin, id, name, dated]
+      )
+    end
+
+    {:ok, view, _} = live(conn, "/watchedme/watched")
+    html = render_async(view)
+    assert html =~ "Dated Film" and html =~ "Undated Film"
+    assert html =~ "No date"
+
+    {:ok, view, _} = live(conn, "/watchedme/watched?dated=no")
+    html = render_async(view)
+    assert html =~ "Undated Film"
+    refute html =~ "Dated Film"
+    assert html =~ "dated=no" or html =~ ~s(aria-checked="true")
+  end
 end

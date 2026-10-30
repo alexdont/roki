@@ -2,7 +2,7 @@ defmodule RokiWeb.WatchedLive do
   @moduledoc """
   `/:username/watched` — everything a user finished, as a grid of posters or as rows (title,
   kind, year, their rating, when), newest first or by their own ratings (`?sort=top`,
-  `?kind=anime`, `?genre=horror` for one genre, `?status=progress` (or `up_to_date`, `on_hold`, `finished`) for one kind of entry, `?months=0` for one list without month headings, `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
+  `?kind=anime`, `?genre=horror` for one genre, `?status=progress` (or `up_to_date`, `on_hold`, `finished`) for one kind of entry, `?months=0` for one list without month headings, `?dated=no` for the titles with no watch date (the owner's), `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
   everyone, like the profile; everything is read from this server (`Roki.Profile`).
 
   The owner has a button that turns on *select mode* (and off again): tick any number of
@@ -57,6 +57,7 @@ defmodule RokiWeb.WatchedLive do
           rating: nil,
           status: nil,
           genre: nil,
+          undated?: false,
           genre_waits: 0,
           months?: true,
           shown: @page,
@@ -88,6 +89,7 @@ defmodule RokiWeb.WatchedLive do
        months?: params["months"] != "0",
        status: status_param(params["status"]),
        genre: Roki.Genres.parse(params["genre"]),
+       undated?: params["dated"] == "no",
        rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10"))
      )
      |> take_place()}
@@ -131,6 +133,7 @@ defmodule RokiWeb.WatchedLive do
       )
 
     list = if a.status, do: Enum.filter(list, &(&1.status == a.status)), else: list
+    list = if a.undated?, do: Enum.reject(list, & &1.dated?), else: list
 
     list =
       if a.genre,
@@ -158,7 +161,8 @@ defmodule RokiWeb.WatchedLive do
   defp rating_note(nil), do: ""
   defp rating_note(n), do: " rated #{n}"
 
-  defp filters_on(status, rating, genre), do: Enum.count([status, rating, genre], &(&1 != nil))
+  defp filters_on(status, rating, genre, undated?),
+    do: Enum.count([status, rating, genre, undated? || nil], &(&1 != nil))
 
   defp status_param(value), do: if(value in Enum.map(@statuses, &elem(&1, 0)), do: value)
 
@@ -401,6 +405,7 @@ defmodule RokiWeb.WatchedLive do
         rating: a.rating,
         status: a.status,
         genre: a.genre,
+        undated?: a.undated?,
         months: a.months?,
         q: a.q,
         view: a.view
@@ -408,12 +413,13 @@ defmodule RokiWeb.WatchedLive do
       |> Map.merge(Map.new(overrides))
 
     query =
-      Enum.flat_map([:sort, :kind, :rating, :status, :genre, :months, :q, :view], fn
+      Enum.flat_map([:sort, :kind, :rating, :status, :genre, :undated, :months, :q, :view], fn
         :sort -> if v.sort == :top, do: [sort: "top"], else: []
         :kind -> if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
         :rating -> if v.rating, do: [rating: v.rating], else: []
         :status -> if v.status, do: [status: v.status], else: []
         :genre -> if v.genre, do: [genre: v.genre], else: []
+        :undated -> if v.undated?, do: [dated: "no"], else: []
         :months -> if v.months, do: [], else: [months: "0"]
         :q -> if v.q != "", do: [q: v.q], else: []
         :view -> if v.view == :rows, do: [view: "rows"], else: []
@@ -594,9 +600,9 @@ defmodule RokiWeb.WatchedLive do
                 <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
                 {if @sort == :top, do: "Rating", else: "Latest"}
                 <span
-                  :if={filters_on(@status, @rating, @genre) > 0}
+                  :if={filters_on(@status, @rating, @genre, @undated?) > 0}
                   class="badge badge-primary badge-xs"
-                >{filters_on(@status, @rating, @genre)}</span>
+                >{filters_on(@status, @rating, @genre, @undated?)}</span>
               </div>
               <div
                 tabindex="0"
@@ -618,6 +624,7 @@ defmodule RokiWeb.WatchedLive do
                   >{label}</.link>
                 </div>
                 <.months_toggle a={assigns} class="mt-3" />
+                <.undated_toggle :if={@owner?} a={assigns} class="mt-1.5" />
                 <.status_picker a={assigns} />
                 <.genre_picker a={assigns} />
                 <.rating_picker :if={@owner? or @profile.show_ratings} a={assigns} />
@@ -638,6 +645,7 @@ defmodule RokiWeb.WatchedLive do
                 {label}
               </.link>
               <.months_toggle a={assigns} pill />
+              <.undated_toggle :if={@owner?} a={assigns} pill />
               <div class="dropdown">
                 <div
                   tabindex="0"
@@ -972,6 +980,43 @@ defmodule RokiWeb.WatchedLive do
         type="checkbox"
         class="toggle toggle-primary toggle-sm pointer-events-none"
         checked={@a.months?}
+        tabindex="-1"
+        aria-hidden="true"
+      />
+    </.link>
+    """
+  end
+
+  # Only the titles with no watch date, so they can be found and dated in the owner's own time.
+  attr :a, :map, required: true
+  attr :class, :string, default: ""
+  attr :pill, :boolean, default: false
+
+  defp undated_toggle(assigns) do
+    ~H"""
+    <.link
+      patch={address(@a, undated?: not @a.undated?)}
+      onclick={if @pill, do: "document.activeElement.blur()", else: nil}
+      role="switch"
+      aria-checked={to_string(@a.undated?)}
+      class={[
+        @pill && "btn btn-sm h-9 gap-1.5 rounded-full border-0 text-sm font-medium",
+        @pill && @a.undated? && "btn-primary",
+        @pill && !@a.undated? && "bg-base-200",
+        !@pill &&
+          "flex items-center justify-between rounded-xl bg-base-200 px-3 py-2 text-sm font-medium",
+        @class
+      ]}
+      title="Show only titles with no watch date"
+    >
+      <span class="flex items-center gap-1.5">
+        <.icon name="hero-calendar" class="h-4 w-4" /> No date
+      </span>
+      <input
+        :if={!@pill}
+        type="checkbox"
+        class="toggle toggle-primary toggle-sm pointer-events-none"
+        checked={@a.undated?}
         tabindex="-1"
         aria-hidden="true"
       />
