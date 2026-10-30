@@ -1046,19 +1046,12 @@ defmodule RokiWeb.TitleLive do
             icon="hero-academic-cap"
             label="Study: watch in languages you choose"
           />
-          <Layouts.player_switch :if={@linked?} class="max-lg:hidden" />
         </div>
       </div>
 
       <%!-- Where Play opens it, and the trailer's controls: pause (it plays once, it does not loop),
             sound, full screen. --%>
       <div class="relative z-20 flex items-center gap-3 px-4 pb-8 sm:px-6 lg:absolute lg:bottom-14 lg:right-12 lg:h-14 lg:justify-end lg:p-0 xl:right-16">
-        <span data-hero-content class="flex items-center gap-2 lg:hidden">
-          <span class="text-[0.65rem] font-semibold uppercase tracking-wider text-white/60 lg:hidden">
-            Watch in
-          </span>
-          <Layouts.player_switch :if={@linked?} />
-        </span>
         <button
           :if={@trailer}
           type="button"
@@ -1491,8 +1484,7 @@ defmodule RokiWeb.TitleLive do
         class="btn btn-primary btn-lg h-full min-h-0 flex-[3] gap-2 px-3 text-[length:inherit] shadow-md"
         disabled={@busy?}
       >
-        <.icon name="hero-play-solid" class="h-6 w-6" />
-        <.icon :if={@cached?} name="hero-bolt-solid" class="h-4 w-4" />
+        <.icon name={if @cached?, do: "hero-bolt-solid", else: "hero-play-solid"} class="h-6 w-6" />
         {play_label(@resume_secs)}
       </button>
     </div>
@@ -1506,8 +1498,7 @@ defmodule RokiWeb.TitleLive do
       class={["btn btn-primary btn-lg gap-2 px-4 shadow-md sm:px-10", @class]}
       disabled={@busy?}
     >
-      <.icon name="hero-play-solid" class="h-6 w-6" />
-      <.icon :if={@cached?} name="hero-bolt-solid" class="h-4 w-4" />
+      <.icon name={if @cached?, do: "hero-bolt-solid", else: "hero-play-solid"} class="h-6 w-6" />
       {play_label(@resume_secs)}
     </button>
     """
@@ -1529,8 +1520,7 @@ defmodule RokiWeb.TitleLive do
           @busy? && "btn-disabled"
         ]}
       >
-        <.icon name="hero-play-solid" class="h-6 w-6" />
-        <.icon :if={@cached?} name="hero-bolt-solid" class="h-4 w-4" />
+        <.icon name={if @cached?, do: "hero-bolt-solid", else: "hero-play-solid"} class="h-6 w-6" />
         {@play.verb} {@play.label}
       </.link>
     </div>
