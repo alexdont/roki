@@ -25,6 +25,12 @@ defmodule RokiWeb.PosterComponents do
     default: false,
     doc: "no caption under the poster: progress sits on the poster, the rest on hover"
 
+  attr :rating_corner, :atom,
+    default: :bottom_right,
+    values: [:bottom_right, :top_left],
+    doc:
+      "where a compact poster's score sits; the top left gives way to a watched tick or progress"
+
   attr :title?, :boolean,
     default: true,
     doc: "false: no title line under the poster (it stays as the hover text)"
@@ -48,6 +54,15 @@ defmodule RokiWeb.PosterComponents do
         cached?:
           match?(%MapSet{}, assigns.cached_titles) and
             MapSet.member?(assigns.cached_titles, {assigns.item[:type], assigns.item[:id]})
+      )
+
+    # The score in the top left corner, when asked for and nothing else holds it.
+    assigns =
+      assign(
+        assigns,
+        :score_tl?,
+        assigns.compact and assigns.rating_corner == :top_left and not assigns.watched? and
+          not is_binary(assigns.item[:partial]) and rating(assigns.item) != nil
       )
 
     ~H"""
@@ -127,7 +142,16 @@ defmodule RokiWeb.PosterComponents do
           ★ {Roki.Profile.score_text(@item.my_rating)}
         </span>
         <span
-          :if={@compact && !@prog && !@item[:resume_at] && !@item[:my_rating] && rating(@item)}
+          :if={@score_tl?}
+          class="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[0.7rem] font-semibold leading-none text-white shadow-sm backdrop-blur-sm"
+        >
+          <span class="text-amber-300" aria-hidden="true">★</span>{rating(@item)}
+        </span>
+        <span
+          :if={
+            !@score_tl? && @compact && !@prog && !@item[:resume_at] && !@item[:my_rating] &&
+              rating(@item)
+          }
           class="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[0.65rem] font-medium leading-none text-white"
         >
           ★ {rating(@item)}

@@ -25,8 +25,9 @@ const widths = (process.env.W || "360,390,430,640,768,1024,1280").split(",").map
       }
       return out
     })
-    const bad = rows.filter(r => r.ratio && r.ratio < 1.45 || (r.btnBottom && r.postersTop && r.btnBottom > r.postersTop))
-    console.log(`w=${w}: ${rows.length} slides, box=${rows[0].box}px, poster ratio min=${Math.min(...rows.filter(r=>r.ratio).map(r=>r.ratio))} (want 1.5), overlaps=${bad.length}`)
+    const bad = rows.filter(r => r.ratio && r.ratio < 1.45 || (r.posterW > 0 && r.btnBottom && r.postersTop && r.btnBottom > r.postersTop))
+    const shapes = rows.filter(r => r.ratio > 0).map(r => r.ratio)
+    console.log(`w=${w}: ${rows.length} slides, box=${rows[0].box}px, ` + (shapes.length ? `poster ratio min=${Math.min(...shapes)} (want 1.5)` : "poster strip hidden (wide screen)") + `, overlaps=${bad.length}`)
     if (process.env.V || bad.length) for (const r of (process.env.V ? rows : bad)) console.log("   ", JSON.stringify(r))
     await b.close()
   }

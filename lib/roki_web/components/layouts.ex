@@ -46,6 +46,10 @@ defmodule RokiWeb.Layouts do
   attr :current_path, :string, default: "/"
   attr :wide, :boolean, default: false, doc: "full-width content, for the home page"
 
+  attr :bleed, :boolean,
+    default: false,
+    doc: "the header spans the window like the page under it (the home page), not the 6xl column"
+
   attr :flush, :boolean,
     default: false,
     doc:
@@ -98,7 +102,10 @@ defmodule RokiWeb.Layouts do
 
     ~H"""
     <header class="site-header relative border-b border-base-300/60">
-      <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-1 px-3 sm:px-6 lg:px-8">
+      <div class={[
+        "mx-auto flex h-14 items-stretch gap-1 px-3 sm:px-6",
+        if(@bleed, do: "lg:px-12 xl:px-16", else: "max-w-6xl lg:px-8")
+      ]}>
         <a
           href={~p"/home"}
           data-no-reload

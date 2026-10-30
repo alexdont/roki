@@ -36,9 +36,15 @@ defmodule RokiWeb.FeaturedLiveTest do
     for kind <- ~w(movies shows anime), do: assert(html =~ ~s(href="/#{kind}"))
     assert html =~ "Popular right now"
     refute html =~ "Load more"
-    # Twelve of each kind, the three lists interleaved; the same titles seeded thrice fold to one.
-    assert html =~ "Film 12"
-    refute html =~ "Film 13"
+    # The grid (phones and tablets): twelve of each kind, the three lists interleaved; the same
+    # titles seeded thrice fold to one.
+    grid = ~s|section[aria-label="Popular right now"] [data-peek-title="Film |
+    assert has_element?(view, grid <> ~s|12"]|)
+    refute has_element?(view, grid <> ~s|13"]|)
+
+    # A wide screen's rows carry the whole page, to scroll along.
+    assert has_element?(view, ~s|#row-movies [data-peek-title="Film 13"]|)
+    assert has_element?(view, ~s|#row-movies [data-peek-title="Film 20"]|)
   end
 
   describe "activity row" do
@@ -126,7 +132,8 @@ defmodule RokiWeb.FeaturedLiveTest do
       {:ok, view, _} = live(conn, "/home")
 
       for mood <- Roki.Mood.all() do
-        chip = view |> element(~s|[data-mood-chip="#{mood.slug}"]|) |> render()
+        # (A wide screen has a bar for each mood too; the chip is the one with the room to keep.)
+        chip = view |> element(~s|a.group[data-mood-chip="#{mood.slug}"]|) |> render()
 
         # Two invisible copies of the name, one set as the lit chip is and one as it is not,
         # and the visible one on top of them: the chip is as wide as the wider, always.

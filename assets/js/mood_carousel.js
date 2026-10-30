@@ -84,8 +84,9 @@ export const MoodCarousel = {
       s.setAttribute("aria-hidden", String(!on))
       if (on) s.querySelectorAll('img[loading="lazy"]').forEach((img) => { img.loading = "eager" })
     })
-    this.chips.forEach((c, k) => {
-      const on = k === i
+    const slug = this.order[i]
+    this.chips.forEach((c) => {
+      const on = c.dataset.moodChip === slug
       c.setAttribute("aria-selected", String(on))
       const bar = c.querySelector("[data-mood-bar]")
       if (!bar) return
@@ -98,7 +99,7 @@ export const MoodCarousel = {
         bar.style.transform = "scaleX(1)"
       }
     })
-    this.centre(this.chips[i])
+    this.centre(this.chips.find((c) => c.dataset.moodChip === slug))
   },
 
   // On a phone the chips scroll sideways: keep the lit one in the middle of its row.
@@ -126,7 +127,10 @@ export const MoodCarousel = {
 
   freeze() {
     clearTimeout(this.timer)
-    const bar = this.chips[this.index] && this.chips[this.index].querySelector("[data-mood-bar]")
-    if (bar) { const w = getComputedStyle(bar).transform; bar.style.transition = "none"; bar.style.transform = w === "none" ? "scaleX(0)" : w }
+    const slug = this.order[this.index]
+    this.chips.filter((c) => c.dataset.moodChip === slug).forEach((c) => {
+      const bar = c.querySelector("[data-mood-bar]")
+      if (bar) { const w = getComputedStyle(bar).transform; bar.style.transition = "none"; bar.style.transform = w === "none" ? "scaleX(0)" : w }
+    })
   },
 }

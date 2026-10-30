@@ -29,6 +29,7 @@ import {setupPeek} from "./peek"
 import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
 import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
+import {ShelfRow} from "./shelf_row"
 import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
 // The manga reader, as the app it came from loads it. PhoenixKit ships Fresco and Etcher of its
@@ -203,7 +204,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel},
+  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, ShelfRow},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
