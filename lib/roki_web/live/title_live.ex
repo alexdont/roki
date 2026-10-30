@@ -362,14 +362,14 @@ defmodule RokiWeb.TitleLive do
   # opened, then kept for as long as the page is.
   def handle_event("reviews_open", _params, %{assigns: %{reviews: reviews}} = socket)
       when reviews in [nil, :error] do
-    %{title: title} = socket.assigns
+    %{title: title, uuid: uuid} = socket.assigns
 
     {:noreply,
      socket
      |> assign(:reviews, :loading)
      |> start_async(:reviews, fn ->
        %{
-         scores: Roki.Reviews.scores(title.type, title.id),
+         scores: Roki.Reviews.scores(title.type, title.id, anime?: title.anime?, uuid: uuid),
          critics: Roki.Reviews.critics(title.type, title.id)
        }
      end)}
@@ -2118,16 +2118,7 @@ defmodule RokiWeb.TitleLive do
                 Scores
               </h3>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div
-                  :for={sc <- @reviews.scores}
-                  class="rounded-box border border-base-300 bg-base-200/50 p-3"
-                >
-                  <div class="text-2xl font-bold tabular-nums leading-tight">{sc.text}</div>
-                  <div class="text-sm font-semibold leading-tight">{sc.label}</div>
-                  <div class="text-xs text-base-content/60">
-                    {sc.who}<span :if={sc.votes}> · {thousands(sc.votes)} ratings</span>
-                  </div>
-                </div>
+                <.score_tile :for={sc <- @reviews.scores} sc={sc} />
               </div>
             </section>
 
@@ -2167,6 +2158,45 @@ defmodule RokiWeb.TitleLive do
           <% end %>
         </div>
       </div>
+    </div>
+    """
+  end
+
+  attr :sc, :map, required: true
+
+  # One service's score; a link to the title on that service when we have the address.
+  defp score_tile(assigns) do
+    ~H"""
+    <.link_or_div url={@sc[:url]}>
+      <div class="text-2xl font-bold tabular-nums leading-tight">{@sc.text}</div>
+      <div class="text-sm font-semibold leading-tight">{@sc.label}</div>
+      <div class="text-xs text-base-content/60">
+        {@sc.who}<span :if={@sc.votes}> · {thousands(@sc.votes)} ratings</span>
+      </div>
+    </.link_or_div>
+    """
+  end
+
+  attr :url, :string, default: nil
+  slot :inner_block, required: true
+
+  defp link_or_div(%{url: url} = assigns) when is_binary(url) do
+    ~H"""
+    <a
+      href={@url}
+      target="_blank"
+      rel="noopener"
+      class="block rounded-box border border-base-300 bg-base-200/50 p-3 transition hover:border-primary/50"
+    >
+      {render_slot(@inner_block)}
+    </a>
+    """
+  end
+
+  defp link_or_div(assigns) do
+    ~H"""
+    <div class="rounded-box border border-base-300 bg-base-200/50 p-3">
+      {render_slot(@inner_block)}
     </div>
     """
   end

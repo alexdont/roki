@@ -1,7 +1,8 @@
 defmodule Roki.Reviews do
   @moduledoc """
   What others made of a title, for the Reviews sheet on its page: the scores of the services that
-  rate (Rotten Tomatoes, Metacritic, Letterboxd, Trakt, IMDb, TMDB, Roger Ebert, MyAnimeList) and
+  rate (Rotten Tomatoes, Metacritic, Letterboxd, Trakt, IMDb, TMDB, Roger Ebert, MyAnimeList,
+  and Filmarks from `Roki.Filmarks`) and
   a short account of how the critics received it.
 
   The scores come from MDBList, which answers for a TMDB id with every service's number in one
@@ -46,14 +47,42 @@ defmodule Roki.Reviews do
   end
 
   @doc """
-  The scores: `[%{source, label, who, text, votes}]`, best known first, empty when MDBList has none
+  The scores: `[%{source, label, who, text, votes, url}]`, best known first, empty when MDBList has none
   (or there is no key). `type` is `"movie"` or `"tv"`.
   """
-  def scores(type, id) when type in ["movie", "tv"] and is_integer(id) do
-    case TTLCache.fetch({:mdblist, type, id}, @ttl_s, fn -> fetch_scores(type, id) end) do
-      {:ok, list} -> list
-      _ -> []
-    end
+  def scores(type, id, opts \\ []) when type in ["movie", "tv"] and is_integer(id) do
+    # Filmarks is a slower, separate lookup: asked alongside, and left out if it is not back in time.
+    filmarks =
+      Task.async(fn ->
+        Roki.Filmarks.score(type, id, Keyword.get(opts, :anime?, false), opts[:uuid])
+      end)
+
+    base =
+      case TTLCache.fetch({:mdblist, type, id}, @ttl_s, fn -> fetch_scores(type, id) end) do
+        {:ok, list} -> list
+        _ -> []
+      end
+
+    extra =
+      case Task.yield(filmarks, 12_000) || Task.shutdown(filmarks) do
+        {:ok, %{score: score, url: url}} ->
+          [
+            %{
+              source: "filmarks",
+              order: 11,
+              label: "Filmarks",
+              who: "Members",
+              text: "#{Float.round(score * 1.0, 1)}/5",
+              votes: nil,
+              url: url
+            }
+          ]
+
+        _ ->
+          []
+      end
+
+    Enum.sort_by(base ++ extra, & &1.order)
   end
 
   defp fetch_scores(type, id) do
@@ -96,7 +125,8 @@ defmodule Roki.Reviews do
         label: label,
         who: who,
         text: number(value, how),
-        votes: if(is_integer(r["votes"]) and r["votes"] > 0, do: r["votes"])
+        votes: if(is_integer(r["votes"]) and r["votes"] > 0, do: r["votes"]),
+        url: nil
       }
     else
       _ -> nil
