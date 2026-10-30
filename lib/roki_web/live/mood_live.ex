@@ -6,8 +6,6 @@ defmodule RokiWeb.MoodLive do
   """
   use RokiWeb, :live_view
 
-  import RokiWeb.PosterComponents
-
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Mood
 
@@ -219,188 +217,228 @@ defmodule RokiWeb.MoodLive do
 
   @impl true
   def render(assigns) do
-    assigns = assign(assigns, grid: @grid, hue: assigns.mood.hue)
+    assigns =
+      assign(assigns,
+        grid: @grid,
+        hue: assigns.mood.hue,
+        lead: Enum.find(assigns.items, & &1[:backdrop])
+      )
 
     ~H"""
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/mood/#{@mood.slug}"}
     >
-      <%!-- The band: the mood's colour, its name as a question answered, and the ways to narrow. --%>
-      <section
-        class="relative isolate overflow-hidden rounded-3xl p-5 text-white sm:p-8"
-        style={"background: radial-gradient(120% 140% at 0% 0%, hsl(#{@hue} 80% 48%) 0%, hsl(#{@hue} 60% 30%) 45%, hsl(#{@hue + 40} 50% 16%) 100%)"}
-      >
-        <%!-- The mood's number, very large and faint, in its own typeface: the picker numbers its
-              moods, and this is the mood you arrived from. --%>
+      <%!-- The top, as on the home page: the mood's picture across the window under the floating
+            header, its name in its own typeface, and the ways to narrow as glass pills. The picture is
+            the backdrop of the first title (the mood's colour until it arrives). --%>
+      <section class="relative z-20 flex min-h-[clamp(24rem,60svh,36rem)] flex-col justify-end text-white">
         <div
-          class="pointer-events-none absolute -right-3 -top-8 text-[10rem] leading-none opacity-[0.16] select-none sm:text-[15rem]"
-          style={"font-family: #{@mood.font}"}
-          aria-hidden="true"
+          class="absolute inset-0 -z-10 overflow-hidden"
+          style={"background: radial-gradient(120% 140% at 0% 0%, hsl(#{@hue} 80% 36%) 0%, hsl(#{@hue} 60% 20%) 45%, hsl(#{@hue + 40} 50% 10%) 100%)"}
         >
-          {Roki.Mood.number(@mood)}
-        </div>
-        <div class="relative space-y-4">
-          <.link
-            navigate={~p"/home"}
-            class="inline-flex items-center gap-1 text-sm text-white/70 hover:text-white"
+          <img
+            :if={@lead}
+            src={Roki.Images.local(@lead.backdrop)}
+            alt=""
+            class="mood-backdrop absolute inset-0 h-full w-full object-cover"
+          />
+          <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true">
+          </div>
+          <div
+            class="absolute inset-0"
+            style={"background: linear-gradient(90deg, hsl(#{@hue} 60% 7% / 0.92) 0%, hsl(#{@hue} 60% 7% / 0.62) 32%, hsl(#{@hue} 60% 7% / 0.08) 66%, transparent 100%), linear-gradient(0deg, hsl(#{@hue} 60% 6% / 0.82) 0%, transparent 38%), linear-gradient(180deg, hsl(#{@hue} 60% 6% / 0.7) 0%, transparent 22%)"}
           >
-            <.icon name="hero-chevron-left-micro" class="h-4 w-4" /> Other moods
-          </.link>
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-6 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
+          <div class="max-w-xl space-y-3 sm:max-w-3xl lg:max-w-4xl lg:space-y-4">
+            <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
+              <span class="font-mono tabular-nums text-white">{Roki.Mood.number(@mood)}</span>
+              <span class="hidden h-px w-8 bg-white/40 sm:block" aria-hidden="true"></span>
               Tonight I want to
             </p>
             <h1
-              class="mood-title text-5xl leading-none tracking-tight sm:text-7xl"
-              style={"font-family: #{@mood.font}; --mood: hsl(#{@hue} 90% 70%)"}
+              class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl lg:text-8xl"
+              style={"font-family: #{@mood.font}; --mood: hsl(#{@hue} 90% 62%)"}
             >
               {@mood.label}
             </h1>
-            <p class="mt-2 max-w-xl text-white/80">{@mood.tagline}</p>
+            <div
+              class="h-1 w-14 rounded-full"
+              style={"background: hsl(#{@hue} 90% 62%)"}
+              aria-hidden="true"
+            >
+            </div>
+            <p class="text-base text-white/80 sm:text-lg">{@mood.tagline}</p>
           </div>
 
-          <form phx-submit="search" class="flex max-w-xl gap-2">
-            <label class="input flex h-12 flex-1 items-center gap-2 rounded-2xl border-0 bg-white/15 text-white placeholder:text-white/60 focus-within:bg-white/25 focus-within:outline-none">
-              <.icon name="hero-magnifying-glass" class="h-5 w-5 shrink-0 opacity-70" />
-              <input
-                type="search"
-                name="q"
-                value={@q}
-                placeholder={"Looking for something in particular? Search #{String.downcase(@mood.label)}…"}
-                autocomplete="off"
-                class="w-full bg-transparent text-white placeholder:text-white/60 focus:outline-none"
-              />
-            </label>
-            <button
-              type="submit"
-              class="btn h-12 rounded-2xl border-0 bg-white text-neutral-900 hover:bg-white/90"
-            >Find</button>
-          </form>
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <form phx-submit="search" class="flex w-full max-w-xl gap-2 lg:w-96">
+              <label class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-white backdrop-blur-md focus-within:border-white/60">
+                <.icon name="hero-magnifying-glass" class="h-5 w-5 shrink-0 opacity-70" />
+                <input
+                  type="search"
+                  name="q"
+                  value={@q}
+                  placeholder={"Search #{String.downcase(@mood.label)}…"}
+                  autocomplete="off"
+                  class="w-full bg-transparent text-white placeholder:text-white/60 focus:outline-none"
+                />
+              </label>
+              <button
+                type="submit"
+                class="btn h-11 min-h-0 rounded-full border-0 bg-white px-5 text-neutral-900 hover:bg-white/90"
+              >
+                Find
+              </button>
+            </form>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="inline-flex rounded-full bg-black/25 p-1" role="group" aria-label="Kind">
-              <button
-                :for={
-                  {k, label} <- [all: "Everything", movies: "Movies", shows: "Shows", anime: "Anime"]
-                }
-                type="button"
-                phx-click="kind"
-                phx-value-kind={k}
-                aria-pressed={to_string(@kind == k)}
-                class={[
-                  "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
-                  @kind == k && "bg-white text-neutral-900 shadow",
-                  @kind != k && "text-white/80 hover:text-white"
-                ]}
+            <div class="flex flex-wrap items-center gap-2">
+              <div
+                class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
+                role="group"
+                aria-label="Kind"
               >
-                {label}
-              </button>
-            </div>
-            <div
-              :if={@q == ""}
-              class="inline-flex rounded-full bg-black/25 p-1"
-              role="group"
-              aria-label="Order"
-            >
-              <button
-                :for={{s, label} <- Mood.sorts()}
-                type="button"
-                phx-click="sort"
-                phx-value-sort={s}
-                aria-pressed={to_string(@sort == s)}
-                class={[
-                  "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
-                  @sort == s && "bg-white text-neutral-900 shadow",
-                  @sort != s && "text-white/80 hover:text-white"
-                ]}
+                <button
+                  :for={
+                    {k, label} <- [
+                      all: "Everything",
+                      movies: "Movies",
+                      shows: "Shows",
+                      anime: "Anime"
+                    ]
+                  }
+                  type="button"
+                  phx-click="kind"
+                  phx-value-kind={k}
+                  aria-pressed={to_string(@kind == k)}
+                  class={[
+                    "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
+                    @kind == k && "bg-white text-neutral-900 shadow",
+                    @kind != k && "text-white/80 hover:text-white"
+                  ]}
+                >
+                  {label}
+                </button>
+              </div>
+              <div
+                :if={@q == ""}
+                class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
+                role="group"
+                aria-label="Order"
               >
-                {label}
-              </button>
+                <button
+                  :for={{s, label} <- Mood.sorts()}
+                  type="button"
+                  phx-click="sort"
+                  phx-value-sort={s}
+                  aria-pressed={to_string(@sort == s)}
+                  class={[
+                    "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
+                    @sort == s && "bg-white text-neutral-900 shadow",
+                    @sort != s && "text-white/80 hover:text-white"
+                  ]}
+                >
+                  {label}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <p :if={@error} class="alert alert-error text-sm">
-        Couldn't reach TMDB just now. Try again in a minute.
-      </p>
-
-      <%!-- A search within the mood: its finds, in place of the list. --%>
-      <section :if={@q != ""} class="space-y-3">
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 class="text-xl font-semibold">“{@q}” in {String.downcase(@mood.label)}</h2>
-          <button type="button" phx-click="clear" class="text-sm text-primary hover:underline">Clear</button>
-        </div>
-        <div :if={@searching?} class="flex items-center gap-3 py-10 text-base-content/60">
-          <span class="loading loading-spinner"></span> Looking…
-        </div>
-        <p
-          :if={@found == [] and not @searching?}
-          class="rounded-box border border-dashed border-base-300 px-4 py-10 text-center text-base-content/60"
-        >
-          Nothing by that name here. It may be in another mood — <.link
-            navigate={~p"/search?#{[q: @q]}"}
-            class="text-primary hover:underline"
-          >search everything</.link>.
+      <%!-- Below the picture: the page's gutters, and the hover cards' hook round every list. --%>
+      <div
+        id="mood-cards"
+        phx-hook="GridCards"
+        class="space-y-4 px-4 pb-12 pt-6 [overflow-x:clip] sm:px-6 lg:px-12 xl:px-16"
+      >
+        <p :if={@error} class="alert alert-error text-sm">
+          Couldn't reach TMDB just now. Try again in a minute.
         </p>
-        <ul :if={is_list(@found) and @found != []} class={["grid gap-4", @grid]}>
-          <li :for={i <- @found} class="space-y-1">
-            <.poster
+
+        <%!-- A search within the mood: its finds, in place of the list. --%>
+        <section :if={@q != ""} class="space-y-3">
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 class="text-xl font-semibold">“{@q}” in {String.downcase(@mood.label)}</h2>
+            <button type="button" phx-click="clear" class="text-sm text-primary hover:underline">Clear</button>
+          </div>
+          <div :if={@searching?} class="flex items-center gap-3 py-10 text-base-content/60">
+            <span class="loading loading-spinner"></span> Looking…
+          </div>
+          <p
+            :if={@found == [] and not @searching?}
+            class="rounded-box border border-dashed border-base-300 px-4 py-10 text-center text-base-content/60"
+          >
+            Nothing by that name here. It may be in another mood — <.link
+              navigate={~p"/search?#{[q: @q]}"}
+              class="text-primary hover:underline"
+            >search everything</.link>.
+          </p>
+          <ul :if={is_list(@found) and @found != []} class={["grid gap-4", @grid]}>
+            <RokiWeb.FeaturedLive.grid_card
+              :for={i <- @found}
+              kind={:mood_found}
               item={i}
               seen={MapSet.member?(@seen, {i.type, i.id})}
-              cached_titles={@cached_titles}
               upcoming={@upcoming}
-              compact
+              signed_in?={@uuid != nil}
             />
-          </li>
+          </ul>
+        </section>
+
+        <ul
+          :if={@q == "" and @items == [] and @loading?}
+          class={["grid gap-4", @grid]}
+          aria-busy="true"
+        >
+          <li :for={_ <- 1..12} class="skeleton aspect-[2/3] w-full rounded-box"></li>
         </ul>
-      </section>
 
-      <ul :if={@q == "" and @items == [] and @loading?} class={["grid gap-4", @grid]} aria-busy="true">
-        <li :for={_ <- 1..12} class="skeleton aspect-[2/3] w-full rounded-box"></li>
-      </ul>
-
-      <ul
-        :if={@q == "" and @items != []}
-        id="grid"
-        phx-hook="FillGrid"
-        data-more={to_string(@more?)}
-        data-page={@page}
-        data-restore-y={@place_y}
-        class={["grid gap-4", @grid]}
-      >
-        <li :for={i <- @items} class="space-y-1">
-          <.poster
+        <ul
+          :if={@q == "" and @items != []}
+          id="grid"
+          phx-hook="FillGrid"
+          data-more={to_string(@more?)}
+          data-page={@page}
+          data-restore-y={@place_y}
+          class={["grid gap-4", @grid]}
+        >
+          <RokiWeb.FeaturedLive.grid_card
+            :for={i <- @items}
+            kind={:mood}
             item={i}
             seen={MapSet.member?(@seen, {i.type, i.id})}
-            cached_titles={@cached_titles}
             upcoming={@upcoming}
-            compact
+            signed_in?={@uuid != nil}
           />
-        </li>
-      </ul>
+        </ul>
 
-      <div
-        :if={@q == "" and @items != [] and (@more? or @loading?)}
-        id="grid-more"
-        phx-hook="InfiniteScroll"
-        data-event="more"
-        data-active={to_string(@more? and not @loading?)}
-        class="flex min-h-16 items-center justify-center pt-4"
-      >
-        <span :if={@loading?} class="loading loading-spinner loading-md text-base-content/50"></span>
+        <div
+          :if={@q == "" and @items != [] and (@more? or @loading?)}
+          id="grid-more"
+          phx-hook="InfiniteScroll"
+          data-event="more"
+          data-active={to_string(@more? and not @loading?)}
+          class="flex min-h-16 items-center justify-center pt-4"
+        >
+          <span :if={@loading?} class="loading loading-spinner loading-md text-base-content/50"></span>
+        </div>
+
+        <p
+          :if={@q == "" and @items == [] and not @loading? and @error == nil}
+          class="py-16 text-center text-base-content/60"
+        >
+          Nothing here.
+        </p>
       </div>
-
-      <p
-        :if={@q == "" and @items == [] and not @loading? and @error == nil}
-        class="py-16 text-center text-base-content/60"
-      >
-        Nothing here.
-      </p>
     </Layouts.app>
     """
   end
