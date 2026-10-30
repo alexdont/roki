@@ -50,6 +50,7 @@ defmodule RokiWeb.TitleLive do
         solo?: false,
         link_state: :none,
         trailer: nil,
+        credits: Roki.Credits.empty(),
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
@@ -478,6 +479,7 @@ defmodule RokiWeb.TitleLive do
      end)
      |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title, sections) end)
      |> start_async(:trailer, fn -> Roki.Trailers.key(title.type, title.id, uuid) end)
+     |> start_async(:credits, fn -> Roki.Credits.for_title(title.type, title.id, uuid) end)
      |> select()}
   end
 
@@ -491,6 +493,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :trailer, key)}
 
   def handle_async(:trailer, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:credits, {:ok, %{} = credits}, socket),
+    do: {:noreply, assign(socket, :credits, credits)}
+
+  def handle_async(:credits, _other, socket), do: {:noreply, socket}
 
   def handle_async(:study, {:ok, %{} = choice}, socket),
     do: {:noreply, assign(socket, :study, choice)}
@@ -603,152 +610,185 @@ defmodule RokiWeb.TitleLive do
       )
 
     ~H"""
+    <%!-- Flush: this page lays itself out. Below a wide screen it has the padding and width it always
+          had; on one the hero runs to the edges of the window under a floating header. --%>
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed={@live_action == :show}
+      overlay={@title != nil and @live_action == :show}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/title/#{@type}/#{@id}"}
     >
-      <p :if={@title_error} class="alert alert-error">
-        {if @uuid,
-          do: "Couldn't load this title just now. Try again in a minute.",
-          else: "Log in to open titles — they are read with your own TMDB key."}
-      </p>
+      <div class={["px-4 py-8 sm:px-6", if(@live_action == :show, do: "lg:p-0", else: "lg:px-8")]}>
+        <div class={["mx-auto max-w-6xl space-y-4", @live_action == :show && "lg:max-w-none"]}>
+          <p :if={@title_error} class="alert alert-error">
+            {if @uuid,
+              do: "Couldn't load this title just now. Try again in a minute.",
+              else: "Log in to open titles — they are read with your own TMDB key."}
+          </p>
 
-      <div :if={@title == nil and @title_error == nil} class="space-y-4" aria-busy="true">
-        <div class="skeleton h-64 w-full rounded-box"></div>
-        <div class="skeleton h-8 w-1/3 rounded"></div>
-      </div>
+          <div :if={@title == nil and @title_error == nil} class="space-y-4" aria-busy="true">
+            <div class="skeleton h-64 w-full rounded-box"></div>
+            <div class="skeleton h-8 w-1/3 rounded"></div>
+          </div>
 
-      <div :if={@title && @live_action == :show} class="space-y-8">
-        <.phone_hero
-          title={@title}
-          play={@play}
-          resume={@resume}
-          resume_secs={@resume_secs}
-          phase={@phase}
-          season={@season}
-          mode={@mode}
-          linked?={@linked?}
-          lib={@lib}
-          lib_busy={@lib_busy}
-          rating={@rating}
-          locked?={@locked?}
-          mal={@rate_mal}
-          link_state={@link_state}
-          trailer={@trailer}
-        />
+          <div :if={@title && @live_action == :show} class="space-y-8">
+            <.phone_hero
+              title={@title}
+              play={@play}
+              resume={@resume}
+              resume_secs={@resume_secs}
+              phase={@phase}
+              season={@season}
+              mode={@mode}
+              linked?={@linked?}
+              lib={@lib}
+              lib_busy={@lib_busy}
+              rating={@rating}
+              locked?={@locked?}
+              mal={@rate_mal}
+              link_state={@link_state}
+              trailer={@trailer}
+            />
 
-        <.rate_sheet
-          :if={@linked?}
-          title={@title}
-          rating={@rating}
-          error={@rating_error}
-          label={rate_label(@sections, @rate_mal)}
-        />
+            <.rate_sheet
+              :if={@linked?}
+              title={@title}
+              rating={@rating}
+              error={@rating_error}
+              label={rate_label(@sections, @rate_mal)}
+            />
 
-        <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
-        <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
+            <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
+            <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
 
-        <.hero
-          mal={@rate_mal}
-          link_state={@link_state}
-          trailer={@trailer}
-          study={@study}
-          rating={@rating}
-          title={@title}
-          play={@play}
-          resume={@resume}
-          resume_secs={@resume_secs}
-          phase={@phase}
-          season={@season}
-          mode={@mode}
-          linked?={@linked?}
-          lib={@lib}
-          lib_busy={@lib_busy}
-          cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
-        >
-          <.title_comments
-            :if={@title.type in ["movie", "tv"]}
-            id="title-comments"
-            title={@title}
-            user={assigns[:phoenix_kit_current_user]}
-          />
-        </.hero>
+            <.hero
+              mal={@rate_mal}
+              link_state={@link_state}
+              trailer={@trailer}
+              study={@study}
+              rating={@rating}
+              title={@title}
+              play={@play}
+              resume={@resume}
+              resume_secs={@resume_secs}
+              phase={@phase}
+              season={@season}
+              mode={@mode}
+              linked?={@linked?}
+              lib={@lib}
+              lib_busy={@lib_busy}
+              cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
+            />
 
-        <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
+            <.cinema_hero
+              mal={@rate_mal}
+              link_state={@link_state}
+              trailer={@trailer}
+              study={@study}
+              rating={@rating}
+              title={@title}
+              play={@play}
+              resume={@resume}
+              resume_secs={@resume_secs}
+              phase={@phase}
+              season={@season}
+              mode={@mode}
+              linked?={@linked?}
+              lib={@lib}
+              lib_busy={@lib_busy}
+              cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
+            />
 
-        <.access_notice uuid={@uuid} linked?={@linked?} />
+            <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
 
-        <%!-- A phone has one column, so its comments come after the details. A wide screen has them
+            <div class="lg:px-12 xl:px-16"><.access_notice uuid={@uuid} linked?={@linked?} /></div>
+
+            <.facts_panel title={@title} credits={@credits} />
+            <.cast_row cast={@credits.cast} />
+
+            <%!-- A phone has one column, so its comments come after the details. A wide screen has them
               in the hero, under the Play controls. --%>
-        <div :if={@title.type in ["movie", "tv"]} class="sm:hidden">
-          <.title_comments
-            id="title-comments-phone"
-            title={@title}
-            user={assigns[:phoenix_kit_current_user]}
-          />
-        </div>
-
-        <%!-- A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
-        <section :if={@similar != []} class="hidden space-y-3 sm:block" aria-label="More like this">
-          <h2 class="text-lg font-semibold">More like this</h2>
-          <ul class="grid grid-cols-3 gap-4 md:grid-cols-4 lg:grid-cols-6">
-            <li :for={i <- Enum.take(@similar, 12)}>
-              <RokiWeb.PosterComponents.poster
-                item={i}
-                seen={MapSet.member?(@similar_seen, {i.type, i.id})}
-                cached_titles={@cached_titles}
+            <div :if={@title.type in ["movie", "tv"]} class="sm:hidden">
+              <.title_comments
+                id="title-comments-phone"
+                title={@title}
+                user={assigns[:phoenix_kit_current_user]}
               />
-            </li>
-          </ul>
-        </section>
+            </div>
 
-        <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
-        <div :if={!@locked?} class="h-36 sm:hidden" aria-hidden="true"></div>
-      </div>
+            <%!-- On a wide screen the comments come right after the cast: they matter more than more like this. --%>
+            <div
+              :if={@title.type in ["movie", "tv"]}
+              class="hidden sm:block lg:px-12 xl:px-16"
+            >
+              <div class="max-w-5xl">
+                <.title_comments
+                  id="title-comments"
+                  title={@title}
+                  user={assigns[:phoenix_kit_current_user]}
+                />
+              </div>
+            </div>
 
-      <div :if={@title && @live_action == :episodes} class="space-y-6">
-        <.episodes_header
-          title={@title}
-          play={@play}
-          resume={@resume}
-          linked?={@linked?}
-          lib={@lib}
-          mal={@rate_mal}
-        />
-        <.rate_sheet
-          :if={@linked? and @rating.provider == :mal}
-          title={@title}
-          rating={@rating}
-          error={@rating_error}
-          label={rate_label(@sections, @rate_mal)}
-        />
-        <.access_notice uuid={@uuid} linked?={@linked?} />
+            <%!-- Last. A phone's title page is one screen that does not scroll, so this is for wider ones. --%>
+            <.similar_row
+              items={@similar}
+              seen={@similar_seen}
+              cached_titles={@cached_titles}
+              signed_in?={@uuid != nil}
+            />
 
-        <.live_component
-          :if={@linked? and @uuid}
-          module={RokiWeb.LinkProgress}
-          id="link-progress"
-          uuid={@uuid}
-          title={@title}
-          rev={:erlang.phash2({@season, @watched})}
-        />
+            <div class="hidden lg:block lg:h-12" aria-hidden="true"></div>
 
-        <.episodes
-          title={@title}
-          season={@season}
-          sections={@sections}
-          section={@section}
-          episodes={@episodes}
-          watched={@watched}
-          season_counts={@season_counts}
-          cached={@cached}
-          title_id={@id}
-          can_play?={@linked?}
-          rating={@rating}
-        />
+            <%!-- On a phone the Play bar is fixed to the screen's bottom; leave room under the page. --%>
+            <div :if={!@locked?} class="h-36 sm:hidden" aria-hidden="true"></div>
+          </div>
+
+          <div :if={@title && @live_action == :episodes} class="space-y-6">
+            <.episodes_header
+              title={@title}
+              play={@play}
+              resume={@resume}
+              linked?={@linked?}
+              lib={@lib}
+              mal={@rate_mal}
+            />
+            <.rate_sheet
+              :if={@linked? and @rating.provider == :mal}
+              title={@title}
+              rating={@rating}
+              error={@rating_error}
+              label={rate_label(@sections, @rate_mal)}
+            />
+            <.access_notice uuid={@uuid} linked?={@linked?} />
+
+            <.live_component
+              :if={@linked? and @uuid}
+              module={RokiWeb.LinkProgress}
+              id="link-progress"
+              uuid={@uuid}
+              title={@title}
+              rev={:erlang.phash2({@season, @watched})}
+            />
+
+            <.episodes
+              title={@title}
+              season={@season}
+              sections={@sections}
+              section={@section}
+              episodes={@episodes}
+              watched={@watched}
+              season_counts={@season_counts}
+              cached={@cached}
+              title_id={@id}
+              can_play?={@linked?}
+              rating={@rating}
+            />
+          </div>
+        </div>
       </div>
     </Layouts.app>
     """
@@ -861,7 +901,7 @@ defmodule RokiWeb.TitleLive do
 
   defp hero(assigns) do
     ~H"""
-    <section class="hidden space-y-6 sm:block">
+    <section class="hidden space-y-6 sm:block lg:hidden">
       <%!-- The banner: the film's own backdrop, washed into the page colour so the words stay readable
             in the light and the dark theme alike; the poster stands on it. --%>
       <div class="relative isolate rounded-3xl border border-base-300/70 bg-base-200">
@@ -971,6 +1011,516 @@ defmodule RokiWeb.TitleLive do
       <%!-- More for under the banner (the comments, on a wide screen). --%>
       <div>{render_slot(@inner_block)}</div>
     </section>
+    """
+  end
+
+  # ── the wide-screen page: a hero the picture runs through, then rows ────────────────
+
+  # Where each thing is drawn from: the film's own backdrop at its largest (the hero is the width of
+  # the window), and what kind of title it is, in a word.
+  defp hero_backdrop(nil), do: nil
+
+  defp hero_backdrop(url),
+    do: Roki.Images.local(String.replace(url, "/w1280/", "/original/"))
+
+  defp kind_label(%{anime?: true}), do: "Anime"
+  defp kind_label(%{type: "movie"}), do: "Film"
+  defp kind_label(_), do: "Series"
+
+  defp release_date(nil), do: nil
+
+  defp release_date(iso) do
+    case Date.from_iso8601(iso) do
+      {:ok, d} -> Calendar.strftime(d, "%-d %b %Y")
+      _ -> nil
+    end
+  end
+
+  attr :cached?, :boolean, default: false
+  attr :title, :map, required: true
+  attr :resume, :any, default: nil
+  attr :resume_secs, :any, default: nil
+
+  attr :play, :map,
+    default: %{season: 1, episode: 1, continue?: false, verb: "Start", label: "S1.E1"}
+
+  attr :phase, :any, required: true
+  attr :season, :any, default: nil
+  attr :mode, :atom, required: true
+  attr :linked?, :boolean, default: false
+  attr :lib, :map, required: true
+  attr :lib_busy, :boolean, default: false
+  attr :rating, :map, required: true
+  attr :mal, :any, default: nil
+  attr :link_state, :any, default: :none
+  attr :trailer, :any, default: nil
+  attr :study, :map, default: nil
+
+  # The title at the top of the page on a wide screen. The backdrop runs edge to edge under the
+  # floating header; after a couple of seconds the trailer plays in its place, muted, with
+  # controls in the corner (`HeroTrailer`). The words are over it on the left, the actions are
+  # round glass buttons — the same look as the cards on the home page.
+  defp cinema_hero(assigns) do
+    assigns =
+      assign(assigns,
+        backdrop: hero_backdrop(assigns.title.backdrop),
+        kind: kind_label(assigns.title)
+      )
+
+    ~H"""
+    <section
+      id="hero"
+      phx-hook="HeroTrailer"
+      data-key={@trailer}
+      class="group/hero relative isolate hidden min-h-[clamp(34rem,80svh,54rem)] overflow-hidden bg-neutral-900 text-white lg:flex lg:flex-col lg:justify-end"
+      aria-label={@title.title}
+    >
+      <img
+        :if={@backdrop}
+        src={@backdrop}
+        alt=""
+        class="absolute inset-0 -z-10 h-full w-full object-cover"
+      />
+      <%!-- The trailer's player is put here by the hook; the page never touches it again. --%>
+      <div
+        id="hero-video"
+        data-hero-video
+        phx-update="ignore"
+        class="absolute inset-0 -z-10 [container-type:size]"
+      >
+      </div>
+      <div
+        data-hero-fade
+        class="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/45 to-transparent"
+      >
+      </div>
+      <div
+        data-hero-fade
+        class="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-transparent to-black/45"
+      >
+      </div>
+
+      <div class="absolute right-12 top-20 z-20 xl:right-16" data-hero-content>
+        <.more_menu
+          id="more-menu-cinema"
+          title={@title}
+          linked?={@linked?}
+          lib={@lib}
+          mal={@mal}
+          button_class="h-11 min-h-0 w-11 border border-white/25 bg-black/35 text-white backdrop-blur-md hover:border-white/60 hover:bg-black/55"
+        />
+      </div>
+
+      <div
+        data-hero-content
+        class="relative z-10 flex max-w-4xl flex-col gap-4 px-12 pb-14 pt-32 xl:px-16"
+      >
+        <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{@kind}</p>
+        <h1 class="text-5xl font-bold leading-[1.02] tracking-tight drop-shadow-lg xl:text-7xl">
+          {@title.title}
+        </h1>
+
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/85">
+          <span
+            :if={is_number(@title.vote) and @title.vote > 0}
+            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 font-semibold backdrop-blur"
+            title="TMDB's score"
+          >
+            <span class="text-amber-300" aria-hidden="true">★</span>{avg_text(@title)}
+          </span>
+          <span :if={@title.year}>{@title.year}</span>
+          <span :if={@title.minutes}>{@title.minutes} min</span>
+          <span :if={seasons_text(@title)}>{seasons_text(@title)}</span>
+          <span :if={episodes_text(@title)}>{episodes_text(@title)}</span>
+          <span
+            :for={g <- Enum.take(@title.genres, 3)}
+            class="rounded-full border border-white/30 px-3 py-0.5 text-white/80"
+          >
+            {g}
+          </span>
+        </div>
+
+        <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>
+
+        <p :if={@title.overview} class="max-w-2xl text-base leading-relaxed text-white/85 xl:text-lg">
+          <span class="line-clamp-3">{@title.overview}</span>
+          <a
+            href="#details"
+            class="text-sm font-medium text-white/60 underline-offset-4 hover:text-white hover:underline"
+          >
+            More
+          </a>
+        </p>
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+          <.play_button
+            title={@title}
+            play={@play}
+            resume={@resume}
+            resume_secs={@resume_secs}
+            busy?={match?({:working, _}, @phase)}
+            class="h-14 min-w-[14rem] rounded-full text-xl"
+          />
+          <.glass_btn
+            :if={@linked? and @study}
+            click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
+            icon="hero-academic-cap"
+            label="Study: watch in languages you choose"
+          />
+          <.glass_btn
+            :if={@linked? and @title.type == "movie"}
+            href={~p"/sources/movie/#{@title.id}"}
+            icon="hero-queue-list"
+            label="Choose which release to play"
+          />
+          <.glass_btn
+            :if={@linked?}
+            click="toggle_saved"
+            icon={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
+            on={@lib.saved?}
+            label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
+          />
+          <.glass_btn
+            :if={@linked?}
+            click="toggle_watched"
+            icon={
+              if watched_state?(@title, @lib),
+                do: "hero-check-circle-solid",
+                else: "hero-check-circle"
+            }
+            on={watched_state?(@title, @lib)}
+            tone={:success}
+            busy={@lib_busy}
+            label={
+              if watched_state?(@title, @lib),
+                do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
+                else: watched_label(@title, @lib)
+            }
+          />
+          <.glass_btn
+            :if={@linked?}
+            click={JS.show(to: "#rate-sheet", display: "flex")}
+            icon={if @rating.value, do: "hero-star-solid", else: "hero-star"}
+            on={@rating.value != nil}
+            tone={:amber}
+            text={if @rating.value, do: fmt_rating(@rating.value)}
+            label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
+          />
+          <.glass_btn
+            :if={@linked? and @title.type == "tv"}
+            click={JS.show(to: "#link-sheet", display: "flex")}
+            icon={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
+            on={@link_state not in [:none, :pending]}
+            text={if match?({:linked, _}, @link_state), do: link_label(@link_state)}
+            label={link_title(@link_state)}
+          />
+          <span
+            :if={@cached?}
+            class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/40"
+            title="Sources are cached: plays right away"
+          >
+            ⚡ cached
+          </span>
+        </div>
+      </div>
+
+      <%!-- Where Play opens it, and the trailer's controls: pause (it plays once, it does not loop),
+            sound, full screen. --%>
+      <div class="absolute bottom-10 right-12 z-20 flex items-center gap-3 xl:right-16">
+        <span data-hero-content><Layouts.player_switch :if={@linked?} /></span>
+        <button
+          :if={@trailer}
+          type="button"
+          data-hero-ctl="play"
+          class={hero_ctl()}
+          title="Play or pause the trailer"
+          aria-label="Play or pause the trailer"
+        >
+          <span class="flex group-data-[hero-playing=true]/hero:hidden">
+            <.icon name="hero-play-solid" class="h-5 w-5" />
+          </span>
+          <span class="hidden group-data-[hero-playing=true]/hero:flex">
+            <.icon name="hero-pause-solid" class="h-5 w-5" />
+          </span>
+        </button>
+        <button
+          :if={@trailer}
+          type="button"
+          data-hero-ctl="mute"
+          class={hero_ctl()}
+          title="Sound on or off"
+          aria-label="Sound on or off"
+        >
+          <span class="flex group-data-[hero-muted=false]/hero:hidden">
+            <.icon name="hero-speaker-x-mark" class="h-5 w-5" />
+          </span>
+          <span class="hidden group-data-[hero-muted=false]/hero:flex">
+            <.icon name="hero-speaker-wave" class="h-5 w-5" />
+          </span>
+        </button>
+        <button
+          :if={@trailer}
+          type="button"
+          data-hero-ctl="full"
+          class={hero_ctl()}
+          title="Full screen"
+          aria-label="Full screen"
+        >
+          <.icon name="hero-arrows-pointing-out" class="h-5 w-5" />
+        </button>
+      </div>
+    </section>
+    """
+  end
+
+  defp hero_ctl,
+    do:
+      "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55"
+
+  attr :click, :any, default: nil
+  attr :href, :any, default: nil
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+  attr :on, :boolean, default: false
+  attr :busy, :boolean, default: false
+  attr :text, :string, default: nil
+  attr :tone, :atom, default: :white
+
+  # A round glass button for an action on the hero: an icon, the words as its tooltip, lit when it
+  # is on. (A score or a name rides beside the icon when there is one.)
+  defp glass_btn(assigns) do
+    ~H"""
+    <.link
+      :if={@href}
+      navigate={@href}
+      class={glass_class(@on, @tone, @text)}
+      title={@label}
+      aria-label={@label}
+    >
+      <.icon name={@icon} class="h-5 w-5" />
+    </.link>
+    <button
+      :if={!@href}
+      type="button"
+      phx-click={@click}
+      disabled={@busy}
+      class={glass_class(@on, @tone, @text)}
+      title={@label}
+      aria-label={@label}
+    >
+      <span :if={@busy} class="loading loading-spinner loading-sm"></span>
+      <.icon :if={!@busy} name={@icon} class="h-5 w-5" />
+      <span :if={@text} class="max-w-40 truncate text-sm font-semibold">{@text}</span>
+    </button>
+    """
+  end
+
+  defp glass_class(on, tone, text) do
+    [
+      "flex h-12 items-center justify-center gap-1.5 rounded-full border text-white backdrop-blur-md transition",
+      if(text, do: "px-4", else: "w-12"),
+      cond do
+        on and tone == :success ->
+          "border-emerald-300/70 bg-emerald-500/40 hover:bg-emerald-500/55"
+
+        on and tone == :amber ->
+          "border-amber-300/70 bg-amber-400/30 hover:bg-amber-400/45"
+
+        on ->
+          "border-white/70 bg-white/25 hover:bg-white/35"
+
+        true ->
+          "border-white/25 bg-white/10 hover:border-white/60 hover:bg-white/20"
+      end
+    ]
+  end
+
+  attr :title, :map, required: true
+  attr :credits, :map, required: true
+
+  # What the hero has no room for: the whole story and the facts, the poster beside them.
+  defp facts_panel(assigns) do
+    t = assigns.title
+    c = assigns.credits
+
+    facts =
+      [
+        {"Status", t[:status]},
+        {if(t.type == "movie", do: "Released", else: "First aired"), release_date(t[:date])},
+        {"Runtime", t.minutes && "#{t.minutes} min"},
+        {"Seasons", seasons_text(t)},
+        {"Directed by", join(c.directors)},
+        {"Written by", join(c.writers)},
+        {"Language", join(t[:spoken]) || t[:language]},
+        {"Country", join(t[:countries])},
+        {if(t.type == "tv", do: "Network", else: "Studio"),
+         join(Enum.take((t.type == "tv" && t[:networks]) || t[:studios] || [], 3))}
+      ]
+      |> Enum.filter(fn {_label, value} -> is_binary(value) and value != "" end)
+
+    assigns = assign(assigns, facts: facts)
+
+    ~H"""
+    <section id="details" class="hidden scroll-mt-20 px-12 lg:block xl:px-16" aria-label="Details">
+      <div class="flex gap-8 rounded-3xl border border-base-300/70 bg-base-100/70 p-6 shadow-sm backdrop-blur lg:p-8">
+        <img
+          :if={@title.poster}
+          src={Roki.Images.local(@title.poster)}
+          alt={@title.title}
+          loading="lazy"
+          class="hidden aspect-[2/3] w-40 shrink-0 self-start rounded-2xl bg-base-300 object-cover shadow-xl ring-1 ring-black/10 xl:block xl:w-48"
+        />
+        <div class="min-w-0 flex-1 space-y-6">
+          <div class="space-y-2">
+            <h2 class="text-xl font-semibold tracking-tight">About</h2>
+            <p :if={@title.overview} class="max-w-3xl leading-relaxed text-base-content/80">
+              {@title.overview}
+            </p>
+          </div>
+          <dl class="grid grid-cols-2 gap-x-8 gap-y-5 text-sm xl:grid-cols-3">
+            <div :for={{label, value} <- @facts} class="min-w-0">
+              <dt class="text-xs font-medium uppercase tracking-wider text-base-content/50">
+                {label}
+              </dt>
+              <dd class="mt-0.5 font-medium">{value}</dd>
+            </div>
+          </dl>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <a
+              :if={@title[:imdb_id]}
+              href={"https://www.imdb.com/title/#{@title.imdb_id}/"}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-sm rounded-full"
+            >
+              IMDb <.icon name="hero-arrow-top-right-on-square" class="h-4 w-4" />
+            </a>
+            <a
+              href={"https://www.themoviedb.org/#{@title.type}/#{@title.id}"}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-sm rounded-full"
+            >
+              TMDB <.icon name="hero-arrow-top-right-on-square" class="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
+  defp join(nil), do: nil
+  defp join([]), do: nil
+  defp join(list) when is_list(list), do: Enum.join(list, ", ")
+  defp join(other), do: other
+
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+
+  attr :cards?, :boolean,
+    default: false,
+    doc: "its items open into cards on hover (the home page's)"
+
+  attr :class, :string, default: "hidden lg:block"
+  slot :inner_block, required: true
+
+  # A row that scrolls sideways, with the chevron on the side the pointer is over (`ShelfRow`):
+  # the home page's rows, for the cast and for more like this.
+  defp scroll_row(assigns) do
+    ~H"""
+    <section
+      id={@id}
+      phx-hook="ShelfRow"
+      data-start="true"
+      data-end="false"
+      class={["group/row", @class]}
+      aria-label={@title}
+    >
+      <h2 class="mb-3 px-12 text-2xl font-semibold tracking-tight xl:px-16">{@title}</h2>
+      <div class="relative">
+        <button
+          type="button"
+          data-row-prev
+          aria-label={"Scroll #{@title} back"}
+          class="absolute inset-y-0 left-0 z-10 hidden w-16 items-center justify-start bg-gradient-to-r from-black/55 to-transparent pl-3 text-white opacity-0 transition lg:group-hover/row:group-data-[start=false]/row:flex lg:group-hover/row:group-data-[start=false]/row:opacity-100"
+        >
+          <.icon name="hero-chevron-left" class="h-8 w-8 drop-shadow" />
+        </button>
+        <button
+          type="button"
+          data-row-next
+          aria-label={"Scroll #{@title} forward"}
+          class="absolute inset-y-0 right-0 z-10 hidden w-16 items-center justify-end bg-gradient-to-l from-black/55 to-transparent pr-3 text-white opacity-0 transition lg:group-hover/row:group-data-[end=false]/row:flex lg:group-hover/row:group-data-[end=false]/row:opacity-100"
+        >
+          <.icon name="hero-chevron-right" class="h-8 w-8 drop-shadow" />
+        </button>
+        <ul
+          data-row-scroller
+          data-card-row={@cards?}
+          class={[
+            "flex snap-x scroll-px-12 gap-4 overflow-x-auto scroll-smooth px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16",
+            if(@cards?, do: "-mb-[3.25rem] -mt-3 pb-16 pt-4", else: "pb-3 pt-1")
+          ]}
+        >
+          {render_slot(@inner_block)}
+        </ul>
+      </div>
+    </section>
+    """
+  end
+
+  attr :cast, :list, required: true
+
+  defp cast_row(assigns) do
+    ~H"""
+    <.scroll_row :if={@cast != []} id="row-cast" title="Cast">
+      <li :for={p <- @cast} class="w-32 shrink-0 snap-start text-center xl:w-36">
+        <div class="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-base-300 ring-1 ring-base-content/10 xl:h-32 xl:w-32">
+          <img
+            :if={p.photo}
+            src={Roki.Images.local(p.photo)}
+            alt=""
+            loading="lazy"
+            class="h-full w-full object-cover"
+          />
+          <span :if={!p.photo} class="text-2xl font-semibold text-base-content/40">
+            {p.name |> String.first()}
+          </span>
+        </div>
+        <p class="mt-2 truncate text-sm font-medium" title={p.name}>{p.name}</p>
+        <p :if={p.character} class="truncate text-xs text-base-content/60" title={p.character}>
+          {p.character}
+        </p>
+      </li>
+    </.scroll_row>
+    """
+  end
+
+  attr :items, :list, required: true
+  attr :seen, :any, required: true
+  attr :cached_titles, :any, default: nil
+  attr :signed_in?, :boolean, default: false
+
+  defp similar_row(assigns) do
+    ~H"""
+    <.scroll_row
+      :if={@items != []}
+      id="row-similar"
+      title="More like this"
+      cards?
+      class="hidden sm:block lg:block"
+    >
+      <RokiWeb.FeaturedLive.shelf_card
+        :for={i <- Enum.take(@items, 20)}
+        kind={:similar}
+        item={i}
+        seen={MapSet.member?(@seen, {i.type, i.id})}
+        cached_titles={@cached_titles}
+        upcoming={%{}}
+        signed_in?={@signed_in?}
+      />
+    </.scroll_row>
     """
   end
 
@@ -1541,6 +2091,7 @@ defmodule RokiWeb.TitleLive do
   attr :link?, :boolean, default: false
   attr :link_state, :any, default: :none
   attr :trailer, :any, default: nil
+  attr :button_class, :string, default: ""
 
   defp more_menu(assigns) do
     assigns =
@@ -1554,7 +2105,7 @@ defmodule RokiWeb.TitleLive do
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}", display: "block")}
-        class="btn btn-ghost btn-circle btn-sm relative"
+        class={["btn btn-ghost btn-circle btn-sm relative", @button_class]}
         aria-label="More actions"
         aria-controls={@id}
       >

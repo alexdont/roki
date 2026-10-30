@@ -12,7 +12,6 @@ defmodule Roki.Trailers do
 
   alias Roki.TTLCache
 
-  @base "https://api.themoviedb.org/3"
   @ttl_s 24 * 3600
 
   @doc "The YouTube key of this film's or show's trailer, or nil. `type` is `\"movie\"` or `\"tv\"`."
@@ -67,27 +66,10 @@ defmodule Roki.Trailers do
   end
 
   defp videos(type, id) do
-    case Laev.Scope.get(:tmdb_key) do
-      key when is_binary(key) and key != "" ->
-        {auth, params} =
-          if String.starts_with?(key, "eyJ"),
-            do: {[auth: {:bearer, key}], []},
-            else: {[], [api_key: key]}
-
-        case Req.get(
-               Req.new(base_url: @base, retry: false, receive_timeout: 6_000),
-               [
-                 url: "/#{type}/#{id}/videos",
-                 params: params ++ [include_video_language: "en,null"]
-               ] ++ auth
-             ) do
-          {:ok, %{status: 200, body: %{"results" => results}}} -> {:ok, results}
-          {:ok, %{status: status}} -> {:error, {:tmdb, status}}
-          {:error, reason} -> {:error, reason}
-        end
-
-      _ ->
-        {:error, :no_tmdb_key}
+    case Roki.TmdbApi.get("/#{type}/#{id}/videos", include_video_language: "en,null") do
+      {:ok, %{"results" => results}} -> {:ok, results}
+      {:ok, _} -> {:ok, []}
+      error -> error
     end
   end
 end

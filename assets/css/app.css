@@ -273,6 +273,43 @@ html.study-open .site-header { display: none; }
   }
 }
 
+/* A title's page on a wide screen: the trailer plays behind the words (HeroTrailer puts the player in
+   `[data-hero-video]`). It covers the hero like a background picture, fades in once it is really
+   playing, and fades out again when it ends or is paused to nothing. In full screen the whole video
+   is shown, uncropped, and only the controls stay over it. */
+[data-hero-video] {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+[data-hero][data-hero-live="true"]:not([data-hero-ended="true"]) [data-hero-video] {
+  opacity: 1;
+}
+
+[data-hero-video] iframe {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  aspect-ratio: 16 / 9;
+  width: max(118cqw, 208cqh);
+  border: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+[data-hero]:fullscreen {
+  background: #000;
+}
+
+[data-hero]:fullscreen [data-hero-video] iframe {
+  width: min(100cqw, 177.78cqh);
+}
+
+[data-hero]:fullscreen [data-hero-content],
+[data-hero]:fullscreen [data-hero-fade] {
+  display: none;
+}
+
 /* Primary buttons carry the brand as a soft gradient and a glow of their own colour. */
 .btn-primary:not(.btn-outline):not(.btn-ghost):not(.btn-link) {
   background-image: linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 78%, var(--color-accent) 22%));

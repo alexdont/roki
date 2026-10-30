@@ -79,4 +79,83 @@ defmodule RokiWeb.TitlePageTest do
       refute html =~ "Watch trailer"
     end
   end
+
+  describe "the wide-screen page" do
+    setup do
+      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, "abc123xyz"})
+
+      Roki.TTLCache.put(
+        {:credits, "tv", 209_867},
+        600,
+        {:ok,
+         %{
+           cast: [%{name: "Cast Person", character: "Role", photo: nil}],
+           directors: ["Dir One"],
+           writers: []
+         }}
+      )
+
+      on_exit(fn ->
+        Roki.TTLCache.delete({:trailer, "tv", 209_867})
+        Roki.TTLCache.delete({:credits, "tv", 209_867})
+      end)
+    end
+
+    defp open_page(conn) do
+      {:ok, view, _} = live(conn, "/title/tv/209867")
+      render_async(view, 8000)
+      render_async(view, 8000)
+    end
+
+    test "has a hero the trailer plays in, with the viewer's controls", %{conn: conn} do
+      html = open_page(conn)
+
+      assert html =~ ~s(id="hero")
+      assert html =~ ~s(phx-hook="HeroTrailer")
+      assert html =~ ~s(data-key="abc123xyz")
+      # The player is put in by the hook, and the page leaves it alone.
+      assert html =~
+               ~r/id="hero-video"[^>]*phx-update="ignore"|phx-update="ignore"[^>]*id="hero-video"/
+
+      for ctl <- ~w(play mute full), do: assert(html =~ ~s(data-hero-ctl="#{ctl}"))
+    end
+
+    test "has no controls to offer when there is no trailer", %{conn: conn} do
+      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, nil})
+      html = open_page(conn)
+
+      assert html =~ ~s(id="hero")
+      refute html =~ "data-hero-ctl"
+      refute html =~ ~s(data-key="abc123xyz")
+    end
+
+    test "has the facts, the cast and the comments, the comments before more like this", %{
+      conn: conn
+    } do
+      html = open_page(conn)
+
+      assert html =~ ~s(id="details")
+      assert html =~ "Cast Person"
+      assert html =~ "Dir One"
+      refute html =~ ">false<"
+
+      {cast, _} = :binary.match(html, ~s(id="row-cast"))
+
+      # The comments section that follows the cast (the phone has its own, earlier in the page).
+      {comments, _} =
+        :binary.match(html, ~s(aria-label="Comments"), scope: {cast, byte_size(html) - cast})
+
+      assert cast < comments
+
+      # Whatever "more like this" is, it never comes before the comments.
+      case :binary.match(html, ~s(id="row-similar")) do
+        {similar, _} -> assert comments < similar
+        :nomatch -> :ok
+      end
+    end
+
+    test "the page's header floats over it", %{conn: conn} do
+      assert open_page(conn) =~ "site-header--overlay"
+    end
+  end
 end

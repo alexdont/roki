@@ -1042,7 +1042,8 @@ defmodule RokiWeb.FeaturedLive do
   # (the trailer, after a moment), Play, save and more, and the facts. The neighbours make way as
   # the poster's slot widens. What it shows beyond the poster comes from `/card/:type/:id`, fetched
   # by the `ShelfRow` hook once the card is open.
-  defp shelf_card(assigns) do
+  @doc false
+  def shelf_card(assigns) do
     kind = if assigns.item.type == "movie", do: "movie", else: "tv"
 
     assigns =
