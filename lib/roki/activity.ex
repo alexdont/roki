@@ -749,7 +749,7 @@ defmodule Roki.Activity do
   # What a run reads as, with the title taken out of the sentence `verb/1` makes.
   defp split_verb(e), do: {verb(e), e.title}
 
-  defp look("finished"), do: %{icon: "hero-check-circle", tone: "success"}
+  defp look("finished"), do: %{icon: "hero-eye", tone: "success"}
   defp look("started"), do: %{icon: "hero-play-circle", tone: "info"}
   defp look("saved"), do: %{icon: "hero-bookmark", tone: "primary"}
   defp look("rated"), do: %{icon: "hero-star", tone: "warning"}

@@ -90,7 +90,7 @@ function actionRow(el) {
     [
       "watched",
       currentState.watched,
-      "check-circle",
+      "eye",
       series ? "Completed (click to mark as not watched)" : "Watched (click to mark as not watched)",
       series ? "Mark as completed" : "Mark as watched",
     ],

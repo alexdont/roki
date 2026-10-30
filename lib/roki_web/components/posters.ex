@@ -171,13 +171,7 @@ defmodule RokiWeb.PosterComponents do
           class="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-success text-success-content shadow"
           title="Watched"
         >
-          <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
-            <path
-              fill-rule="evenodd"
-              d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.8 3.8 6.8-6.8a1 1 0 0 1 1.4 0Z"
-              clip-rule="evenodd"
-            />
-          </svg>
+          <span class="hero-eye-solid h-4 w-4" aria-hidden="true"></span>
         </span>
         <div
           :if={!@item.poster}

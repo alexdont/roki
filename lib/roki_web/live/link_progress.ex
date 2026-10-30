@@ -345,7 +345,7 @@ defmodule RokiWeb.LinkProgress do
           )
         ]}
       >
-        <.icon name="hero-check-circle" class="h-5 w-5 shrink-0" />
+        <.icon name="hero-eye" class="h-5 w-5 shrink-0" />
         <span :if={!@linked?} class="font-semibold">Not linked yet</span>
         <span :if={@linked? and is_map(@next_up)} class="min-w-0">
           <span class="block font-semibold">We watched S{@next_up.season}E{@next_up.episode}</span>

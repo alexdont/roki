@@ -1039,8 +1039,8 @@ defmodule RokiWeb.TitleLive do
               click="toggle_watched"
               icon={
                 if watched_state?(@title, @lib),
-                  do: "hero-check-circle-solid",
-                  else: "hero-check-circle"
+                  do: "hero-eye-solid",
+                  else: "hero-eye"
               }
               on={watched_state?(@title, @lib)}
               tone={:success}
@@ -1649,7 +1649,7 @@ defmodule RokiWeb.TitleLive do
           aria-label={season_aria(state, to_come)}
         >
           <.icon
-            name={if state == :open, do: "hero-check-circle", else: "hero-check-circle-solid"}
+            name={if state == :open, do: "hero-eye", else: "hero-eye-solid"}
             class="h-8 w-8"
           />
         </button>
@@ -1732,8 +1732,8 @@ defmodule RokiWeb.TitleLive do
               <.icon
                 name={
                   if MapSet.member?(@watched, e.number),
-                    do: "hero-check-circle-solid",
-                    else: "hero-check-circle"
+                    do: "hero-eye-solid",
+                    else: "hero-eye"
                 }
                 class="h-8 w-8"
               />

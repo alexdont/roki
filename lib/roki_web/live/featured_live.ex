@@ -1025,9 +1025,9 @@ defmodule RokiWeb.FeaturedLive do
               if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
             }
           >
-            <span data-off class="flex"><.icon name="hero-check-circle" class="h-5 w-5" /></span>
+            <span data-off class="flex"><.icon name="hero-eye" class="h-5 w-5" /></span>
             <span data-on class="hidden">
-              <.icon name="hero-check-circle-solid" class="h-5 w-5 text-emerald-400" />
+              <.icon name="hero-eye-solid" class="h-5 w-5 text-emerald-400" />
             </span>
           </button>
           <.link
