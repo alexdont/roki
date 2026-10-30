@@ -729,7 +729,7 @@ defmodule RokiWeb.FeaturedLive do
         type="button"
         data-mood-prev
         aria-label="Previous mood"
-        class="absolute left-1 top-[42%] z-10 flex h-8 w-6 -translate-y-1/2 items-center justify-center text-white/70 drop-shadow transition hover:text-white sm:left-2"
+        class="absolute left-1 top-[42%] z-10 flex h-8 w-6 -translate-y-1/2 items-center justify-center text-white drop-shadow-[0_0_3px_rgba(0,0,0,0.95)] transition hover:text-white sm:left-2"
       >
         <.icon name="hero-chevron-left" class="h-4 w-4" />
       </button>
@@ -737,7 +737,7 @@ defmodule RokiWeb.FeaturedLive do
         type="button"
         data-mood-next
         aria-label="Next mood"
-        class="absolute right-1 top-[42%] z-10 flex h-8 w-6 -translate-y-1/2 items-center justify-center text-white/70 drop-shadow transition hover:text-white sm:right-2"
+        class="absolute right-1 top-[42%] z-10 flex h-8 w-6 -translate-y-1/2 items-center justify-center text-white drop-shadow-[0_0_3px_rgba(0,0,0,0.95)] transition hover:text-white sm:right-2"
       >
         <.icon name="hero-chevron-right" class="h-4 w-4" />
       </button>
