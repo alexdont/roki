@@ -70,7 +70,6 @@ function render(el, info) {
   // Not out yet (red, from the page) or out already (grey, when the lookup arrives).
   if (el.dataset.peekDue) c.appendChild(line("peek-due", el.dataset.peekDue))
   else if (info?.date) c.appendChild(line("peek-released", released(info.date, el.dataset.peek)))
-  if (el.dataset.peekCached) c.appendChild(line("peek-cached", "⚡ sources cached — plays right away"))
 
   const actions = actionRow(el)
   if (actions) c.appendChild(actions)

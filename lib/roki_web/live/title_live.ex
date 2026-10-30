@@ -970,6 +970,7 @@ defmodule RokiWeb.TitleLive do
             resume={@resume}
             resume_secs={@resume_secs}
             busy?={match?({:working, _}, @phase)}
+            cached?={@cached?}
             class="h-14 w-full rounded-full text-xl sm:w-auto sm:min-w-[14rem]"
           />
           <.glass_btn
@@ -982,16 +983,16 @@ defmodule RokiWeb.TitleLive do
             class="lg:hidden"
           />
           <.glass_btn
-            :if={@linked? and @study}
-            click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
-            icon="hero-academic-cap"
-            label="Study: watch in languages you choose"
-          />
-          <.glass_btn
             :if={@linked? and @title.type == "movie"}
             href={~p"/sources/movie/#{@title.id}"}
             icon="hero-queue-list"
             label="Choose which release to play"
+          />
+          <.glass_btn
+            :if={@linked? and @study}
+            click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
+            icon="hero-academic-cap"
+            label="Study: watch in languages you choose"
           />
           <.glass_btn
             :if={@linked?}
@@ -1034,19 +1035,12 @@ defmodule RokiWeb.TitleLive do
             text={if match?({:linked, _}, @link_state), do: link_label(@link_state)}
             label={link_title(@link_state)}
           />
-          <span
-            :if={@cached?}
-            class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/40"
-            title="Sources are cached: plays right away"
-          >
-            ⚡ cached
-          </span>
         </div>
       </div>
 
       <%!-- Where Play opens it, and the trailer's controls: pause (it plays once, it does not loop),
             sound, full screen. --%>
-      <div class="relative z-20 flex items-center gap-3 px-4 pb-8 sm:px-6 lg:absolute lg:bottom-10 lg:right-12 lg:justify-end lg:p-0 xl:right-16">
+      <div class="relative z-20 flex items-center gap-3 px-4 pb-8 sm:px-6 lg:absolute lg:bottom-14 lg:right-12 lg:h-14 lg:justify-end lg:p-0 xl:right-16">
         <span data-hero-content class="flex items-center gap-2">
           <span class="text-[0.65rem] font-semibold uppercase tracking-wider text-white/60 lg:hidden">
             Watch in
@@ -1465,6 +1459,7 @@ defmodule RokiWeb.TitleLive do
 
   attr :busy?, :boolean, default: false
   attr :split?, :boolean, default: false
+  attr :cached?, :boolean, default: false
   attr :class, :string, default: nil
 
   # The big button. A film: one button, Start / Continue mm:ss. A series: two halves — the left
@@ -1485,6 +1480,7 @@ defmodule RokiWeb.TitleLive do
         disabled={@busy?}
       >
         <.icon name="hero-play-solid" class="h-6 w-6" />
+        <.icon :if={@cached?} name="hero-bolt-solid" class="h-4 w-4" />
         {play_label(@resume_secs)}
       </button>
     </div>
@@ -1499,6 +1495,7 @@ defmodule RokiWeb.TitleLive do
       disabled={@busy?}
     >
       <.icon name="hero-play-solid" class="h-6 w-6" />
+      <.icon :if={@cached?} name="hero-bolt-solid" class="h-4 w-4" />
       {play_label(@resume_secs)}
     </button>
     """
@@ -1521,6 +1518,7 @@ defmodule RokiWeb.TitleLive do
         ]}
       >
         <.icon name="hero-play-solid" class="h-6 w-6" />
+        <.icon :if={@cached?} name="hero-bolt-solid" class="h-4 w-4" />
         {@play.verb} {@play.label}
       </.link>
     </div>

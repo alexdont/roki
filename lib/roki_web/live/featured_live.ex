@@ -729,17 +729,17 @@ defmodule RokiWeb.FeaturedLive do
         type="button"
         data-mood-prev
         aria-label="Previous mood"
-        class="absolute left-2 sm:left-4 lg:left-6 top-[42%] z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 sm:h-11 sm:w-11"
+        class="absolute left-2 sm:left-4 lg:left-6 top-[42%] z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/25 text-white/80 transition hover:bg-black/55 hover:text-white"
       >
-        <.icon name="hero-chevron-left" class="h-5 w-5" />
+        <.icon name="hero-chevron-left" class="h-4 w-4" />
       </button>
       <button
         type="button"
         data-mood-next
         aria-label="Next mood"
-        class="absolute right-2 sm:right-4 lg:right-6 top-[42%] z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 sm:h-11 sm:w-11"
+        class="absolute right-2 sm:right-4 lg:right-6 top-[42%] z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/25 text-white/80 transition hover:bg-black/55 hover:text-white"
       >
-        <.icon name="hero-chevron-right" class="h-5 w-5" />
+        <.icon name="hero-chevron-right" class="h-4 w-4" />
       </button>
       <%!-- The slides are stacked in one grid cell, so the box is as tall as the tallest of them:
             a long title or a tagline that wraps makes every slide taller, and never squeezes the
