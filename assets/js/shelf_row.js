@@ -65,6 +65,7 @@ export const ShelfRow = {
     window.addEventListener("resize", this.sync)
     this.sync()
     this.cards()
+    if (matchMedia("(hover: hover) and (min-width: 1024px)").matches && this.scroller && !this.grid) this.watchNear()
   },
 
   // The page re-renders as posters arrive: the attributes set here are the first to go.
@@ -72,6 +73,24 @@ export const ShelfRow = {
     this.scroller = this.el.querySelector("[data-row-scroller]")
     this.asked = false
     this.sync()
+  },
+
+  // The chevrons are faintly there while the pointer is in the row, and darker the nearer it gets
+  // to the side they are on (`--near-l` / `--near-r`, 0 to 1, read by the strips' opacity): so there
+  // is something to see before reaching for it, and it is plain by the time the pointer is there.
+  watchNear() {
+    const REACH = 280
+    const set = (l, r) => {
+      this.el.style.setProperty("--near-l", l.toFixed(3))
+      this.el.style.setProperty("--near-r", r.toFixed(3))
+    }
+    this.el.addEventListener("mousemove", (e) => {
+      const box = this.scroller.getBoundingClientRect()
+      const l = this.el.dataset.start === "false" ? 1 - (e.clientX - box.left) / REACH : 0
+      const r = this.el.dataset.end === "false" ? 1 - (box.right - e.clientX) / REACH : 0
+      set(Math.min(1, Math.max(0, l)), Math.min(1, Math.max(0, r)))
+    })
+    this.el.addEventListener("mouseleave", () => set(0, 0))
   },
 
   // A row that draws what is in view and the rest on demand (`data-more`): there is more to ask for.

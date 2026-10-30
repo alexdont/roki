@@ -38,7 +38,7 @@ defmodule Roki.ReviewsTest do
       }
     ]
 
-    Roki.TTLCache.put({:mdblist, "movie", 999_001}, 60, {:ok, held})
+    Roki.TTLCache.put({:mdblist, "movie", 999_001}, 3600, {:ok, held})
     assert Roki.Reviews.scores("movie", 999_001) == held
   end
 end
