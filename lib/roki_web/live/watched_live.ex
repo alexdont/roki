@@ -525,7 +525,11 @@ defmodule RokiWeb.WatchedLive do
                   type="text"
                   name="q"
                   value={@q}
-                  placeholder="Search what you watched…"
+                  placeholder={
+                    if @owner?,
+                      do: "Search what you watched…",
+                      else: "Search what #{@username} watched…"
+                  }
                   autocomplete="off"
                   phx-debounce="300"
                   class="min-w-0 grow bg-transparent text-sm outline-none placeholder:text-base-content/45"
