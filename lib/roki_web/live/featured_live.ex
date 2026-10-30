@@ -954,7 +954,7 @@ defmodule RokiWeb.FeaturedLive do
     <div
       data-card-panel
       class={[
-        "pointer-events-none absolute z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100 group-hover/card:delay-300",
+        "pointer-events-none absolute z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 group-hover/card:pointer-events-auto group-hover/card:opacity-100",
         @class
       ]}
     >
@@ -1121,7 +1121,7 @@ defmodule RokiWeb.FeaturedLive do
           title_href={@title_href}
           play_href={@play_href}
           signed_in?={@signed_in?}
-          class="inset-y-0 left-1/2 w-[170%] [translate:-50%_0] max-lg:hidden"
+          class="inset-y-0 left-1/2 w-[170%] [translate:-50%_0] max-lg:hidden group-hover/card:delay-300"
         />
       </div>
       {render_slot(@inner_block)}
@@ -1183,7 +1183,7 @@ defmodule RokiWeb.FeaturedLive do
         title_href={@title_href}
         play_href={@play_href}
         signed_in?={@signed_in?}
-        class="inset-0"
+        class="inset-0 group-hover/card:delay-300"
       />
     </li>
     """

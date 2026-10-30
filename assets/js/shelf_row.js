@@ -9,7 +9,7 @@
 // the page did not carry — length, genres, the wide picture, the trailer — and, a moment after it
 // opened, swaps the picture for the trailer playing muted. Leaving the card stops it.
 const cache = new Map()
-const OPEN_MS = 320 // the card's CSS delay before it starts to open
+const OPEN_MS = 320 // a grid card's CSS delay before it opens
 const TRAILER_MS = 1500 // how long the picture is shown before the trailer replaces it
 
 const csrf = () => document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || ""
@@ -64,6 +64,7 @@ export const ShelfRow = {
     window.addEventListener("resize", this.sync)
     this.sync()
     this.cards()
+    if (matchMedia("(hover: hover) and (min-width: 1024px)").matches && this.scroller && !this.grid) this.watchEdges()
   },
 
   // The page re-renders as posters arrive: the attributes set here are the first to go.
@@ -119,6 +120,26 @@ export const ShelfRow = {
 // What opens over a poster, shared with the grids (`GridCards`): both hooks carry these.
 export const cardMethods = {
   // ── the cards ──────────────────────────────────────────────────────
+
+  // A poster close to a chevron does not open: a card that grew under the strip would be closed
+  // again as the pointer reached for the chevron, which is the jump. Such a poster is marked on the
+  // row (`data-edge-zone`, read by the CSS) while the pointer is over it. "Close" is the strip (56px)
+  // plus how far an opened card spreads past its poster (0.35 of one) and a little.
+  watchEdges() {
+    this.el.addEventListener("mouseover", (e) => {
+      const li = e.target.closest?.("[data-card]")
+      if (!li) return
+      const box = this.scroller.getBoundingClientRect()
+      const r = li.getBoundingClientRect()
+      const reach = 56 + r.width * 0.35 + 8
+      const near =
+        (this.el.dataset.start === "false" && r.left - box.left < reach) ||
+        (this.el.dataset.end === "false" && box.right - r.right < reach)
+      if (near) this.el.dataset.edgeZone = ""
+      else delete this.el.dataset.edgeZone
+    })
+    this.el.addEventListener("mouseleave", () => { delete this.el.dataset.edgeZone })
+  },
 
   cards() {
     // A pointer that hovers, on a screen with room for a card that opens.

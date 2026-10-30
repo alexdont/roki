@@ -217,6 +217,15 @@ html.study-open .site-header { display: none; }
   [data-card-row] > [data-card]:hover {
     width: calc(var(--card-w) * 1.7);
   }
+
+  /* The pointer is going for a chevron (ShelfRow sets this within reach of one): nothing opens. */
+  [data-edge-zone] [data-card-row] > [data-card]:hover {
+    width: var(--card-w);
+  }
+
+  [data-edge-zone] [data-card-row]:has(> [data-card]:hover) > [data-card] {
+    transform: none;
+  }
 }
 
 /* The others in a grid's row make way for a card that opens (GridCards sets --nudge): moved, not
