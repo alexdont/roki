@@ -499,7 +499,8 @@ defmodule RokiWeb.FeaturedLive do
   # "What are you feeling like today?": one mood at a time, turning on a timer, each on the
   # backdrop of what is popular in it with a strip of those posters; the row of moods under it
   # — hover one to see it, click it to open it. The turning is the `MoodCarousel` hook's.
-  defp mood_picker(assigns) do
+  @doc false
+  def mood_picker(assigns) do
     assigns = assign(assigns, :all, Roki.Mood.all())
 
     ~H"""
@@ -510,13 +511,16 @@ defmodule RokiWeb.FeaturedLive do
       class="space-y-3"
       aria-label="What are you feeling like today?"
     >
-      <div class="relative h-[26rem] overflow-hidden rounded-3xl bg-base-300 shadow-xl sm:h-[28rem]">
+      <%!-- The slides are stacked in one grid cell, so the box is as tall as the tallest of them:
+            a long title or a tagline that wraps makes every slide taller, and never squeezes the
+            posters or the button, whatever the width of the screen. --%>
+      <div class="relative grid min-h-[26rem] grid-cols-[minmax(0,1fr)] overflow-hidden rounded-3xl bg-base-300 shadow-xl sm:min-h-[28rem]">
         <%!-- One slide per mood; the hook shows one. --%>
         <div
           :for={{m, i} <- Enum.with_index(@all)}
           data-mood={m.slug}
           class={[
-            "absolute inset-0 transition-opacity duration-700",
+            "relative col-start-1 row-start-1 flex transition-opacity duration-700",
             i != 0 && "pointer-events-none opacity-0"
           ]}
           aria-hidden={to_string(i != 0)}
@@ -538,8 +542,8 @@ defmodule RokiWeb.FeaturedLive do
           >
           </div>
 
-          <div class="relative flex h-full flex-col justify-between p-5 text-white sm:p-8">
-            <div class="max-w-xl space-y-3">
+          <div class="relative flex w-full flex-col justify-between gap-6 p-5 text-white sm:p-8">
+            <div class="max-w-xl space-y-3 sm:max-w-3xl">
               <%!-- Numbered the way a programme numbers its films: where a pictogram would stand. --%>
               <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
                 <span class="font-mono tabular-nums text-white">{Roki.Mood.number(m)}</span>
@@ -547,7 +551,7 @@ defmodule RokiWeb.FeaturedLive do
                 What are you feeling like today?
               </p>
               <h1
-                class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl"
+                class="mood-title text-4xl leading-[0.95] tracking-tight min-[400px]:text-5xl sm:text-7xl"
                 style={"font-family: #{m.font}; --mood: hsl(#{m.hue} 90% 62%)"}
               >
                 {m.label}
@@ -570,7 +574,7 @@ defmodule RokiWeb.FeaturedLive do
             <%!-- What is popular in it right now; each poster is its title. --%>
             <div
               :if={items != []}
-              class="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-8 sm:px-8"
+              class="-mx-5 flex shrink-0 gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-8 sm:px-8"
             >
               <.link
                 :for={t <- Enum.take(items, 10)}
@@ -588,10 +592,10 @@ defmodule RokiWeb.FeaturedLive do
                 <div :if={!t.poster} class="aspect-[2/3] w-full"></div>
               </.link>
             </div>
-            <div :if={items == []} class="flex gap-2">
+            <div :if={items == []} class="flex shrink-0 gap-2">
               <div
                 :for={_ <- 1..6}
-                class="aspect-[2/3] w-[4.5rem] animate-pulse rounded-lg bg-white/15 sm:w-24"
+                class="aspect-[2/3] w-[4.5rem] shrink-0 animate-pulse rounded-lg bg-white/15 sm:w-24"
               >
               </div>
             </div>
