@@ -605,7 +605,7 @@ defmodule RokiWeb.CategoryLive do
   # A big button that says what is chosen and opens a panel under it.
   defp picker(assigns) do
     ~H"""
-    <div id={@id} class="min-w-0 flex-1 basis-[7.5rem] sm:flex-none sm:basis-auto">
+    <div id={@id} class="min-w-0 flex-1 basis-[7.5rem] sm:relative sm:flex-none sm:basis-auto">
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}-panel", display: "block")}
@@ -622,7 +622,7 @@ defmodule RokiWeb.CategoryLive do
       </button>
       <div
         id={"#{@id}-panel"}
-        class="absolute right-0 top-full z-40 mt-2 hidden w-80 max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+        class="absolute right-0 top-full z-40 mt-2 hidden w-80 sm:left-0 sm:right-auto max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
         phx-click-away={JS.hide(to: "##{@id}-panel")}
         phx-window-keydown={JS.hide(to: "##{@id}-panel")}
         phx-key="escape"
