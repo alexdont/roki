@@ -87,6 +87,7 @@ defmodule RokiWeb.HomeRowsTest do
       assert html =~ ~r/data-card-trailer[^>]*phx-update="ignore"/
       assert html =~ ~s(href="/sources/movie/1?auto=1")
       assert html =~ ~s(aria-label="More about Title 1")
+      assert html =~ "data-card-overview"
       # A show's Play is its page, where "continue" is worked out.
       refute html =~ "/sources/tv/3"
     end

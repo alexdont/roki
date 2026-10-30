@@ -24,6 +24,7 @@ defmodule RokiWeb.CardController do
         minutes: t.minutes,
         vote: t.vote,
         genres: Enum.take(t.genres || [], 3),
+        overview: shorten(t.overview),
         backdrop: t.backdrop && Roki.Images.local(t.backdrop),
         trailer: Roki.Trailers.key(type, n, uuid),
         seasons: if(type == "tv", do: length(t.seasons || []))
@@ -33,6 +34,24 @@ defmodule RokiWeb.CardController do
       _ -> send_resp(conn, 404, "")
     end
   end
+
+  # A few lines' worth, cut at a word, not in the middle of one.
+  @overview_chars 190
+  defp shorten(text) when is_binary(text) do
+    text = String.trim(text)
+
+    if String.length(text) <= @overview_chars do
+      text
+    else
+      text
+      |> String.slice(0, @overview_chars)
+      |> String.replace(~r/\s+\S*$/u, "")
+      |> String.trim_trailing(" ,;:.—-")
+      |> Kernel.<>("…")
+    end
+  end
+
+  defp shorten(_), do: nil
 
   defp client(_conn, uuid) when is_binary(uuid), do: {:user, uuid}
   defp client(conn, _), do: {:ip, conn.remote_ip |> :inet.ntoa() |> to_string()}

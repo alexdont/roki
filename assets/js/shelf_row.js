@@ -129,6 +129,7 @@ export const ShelfRow = {
     const set = (sel, text) => { const el = li.querySelector(sel); if (el) el.textContent = text }
     set("[data-card-runtime]", minutes(info.minutes) || (info.seasons ? `${info.seasons} season${info.seasons > 1 ? "s" : ""}` : ""))
     set("[data-card-genres]", (info.genres || []).join(" · "))
+    set("[data-card-overview]", info.overview || "")
     if (info.backdrop) {
       const img = li.querySelector("[data-card-img]")
       const next = new Image()

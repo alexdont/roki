@@ -23,6 +23,11 @@ defmodule RokiWeb.CardControllerTest do
     assert json["minutes"] == 25
     assert json["trailer"] == "abc123xyz"
     assert json["seasons"] == 1
+    # A few lines of the story, cut at a word.
+    assert is_binary(json["overview"])
+    assert String.length(json["overview"]) <= 192
+    assert String.ends_with?(json["overview"], "…")
+    refute json["overview"] =~ ~r/\s…$/
     assert length(json["genres"]) <= 3
     assert is_binary(json["backdrop"])
   end
