@@ -162,4 +162,20 @@ defmodule RokiWeb.FeaturedLiveTest do
       assert render(view) =~ "background: hsl(#{scared.hue} 90% 62%)"
     end
   end
+
+  describe "the header" do
+    test "floats over the picture on the home page, with a search field in it", %{conn: conn} do
+      {:ok, view, html} = live(conn, "/home")
+      assert html =~ "site-header--overlay"
+      assert has_element?(view, ~s|header form[role="search"] input#search-input-wide[name="q"]|)
+      # The icon that opens the search under the bar is still there for narrower screens.
+      assert has_element?(view, ~s|header button[aria-label="Search"].lg\\:hidden|)
+    end
+
+    test "stays an ordinary frosted bar on the other pages, search field included", %{conn: conn} do
+      {:ok, view, html} = live(conn, "/movies")
+      refute html =~ "site-header--overlay"
+      assert has_element?(view, ~s|header form[role="search"] input#search-input-wide|)
+    end
+  end
 end

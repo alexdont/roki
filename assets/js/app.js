@@ -30,6 +30,13 @@ import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
 import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
 import {ShelfRow} from "./shelf_row"
+
+// The home page's header floats clear over its picture until the page is scrolled (see the
+// `.site-header--overlay` rules). The mark is on <html>, which no LiveView patch touches.
+const markScrolled = () => document.documentElement.toggleAttribute("data-scrolled", window.scrollY > 24)
+window.addEventListener("scroll", markScrolled, {passive: true})
+window.addEventListener("phx:page-loading-stop", markScrolled)
+markScrolled()
 import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
 // The manga reader, as the app it came from loads it. PhoenixKit ships Fresco and Etcher of its

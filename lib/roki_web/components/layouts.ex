@@ -46,6 +46,11 @@ defmodule RokiWeb.Layouts do
   attr :current_path, :string, default: "/"
   attr :wide, :boolean, default: false, doc: "full-width content, for the home page"
 
+  attr :overlay, :boolean,
+    default: false,
+    doc:
+      "wide screens: the header floats over the top of the page, clear, until it is scrolled (the home page, whose picture runs to the top)"
+
   attr :bleed, :boolean,
     default: false,
     doc: "the header spans the window like the page under it (the home page), not the 6xl column"
@@ -101,7 +106,10 @@ defmodule RokiWeb.Layouts do
       |> assign(:sections, sections)
 
     ~H"""
-    <header class="site-header relative border-b border-base-300/60">
+    <header class={[
+      "site-header relative border-b border-base-300/60",
+      @overlay && "site-header--overlay"
+    ]}>
       <div class={[
         "mx-auto flex h-14 items-stretch gap-1 px-3 sm:px-6",
         if(@bleed, do: "lg:px-12 xl:px-16", else: "max-w-6xl lg:px-8")
@@ -133,6 +141,25 @@ defmodule RokiWeb.Layouts do
         <%!-- The right side is one quiet row: search, new episodes, the bell, then home (the star) and
               you, last. On a phone new episodes moves into the account menu. --%>
         <div class="flex items-stretch">
+          <%!-- A wide screen has the search field in the bar itself; a narrower one the icon, which
+                opens it under the bar. --%>
+          <form
+            action={~p"/search"}
+            method="get"
+            role="search"
+            class="my-auto mr-2 hidden h-9 w-56 items-center gap-2 rounded-full border border-base-300 bg-base-200 px-3 transition-[width,border-color] focus-within:w-72 focus-within:border-base-content/40 lg:flex xl:w-64 xl:focus-within:w-80"
+          >
+            <.icon name="hero-magnifying-glass" class="h-4 w-4 shrink-0 text-base-content/60" />
+            <input
+              id="search-input-wide"
+              type="search"
+              name="q"
+              placeholder="Search movies and shows"
+              autocomplete="off"
+              aria-label="Search movies and shows"
+              class="min-w-0 flex-1 bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/50"
+            />
+          </form>
           <button
             type="button"
             phx-click={
@@ -141,7 +168,7 @@ defmodule RokiWeb.Layouts do
               |> JS.toggle(to: "#search-pop", display: "flex")
               |> JS.focus(to: "#search-input")
             }
-            class={icon_button()}
+            class={[icon_button(), "lg:hidden"]}
             aria-label="Search"
             title="Search"
           >

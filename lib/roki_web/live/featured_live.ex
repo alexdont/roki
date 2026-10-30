@@ -353,6 +353,7 @@ defmodule RokiWeb.FeaturedLive do
       flash={@flash}
       flush
       bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path="/home"
     >

@@ -195,6 +195,54 @@ html.study-open .site-header { display: none; }
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
 }
 
+/* The home page on a wide screen: its picture runs to the top of the window and the header floats
+   over it — clear, white, with a soft dark fade for the words — until the page is scrolled, when it
+   settles into the frosted bar above. `data-scrolled` is on <html> (set by app.js) because the
+   header is part of a LiveView's markup, and a class set from outside it is lost at the next patch. */
+:root {
+  /* The theme's own colours, kept under other names: inside the clear header the real ones are
+     white, and its menus (which open on a normal background) take these back. */
+  --roki-fg: var(--color-base-content);
+  --roki-b200: var(--color-base-200);
+  --roki-b300: var(--color-base-300);
+}
+
+@media (min-width: 1024px) {
+  .site-header--overlay {
+    position: fixed;
+    left: 0;
+    right: 0;
+    border-bottom-color: transparent;
+    background: linear-gradient(to bottom, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.34) 62%, transparent 100%);
+    background-origin: border-box;
+    background-repeat: no-repeat;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+  }
+
+  html:not([data-scrolled]) .site-header--overlay {
+    color: #fff;
+    --color-base-content: #fff;
+    --color-base-200: rgb(255 255 255 / 0.14);
+    --color-base-300: rgb(255 255 255 / 0.24);
+  }
+
+  html:not([data-scrolled]) .site-header--overlay :is(#account-pop, #search-pop, #mobile-nav, .dropdown-content) {
+    color: var(--roki-fg);
+    --color-base-content: var(--roki-fg);
+    --color-base-200: var(--roki-b200);
+    --color-base-300: var(--roki-b300);
+  }
+
+  html[data-scrolled] .site-header--overlay {
+    background: color-mix(in oklab, var(--color-base-100) 78%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+    border-bottom-color: color-mix(in oklab, var(--color-base-300) 60%, transparent);
+  }
+}
+
 /* Primary buttons carry the brand as a soft gradient and a glow of their own colour. */
 .btn-primary:not(.btn-outline):not(.btn-ghost):not(.btn-link) {
   background-image: linear-gradient(135deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 78%, var(--color-accent) 22%));
