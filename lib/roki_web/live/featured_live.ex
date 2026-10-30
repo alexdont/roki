@@ -1047,7 +1047,6 @@ defmodule RokiWeb.FeaturedLive do
         <.poster
           item={@item}
           seen={@seen}
-          cached_titles={@cached_titles}
           upcoming={@upcoming}
           compact
           title?={false}
