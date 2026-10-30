@@ -557,17 +557,17 @@ defmodule RokiWeb.FeaturedLive do
           type="button"
           data-row-prev
           aria-label="Scroll Lists back"
-          class="absolute inset-y-0 left-0 z-10 hidden w-16 items-center justify-start bg-gradient-to-r from-black/55 to-transparent pl-3 text-white opacity-0 transition lg:group-hover/row:group-data-[start=false]/row:flex lg:group-hover/row:group-data-[start=false]/row:opacity-100"
+          class="absolute left-2 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition hover:bg-black/80 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100"
         >
-          <.icon name="hero-chevron-left" class="h-8 w-8 drop-shadow" />
+          <.icon name="hero-chevron-left" class="h-6 w-6" />
         </button>
         <button
           type="button"
           data-row-next
           aria-label="Scroll Lists forward"
-          class="absolute inset-y-0 right-0 z-10 hidden w-16 items-center justify-end bg-gradient-to-l from-black/55 to-transparent pr-3 text-white opacity-0 transition lg:group-hover/row:group-data-[end=false]/row:flex lg:group-hover/row:group-data-[end=false]/row:opacity-100"
+          class="absolute right-2 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition hover:bg-black/80 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100"
         >
-          <.icon name="hero-chevron-right" class="h-8 w-8 drop-shadow" />
+          <.icon name="hero-chevron-right" class="h-6 w-6" />
         </button>
 
         <ul
@@ -894,17 +894,17 @@ defmodule RokiWeb.FeaturedLive do
           type="button"
           data-row-prev
           aria-label={"Scroll #{@title} back"}
-          class="absolute inset-y-0 left-0 z-10 hidden w-16 items-center justify-start bg-gradient-to-r from-black/55 to-transparent pl-3 text-white opacity-0 transition group-hover/row:group-data-[start=false]/row:flex group-hover/row:group-data-[start=false]/row:opacity-100"
+          class="absolute left-2 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition hover:bg-black/80 max-lg:!hidden group-data-[start=false]/row:flex group-hover/row:opacity-100"
         >
-          <.icon name="hero-chevron-left" class="h-8 w-8 drop-shadow" />
+          <.icon name="hero-chevron-left" class="h-6 w-6" />
         </button>
         <button
           type="button"
           data-row-next
           aria-label={"Scroll #{@title} forward"}
-          class="absolute inset-y-0 right-0 z-10 hidden w-16 items-center justify-end bg-gradient-to-l from-black/55 to-transparent pr-3 text-white opacity-0 transition group-hover/row:group-data-[end=false]/row:flex group-hover/row:group-data-[end=false]/row:opacity-100"
+          class="absolute right-2 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white opacity-0 shadow-lg backdrop-blur-sm transition hover:bg-black/80 max-lg:!hidden group-data-[end=false]/row:flex group-hover/row:opacity-100"
         >
-          <.icon name="hero-chevron-right" class="h-8 w-8 drop-shadow" />
+          <.icon name="hero-chevron-right" class="h-6 w-6" />
         </button>
 
         <%!-- Room above and below the cards for a card that opens taller than the poster: the padding

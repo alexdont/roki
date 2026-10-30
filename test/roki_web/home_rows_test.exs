@@ -47,6 +47,11 @@ defmodule RokiWeb.HomeRowsTest do
     for href <- ~w(/movies /shows /anime), do: assert(html =~ ~s(href="#{href}"))
     assert length(Regex.scan(~r/data-row-next/, html)) == 3
     assert length(Regex.scan(~r/data-row-prev/, html)) == 3
+    # The chevrons are small round buttons, always there to be hit (not a strip that only appears
+    # once the pointer is in the row), and above an opened card: a pointer on one never opens a poster.
+    assert html =~ ~r/data-row-next[^>]*
+?[^>]*z-30 hidden h-11 w-11/
+    refute html =~ "from-black/55"
     # The rows are on every width now: a phone swipes them.
     refute html =~ ~r/class="hidden space-y-9/
   end
