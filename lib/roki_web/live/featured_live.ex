@@ -960,7 +960,7 @@ defmodule RokiWeb.FeaturedLive do
     >
       <.link
         navigate={@title_href}
-        class="relative block aspect-[2/1] shrink-0 overflow-hidden bg-neutral-800"
+        class="relative block aspect-[5/2] shrink-0 overflow-hidden bg-neutral-800"
       >
         <img
           :if={@picture}
@@ -1055,7 +1055,7 @@ defmodule RokiWeb.FeaturedLive do
             class="mt-1 hidden line-clamp-2 text-xs @[323px]:[display:-webkit-box] leading-snug text-white/75"
           >
           </p>
-          <p data-card-genres class="mt-1 hidden truncate text-xs @[374px]:block text-white/50"></p>
+          <p data-card-genres class="mt-0.5 min-h-4 truncate text-xs text-white/50"></p>
         </div>
       </div>
     </div>
