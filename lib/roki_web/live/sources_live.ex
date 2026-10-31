@@ -25,13 +25,18 @@ defmodule RokiWeb.SourcesLive do
          {season, episode} <- parse_episode(params) do
       scope = socket.assigns[:phoenix_kit_current_scope]
       uuid = if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
-      source = initial_source(uuid, params)
+      avail = Roki.Sources.available(uuid)
+      settings = settings_path(scope)
+      source = initial_source(uuid, params, avail)
 
       socket =
         assign(socket,
           page_title: "Sources",
           source: source,
-          pengu?: Roki.Pengu.configured?(uuid),
+          avail: avail,
+          settings: settings,
+          setup_msg: nil,
+          setup_busy: false,
           type: type,
           id: n,
           season: season,
@@ -43,7 +48,8 @@ defmodule RokiWeb.SourcesLive do
           title: nil,
           title_error: nil,
           token: 0,
-          phase: :loading,
+          # Nothing connected for this kind of source: nothing is searched (see `connect_sources/1`).
+          phase: if(avail[source] || source == :pengu, do: :loading, else: :idle),
           status: "Starting…",
           probe: nil,
           checks: [],
@@ -73,7 +79,7 @@ defmodule RokiWeb.SourcesLive do
         )
 
       {:ok,
-       if(connected?(socket) and (socket.assigns.linked? or source == :pengu),
+       if(connected?(socket) and uuid != nil,
          do: load(socket),
          else: socket
        )}
@@ -83,14 +89,26 @@ defmodule RokiWeb.SourcesLive do
   end
 
   # Where the page looks first: `?src=` when the link says (the player's "change source" does), else
-  # the account's "Play from" setting. PenguPlay only when it is set up on this server.
-  defp initial_source(uuid, params) do
-    cond do
-      not Roki.Pengu.configured?(uuid) -> :torrent
-      params["src"] == "pengu" -> :pengu
-      params["src"] == "torrent" -> :torrent
-      uuid && Roki.Laev.web_settings(uuid)["play_from"] == "pengu" -> :pengu
-      true -> :torrent
+  # the account's "Play from" setting — but a kind nothing is connected for gives way to the other
+  # one when that works.
+  defp initial_source(uuid, params, avail) do
+    wanted =
+      cond do
+        params["src"] == "pengu" -> :pengu
+        params["src"] == "torrent" -> :torrent
+        uuid && Roki.Laev.web_settings(uuid)["play_from"] == "pengu" -> :pengu
+        true -> :torrent
+      end
+
+    other = if wanted == :pengu, do: :torrent, else: :pengu
+    if not avail[wanted] and avail[other], do: other, else: wanted
+  end
+
+  # Where an account adds what is missing: its Settings page.
+  defp settings_path(scope) do
+    case scope && Scope.user(scope) do
+      %{username: name} when is_binary(name) and name != "" -> "/#{name}/settings"
+      _ -> "/"
     end
   end
 
@@ -138,7 +156,7 @@ defmodule RokiWeb.SourcesLive do
       # Playing in the browser, the sources page has nothing to add: the watch page finds the
       # release and starts it itself. Going straight there saves a whole page.
       auto?(params, socket) and socket.assigns.linked? and socket.assigns.mode == :browser and
-          socket.assigns.source == :torrent ->
+          socket.assigns.source == :torrent and socket.assigns.avail.torrent ->
         {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns), replace: true)}
 
       true ->
@@ -173,6 +191,18 @@ defmodule RokiWeb.SourcesLive do
          |> assign(:auto_req, true)
          |> push_patch(to: clean_path(socket.assigns), replace: true)},
       else: {:noreply, socket}
+  end
+
+  # A source was just connected: use it now, loading the title first when nothing has yet.
+  defp activate(socket, source) do
+    socket = assign(socket, source: source, auto: :off, setup_msg: nil, pengu: nil)
+    socket = assign(socket, :avail, Map.put(socket.assigns.avail, source, true))
+
+    cond do
+      socket.assigns.title == nil -> load(socket)
+      source == :pengu -> pengu_search(socket)
+      true -> begin(socket, false)
+    end
   end
 
   defp pengu_search(%{assigns: %{title: %{imdb_id: imdb}}} = socket) do
@@ -247,9 +277,8 @@ defmodule RokiWeb.SourcesLive do
   @impl true
   def handle_async(:title, {:ok, {:ok, title, auto?}}, socket) do
     %{uuid: uuid, season: season, episode: episode} = socket.assigns
-    title = Map.put(title, :tag, Watch.episode_tag(uuid, title, season, episode))
-
-    %{uuid: uuid, season: season, episode: episode} = socket.assigns
+    tag = if socket.assigns.linked?, do: Watch.episode_tag(uuid, title, season, episode)
+    title = Map.put(title, :tag, tag)
 
     socket =
       assign(socket,
@@ -266,7 +295,14 @@ defmodule RokiWeb.SourcesLive do
           |> start_async(:prev, fn -> Watch.previous_episode(uuid, title, season, episode) end),
         else: socket
 
-    {:noreply, if(socket.assigns.source == :pengu, do: pengu_search(socket), else: begin(socket, false))}
+    # With nothing connected for this kind of source there is nothing to search; the connect panel
+    # is what the page shows.
+    {:noreply,
+     cond do
+       not socket.assigns.avail[socket.assigns.source] -> socket
+       socket.assigns.source == :pengu -> pengu_search(socket)
+       true -> begin(socket, false)
+     end}
   end
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
@@ -344,6 +380,17 @@ defmodule RokiWeb.SourcesLive do
       _ -> {:noreply, assign(socket, :auto, :off)}
     end
   end
+
+  def handle_async(:debrid, {:ok, :ok}, socket) do
+    socket = assign(socket, setup_busy: false, linked?: true, avail: %{socket.assigns.avail | torrent: true})
+    {:noreply, activate(socket, :torrent)}
+  end
+
+  def handle_async(:debrid, {:ok, {:error, text}}, socket),
+    do: {:noreply, assign(socket, setup_busy: false, setup_msg: {:error, text})}
+
+  def handle_async(:debrid, _other, socket),
+    do: {:noreply, assign(socket, setup_busy: false, setup_msg: {:error, "That did not work. Try again."})}
 
   def handle_async(:pengu, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, pengu: {:error, Roki.Pengu.message(reason)}, auto: :off)}
@@ -455,12 +502,32 @@ defmodule RokiWeb.SourcesLive do
     socket =
       cond do
         socket.assigns.title == nil -> socket
+        not socket.assigns.avail[source] -> socket
         source == :pengu and socket.assigns.pengu == nil -> pengu_search(socket)
-        source == :torrent and socket.assigns.phase == :loading -> begin(socket, false)
+        source == :torrent and socket.assigns.phase in [:loading, :idle] -> begin(socket, false)
         true -> socket
       end
 
     {:noreply, socket}
+  end
+
+  # The paste fields of the "connect a source" panel.
+  def handle_event("setup_pengu", %{"pengu" => %{"url" => url}}, %{assigns: %{uuid: uuid}} = socket)
+      when is_binary(uuid) do
+    case Roki.Pengu.save_url(PhoenixKit.Users.Auth.get_user(uuid), url) do
+      {:ok, _user} -> {:noreply, activate(socket, :pengu)}
+      {:error, text} -> {:noreply, assign(socket, :setup_msg, {:error, text})}
+    end
+  end
+
+  def handle_event("setup_debrid", %{"debrid" => keys}, %{assigns: %{uuid: uuid}} = socket)
+      when is_binary(uuid) do
+    keys = Map.take(keys, ~w(RD_TOKEN TORBOX_API_KEY))
+
+    {:noreply,
+     socket
+     |> assign(setup_busy: true, setup_msg: nil)
+     |> start_async(:debrid, fn -> Roki.Laev.save_debrid(uuid, keys) end)}
   end
 
   def handle_event("pengu", _params, %{assigns: %{title: %{}}} = socket),
@@ -683,26 +750,32 @@ defmodule RokiWeb.SourcesLive do
           <span>Log in, and connect your debrid account through laev, to watch here.</span>
           <a href="/phoenix_kit/users/log-in" class="btn btn-sm">Log in</a>
         </div>
-        <div :if={@uuid != nil and not @linked? and @source == :torrent} class="alert text-sm">
-          <span>Connect laev on your shelf to watch here — your Real-Debrid or TorBox account does the streaming.</span>
-          <.link navigate={~p"/"} class="btn btn-sm">Connect laev</.link>
-        </div>
 
         <p :if={@title_error} class="alert alert-error">
           Couldn't load this title just now. Try again in a minute.
         </p>
 
         <.source_bar
-          :if={@pengu?}
+          :if={@uuid != nil}
           source={@source}
+          avail={@avail}
+          settings={@settings}
           cached_at={@cached_at}
           busy={@phase == :working}
           pengu={@pengu}
         />
         <.cache_note
-          :if={@cached_at != nil and not @pengu?}
+          :if={@cached_at != nil and @uuid == nil}
           at={@cached_at}
           busy={@phase == :working}
+        />
+
+        <.connect_sources
+          :if={@uuid != nil and not @avail[@source]}
+          avail={@avail}
+          source={@source}
+          msg={@setup_msg}
+          busy={@setup_busy}
         />
 
         <.progress_line
@@ -753,7 +826,7 @@ defmodule RokiWeb.SourcesLive do
         />
 
         <.pengu_sources
-          :if={@source == :pengu}
+          :if={@source == :pengu and @avail.pengu}
           pengu={@pengu}
           auto={@auto}
           type={@type}
@@ -780,7 +853,134 @@ defmodule RokiWeb.SourcesLive do
 
   # ── PenguPlay: a second search, on request ──────────────────────────
 
+  attr :kind, :atom, required: true
+  attr :label, :string, required: true
   attr :source, :atom, required: true
+  attr :avail, :map, required: true
+  attr :missing, :string, required: true
+  attr :hint, :string, required: true
+
+  # One side of the switch: a button when the account has it, else greyed and a link to Settings.
+  defp source_choice(assigns) do
+    ~H"""
+    <button
+      :if={@avail[@kind]}
+      type="button"
+      phx-click="source"
+      phx-value-to={@kind}
+      aria-pressed={@source == @kind}
+      class={["btn btn-sm join-item", @source == @kind && "btn-primary"]}
+    >
+      {@label}
+    </button>
+    <.link
+      :if={not @avail[@kind]}
+      navigate={@missing}
+      title={@hint}
+      class="btn btn-sm join-item btn-ghost opacity-50 hover:opacity-80"
+    >
+      {@label}
+    </.link>
+    """
+  end
+
+  attr :avail, :map, required: true
+  attr :source, :atom, required: true
+  attr :msg, :any, default: nil
+  attr :busy, :boolean, default: false
+
+  # What to do when nothing is connected for the kind of source being looked at: where each one
+  # comes from, and a field to paste it into. The page works as soon as one is saved.
+  defp connect_sources(assigns) do
+    ~H"""
+    <section class="space-y-4 rounded-2xl border border-primary/30 bg-primary/5 p-5">
+      <div class="space-y-1">
+        <h2 class="text-xl font-semibold">Connect a source to start watching</h2>
+        <p class="text-sm text-base-content/70">
+          Roki plays from accounts of your own, so nothing plays until one is connected. Pick
+          whichever suits you — {if @source == :torrent,
+            do: "torrents need a debrid account; PenguPlay is free",
+            else: "PenguPlay is free; torrents need a debrid account"}.
+        </p>
+      </div>
+
+      <p :if={match?({:error, _}, @msg)} class="alert alert-warning text-sm">{elem(@msg, 1)}</p>
+
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div class="space-y-3 rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <h3 class="font-semibold">PenguPlay <span class="badge badge-success badge-sm ml-1">free</span></h3>
+          <ol class="list-decimal space-y-1 pl-5 text-sm text-base-content/70">
+            <li>
+              Open <a href="https://pengu.uk" target="_blank" rel="noopener" class="link link-primary">pengu.uk</a>
+              and sign in with Google — about ten seconds.
+            </li>
+            <li>Pick the providers you want, then copy the install link (it ends in <code>/manifest.json</code>).</li>
+            <li>Paste it here.</li>
+          </ol>
+          <form phx-submit="setup_pengu" class="flex flex-wrap gap-2">
+            <input
+              type="text"
+              name="pengu[url]"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://pengu.uk/…/manifest.json"
+              class="input input-bordered input-sm min-w-0 flex-1"
+            />
+            <button class="btn btn-sm btn-primary">Connect</button>
+          </form>
+        </div>
+
+        <div class="space-y-3 rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <h3 class="font-semibold">
+            Real-Debrid or TorBox
+            <span class="badge badge-ghost badge-sm ml-1">paid, for torrents</span>
+          </h3>
+          <ol class="list-decimal space-y-1 pl-5 text-sm text-base-content/70">
+            <li>
+              Sign up at
+              <a href="https://real-debrid.com" target="_blank" rel="noopener" class="link link-primary">real-debrid.com</a>
+              or
+              <a href="https://torbox.app" target="_blank" rel="noopener" class="link link-primary">torbox.app</a>
+              (either one).
+            </li>
+            <li>
+              Copy your key:
+              <a href="https://real-debrid.com/apitoken" target="_blank" rel="noopener" class="link link-primary">Real-Debrid API token</a>
+              ·
+              <a href="https://torbox.app/settings" target="_blank" rel="noopener" class="link link-primary">TorBox API key</a>.
+            </li>
+            <li>Paste it below. It is checked with the service before it is kept.</li>
+          </ol>
+          <form phx-submit="setup_debrid" class="space-y-2">
+            <input
+              type="password"
+              name="debrid[RD_TOKEN]"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Real-Debrid API token"
+              class="input input-bordered input-sm w-full font-mono"
+            />
+            <input
+              type="password"
+              name="debrid[TORBOX_API_KEY]"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="TorBox API key"
+              class="input input-bordered input-sm w-full font-mono"
+            />
+            <button class="btn btn-sm btn-primary" disabled={@busy}>
+              <span :if={@busy} class="loading loading-spinner loading-xs"></span> Connect
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
+  attr :source, :atom, required: true
+  attr :avail, :map, required: true
+  attr :settings, :string, required: true
   attr :cached_at, :any, default: nil
   attr :busy, :boolean, default: false
   attr :pengu, :any, default: nil
@@ -791,24 +991,22 @@ defmodule RokiWeb.SourcesLive do
     ~H"""
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-base-300/70 bg-base-100/60 px-4 py-3 text-sm text-base-content/70">
       <div class="join" role="group" aria-label="Where to look for sources">
-        <button
-          type="button"
-          phx-click="source"
-          phx-value-to="torrent"
-          aria-pressed={@source == :torrent}
-          class={["btn btn-sm join-item", @source == :torrent && "btn-primary"]}
-        >
-          Torrents
-        </button>
-        <button
-          type="button"
-          phx-click="source"
-          phx-value-to="pengu"
-          aria-pressed={@source == :pengu}
-          class={["btn btn-sm join-item", @source == :pengu && "btn-primary"]}
-        >
-          PenguPlay
-        </button>
+        <.source_choice
+          kind={:torrent}
+          label="Torrents"
+          source={@source}
+          avail={@avail}
+          missing={@settings <> "#debrid"}
+          hint="Needs a Real-Debrid or TorBox account — add it in Settings"
+        />
+        <.source_choice
+          kind={:pengu}
+          label="PenguPlay"
+          source={@source}
+          avail={@avail}
+          missing={@settings <> "#penguplay"}
+          hint="Needs a PenguPlay link — add it in Settings"
+        />
       </div>
 
       <%= if @source == :torrent do %>

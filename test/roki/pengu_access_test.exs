@@ -79,6 +79,18 @@ defmodule Roki.PenguAccessTest do
     assert {:error, :cap} = Pengu.streams(friend.uuid, "tt0000001")
   end
 
+  test "Sources says what an account can play from, and follows lending", %{friend: friend} do
+    assert %{torrent: false, pengu: false} = Roki.Sources.available(friend.uuid)
+
+    Keys.set_pengu!(friend.uuid, true)
+    assert %{pengu: true} = Roki.Sources.available(friend.uuid)
+
+    Keys.set_pengu!(friend.uuid, false)
+    assert %{pengu: false} = Roki.Sources.available(friend.uuid)
+    assert Roki.Sources.current(friend.uuid, %{torrent: false, pengu: true}) == :pengu
+    assert Roki.Sources.current(friend.uuid, %{torrent: true, pengu: true}) == :torrent
+  end
+
   test "an account on its own link is not capped", %{friend: friend} do
     give_link(friend)
     Keys.set_pengu!(friend.uuid, true)

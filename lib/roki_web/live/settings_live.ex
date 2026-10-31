@@ -131,6 +131,9 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:os_msg, nil)
           |> assign(:pengu, Roki.Pengu.status(uuid))
           |> assign(:pengu_msg, nil)
+          |> assign(:debrid?, Roki.Laev.debrid?(uuid))
+          |> assign(:debrid_msg, nil)
+          |> assign(:debrid_busy, false)
           |> assign_reading()
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
@@ -232,6 +235,17 @@ defmodule RokiWeb.SettingsLive do
       {:error, text} ->
         {:noreply, assign(socket, :pengu_msg, {:error, text})}
     end
+  end
+
+  # Real-Debrid / TorBox for an account that has nothing yet: connected first if need be, each key
+  # kept only once its service accepts it.
+  def handle_event("debrid_save", %{"debrid" => keys}, %{assigns: %{uuid: uuid}} = socket) do
+    keys = Map.take(keys, ~w(RD_TOKEN TORBOX_API_KEY))
+
+    {:noreply,
+     socket
+     |> assign(debrid_busy: true, debrid_msg: nil)
+     |> start_async(:debrid_save, fn -> Roki.Laev.save_debrid(uuid, keys) end)}
   end
 
   def handle_event("pengu_remove", _params, socket) do
@@ -459,6 +473,17 @@ defmodule RokiWeb.SettingsLive do
   # ── async results ──────────────────────────────────────────────────
 
   @impl true
+  # A debrid key was saved: the page is opened again so everything on it is read afresh (laev's
+  # settings, the Connections section, the switches).
+  def handle_async(:debrid_save, {:ok, :ok}, %{assigns: %{username: username}} = socket),
+    do: {:noreply, push_navigate(socket, to: "/#{username}/settings")}
+
+  def handle_async(:debrid_save, {:ok, {:error, text}}, socket),
+    do: {:noreply, assign(socket, debrid_busy: false, debrid_msg: {:error, text})}
+
+  def handle_async(:debrid_save, _other, socket),
+    do: {:noreply, assign(socket, debrid_busy: false, debrid_msg: {:error, "That did not work. Try again."})}
+
   def handle_async(:settings, {:ok, {settings, carrying?, server}}, socket),
     do:
       {:noreply,
@@ -761,6 +786,44 @@ defmodule RokiWeb.SettingsLive do
           </form>
           <p :if={match?({:ok, _}, @pengu_msg)} class="text-sm text-success">{elem(@pengu_msg, 1)}</p>
           <p :if={match?({:error, _}, @pengu_msg)} class="text-sm text-error">{elem(@pengu_msg, 1)}</p>
+        </section>
+
+        <%!-- Torrents: a Real-Debrid or TorBox key, for an account that has none yet (and is not lent
+             one). Once it has, the Connections section below is where keys are changed. --%>
+        <section :if={not @debrid?} id="debrid" class="space-y-2 scroll-mt-4">
+          <h2 class="text-xl font-semibold">Torrents — Real-Debrid or TorBox</h2>
+          <p class="text-sm text-base-content/60">
+            Torrent releases play through a debrid account (paid). Sign up at
+            <a href="https://real-debrid.com" target="_blank" rel="noopener" class="link">real-debrid.com</a>
+            or <a href="https://torbox.app" target="_blank" rel="noopener" class="link">torbox.app</a>
+            (either one), copy your
+            <a href="https://real-debrid.com/apitoken" target="_blank" rel="noopener" class="link">Real-Debrid API token</a>
+            or <a href="https://torbox.app/settings" target="_blank" rel="noopener" class="link">TorBox API key</a>,
+            and paste it here. It is checked with the service before it is kept.
+          </p>
+          <p class="text-sm"><span class="badge badge-ghost">Not connected</span></p>
+          <form phx-submit="debrid_save" class="flex flex-wrap items-center gap-2">
+            <input
+              type="password"
+              name="debrid[RD_TOKEN]"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Real-Debrid API token"
+              class="input input-bordered input-sm w-full max-w-sm font-mono"
+            />
+            <input
+              type="password"
+              name="debrid[TORBOX_API_KEY]"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="TorBox API key"
+              class="input input-bordered input-sm w-full max-w-sm font-mono"
+            />
+            <button class="btn btn-sm btn-primary" disabled={@debrid_busy}>
+              <span :if={@debrid_busy} class="loading loading-spinner loading-xs"></span> Connect
+            </button>
+          </form>
+          <p :if={match?({:error, _}, @debrid_msg)} class="text-sm text-error">{elem(@debrid_msg, 1)}</p>
         </section>
 
         <section :if={@state == :ready} id="connections" class="space-y-1 scroll-mt-4">

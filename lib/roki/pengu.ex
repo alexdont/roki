@@ -79,6 +79,7 @@ defmodule Roki.Pengu do
              Map.put(user.custom_fields || %{}, @field, url)
            ) do
       TTLCache.delete({:pengu_own, user.uuid})
+      Roki.Sources.forget(user.uuid)
       {:ok, user}
     else
       {:error, text} when is_binary(text) -> {:error, text}
@@ -92,6 +93,7 @@ defmodule Roki.Pengu do
       PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.delete(user.custom_fields || %{}, @field))
 
     TTLCache.delete({:pengu_own, user.uuid})
+    Roki.Sources.forget(user.uuid)
     result
   end
 

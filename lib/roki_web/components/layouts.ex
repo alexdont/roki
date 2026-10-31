@@ -96,7 +96,7 @@ defmodule RokiWeb.Layouts do
       assigns
       |> assign(:scope, scope)
       |> assign(:username, username)
-      |> assign(:play_from, username && play_from(scope))
+      |> assign(:source_choice, username && source_choice(scope))
       |> assign(:bell_user, bell_user)
       |> assign(:bell_parent, bell_parent)
       |> assign(:user, username && PhoenixKit.Users.Auth.Scope.user(scope))
@@ -278,11 +278,16 @@ defmodule RokiWeb.Layouts do
                 <.player_switch class="w-full" />
               </div>
               <%!-- And where it looks first, and where Play finds its source: the account's "Play from". --%>
-              <div :if={@play_from} class="px-3 pb-1 pt-1.5">
+              <div :if={@source_choice} class="px-3 pb-1 pt-1.5">
                 <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50">
                   Source
                 </p>
-                <.source_switch class="w-full" value={@play_from} />
+                <.source_switch
+                  class="w-full"
+                  value={@source_choice.value}
+                  avail={@source_choice.avail}
+                  settings={"/#{@username}/settings"}
+                />
               </div>
 
               <div class="my-2 border-t border-base-300/70"></div>
@@ -610,23 +615,28 @@ defmodule RokiWeb.Layouts do
     """
   end
 
-  # The account's "Play from", when PenguPlay is set up here and there is something to choose.
-  defp play_from(scope) do
-    with uuid when is_binary(uuid) <- PhoenixKit.Users.Auth.Scope.user_uuid(scope),
-         true <- Roki.Pengu.configured?(uuid) do
-      Roki.Laev.web_settings(uuid)["play_from"]
-    else
-      _ -> nil
+  # What the menu's source switch shows: the kind in use, and which kinds this account has.
+  defp source_choice(scope) do
+    case PhoenixKit.Users.Auth.Scope.user_uuid(scope) do
+      uuid when is_binary(uuid) ->
+        avail = Roki.Sources.available(uuid)
+        %{avail: avail, value: Atom.to_string(Roki.Sources.current(uuid, avail))}
+
+      _ ->
+        nil
     end
   end
 
   @doc """
   Which kind of source Play uses: *Torrents* or *PenguPlay*. The same two-part switch as
   `player_switch/1`, lit from its own `data-source` (so a click shows at once, before the server
-  has answered), and sending `set_play_from` — saved to the account, see `RokiWeb.PlayerMode`.
+  has answered), and sending `set_play_from` — saved to the account, see `RokiWeb.PlayerMode`. A
+  kind the account has nothing connected for (`avail`) is greyed out and goes to Settings instead.
   """
   attr :class, :any, default: nil
   attr :value, :string, required: true, doc: "\"torrent\" or \"pengu\""
+  attr :avail, :map, required: true, doc: "`%{torrent: bool, pengu: bool}` — see `Roki.Sources`"
+  attr :settings, :string, required: true, doc: "the account's Settings page"
 
   def source_switch(assigns) do
     ~H"""
@@ -638,6 +648,7 @@ defmodule RokiWeb.Layouts do
       aria-label="Where Play finds its source"
     >
       <button
+        :if={@avail.torrent}
         type="button"
         phx-click="set_play_from"
         phx-value-to="torrent"
@@ -646,7 +657,16 @@ defmodule RokiWeb.Layouts do
       >
         <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Torrents
       </button>
+      <.link
+        :if={not @avail.torrent}
+        navigate={@settings <> "#debrid"}
+        class="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-base-content/30 transition hover:text-base-content/60"
+        title="Not connected — add a Real-Debrid or TorBox account in Settings"
+      >
+        <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Torrents
+      </.link>
       <button
+        :if={@avail.pengu}
         type="button"
         phx-click="set_play_from"
         phx-value-to="pengu"
@@ -655,6 +675,14 @@ defmodule RokiWeb.Layouts do
       >
         <.icon name="hero-globe-alt" class="h-4 w-4" /> PenguPlay
       </button>
+      <.link
+        :if={not @avail.pengu}
+        navigate={@settings <> "#penguplay"}
+        class="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-base-content/30 transition hover:text-base-content/60"
+        title="Not connected — add a PenguPlay link in Settings"
+      >
+        <.icon name="hero-globe-alt" class="h-4 w-4" /> PenguPlay
+      </.link>
     </div>
     """
   end

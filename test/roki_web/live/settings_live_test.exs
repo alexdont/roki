@@ -373,7 +373,9 @@ defmodule RokiWeb.SettingsLiveTest do
 
     assert html =~ "•"
     refute html =~ secret
-    refute html =~ ~s(type="password")
+    # the edit form is closed again (the debrid paste section, shown to an account with no
+    # debrid key, has password fields of its own, so it is the replace form that is checked)
+    refute has_element?(view, "form[phx-submit=replace]")
   end
 
   test "the settings page is in the header", %{conn: conn, user: user} do

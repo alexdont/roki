@@ -28,6 +28,7 @@ defmodule RokiWeb.PlayerMode do
   defp handle("set_play_from", %{"to" => to}, socket) when to in ["torrent", "pengu"] do
     with scope when not is_nil(scope) <- socket.assigns[:phoenix_kit_current_scope],
          uuid when is_binary(uuid) <- PhoenixKit.Users.Auth.Scope.user_uuid(scope),
+         true <- Roki.Sources.available(uuid)[String.to_existing_atom(to)],
          :ok <- Roki.Laev.put_web_setting(uuid, "play_from", to) do
       {:halt, push_event(socket, "roki:source", %{value: to})}
     else

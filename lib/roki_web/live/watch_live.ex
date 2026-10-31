@@ -220,8 +220,10 @@ defmodule RokiWeb.WatchLive do
   defp next_pengu(_assigns, _tried), do: nil
 
   # Play on an account that looks at PenguPlay first, arriving here with nothing chosen.
-  defp pengu_default?(%{hash: nil, torrent_forced: false, uuid: uuid}) when is_binary(uuid),
-    do: Roki.Pengu.configured?(uuid) and Roki.Laev.web_settings(uuid)["play_from"] == "pengu"
+  defp pengu_default?(%{hash: nil, torrent_forced: false, uuid: uuid}) when is_binary(uuid) do
+    avail = Roki.Sources.available(uuid)
+    avail.pengu and Roki.Sources.current(uuid, avail) == :pengu
+  end
 
   defp pengu_default?(_), do: false
 
@@ -1091,8 +1093,8 @@ defmodule RokiWeb.WatchLive do
           <a href="/phoenix_kit/users/log-in" class="btn btn-sm">Log in</a>
         </div>
         <div :if={@uuid != nil and not @linked? and @pengu == nil} class="alert text-sm">
-          <span>Connect laev on your shelf to watch this — your Real-Debrid or TorBox account does the streaming.</span>
-          <.link navigate={~p"/"} class="btn btn-sm">Connect laev</.link>
+          <span>Nothing is connected to play this yet — PenguPlay (free) or a Real-Debrid / TorBox account.</span>
+          <.link navigate={sources_path(assigns)} class="btn btn-sm">Connect a source</.link>
         </div>
 
         <p :if={@title_error} class="alert alert-error">

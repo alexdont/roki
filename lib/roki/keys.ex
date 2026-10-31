@@ -181,7 +181,10 @@ defmodule Roki.Keys do
     :ok
   end
 
-  defp forget(uuid), do: TTLCache.delete({:key_grant, uuid})
+  defp forget(uuid) do
+    TTLCache.delete({:key_grant, uuid})
+    Roki.Sources.forget(uuid)
+  end
 
   @doc "Every account with any access: `%{uuid => %{daily_plays, granted_at, keys, heavy, pengu, daily_pengu}}`."
   def all_grants do

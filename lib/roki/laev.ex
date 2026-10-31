@@ -514,6 +514,7 @@ defmodule Roki.Laev do
   asks, because it puts working debrid credentials on this server.
   """
   def connect(uuid, key, opts \\ []) do
+    Roki.Sources.forget(uuid)
     carry? = Keyword.get(opts, :carry_keys?, false)
     url = opts |> Keyword.get(:url) |> blank_to_nil() || sync_url()
     Roki.Stats.forget(uuid)
@@ -543,6 +544,7 @@ defmodule Roki.Laev do
   Nothing is left behind on failure.
   """
   def setup(uuid, keys) do
+    Roki.Sources.forget(uuid)
     Roki.Stats.forget(uuid)
     forget_shelf(uuid)
 
@@ -581,6 +583,50 @@ defmodule Roki.Laev do
     with {:ok, summary} <- connect(uuid, Laev.Setup.generate_key(), carry_keys?: false) do
       sync(uuid)
       {:ok, summary}
+    end
+  end
+
+  @doc """
+  Whether this account can play torrents at all: it is connected and has a Real-Debrid or TorBox
+  key, its own or lent (the scope `run/2` builds includes lent ones).
+  """
+  def debrid?(uuid) when is_binary(uuid) do
+    connected?(uuid) and
+      run(uuid, fn ->
+        Enum.any?(~w(RD_TOKEN TORBOX_API_KEY), fn name ->
+          atom = Map.get(Laev.Config.keys(), name)
+          atom != nil and Laev.Scope.get(atom) not in [nil, ""]
+        end)
+      end)
+  rescue
+    _ -> false
+  end
+
+  def debrid?(_), do: false
+
+  @doc """
+  Save pasted debrid keys from the sources page (`%{"RD_TOKEN" => …, "TORBOX_API_KEY" => …}`,
+  blanks skipped): the account is connected first if it is not yet, then each key is kept only
+  once its service accepts it. `:ok` or `{:error, text}`.
+  """
+  def save_debrid(uuid, keys) do
+    keys = for {k, v} <- keys, (v = String.trim(v || "")) != "", into: %{}, do: {k, v}
+
+    cond do
+      map_size(keys) == 0 ->
+        {:error, "Paste a Real-Debrid token or a TorBox key first."}
+
+      not connected?(uuid) and match?({:error, _}, setup_granted(uuid)) ->
+        {:error, "Could not set your account up just now. Try again in a moment."}
+
+      true ->
+        Enum.find_value(keys, :ok, fn {name, value} ->
+          case replace_key(uuid, name, value) do
+            {:ok, _} -> nil
+            {:error, why} -> {:error, "#{key_name(name)}: #{explain(why)}"}
+            _ -> {:error, "#{key_name(name)} was not accepted."}
+          end
+        end)
     end
   end
 
@@ -692,6 +738,7 @@ defmodule Roki.Laev do
 
   @doc "Forget the connection and everything pulled for this account."
   def disconnect(uuid) do
+    Roki.Sources.forget(uuid)
     Roki.Stats.forget(uuid)
     forget_shelf(uuid)
     File.rm_rf!(dir(uuid))
@@ -1175,6 +1222,7 @@ defmodule Roki.Laev do
     case run(uuid, fn -> Laev.Setup.replace_key(key, value) end) do
       {:ok, detail} ->
         Roki.Stats.forget(uuid)
+        Roki.Sources.forget(uuid)
         {:ok, detail}
 
       {:error, :empty} ->
@@ -1219,6 +1267,7 @@ defmodule Roki.Laev do
   @doc "Forget a saved key."
   def remove_key(uuid, key) do
     Roki.Stats.forget(uuid)
+    Roki.Sources.forget(uuid)
     put_setting(uuid, key, "")
   end
 
