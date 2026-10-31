@@ -18,7 +18,7 @@ defmodule Roki.Featured do
 
   # Bumped when what a cached page *contains* changes, so old answers are ignored
   # rather than served for up to 12 hours.
-  @version 4
+  @version 6
 
   # Every shelf is this many titles a page, so Shows is as tall as Movies even though
   # the anime taken out of TMDB's trending list leaves a TMDB page 15-17 short.
@@ -126,7 +126,15 @@ defmodule Roki.Featured do
       end)
 
     with {:ok, items} <- result do
-      {:ok, items |> Enum.uniq_by(& &1.id) |> Roki.AnimeRank.rank(Date.utc_today().year), false}
+      year = Date.utc_today().year
+
+      ranked =
+        items
+        |> Enum.uniq_by(& &1.id)
+        |> Roki.AnimeRank.refine(year, &Roki.AnimeRank.latest_season_year/1)
+        |> Roki.AnimeRank.rank(year)
+
+      {:ok, ranked, false}
     end
   end
 
