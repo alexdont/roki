@@ -1021,29 +1021,36 @@ defmodule RokiWeb.TitleLive do
             cached?={@cached?}
             class="h-14 w-full rounded-full text-xl sm:w-auto sm:min-w-[14rem]"
           />
-          <.glass_btn
-            :if={@trailer}
-            click={open_trailer()}
-            icon="hero-play-circle"
-            label="Watch the trailer"
-            text="Trailer"
-            text_class="max-sm:hidden"
-            class="lg:hidden"
-          />
-          <.glass_btn
-            :if={@linked? and @title.type == "movie"}
-            href={~p"/sources/movie/#{@title.id}"}
-            icon="hero-queue-list"
-            label="Choose which release to play"
-          />
-          <.glass_btn
-            :if={@linked? and @study}
-            click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
-            icon="hero-academic-cap"
-            label="Study: watch in languages you choose"
-          />
+          <%!-- On a phone the buttons under Start are two capsules side by side: ways to watch it, and
+                what you do with it. From `sm` up the wrappers vanish and they are one row, as before. --%>
+          <div class="flex items-center justify-around gap-1 max-sm:min-w-0 max-sm:flex-1 max-sm:rounded-full max-sm:border max-sm:border-white/20 max-sm:bg-black/25 max-sm:p-1.5 max-sm:backdrop-blur-md sm:contents">
+            <.glass_btn
+              :if={@trailer}
+              click={open_trailer()}
+              icon="hero-play-circle"
+              label="Watch the trailer"
+              text="Trailer"
+              text_class="max-sm:hidden"
+              class="lg:hidden"
+            />
+            <.glass_btn
+              :if={@linked? and @title.type == "movie"}
+              href={~p"/sources/movie/#{@title.id}"}
+              icon="hero-queue-list"
+              label="Choose which release to play"
+            />
+            <.glass_btn
+              :if={@linked? and @study}
+              click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
+              icon="hero-academic-cap"
+              label="Study: watch in languages you choose"
+            />
+          </div>
           <%!-- Your record of it, apart from watching it: a gap sets it off from the buttons before. --%>
-          <div :if={@linked?} class="flex items-center gap-2 sm:ml-3 sm:gap-3 lg:ml-5">
+          <div
+            :if={@linked?}
+            class="flex items-center justify-around gap-1 max-sm:min-w-0 max-sm:flex-1 max-sm:rounded-full max-sm:border max-sm:border-white/20 max-sm:bg-black/25 max-sm:p-1.5 max-sm:backdrop-blur-md sm:ml-3 sm:gap-3 lg:ml-5"
+          >
             <.glass_btn
               :if={@linked?}
               click="toggle_saved"
