@@ -965,7 +965,7 @@ defmodule RokiWeb.TitleLive do
 
       <div
         data-hero-content
-        class="relative z-10 flex max-w-4xl flex-col gap-3 px-4 pb-6 pt-32 sm:px-6 lg:gap-4 lg:px-12 lg:pb-14 xl:px-16"
+        class="relative z-10 flex max-w-4xl flex-col gap-3 px-4 pb-7 pt-32 sm:px-6 lg:gap-4 lg:px-12 lg:pb-14 xl:px-16"
       >
         <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{@kind}</p>
         <h1 class="text-4xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-5xl xl:text-7xl">
@@ -1011,7 +1011,7 @@ defmodule RokiWeb.TitleLive do
           </a>
         </p>
 
-        <div class="flex flex-wrap items-center gap-2 pt-2 sm:gap-3">
+        <div class="flex flex-wrap items-center gap-2 pt-3 sm:gap-3">
           <.play_button
             title={@title}
             play={@play}
@@ -1097,7 +1097,7 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- Where Play opens it, and the trailer's controls: pause (it plays once, it does not loop),
             sound, full screen. --%>
-      <div class="relative z-20 flex items-center gap-3 px-4 pb-8 sm:px-6 lg:absolute lg:bottom-14 lg:right-12 lg:h-14 lg:justify-end lg:p-0 xl:right-16">
+      <div class="relative z-20 flex items-center gap-3 px-4 sm:px-6 max-lg:hidden lg:absolute lg:bottom-14 lg:right-12 lg:h-14 lg:justify-end lg:p-0 xl:right-16">
         <button
           :if={@trailer}
           type="button"
