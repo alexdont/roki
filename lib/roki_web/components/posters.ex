@@ -160,12 +160,12 @@ defmodule RokiWeb.PosterComponents do
         >
           ★ {rating(@item)}
         </span>
-        <%!-- Not out yet: a thin muted red line along the bottom edge, nothing more. The date is on
+        <%!-- Not out yet: a faint red glow along the bottom edge, nothing more. The date is on
               hover (`data-peek-due` above). --%>
         <span
           :if={@due}
           title={"Not out yet: #{due_text(@due)}"}
-          class="absolute inset-x-0 bottom-0 z-10 block h-[3px] bg-error/60"
+          class="pointer-events-none absolute inset-x-0 bottom-0 z-10 block h-3 bg-gradient-to-t from-error/45 to-transparent"
         >
           <span class="sr-only">Not out yet: {due_text(@due)}</span>
         </span>
