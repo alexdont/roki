@@ -4,12 +4,14 @@ defmodule RokiWeb.Relay do
   for the player that does its own work on the viewer's device (`assets/js/study/local_player.js`)
   when the release's host sends no CORS headers (Real-Debrid), so the browser cannot read it
   directly. No decoding, no file, no buffering beyond a chunk — the server's part is its
-  bandwidth. Only a debrid host is read from (it is not an open proxy), and only for a link this
+  bandwidth. Only a debrid host (or PenguPlay's address) is read from (it is not an open proxy), and only for a link this
   server signed for a signed-in person (`sign/1`, `verify/1`).
   """
   import Plug.Conn
 
-  @hosts ~w(real-debrid.com tb-cdn.io torbox.app)
+  # `pengu.uk` is PenguPlay's own address: its file links answer with a redirect to wherever the
+  # file lives (often a host that sends no CORS headers), which this follows server-side.
+  @hosts ~w(real-debrid.com tb-cdn.io torbox.app pengu.uk)
   @salt "release relay"
   @max_age 24 * 3600
 
@@ -51,6 +53,7 @@ defmodule RokiWeb.Relay do
 
   @doc "Stream `url` to the connection, the request's `Range` forwarded, the answer's status and headers kept."
   def stream(conn, url) do
+    url = final_url(url, 5)
     headers = for v <- get_req_header(conn, "range"), do: {"range", v}
     Process.put(:relay_conn, nil)
 
@@ -82,6 +85,35 @@ defmodule RokiWeb.Relay do
       e -> Process.get(:relay_conn) || send_resp(conn, 502, "upstream: #{Exception.message(e)}")
     end
   end
+
+  # A streamed download does not follow redirects, so find where a PenguPlay link ends up first:
+  # a one-byte read per hop, the `Location` taken until something answers with bytes.
+  defp final_url(url, hops) when hops > 0 do
+    case URI.parse(url) do
+      %URI{host: "pengu.uk"} ->
+        case Req.get(url,
+               headers: [{"range", "bytes=0-0"}],
+               redirect: false,
+               retry: false,
+               decode_body: false,
+               receive_timeout: 20_000
+             ) do
+          {:ok, %{status: s} = resp} when s in 301..308 ->
+            case resp.headers["location"] do
+              [loc | _] -> final_url(to_string(URI.merge(url, loc)), hops - 1)
+              _ -> url
+            end
+
+          _ ->
+            url
+        end
+
+      _ ->
+        url
+    end
+  end
+
+  defp final_url(url, _hops), do: url
 
   defp open(conn, resp) do
     conn

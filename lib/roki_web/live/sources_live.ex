@@ -65,7 +65,8 @@ defmodule RokiWeb.SourcesLive do
           heavy_ok: false,
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           caps: caps_param(socket),
-          busy?: false
+          busy?: false,
+          pengu: nil
         )
 
       {:ok, if(connected?(socket) and socket.assigns.linked?, do: load(socket), else: socket)}
@@ -297,6 +298,15 @@ defmodule RokiWeb.SourcesLive do
          start_error: "That one would not start. Pick another."
        )}
 
+  def handle_async(:pengu, {:ok, {:ok, streams}}, socket),
+    do: {:noreply, assign(socket, :pengu, {:ok, Roki.Pengu.group(streams), length(streams)})}
+
+  def handle_async(:pengu, {:ok, {:error, reason}}, socket),
+    do: {:noreply, assign(socket, :pengu, {:error, Roki.Pengu.message(reason)})}
+
+  def handle_async(:pengu, {:exit, _}, socket),
+    do: {:noreply, assign(socket, :pengu, {:error, Roki.Pengu.message(:timeout)})}
+
   def handle_async(:next, {:ok, {_s, _e, _tag} = next}, socket),
     do: {:noreply, assign(socket, :next, next)}
 
@@ -392,6 +402,17 @@ defmodule RokiWeb.SourcesLive do
   # ── events ─────────────────────────────────────────────────────────
 
   @impl true
+  def handle_event("pengu", _params, %{assigns: %{title: %{imdb_id: imdb}}} = socket) do
+    %{season: season, episode: episode} = socket.assigns
+
+    {:noreply,
+     socket
+     |> assign(:pengu, :loading)
+     |> start_async(:pengu, fn -> Roki.Pengu.streams(imdb, season, episode) end)}
+  end
+
+  def handle_event("pengu", _params, socket), do: {:noreply, socket}
+
   def handle_event("cancel_auto", _params, %{assigns: %{auto: :pending}} = socket),
     do: {:noreply, assign(socket, :auto, :cancelled)}
 
@@ -658,6 +679,15 @@ defmodule RokiWeb.SourcesLive do
           busy={@busy?}
           limit={limit(@mode, @uuid, @caps)}
         />
+
+        <.pengu_sources
+          :if={@title && Roki.Pengu.configured?()}
+          pengu={@pengu}
+          type={@type}
+          id={@id}
+          season={@season}
+          episode={@episode}
+        />
       </div>
 
       <.auto_start
@@ -671,6 +701,83 @@ defmodule RokiWeb.SourcesLive do
     </Layouts.app>
     """
   end
+
+  # ── PenguPlay: a second search, on request ──────────────────────────
+
+  attr :pengu, :any, required: true
+  attr :type, :string, required: true
+  attr :id, :integer, required: true
+  attr :season, :integer, default: nil
+  attr :episode, :integer, default: nil
+
+  defp pengu_sources(assigns) do
+    ~H"""
+    <section class="space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-2xl font-semibold tracking-tight">
+          PenguPlay
+          <span :if={match?({:ok, _, _}, @pengu)} class="text-sm font-normal text-base-content/60">
+            {elem(@pengu, 2)} playable
+          </span>
+        </h2>
+        <button
+          :if={@pengu != :loading}
+          type="button"
+          phx-click="pengu"
+          class="inline-flex h-10 items-center gap-2 rounded-full border border-base-300 px-4 text-sm font-semibold transition hover:border-primary/60"
+        >
+          <.icon name="hero-magnifying-glass" class="h-4 w-4" />
+          {if @pengu, do: "Search again", else: "Search PenguPlay sources"}
+        </button>
+      </div>
+      <p :if={@pengu == nil} class="text-sm text-base-content/60">
+        Look for this on the PenguPlay providers too — they run from our side, so it works with or
+        without a debrid account, and can take up to a minute.
+      </p>
+      <div :if={@pengu == :loading} class="flex items-center gap-3 rounded-box bg-base-200 p-4 text-sm">
+        <span class="loading loading-spinner loading-sm"></span> Asking the PenguPlay providers…
+      </div>
+      <p :if={match?({:error, _}, @pengu)} class="alert alert-warning text-sm">{elem(@pengu, 1)}</p>
+      <p :if={match?({:ok, [], _}, @pengu)} class="text-sm text-base-content/60">
+        PenguPlay found nothing for this.
+      </p>
+      <div :if={match?({:ok, [_ | _], _}, @pengu)} class="space-y-5">
+        <div :for={{provider, streams} <- elem(@pengu, 1)} class="space-y-2">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+            {provider}
+          </h3>
+          <ul class="space-y-2">
+            <li :for={s <- streams}>
+              <.link
+                navigate={pengu_watch(@type, @id, @season, @episode, s.id)}
+                class="group flex w-full items-center gap-4 rounded-2xl border border-base-300 bg-base-100/70 p-4 text-left transition hover:border-primary/60 hover:bg-base-100"
+              >
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <div class="truncate text-sm font-medium" title={s.label}>
+                    {if s.name != "", do: s.name, else: s.label}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span :if={s.quality != ""} class="badge badge-sm badge-primary">{s.quality}</span>
+                    <span :if={s.size != ""} class="badge badge-sm badge-ghost">{s.size}</span>
+                    <span class="badge badge-sm badge-ghost">{provider}</span>
+                    <span :if={s.language != ""} class="text-base-content/60">🔊 {s.language}</span>
+                    <span :if={s.subtitles != []} class="text-base-content/60">💬 {length(s.subtitles)}</span>
+                  </div>
+                </div>
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-content">
+                  <.icon name="hero-play-solid" class="h-5 w-5" />
+                </span>
+              </.link>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
+  defp pengu_watch("movie", id, _s, _e, sid), do: ~p"/watch/movie/#{id}?#{[pg: sid]}"
+  defp pengu_watch("tv", id, s, e, sid), do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[pg: sid]}"
 
   defp back_path("movie", id), do: ~p"/title/movie/#{id}"
   defp back_path("tv", id), do: ~p"/title/tv/#{id}/episodes"

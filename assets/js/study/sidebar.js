@@ -1506,10 +1506,16 @@ export const StudySidebar = {
       return
     }
 
-    if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
+    // `p.hlsjs`: a playlist from elsewhere (PenguPlay) is read by hls.js wherever the browser can run it;
+    // its own HLS is left to browsers that have nothing else (iPhones).
+    if (p.hls && (p.hlsjs || !v.canPlayType("application/vnd.apple.mpegurl"))) {
       const Hls = await loadHls()
       if (this.playerUrl !== p.url) return // another source was chosen while it loaded
-      if (!Hls || !Hls.isSupported()) { this.title.textContent = "This browser can't play HLS."; return }
+      if (!Hls || !Hls.isSupported()) {
+        if (p.hlsjs && v.canPlayType("application/vnd.apple.mpegurl")) { v.src = p.url; v.load(); v.play().catch(() => {}); this.watchPicture(); return }
+        this.title.textContent = "This browser can't play HLS."
+        return
+      }
 
       const hls = (this.hls = new Hls({
         maxBufferLength: 60,

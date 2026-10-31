@@ -43,6 +43,9 @@ defmodule RokiWeb.WatchLive do
           episode: episode,
           hash: nil,
           prefer: nil,
+          # `?pg=` plays a PenguPlay stream (from the sources page's PenguPlay search) instead of
+          # a debrid release: no laev account needed, the video is read from its host directly.
+          pengu: if(uuid && is_binary(params["pg"]), do: String.slice(params["pg"], 0, 32)),
           uuid: uuid,
           linked?: uuid != nil and Roki.Laev.connected?(uuid),
           title: nil,
@@ -68,7 +71,11 @@ defmodule RokiWeb.WatchLive do
           up_prev: nil
         )
 
-      {:ok, if(connected?(socket) and socket.assigns.linked?, do: load(socket), else: socket)}
+      {:ok,
+       if(connected?(socket) and (socket.assigns.linked? or socket.assigns.pengu),
+         do: load(socket),
+         else: socket
+       )}
     else
       _ ->
         {:ok, push_navigate(socket, to: ~p"/home")}
@@ -172,6 +179,26 @@ defmodule RokiWeb.WatchLive do
       end)
     )
   end
+
+  # The stream named in the address, among what PenguPlay found for this title (kept ten minutes,
+  # so a click from the sources page is no second search).
+  defp play_pengu(socket) do
+    %{title: title, season: season, episode: episode, pengu: id} = socket.assigns
+
+    start_async(socket, :pengu, fn ->
+      with {:ok, streams} <- Roki.Pengu.streams(title.imdb_id, season, episode) do
+        case Roki.Pengu.find(streams, id) do
+          nil -> {:error, :gone}
+          stream -> {:ok, stream}
+        end
+      end
+    end)
+  end
+
+  defp pengu_failure(:gone),
+    do: "That PenguPlay source is no longer listed. Go back and search again."
+
+  defp pengu_failure(reason), do: Roki.Pengu.message(reason)
 
   # What did not work before is left out; when that is all that was checked, look at more.
   defp without(_parent, _token, _uuid, _heavy_ok, _caps, res, []), do: res
@@ -337,7 +364,7 @@ defmodule RokiWeb.WatchLive do
         do: load_episodes(socket),
         else: socket
 
-    {:noreply, resolve(socket)}
+    {:noreply, if(socket.assigns.pengu, do: play_pengu(socket), else: resolve(socket))}
   end
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
@@ -345,6 +372,41 @@ defmodule RokiWeb.WatchLive do
 
   def handle_async(:title, {:exit, reason}, socket),
     do: {:noreply, assign(socket, :title_error, reason)}
+
+  def handle_async(:pengu, {:ok, {:ok, stream}}, socket) do
+    local? = stream.kind == :file and socket.assigns.caps[:local] == true
+
+    # A playlist is read from PenguPlay directly (it allows cross-origin reads, and so do its
+    # segments); a file's link redirects to a host that often does not, so its bytes come by way of
+    # the relay, which follows the redirect here.
+    url = if stream.kind == :hls, do: stream.url, else: RokiWeb.Relay.url_for(stream.url)
+
+    data = %{
+      url: url,
+      hls: stream.kind == :hls,
+      hlsjs: stream.kind == :hls,
+      local: local?,
+      audio_lang: nil,
+      filesize: nil,
+      resume: 0,
+      start: 0,
+      tracks: [],
+      prefer: nil,
+      key: stream.id,
+      media: "pengu:#{socket.assigns.id}",
+      os: nil,
+      os_langs: [],
+      study: nil
+    }
+
+    {:noreply, socket |> assign(player: data) |> with_neighbours()}
+  end
+
+  def handle_async(:pengu, {:ok, {:error, reason}}, socket),
+    do: {:noreply, assign(socket, failed: pengu_failure(reason), failed_reason: :pengu)}
+
+  def handle_async(:pengu, {:exit, _}, socket),
+    do: {:noreply, assign(socket, failed: pengu_failure(:timeout), failed_reason: :pengu)}
 
   def handle_async(
         :resolve,
@@ -577,6 +639,19 @@ defmodule RokiWeb.WatchLive do
   # Nothing is converted or replaced behind the viewer's back: they are asked. The two answers —
   # convert this release for the browser (the server re-encodes it to H.264, minutes of work), or
   # look for another file the browser plays as it is — are `convert_it` and `find_other`.
+  # A PenguPlay stream the browser could not play: nothing to convert or replace here, so say so.
+  def handle_event("player_failed", params, %{assigns: %{pengu: id, player: %{}}} = socket)
+      when is_binary(id) do
+    Logger.warning("pengu stream #{id} failed for #{socket.assigns.id}: #{inspect(params["why"])}")
+
+    {:noreply,
+     assign(socket,
+       player: nil,
+       failed: "That stream would not play in this browser (#{String.slice(to_string(params["why"]), 0, 120)}). Try another PenguPlay source.",
+       failed_reason: :pengu
+     )}
+  end
+
   def handle_event(
         "player_failed",
         %{"local" => true} = params,
@@ -918,7 +993,7 @@ defmodule RokiWeb.WatchLive do
           <span>Log in, and connect your debrid account through laev, to watch this.</span>
           <a href="/phoenix_kit/users/log-in" class="btn btn-sm">Log in</a>
         </div>
-        <div :if={@uuid != nil and not @linked?} class="alert text-sm">
+        <div :if={@uuid != nil and not @linked? and @pengu == nil} class="alert text-sm">
           <span>Connect laev on your shelf to watch this — your Real-Debrid or TorBox account does the streaming.</span>
           <.link navigate={~p"/"} class="btn btn-sm">Connect laev</.link>
         </div>
@@ -978,7 +1053,7 @@ defmodule RokiWeb.WatchLive do
 
         <div
           :if={
-            @linked? and @player == nil and @failed == nil and @title_error == nil and
+            (@linked? or @pengu != nil) and @player == nil and @failed == nil and @title_error == nil and
               @decode_prompt == nil
           }
           class="space-y-3 rounded-box bg-base-200 p-6 text-sm"
