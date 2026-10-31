@@ -160,15 +160,14 @@ defmodule RokiWeb.PosterComponents do
         >
           ★ {rating(@item)}
         </span>
+        <%!-- Not out yet: a thin muted red line along the bottom edge, nothing more. The date is on
+              hover (`data-peek-due` above). --%>
         <span
           :if={@due}
-          class={[
-            "absolute right-1.5 flex h-[1.1rem] w-[1.1rem] items-center justify-center rounded-full bg-error/90 text-error-content shadow-sm",
-            if(@item[:badge], do: "top-8", else: "top-1.5")
-          ]}
           title={"Not out yet: #{due_text(@due)}"}
+          class="absolute inset-x-0 bottom-0 z-10 block h-[3px] bg-error/60"
         >
-          <.icon_clock />
+          <span class="sr-only">Not out yet: {due_text(@due)}</span>
         </span>
         <span
           :if={@watched? and @mark?}
@@ -263,18 +262,6 @@ defmodule RokiWeb.PosterComponents do
       end
 
     "#{Calendar.strftime(d, "%-d %b %Y")} (#{in_days})"
-  end
-
-  defp icon_clock(assigns) do
-    ~H"""
-    <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true">
-      <path
-        fill-rule="evenodd"
-        d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-12.25a.75.75 0 0 0-1.5 0V10c0 .2.08.39.22.53l2.5 2.5a.75.75 0 1 0 1.06-1.06l-2.28-2.28V5.75Z"
-        clip-rule="evenodd"
-      />
-    </svg>
-    """
   end
 
   defp rating(%{vote: v}) when is_number(v) and v > 0, do: Float.round(v * 1.0, 1)
