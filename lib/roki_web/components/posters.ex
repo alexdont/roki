@@ -99,22 +99,21 @@ defmodule RokiWeb.PosterComponents do
         >
           ✓ {@item[:partial]}
         </span>
-        <%!-- On your saved-for-later list. --%>
+        <%!-- On your saved-for-later list: a bookmark ribbon hanging from the top edge, near the
+              corner — just the shape, in the accent colour, with the notch of a real one. --%>
         <span
           :if={@item[:saved]}
           title="Saved for later"
-          class={[
-            "absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-md bg-primary text-primary-content shadow-sm",
-            if(@item[:badge], do: "top-8", else: "top-1.5")
-          ]}
+          class="absolute right-2.5 top-0 z-10 block h-6 w-4 bg-primary drop-shadow-[0_1px_1px_rgb(0_0_0/0.35)] [clip-path:polygon(0_0,100%_0,100%_100%,50%_72%,0_100%)]"
         >
-          <svg viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M5 3a2 2 0 0 0-2 2v12.5a.5.5 0 0 0 .8.4L10 13l6.2 4.9a.5.5 0 0 0 .8-.4V5a2 2 0 0 0-2-2H5Z" />
-          </svg>
+          <span class="sr-only">Saved for later</span>
         </span>
         <span
           :if={@item[:badge]}
-          class="badge badge-primary badge-sm absolute right-1.5 top-1.5 shadow"
+          class={[
+            "badge badge-primary badge-sm absolute right-1.5 shadow",
+            if(@item[:saved], do: "top-8", else: "top-1.5")
+          ]}
         >
           {@item[:badge]}
         </span>
