@@ -18,7 +18,7 @@ defmodule Roki.Featured do
 
   # Bumped when what a cached page *contains* changes, so old answers are ignored
   # rather than served for up to 12 hours.
-  @version 3
+  @version 4
 
   # Every shelf is this many titles a page, so Shows is as tall as Movies even though
   # the anime taken out of TMDB's trending list leaves a TMDB page 15-17 short.
@@ -92,7 +92,16 @@ defmodule Roki.Featured do
   end
 
   defp call(:movies, n), do: Laev.Tmdb.trending("movie", n)
-  defp call(:anime, n), do: Laev.Tmdb.discover_anime(n)
+  # Anime airing now, current first: TMDB's list is by popularity, which puts the evergreens
+  # (Doraemon, Detective Conan, Bleach) first every week. A few pages of it are read together and
+  # put in order by `Roki.AnimeRank`, then cut into pages of twenty.
+  @anime_depth 4
+
+  defp call(:anime, n) do
+    with {:ok, pool, _} <- memo(:anime_pool, &anime_pool/0) do
+      {:ok, Enum.slice(pool, (n - 1) * @page_size, @page_size), length(pool) > n * @page_size}
+    end
+  end
   # TMDB's "trending TV" includes anime (One Piece, Bleach …), which has its own shelf.
   # Anime is what MyAnimeList has an entry for — laev's own definition, the one it
   # splits your stats by — so those come out of Shows. Live-action One Piece is a
@@ -106,6 +115,20 @@ defmodule Roki.Featured do
   # TMDB's own trending-TV pages, cached on their own so page 2 of Shows reuses the
   # TMDB pages page 1 already read.
   defp raw_tv(p), do: memo({:tv_raw, p}, fn -> Laev.Tmdb.trending("tv", p) end)
+
+  defp anime_pool do
+    result =
+      Enum.reduce_while(1..@anime_depth, {:ok, []}, fn p, {:ok, acc} ->
+        case Laev.Tmdb.discover_anime(p) do
+          {:ok, items, more?} -> {if(more?, do: :cont, else: :halt), {:ok, acc ++ items}}
+          error -> {:halt, if(acc == [], do: error, else: {:ok, acc})}
+        end
+      end)
+
+    with {:ok, items} <- result do
+      {:ok, items |> Enum.uniq_by(& &1.id) |> Roki.AnimeRank.rank(Date.utc_today().year), false}
+    end
+  end
 
   @doc """
   Page `n` of Shows: the anime-free stream of trending TV, cut into pages of exactly

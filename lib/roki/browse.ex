@@ -48,7 +48,7 @@ defmodule Roki.Browse do
   def page(kind, sort, n, uuid, season \\ nil, week \\ nil, genre \\ nil)
       when kind in @kinds and is_integer(n) and n >= 1 do
     {sort, season, week, genre} = view(kind, sort, season, week, genre)
-    key = {:browse, kind, sort, season, week, genre, n}
+    key = key(kind, sort, season, week, genre, n)
 
     answer = cached_page(key, fn -> fetch(kind, sort, n, uuid, season, week, genre) end)
 
@@ -105,10 +105,18 @@ defmodule Roki.Browse do
   def peek(kind, sort, n, season \\ nil, week \\ nil, genre \\ nil)
       when kind in @kinds and is_integer(n) and n >= 1 do
     {sort, season, week, genre} = view(kind, sort, season, week, genre)
-    key = {:browse, kind, sort, season, week, genre, n}
 
-    peek_page(key)
+    peek_page(key(kind, sort, season, week, genre, n))
   end
+
+  # What a page is kept under. Anime's lists (not the Anime Corner ranking) carry a version of their
+  # own, bumped when the order they are in changes, so a kept page of the old order is not shown.
+  @anime_order 2
+
+  defp key(:anime, sort, season, week, genre, n) when sort != :corner,
+    do: {:browse, :anime, sort, season, week, genre, n, @anime_order}
+
+  defp key(kind, sort, season, week, genre, n), do: {:browse, kind, sort, season, week, genre, n}
 
   # What a request means once it is made sane: an order the kind has, a season only for anime, a
   # week only for the ranking, and a genre the kind offers. Anime Corner's ranking is a fixed
@@ -195,22 +203,45 @@ defmodule Roki.Browse do
 
   # A season is what premiered in it (laev's list) and what had episodes in it: the new seasons
   # of older shows, which a premiere window leaves out (Reincarnated as a Sword's second season
-  # started in 2022's), and the long-runners. Both lists are by popularity, a page of each.
-  defp fetch(:anime, _sort, n, uuid, {_year, _season} = season, _week, genre) do
-    Roki.Laev.public(uuid, fn ->
-      with {:ok, premiered, more1?} <- premiered(season, n, genre),
-           {:ok, airing, more2?} <- airing(season, n, genre) do
-        items =
-          (airing ++ premiered)
-          |> Enum.uniq_by(& &1.id)
-          |> Enum.sort_by(&(&1.popularity || 0), :desc)
+  # started in 2022's), and the long-runners. Both are read a few TMDB pages deep, put in order
+  # together (`Roki.AnimeRank`: what is current first, the evergreens after) and cut into pages.
+  @season_page 40
+  @season_depth 3
 
-        {:ok, big(items), more1? or more2?}
-      end
-    end)
+  defp fetch(:anime, _sort, n, uuid, {_year, _season} = season, _week, genre) do
+    with {:ok, ranked} <- season_ranked(season, genre, uuid) do
+      {:ok, big(Enum.slice(ranked, (n - 1) * @season_page, @season_page)),
+       length(ranked) > n * @season_page}
+    end
   end
 
   defp fetch(kind, sort, n, uuid, _season, _week, genre), do: fetch(kind, sort, n, uuid, genre)
+
+  # The whole ranked list of a season, kept for the hour a page is, so its pages are cuts of one list.
+  defp season_ranked(season, genre, uuid) do
+    TTLCache.fetch({:anime_ranked, season, genre}, @ttl_s, fn ->
+      Roki.Laev.public(uuid, fn ->
+        with {:ok, premiered} <- pool(&premiered(season, &1, genre)),
+             {:ok, airing} <- pool(&airing(season, &1, genre)) do
+          new = MapSet.new(premiered, & &1.id)
+          items = Enum.uniq_by(airing ++ premiered, & &1.id)
+          {:ok, Roki.AnimeRank.rank(items, elem(season, 0), new)}
+        end
+      end)
+    end)
+  end
+
+  # Up to `@season_depth` pages of one of the season's lists, as one list; what was read stands if a
+  # later page fails.
+  defp pool(page) do
+    Enum.reduce_while(1..@season_depth, {:ok, []}, fn n, {:ok, acc} ->
+      case page.(n) do
+        {:ok, items, true} -> {:cont, {:ok, acc ++ items}}
+        {:ok, items, false} -> {:halt, {:ok, acc ++ items}}
+        error -> if acc == [], do: {:halt, error}, else: {:halt, {:ok, acc}}
+      end
+    end)
+  end
 
   # What premiered in the season: laev's own list, or — with a genre, which laev's cannot take —
   # the same question put to TMDB directly.
