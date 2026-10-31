@@ -601,6 +601,12 @@ defmodule RokiWeb.UserHomeLive do
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
 
+  # Where Continue goes: playing, for a film or a show; the title's own page for anything else.
+  defp continue_href(%{type: type, id: id}) when type in ["movie", "tv"] and is_integer(id),
+    do: ~p"/continue/#{type}/#{id}"
+
+  defp continue_href(item), do: href(item)
+
   defp shelf(assigns) do
     assigns =
       assign(assigns, :watching, assigns.data && List.first(assigns.data.watchlist.behind))
@@ -642,9 +648,11 @@ defmodule RokiWeb.UserHomeLive do
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
+            <%!-- One press: it starts playing where you left off (`/continue` works out what is next and
+                  goes straight to the player), no title page in between. --%>
             <.link
               :if={@watching}
-              navigate={href(@watching)}
+              href={continue_href(@watching)}
               class="btn btn-primary btn-lg h-14 min-h-0 gap-2 rounded-full px-8 text-xl shadow-md"
             >
               <.icon name="hero-play-solid" class="h-6 w-6" /> Continue

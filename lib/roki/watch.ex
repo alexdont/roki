@@ -2421,6 +2421,30 @@ defmodule Roki.Watch do
   end
 
   @doc """
+  Where Continue goes: the sources page asked to start the best source by itself (`?auto=1`), for
+  the film, or for the episode Play on the title page would offer (`play_for/4`). `{:ok, path}` or
+  `{:error, reason}` when the title cannot be read.
+  """
+  def continue_path(uuid, "movie", id) do
+    with {:ok, _title} <- title("movie", id, uuid), do: {:ok, "/sources/movie/#{id}?auto=1"}
+  end
+
+  def continue_path(uuid, "tv", id) do
+    with {:ok, title} <- title("tv", id, uuid) do
+      linked? = Roki.Laev.connected?(uuid)
+      resume = if linked?, do: Roki.Laev.run(uuid, fn -> Laev.Resume.get("tv", id) end)
+      sections = sections(uuid, title)
+
+      play =
+        if linked?,
+          do: play_for(uuid, title, sections, resume),
+          else: play_info(sections, resume)
+
+      {:ok, "/sources/tv/#{id}/#{play.season}/#{play.episode}?auto=1"}
+    end
+  end
+
+  @doc """
   What Play should offer for a series, from what is actually watched rather than only from the
   last thing played: an episode left half-way is "Continue"; otherwise "Next" is the first
   unwatched episode after the last one you finished (the next season's first, when a season is

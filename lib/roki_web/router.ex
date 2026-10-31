@@ -265,6 +265,8 @@ defmodule RokiWeb.Router do
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.
     get "/account/services", AccountController, :services
+    # The home page's Continue: straight to playing what is next, not to the title's page.
+    get "/continue/:type/:id", ContinueController, :show
     # PhoenixKit sends a logged-out visitor to its own mount point (`/phoenix_kit/`) when it asks
     # this router whether that is a page — and `/:username` below would say yes, and then "no one
     # called phoenix_kit here". The mount point is not a page of this site: it leads home.
