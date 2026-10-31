@@ -1,39 +1,156 @@
 defmodule Roki.Pengu do
   @moduledoc """
-  PenguPlay as a Stremio addon: the install URL (`PENGU_ADDON_URL`, its path carries the owner's
-  provider and quality settings and an auth token, so it is a secret) answers
+  PenguPlay as a Stremio addon: an account's install link (copied from pengu.uk — its path carries
+  the provider and quality settings and an auth token, so it is a secret) answers
   `<base>/stream/{movie|series}/{imdb}[:season:episode].json` with the releases its providers
   found. Nothing here scrapes — the addon does; this asks, tidies the answer and groups it.
+
+  Whose link is used: the account's own (saved in Settings, in its `custom_fields`); failing that,
+  the key owner's, when the owner has lent it to the account (`Roki.Keys.pengu_lent?/1`) — then
+  every real search counts against the account's daily cap. Neither: PenguPlay is not offered.
 
   A stream is `%{provider:, quality:, language:, size:, label:, url:, kind:, headers:, subtitles:}`
   where `kind` is `:hls` or `:file`. Entries with no `url` (the donate banner, magnets) are dropped.
   """
 
-  alias Roki.TTLCache
+  alias Roki.{Keys, TTLCache}
 
   @ttl 600
   @timeout 45_000
   @qualities ~w(4K 2160P 1440P 1080P 720P 480P 360P)
+  @field "pengu_addon_url"
 
-  @doc "Whether an addon URL is configured."
-  def configured?, do: base() != nil
+  # ── whose link ─────────────────────────────────────────────────────
+
+  @doc "`{:own, base}`, `{:lent, base}` or nil: which link this account searches with."
+  def account(uuid) when is_binary(uuid) do
+    case own_base(uuid) do
+      nil -> if Keys.pengu_lent?(uuid), do: lent(), else: nil
+      base -> {:own, base}
+    end
+  end
+
+  def account(_), do: nil
+
+  # The key owner's own link, as what a lent account searches with.
+  defp lent do
+    case own_base(Keys.config().owner_uuid) do
+      nil -> nil
+      base -> {:lent, base}
+    end
+  end
+
+  @doc "Whether PenguPlay can be used by this account at all."
+  def configured?(uuid), do: account(uuid) != nil
+
+  # The link this account saved, as a base (without `/manifest.json`), or nil.
+  defp own_base(uuid) when is_binary(uuid) do
+    case TTLCache.fetch({:pengu_own, uuid}, 15, fn -> {:ok, read_own(uuid)} end) do
+      {:ok, base} -> base
+      _ -> nil
+    end
+  end
+
+  defp own_base(_), do: nil
+
+  defp read_own(uuid) do
+    case PhoenixKit.Users.Auth.get_user(uuid) do
+      %{custom_fields: %{@field => url}} when is_binary(url) and url != "" -> base_of(url)
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp base_of(url), do: url |> String.trim() |> String.trim_trailing("/manifest.json") |> String.trim_trailing("/")
+
+  @doc """
+  Save the link pasted in Settings. It must be a `https://pengu.uk/…/manifest.json` address whose
+  manifest answers as PenguPlay. `{:ok, user}` or `{:error, text}`.
+  """
+  def save_url(user, pasted) when is_binary(pasted) do
+    url = String.trim(pasted)
+
+    with :ok <- valid_url(url),
+         :ok <- check_manifest(url),
+         {:ok, user} <-
+           PhoenixKit.Users.Auth.update_user_custom_fields(
+             user,
+             Map.put(user.custom_fields || %{}, @field, url)
+           ) do
+      TTLCache.delete({:pengu_own, user.uuid})
+      {:ok, user}
+    else
+      {:error, text} when is_binary(text) -> {:error, text}
+      _ -> {:error, "Could not save that link."}
+    end
+  end
+
+  @doc "Forget the link this account saved."
+  def remove_url(user) do
+    result =
+      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.delete(user.custom_fields || %{}, @field))
+
+    TTLCache.delete({:pengu_own, user.uuid})
+    result
+  end
+
+  defp valid_url(url) do
+    case URI.parse(url) do
+      %URI{scheme: "https", host: "pengu.uk", path: "/" <> _ = path} ->
+        if String.ends_with?(path, "/manifest.json"),
+          do: :ok,
+          else: {:error, "That is not the manifest link — it should end in /manifest.json."}
+
+      _ ->
+        {:error, "Paste the install link from pengu.uk (https://pengu.uk/…/manifest.json)."}
+    end
+  end
+
+  defp check_manifest(url) do
+    case Req.get(url, receive_timeout: 15_000, retry: false) do
+      {:ok, %{status: 200, body: %{"id" => "com.penguplay"}}} -> :ok
+      {:ok, %{status: 200}} -> {:error, "That link is not a PenguPlay manifest."}
+      {:ok, %{status: s}} -> {:error, "PenguPlay answered #{s} for that link."}
+      {:error, _} -> {:error, "PenguPlay could not be reached to check the link."}
+    end
+  end
+
+  @doc "`%{kind: :own | :lent | nil, used:, cap:}` — what Settings says about this account's PenguPlay."
+  def status(uuid) do
+    case account(uuid) do
+      {:lent, _} -> %{kind: :lent, used: Keys.pengu_today(uuid), cap: Keys.pengu_cap(uuid)}
+      {:own, _} -> %{kind: :own, used: nil, cap: nil}
+      nil -> %{kind: nil, used: nil, cap: nil}
+    end
+  end
+
+  # ── searching ──────────────────────────────────────────────────────
 
   @doc "`{:ok, [stream]}` for a film (`season`/`episode` nil) or an episode, or `{:error, reason}`."
-  def streams(imdb_id, season \\ nil, episode \\ nil)
+  def streams(uuid, imdb_id, season \\ nil, episode \\ nil)
 
-  def streams(imdb_id, season, episode) when is_binary(imdb_id) do
-    case base() do
+  def streams(uuid, imdb_id, season, episode) when is_binary(imdb_id) do
+    case account(uuid) do
       nil ->
         {:error, :not_configured}
 
-      base ->
-        TTLCache.fetch({:pengu, imdb_id, season, episode}, @ttl, fn ->
-          fetch(base, imdb_id, season, episode)
+      {kind, base} ->
+        # Kept per link, so accounts on the same one share a search and nobody sees another's.
+        TTLCache.fetch({:pengu, :erlang.phash2(base), imdb_id, season, episode}, @ttl, fn ->
+          cond do
+            kind == :lent and not Keys.pengu_allowed?(uuid) ->
+              {:error, :cap}
+
+            true ->
+              if kind == :lent, do: Keys.record_pengu(uuid)
+              fetch(base, imdb_id, season, episode)
+          end
         end)
     end
   end
 
-  def streams(_, _, _), do: {:error, :no_imdb_id}
+  def streams(_, _, _, _), do: {:error, :no_imdb_id}
 
   defp fetch(base, imdb_id, season, episode) do
     {type, id} =
@@ -192,19 +309,10 @@ defmodule Roki.Pengu do
   defp rank(%{quality: q}), do: Enum.find_index(@qualities, &(&1 == q)) || 9
 
   @doc "What to tell the viewer when a search failed."
-  def message(:not_configured), do: "PenguPlay is not set up on this server."
+  def message(:not_configured), do: "PenguPlay is not set up for this account — add your link in Settings."
+  def message(:cap), do: "Today's PenguPlay searches on the shared link are used up. Add your own PenguPlay link in Settings for no limit."
   def message(:no_imdb_id), do: "This title has no IMDb id, which PenguPlay looks titles up by."
   def message({:http, status}), do: "PenguPlay answered #{status}."
   def message(:timeout), do: "PenguPlay did not answer in time."
   def message(_), do: "PenguPlay could not be reached."
-
-  defp base do
-    case Application.get_env(:roki, :pengu_addon_url) do
-      url when is_binary(url) and url != "" ->
-        url |> String.trim_trailing("/manifest.json") |> String.trim_trailing("/")
-
-      _ ->
-        nil
-    end
-  end
 end

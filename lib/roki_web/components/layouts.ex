@@ -612,8 +612,8 @@ defmodule RokiWeb.Layouts do
 
   # The account's "Play from", when PenguPlay is set up here and there is something to choose.
   defp play_from(scope) do
-    with true <- Roki.Pengu.configured?(),
-         uuid when is_binary(uuid) <- PhoenixKit.Users.Auth.Scope.user_uuid(scope) do
+    with uuid when is_binary(uuid) <- PhoenixKit.Users.Auth.Scope.user_uuid(scope),
+         true <- Roki.Pengu.configured?(uuid) do
       Roki.Laev.web_settings(uuid)["play_from"]
     else
       _ -> nil

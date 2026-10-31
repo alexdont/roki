@@ -192,7 +192,7 @@ defmodule RokiWeb.WatchLive do
     %{uuid: uuid, linked?: linked?} = socket.assigns
 
     start_async(socket, :pengu, fn ->
-      with {:ok, streams} <- Roki.Pengu.streams(title.imdb_id, season, episode) do
+      with {:ok, streams} <- Roki.Pengu.streams(uuid, title.imdb_id, season, episode) do
         case Roki.Pengu.find(streams, id) do
           nil ->
             {:error, :gone}
@@ -213,7 +213,7 @@ defmodule RokiWeb.WatchLive do
   # After a stream Play picked failed: the next best from the same search (kept ten minutes), up to
   # four in a row. A stream chosen by hand is not replaced behind the viewer's back.
   defp next_pengu(%{pengu_auto: true, title: %{imdb_id: imdb}} = a, tried) when length(tried) < 4 do
-    with {:ok, streams} <- Roki.Pengu.streams(imdb, a.season, a.episode),
+    with {:ok, streams} <- Roki.Pengu.streams(a.uuid, imdb, a.season, a.episode),
          do: Roki.Pengu.best(streams, a.caps, tried)
   end
 
@@ -221,7 +221,7 @@ defmodule RokiWeb.WatchLive do
 
   # Play on an account that looks at PenguPlay first, arriving here with nothing chosen.
   defp pengu_default?(%{hash: nil, torrent_forced: false, uuid: uuid}) when is_binary(uuid),
-    do: Roki.Pengu.configured?() and Roki.Laev.web_settings(uuid)["play_from"] == "pengu"
+    do: Roki.Pengu.configured?(uuid) and Roki.Laev.web_settings(uuid)["play_from"] == "pengu"
 
   defp pengu_default?(_), do: false
 
@@ -1050,7 +1050,7 @@ defmodule RokiWeb.WatchLive do
   defp sources_path(%{pengu: id} = a) when is_binary(id), do: sources_path(a, "pengu")
   defp sources_path(a), do: sources_path(a, "torrent")
 
-  defp sources_path(a, src), do: sources_base(a) <> if(Roki.Pengu.configured?(), do: "?src=#{src}", else: "")
+  defp sources_path(a, src), do: sources_base(a) <> if(Roki.Pengu.configured?(a[:uuid]), do: "?src=#{src}", else: "")
 
   defp sources_base(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 

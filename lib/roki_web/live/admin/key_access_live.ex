@@ -24,7 +24,8 @@ defmodule RokiWeb.Admin.KeyAccessLive do
     {"search", "searches"},
     {"probe", "releases checked"},
     {"play", "plays"},
-    {"subtitle", "subtitle downloads"}
+    {"subtitle", "subtitle downloads"},
+    {"pengu", "PenguPlay searches"}
   ]
 
   @impl true
@@ -52,7 +53,8 @@ defmodule RokiWeb.Admin.KeyAccessLive do
           grant: grants[u.uuid],
           owner?: u.uuid == config.owner_uuid,
           stat: stats[u.uuid],
-          today_plays: if(grants[u.uuid], do: Keys.plays_today(u.uuid), else: 0)
+          today_plays: if(grants[u.uuid], do: Keys.plays_today(u.uuid), else: 0),
+          today_pengu: if(grants[u.uuid] && grants[u.uuid].pengu, do: Keys.pengu_today(u.uuid), else: 0)
         }
       end)
       |> Enum.sort_by(
@@ -99,16 +101,34 @@ defmodule RokiWeb.Admin.KeyAccessLive do
   end
 
   def handle_event("toggle_key", %{"uuid" => uuid, "perm" => perm}, socket) do
-    g = socket.assigns.grants[uuid] || %{keys: [], heavy: false}
+    g = socket.assigns.grants[uuid] || %{keys: [], heavy: false, pengu: false}
     keys = if perm in g.keys, do: List.delete(g.keys, perm), else: g.keys ++ [perm]
-    Keys.set_access!(uuid, %{keys: keys, heavy: g.heavy})
+    Keys.set_access!(uuid, %{keys: keys, heavy: g.heavy, pengu: g.pengu})
     unless Roki.Laev.connected?(uuid), do: Task.start(fn -> Roki.Laev.setup_granted(uuid) end)
     {:noreply, load(socket)}
   end
 
+  # The owner's PenguPlay link, lent to this account (or taken back).
+  def handle_event("toggle_pengu", %{"uuid" => uuid}, socket) do
+    on? = match?(%{pengu: true}, socket.assigns.grants[uuid])
+    Keys.set_pengu!(uuid, not on?)
+    {:noreply, load(socket)}
+  end
+
+  def handle_event("cap_pengu", %{"uuid" => uuid, "searches" => n}, socket) do
+    value =
+      case Integer.parse(String.trim(n)) do
+        {n, ""} when n >= 0 -> n
+        _ -> nil
+      end
+
+    Keys.set_daily_pengu!(uuid, value)
+    {:noreply, load(socket)}
+  end
+
   def handle_event("toggle_heavy", %{"uuid" => uuid}, socket) do
-    g = socket.assigns.grants[uuid] || %{keys: [], heavy: false}
-    Keys.set_access!(uuid, %{keys: g.keys, heavy: not g.heavy})
+    g = socket.assigns.grants[uuid] || %{keys: [], heavy: false, pengu: false}
+    Keys.set_access!(uuid, %{keys: g.keys, heavy: not g.heavy, pengu: g.pengu})
     {:noreply, load(socket)}
   end
 
@@ -218,6 +238,15 @@ defmodule RokiWeb.Admin.KeyAccessLive do
               >
                 Heavy encode
               </th>
+              <th
+                class="text-center"
+                title="May search PenguPlay with the owner's link (the owner's own account, set under Settings → PenguPlay)."
+              >
+                PenguPlay
+              </th>
+              <th title="PenguPlay searches a day on the owner's link; blank for the default">
+                Daily PenguPlay
+              </th>
               <th></th>
               <th title="Plays a day; blank for no cap">Daily plays</th>
               <th class="text-right">Today</th>
@@ -266,6 +295,36 @@ defmodule RokiWeb.Admin.KeyAccessLive do
                 >
                   {if r.grant && r.grant.heavy, do: "on", else: "off"}
                 </button>
+              </td>
+              <td class="text-center">
+                <span :if={r.owner?} class="text-base-content/40">—</span>
+                <button
+                  :if={!r.owner?}
+                  phx-click="toggle_pengu"
+                  phx-value-uuid={r.user.uuid}
+                  class={[
+                    "btn btn-xs w-14",
+                    r.grant && r.grant.pengu && "btn-success",
+                    !(r.grant && r.grant.pengu) && "btn-outline btn-error"
+                  ]}
+                  title={"PenguPlay: " <> if(r.grant && r.grant.pengu, do: "lent — click to take back", else: "not lent — click to lend")}
+                >
+                  {if r.grant && r.grant.pengu, do: "on", else: "off"}
+                </button>
+              </td>
+              <td>
+                <form :if={r.grant && r.grant.pengu} phx-change="cap_pengu" phx-debounce="600">
+                  <input type="hidden" name="uuid" value={r.user.uuid} />
+                  <input
+                    type="number"
+                    min="0"
+                    name="searches"
+                    value={r.grant.daily_pengu}
+                    placeholder={Roki.Keys.default_pengu_cap()}
+                    class="input input-xs input-bordered w-20"
+                  />
+                  <span class="ml-1 text-xs text-base-content/50">{r.today_pengu} used</span>
+                </form>
               </td>
               <td class="whitespace-nowrap">
                 <button

@@ -31,6 +31,7 @@ defmodule RokiWeb.SourcesLive do
         assign(socket,
           page_title: "Sources",
           source: source,
+          pengu?: Roki.Pengu.configured?(uuid),
           type: type,
           id: n,
           season: season,
@@ -85,7 +86,7 @@ defmodule RokiWeb.SourcesLive do
   # the account's "Play from" setting. PenguPlay only when it is set up on this server.
   defp initial_source(uuid, params) do
     cond do
-      not Roki.Pengu.configured?() -> :torrent
+      not Roki.Pengu.configured?(uuid) -> :torrent
       params["src"] == "pengu" -> :pengu
       params["src"] == "torrent" -> :torrent
       uuid && Roki.Laev.web_settings(uuid)["play_from"] == "pengu" -> :pengu
@@ -175,11 +176,11 @@ defmodule RokiWeb.SourcesLive do
   end
 
   defp pengu_search(%{assigns: %{title: %{imdb_id: imdb}}} = socket) do
-    %{season: season, episode: episode} = socket.assigns
+    %{uuid: uuid, season: season, episode: episode} = socket.assigns
 
     socket
     |> assign(:pengu, :loading)
-    |> start_async(:pengu, fn -> Roki.Pengu.streams(imdb, season, episode) end)
+    |> start_async(:pengu, fn -> Roki.Pengu.streams(uuid, imdb, season, episode) end)
   end
 
   defp pengu_search(socket), do: assign(socket, pengu: {:error, Roki.Pengu.message(:no_imdb_id)}, auto: :off)
@@ -692,14 +693,14 @@ defmodule RokiWeb.SourcesLive do
         </p>
 
         <.source_bar
-          :if={Roki.Pengu.configured?()}
+          :if={@pengu?}
           source={@source}
           cached_at={@cached_at}
           busy={@phase == :working}
           pengu={@pengu}
         />
         <.cache_note
-          :if={@cached_at != nil and not Roki.Pengu.configured?()}
+          :if={@cached_at != nil and not @pengu?}
           at={@cached_at}
           busy={@phase == :working}
         />

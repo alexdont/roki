@@ -227,9 +227,3 @@ if config_env() == :test do
     http: [ip: {127, 0, 0, 1}, port: 4002],
     server: false
 end
-
-# PenguPlay, as a Stremio addon: the install URL from pengu.uk (it carries an auth token, so it
-# lives in the stack .env only). Optional — without it the PenguPlay sources page says so.
-if (pengu = System.get_env("PENGU_ADDON_URL")) not in [nil, ""] do
-  config :roki, pengu_addon_url: pengu
-end

@@ -129,6 +129,8 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:laev_key, nil)
           |> assign(:os, %{key?: false, user: nil, login?: false})
           |> assign(:os_msg, nil)
+          |> assign(:pengu, Roki.Pengu.status(uuid))
+          |> assign(:pengu_msg, nil)
           |> assign_reading()
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
@@ -215,6 +217,37 @@ defmodule RokiWeb.SettingsLive do
   end
 
   def handle_event("change", _params, socket), do: {:noreply, socket}
+
+  # PenguPlay: the install link pasted from pengu.uk, checked against its manifest before it is kept.
+  def handle_event("pengu_save", %{"pengu" => %{"url" => url}}, socket) do
+    case Roki.Pengu.save_url(socket.assigns.reader, url) do
+      {:ok, user} ->
+        {:noreply,
+         assign(socket,
+           reader: user,
+           pengu: Roki.Pengu.status(user.uuid),
+           pengu_msg: {:ok, "Saved — PenguPlay now searches with your own link."}
+         )}
+
+      {:error, text} ->
+        {:noreply, assign(socket, :pengu_msg, {:error, text})}
+    end
+  end
+
+  def handle_event("pengu_remove", _params, socket) do
+    case Roki.Pengu.remove_url(socket.assigns.reader) do
+      {:ok, user} ->
+        {:noreply,
+         assign(socket,
+           reader: user,
+           pengu: Roki.Pengu.status(user.uuid),
+           pengu_msg: {:ok, "Your link is removed."}
+         )}
+
+      _ ->
+        {:noreply, assign(socket, :pengu_msg, {:error, "Could not remove it."})}
+    end
+  end
 
   def handle_event("edit", %{"key" => key}, socket),
     do: {:noreply, update(socket, :editing, &MapSet.put(&1, key))}
@@ -635,7 +668,15 @@ defmodule RokiWeb.SettingsLive do
               <.device_row :if={group == :playback} value={@device_player} saved={@saved} />
               <.web_row
                 :for={
-                  {key, spec} <- if(group == :playback, do: external_app_spec(@web_specs), else: [])
+                  {key, spec} <-
+                    if(group == :playback,
+                      do:
+                        Enum.reject(
+                          external_app_spec(@web_specs),
+                          &(elem(&1, 0) == "play_from" and @pengu.kind == nil)
+                        ),
+                      else: []
+                    )
                 }
                 key={key}
                 spec={spec}
@@ -676,6 +717,50 @@ defmodule RokiWeb.SettingsLive do
             mal_token={@reader_mal}
             mal_available={@reader_mal_available}
           />
+        </section>
+
+        <%!-- PenguPlay: a link of your own, or the owner's lent to you. Outside laev's own sections,
+             so it works without a laev account (watch history still needs one). --%>
+        <section id="penguplay" class="space-y-2 scroll-mt-4">
+          <h2 class="text-xl font-semibold">PenguPlay</h2>
+          <p class="text-sm text-base-content/60">
+            Plain https streams from PenguPlay's providers — no debrid account needed. Sign in at
+            <a href="https://pengu.uk" target="_blank" rel="noopener" class="link">pengu.uk</a>
+            (Google takes a few seconds), pick your providers, and paste the install link (the one
+            ending in <code>/manifest.json</code>) here. Searches then go out under your own account.
+          </p>
+          <p class="text-sm">
+            <span :if={@pengu.kind == :own} class="badge badge-success badge-outline">Your own link</span>
+            <span :if={@pengu.kind == :lent} class="badge badge-info badge-outline">Shared link</span>
+            <span :if={@pengu.kind == nil} class="badge badge-ghost">Not set up</span>
+            <span :if={@pengu.kind == :lent} class="ml-2 text-base-content/70">
+              {@pengu.used} of {@pengu.cap} searches used today. A link of your own has no limit.
+            </span>
+          </p>
+          <form phx-submit="pengu_save" class="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              name="pengu[url]"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://pengu.uk/…/manifest.json"
+              class="input input-bordered input-sm w-full max-w-xl"
+            />
+            <button class="btn btn-sm btn-primary">
+              {if @pengu.kind == :own, do: "Replace link", else: "Save link"}
+            </button>
+            <button
+              :if={@pengu.kind == :own}
+              type="button"
+              phx-click="pengu_remove"
+              data-confirm="Remove your PenguPlay link?"
+              class="btn btn-sm btn-ghost text-error"
+            >
+              Remove
+            </button>
+          </form>
+          <p :if={match?({:ok, _}, @pengu_msg)} class="text-sm text-success">{elem(@pengu_msg, 1)}</p>
+          <p :if={match?({:error, _}, @pengu_msg)} class="text-sm text-error">{elem(@pengu_msg, 1)}</p>
         </section>
 
         <section :if={@state == :ready} id="connections" class="space-y-1 scroll-mt-4">

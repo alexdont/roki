@@ -78,12 +78,16 @@ defmodule Roki.PenguTest do
     assert [{"2Peckle", _}, {"Cinejoy", _}] = @streams |> Pengu.parse() |> Pengu.group()
   end
 
-  test "streams without a title id or a configured addon say why" do
-    old = Application.get_env(:roki, :pengu_addon_url)
-    Application.delete_env(:roki, :pengu_addon_url)
-    on_exit(fn -> if old, do: Application.put_env(:roki, :pengu_addon_url, old) end)
+  test "streams without a title id or a link say why" do
+    assert {:error, :no_imdb_id} = Pengu.streams(nil, nil)
+    assert {:error, :not_configured} = Pengu.streams(nil, "tt0133093")
+  end
 
-    assert {:error, :no_imdb_id} = Pengu.streams(nil)
-    assert {:error, :not_configured} = Pengu.streams("tt0133093")
+  test "only a pengu.uk manifest link is accepted" do
+    user = %{custom_fields: %{}, uuid: "x"}
+    for bad <- ["", "http://pengu.uk/a/manifest.json", "https://example.com/a/manifest.json", "https://pengu.uk/a/other.json"] do
+      assert {:error, text} = Pengu.save_url(user, bad)
+      assert is_binary(text)
+    end
   end
 end

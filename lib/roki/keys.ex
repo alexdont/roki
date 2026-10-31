@@ -24,7 +24,7 @@ defmodule Roki.Keys do
 
   # What a use of a key weighs when accounts are ranked: a play or a download costs more than
   # checking one release.
-  @weights %{"search" => 2, "probe" => 1, "play" => 5, "subtitle" => 3}
+  @weights %{"search" => 2, "probe" => 1, "play" => 5, "subtitle" => 3, "pengu" => 2}
 
   def shareable, do: @shareable
 
@@ -90,30 +90,44 @@ defmodule Roki.Keys do
     found =
       from(g in grants(),
         where: g.user_uuid == ^bin,
-        select: %{daily_plays: g.daily_plays, note: g.note, keys: g.keys, heavy: g.heavy}
+        select: %{
+          daily_plays: g.daily_plays,
+          note: g.note,
+          keys: g.keys,
+          heavy: g.heavy,
+          pengu: g.pengu,
+          daily_pengu: g.daily_pengu
+        }
       )
       |> Repo.one()
 
     {:ok, found || false}
   end
 
-  @doc "Let this account use all of the owner's keys and have videos re-encoded for the browser."
+  @doc "Let this account use all of the owner's keys, PenguPlay, and have videos re-encoded for the browser."
   def grant!(uuid, daily_plays \\ nil) do
-    set_access!(uuid, %{keys: for({id, _, _} <- @permissions, do: id), heavy: true})
+    set_access!(uuid, %{keys: for({id, _, _} <- @permissions, do: id), heavy: true, pengu: true})
 
     if daily_plays, do: set_daily_plays!(uuid, daily_plays)
     :ok
   end
 
   @doc """
-  Set what an account may use: `keys` (permission ids, see `permissions/0`) and `heavy` (re-encoding for the browser).
-  An account left with neither has no row at all.
+  Set what an account may use: `keys` (permission ids, see `permissions/0`), `heavy` (re-encoding for the
+  browser) and `pengu` (the owner's PenguPlay link; left as it is when not given). An account left with
+  none of them has no row at all.
   """
-  def set_access!(uuid, %{keys: keys, heavy: heavy}) do
+  def set_access!(uuid, %{keys: keys, heavy: heavy} = access) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     keys = Enum.filter(keys, &(&1 in Enum.map(@permissions, fn {id, _, _} -> id end)))
 
-    if keys == [] and not heavy do
+    pengu =
+      case Map.fetch(access, :pengu) do
+        {:ok, v} -> v
+        :error -> match?({:ok, %{pengu: true}}, load_grant(uuid))
+      end
+
+    if keys == [] and not heavy and not pengu do
       Repo.delete_all(from(g in grants(), where: g.user_uuid == ^bin))
     else
       Repo.insert_all(
@@ -123,10 +137,11 @@ defmodule Roki.Keys do
             user_uuid: bin,
             granted_at: DateTime.utc_now() |> DateTime.truncate(:second),
             keys: keys,
-            heavy: heavy
+            heavy: heavy,
+            pengu: pengu
           }
         ],
-        on_conflict: {:replace, [:keys, :heavy]},
+        on_conflict: {:replace, [:keys, :heavy, :pengu]},
         conflict_target: [:user_uuid]
       )
     end
@@ -151,14 +166,36 @@ defmodule Roki.Keys do
     :ok
   end
 
+  @doc "Let an account use the owner's PenguPlay link (or take it away), leaving the rest as it is."
+  def set_pengu!(uuid, on?) do
+    {:ok, g} = load_grant(uuid)
+    g = g || %{keys: [], heavy: false}
+    set_access!(uuid, %{keys: g.keys, heavy: g.heavy, pengu: on?})
+  end
+
+  @doc "Cap an account to this many PenguPlay searches a day (nil for the site default)."
+  def set_daily_pengu!(uuid, n) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    Repo.update_all(from(g in grants(), where: g.user_uuid == ^bin), set: [daily_pengu: n])
+    forget(uuid)
+    :ok
+  end
+
   defp forget(uuid), do: TTLCache.delete({:key_grant, uuid})
 
-  @doc "Every account with any access: `%{uuid => %{daily_plays, granted_at, keys, heavy}}`."
+  @doc "Every account with any access: `%{uuid => %{daily_plays, granted_at, keys, heavy, pengu, daily_pengu}}`."
   def all_grants do
     from(g in grants(),
       select:
         {g.user_uuid,
-         %{daily_plays: g.daily_plays, granted_at: g.granted_at, keys: g.keys, heavy: g.heavy}}
+         %{
+           daily_plays: g.daily_plays,
+           granted_at: g.granted_at,
+           keys: g.keys,
+           heavy: g.heavy,
+           pengu: g.pengu,
+           daily_pengu: g.daily_pengu
+         }}
     )
     |> Repo.all()
     |> Map.new(fn {bin, g} -> {Ecto.UUID.load!(bin), g} end)
@@ -264,6 +301,57 @@ defmodule Roki.Keys do
   rescue
     _ -> :ok
   end
+
+  # ── PenguPlay, lent ────────────────────────────────────────────────
+
+  # Searches a day for an account using the owner's PenguPlay link, unless its row says otherwise.
+  # A search is one real request to PenguPlay (what is kept for ten minutes is not counted again).
+  @default_pengu_cap 30
+
+  @doc "Is the owner's PenguPlay link lent to this account?"
+  def pengu_lent?(uuid), do: match?(%{pengu: true}, grant(uuid))
+
+  @doc "How many PenguPlay searches a day this account may make on the owner's link."
+  def pengu_cap(uuid) do
+    case grant(uuid) do
+      %{daily_pengu: n} when is_integer(n) -> n
+      _ -> @default_pengu_cap
+    end
+  end
+
+  def default_pengu_cap, do: @default_pengu_cap
+
+  @doc "Count one PenguPlay search against this account today."
+  def record_pengu(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    Repo.insert_all(
+      usage(),
+      [%{user_uuid: bin, day: Date.utc_today(), kind: "pengu", count: 1}],
+      on_conflict: [inc: [count: 1]],
+      conflict_target: [:user_uuid, :day, :kind]
+    )
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  @doc "PenguPlay searches this account has made today on the owner's link."
+  def pengu_today(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    today = Date.utc_today()
+
+    from(u in usage(),
+      where: u.user_uuid == ^bin and u.day == ^today and u.kind == "pengu",
+      select: sum(u.count)
+    )
+    |> Repo.one()
+    |> Kernel.||(0)
+  end
+
+  @doc "May this account make another PenguPlay search on the owner's link today?"
+  def pengu_allowed?(uuid), do: pengu_today(uuid) < pengu_cap(uuid)
 
   @doc "May this account start another play today? (`false` once it has used its daily plays.)"
   def allow_play?(uuid) do
