@@ -5,6 +5,10 @@ defmodule RokiWeb.PageController do
     render(conn, :home)
   end
 
+  # PhoenixKit's mount point on its own: there is nothing there. Home is where a visitor who has
+  # just logged out ends up (the flash that says so is kept through the redirect).
+  def phoenix_kit_root(conn, _params), do: redirect(conn, to: ~p"/")
+
   # The browser decoding self-test is a plain page under /images; the short addresses lead to it.
   def hevc_test(conn, _params), do: redirect(conn, to: "/images/hevc-test/index.html")
 

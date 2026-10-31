@@ -265,6 +265,10 @@ defmodule RokiWeb.Router do
     # menu's "Settings". This site's playback and services page is /:username/settings, reached
     # from the menu by this address, which only needs to know who is signed in.
     get "/account/services", AccountController, :services
+    # PhoenixKit sends a logged-out visitor to its own mount point (`/phoenix_kit/`) when it asks
+    # this router whether that is a page — and `/:username` below would say yes, and then "no one
+    # called phoenix_kit here". The mount point is not a page of this site: it leads home.
+    get "/phoenix_kit", PageController, :phoenix_kit_root
     # Where MyAnimeList sends people back after they approve the site's app.
     get "/mal/callback", MalController, :callback
     # Linking a TMDB account, so ratings are saved on the person's own account: begin, and where
