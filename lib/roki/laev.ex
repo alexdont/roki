@@ -734,6 +734,13 @@ defmodule Roki.Laev do
         "off" => "No limit"
       }
     },
+    # Where the sources page looks first, and where Play finds its source: torrents (laev, through
+    # the debrid account) or PenguPlay's plain https streams. The sources page switches either way.
+    "play_from" => %{
+      default: "torrent",
+      allowed: ~w(torrent pengu),
+      labels: %{"torrent" => "Torrents (your debrid account)", "pengu" => "PenguPlay (https streams)"}
+    },
     # How long found sources are kept so the next Play skips the search.
     "sources_cache" => %{
       default: "12",

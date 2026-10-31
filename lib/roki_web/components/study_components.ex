@@ -52,6 +52,7 @@ defmodule RokiWeb.StudyComponents do
 
   attr :season, :integer, default: nil, doc: "the season that is playing"
   attr :home, :string, default: "/home", doc: "where closing goes when there is no page behind"
+  attr :sources, :string, default: nil, doc: "the sources page, for a \"Change source\" button in the bar"
 
   slot :controls,
     doc: "extra controls above the video (the /study page puts its file pickers here)"
@@ -213,6 +214,15 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                 </div>
                 <div class="study-bar-group">
+                  <.link
+                    :if={@sources}
+                    navigate={@sources}
+                    class="btn btn-sm gap-1.5"
+                    title="Change source"
+                  >
+                    <.icon name="hero-arrows-right-left" class="h-4 w-4 shrink-0" />
+                    <span class="hidden sm:inline">Change source</span>
+                  </.link>
                   <button
                     type="button"
                     data-role="audio-btn"

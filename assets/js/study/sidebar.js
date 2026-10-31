@@ -1483,6 +1483,15 @@ export const StudySidebar = {
     this.cache.clear()
     this.resetAudio()
 
+    // A stream that has not started by then is reported as failed, so the next one is tried
+    // (PenguPlay: some hosts accept the request and then never send anything).
+    clearTimeout(this.startTimer)
+    if (p.startup) {
+      this.startTimer = setTimeout(() => {
+        if (this.playerUrl === p.url && !this.failedSent && v.readyState < 3 && v.currentTime < 0.5) this.playerFailed("did not start")
+      }, p.startup)
+    }
+
     if (p.local) {
       // This device does the work: the release read from its host, taken apart and played here.
       this.base = 0

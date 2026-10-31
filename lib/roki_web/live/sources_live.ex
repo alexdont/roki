@@ -25,10 +25,12 @@ defmodule RokiWeb.SourcesLive do
          {season, episode} <- parse_episode(params) do
       scope = socket.assigns[:phoenix_kit_current_scope]
       uuid = if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
+      source = initial_source(uuid, params)
 
       socket =
         assign(socket,
           page_title: "Sources",
+          source: source,
           type: type,
           id: n,
           season: season,
@@ -69,9 +71,25 @@ defmodule RokiWeb.SourcesLive do
           pengu: nil
         )
 
-      {:ok, if(connected?(socket) and socket.assigns.linked?, do: load(socket), else: socket)}
+      {:ok,
+       if(connected?(socket) and (socket.assigns.linked? or source == :pengu),
+         do: load(socket),
+         else: socket
+       )}
     else
       _ -> {:ok, push_navigate(socket, to: ~p"/home")}
+    end
+  end
+
+  # Where the page looks first: `?src=` when the link says (the player's "change source" does), else
+  # the account's "Play from" setting. PenguPlay only when it is set up on this server.
+  defp initial_source(uuid, params) do
+    cond do
+      not Roki.Pengu.configured?() -> :torrent
+      params["src"] == "pengu" -> :pengu
+      params["src"] == "torrent" -> :torrent
+      uuid && Roki.Laev.web_settings(uuid)["play_from"] == "pengu" -> :pengu
+      true -> :torrent
     end
   end
 
@@ -118,7 +136,8 @@ defmodule RokiWeb.SourcesLive do
     cond do
       # Playing in the browser, the sources page has nothing to add: the watch page finds the
       # release and starts it itself. Going straight there saves a whole page.
-      auto?(params, socket) and socket.assigns.linked? and socket.assigns.mode == :browser ->
+      auto?(params, socket) and socket.assigns.linked? and socket.assigns.mode == :browser and
+          socket.assigns.source == :torrent ->
         {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns), replace: true)}
 
       true ->
@@ -135,11 +154,12 @@ defmodule RokiWeb.SourcesLive do
       Map.get(get_connect_params(socket) || %{}, "_mounts", 0) == 0
   end
 
+  # `src=torrent`: a release is being asked for, whatever the account's "Play from" says.
   defp direct_watch_path(%{type: "movie", id: id, prefer: prefer}),
-    do: ~p"/watch/movie/#{id}?#{prefer_query(prefer)}"
+    do: ~p"/watch/movie/#{id}?#{[src: "torrent"] ++ prefer_query(prefer)}"
 
   defp direct_watch_path(%{type: "tv", id: id, season: s, episode: e, prefer: prefer}),
-    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{prefer_query(prefer)}"
+    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[src: "torrent"] ++ prefer_query(prefer)}"
 
   defp prefer_query(nil), do: []
   defp prefer_query(hash), do: [prefer: hash]
@@ -154,6 +174,16 @@ defmodule RokiWeb.SourcesLive do
       else: {:noreply, socket}
   end
 
+  defp pengu_search(%{assigns: %{title: %{imdb_id: imdb}}} = socket) do
+    %{season: season, episode: episode} = socket.assigns
+
+    socket
+    |> assign(:pengu, :loading)
+    |> start_async(:pengu, fn -> Roki.Pengu.streams(imdb, season, episode) end)
+  end
+
+  defp pengu_search(socket), do: assign(socket, pengu: {:error, Roki.Pengu.message(:no_imdb_id)}, auto: :off)
+
   defp clean_path(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 
   defp clean_path(%{type: "tv", id: id, season: s, episode: e}),
@@ -162,8 +192,11 @@ defmodule RokiWeb.SourcesLive do
   defp load(socket) do
     %{type: type, id: id, uuid: uuid} = socket.assigns
 
+    linked? = socket.assigns.linked?
+
     start_async(socket, :title, fn ->
-      with {:ok, title} <- Watch.title(type, id, uuid), do: {:ok, title, Watch.auto_start?(uuid)}
+      with {:ok, title} <- Watch.title(type, id, uuid),
+           do: {:ok, title, not linked? or Watch.auto_start?(uuid)}
     end)
   end
 
@@ -232,7 +265,7 @@ defmodule RokiWeb.SourcesLive do
           |> start_async(:prev, fn -> Watch.previous_episode(uuid, title, season, episode) end),
         else: socket
 
-    {:noreply, begin(socket, false)}
+    {:noreply, if(socket.assigns.source == :pengu, do: pengu_search(socket), else: begin(socket, false))}
   end
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
@@ -298,14 +331,24 @@ defmodule RokiWeb.SourcesLive do
          start_error: "That one would not start. Pick another."
        )}
 
-  def handle_async(:pengu, {:ok, {:ok, streams}}, socket),
-    do: {:noreply, assign(socket, :pengu, {:ok, Roki.Pengu.group(streams), length(streams)})}
+  # Play asked for the best stream: go straight to the player with it; the list is only here when
+  # nothing suitable came back.
+  def handle_async(:pengu, {:ok, {:ok, streams}}, socket) do
+    socket = assign(socket, :pengu, {:ok, Roki.Pengu.group(streams), length(streams)})
+
+    with :pending <- socket.assigns.auto,
+         %{id: id} <- Roki.Pengu.best(streams, socket.assigns.caps) do
+      {:noreply, push_navigate(socket, to: pengu_watch(socket.assigns, id) <> "&auto=1", replace: true)}
+    else
+      _ -> {:noreply, assign(socket, :auto, :off)}
+    end
+  end
 
   def handle_async(:pengu, {:ok, {:error, reason}}, socket),
-    do: {:noreply, assign(socket, :pengu, {:error, Roki.Pengu.message(reason)})}
+    do: {:noreply, assign(socket, pengu: {:error, Roki.Pengu.message(reason)}, auto: :off)}
 
   def handle_async(:pengu, {:exit, _}, socket),
-    do: {:noreply, assign(socket, :pengu, {:error, Roki.Pengu.message(:timeout)})}
+    do: {:noreply, assign(socket, pengu: {:error, Roki.Pengu.message(:timeout)}, auto: :off)}
 
   def handle_async(:next, {:ok, {_s, _e, _tag} = next}, socket),
     do: {:noreply, assign(socket, :next, next)}
@@ -402,14 +445,25 @@ defmodule RokiWeb.SourcesLive do
   # ── events ─────────────────────────────────────────────────────────
 
   @impl true
-  def handle_event("pengu", _params, %{assigns: %{title: %{imdb_id: imdb}}} = socket) do
-    %{season: season, episode: episode} = socket.assigns
+  # The switch in the bar: look at torrents or at PenguPlay. Each is searched the first time it is
+  # shown and kept after that.
+  def handle_event("source", %{"to" => to}, socket) when to in ["torrent", "pengu"] do
+    source = String.to_existing_atom(to)
+    socket = assign(socket, source: source, auto: :off)
 
-    {:noreply,
-     socket
-     |> assign(:pengu, :loading)
-     |> start_async(:pengu, fn -> Roki.Pengu.streams(imdb, season, episode) end)}
+    socket =
+      cond do
+        socket.assigns.title == nil -> socket
+        source == :pengu and socket.assigns.pengu == nil -> pengu_search(socket)
+        source == :torrent and socket.assigns.phase == :loading -> begin(socket, false)
+        true -> socket
+      end
+
+    {:noreply, socket}
   end
+
+  def handle_event("pengu", _params, %{assigns: %{title: %{}}} = socket),
+    do: {:noreply, pengu_search(socket)}
 
   def handle_event("pengu", _params, socket), do: {:noreply, socket}
 
@@ -624,11 +678,11 @@ defmodule RokiWeb.SourcesLive do
       </section>
 
       <div class="space-y-6 px-4 pb-12 pt-6 sm:px-6 lg:px-12 xl:px-16">
-        <div :if={@uuid == nil} class="alert text-sm">
+        <div :if={@uuid == nil and @source == :torrent} class="alert text-sm">
           <span>Log in, and connect your debrid account through laev, to watch here.</span>
           <a href="/phoenix_kit/users/log-in" class="btn btn-sm">Log in</a>
         </div>
-        <div :if={@uuid != nil and not @linked?} class="alert text-sm">
+        <div :if={@uuid != nil and not @linked? and @source == :torrent} class="alert text-sm">
           <span>Connect laev on your shelf to watch here — your Real-Debrid or TorBox account does the streaming.</span>
           <.link navigate={~p"/"} class="btn btn-sm">Connect laev</.link>
         </div>
@@ -637,29 +691,46 @@ defmodule RokiWeb.SourcesLive do
           Couldn't load this title just now. Try again in a minute.
         </p>
 
-        <.cache_note :if={@cached_at} at={@cached_at} busy={@phase == :working} />
+        <.source_bar
+          :if={Roki.Pengu.configured?()}
+          source={@source}
+          cached_at={@cached_at}
+          busy={@phase == :working}
+          pengu={@pengu}
+        />
+        <.cache_note
+          :if={@cached_at != nil and not Roki.Pengu.configured?()}
+          at={@cached_at}
+          busy={@phase == :working}
+        />
 
         <.progress_line
-          :if={@phase in [:loading, :working] and @auto != :pending}
+          :if={@source == :torrent and @phase in [:loading, :working] and @auto != :pending}
           probe={@probe}
           text={@status}
         />
-        <.checks_list :if={@phase in [:loading, :working] and @auto != :pending} checks={@checks} />
-        <p :if={@start_error} class="alert alert-warning text-sm">{@start_error}</p>
-        <p :if={@phase == :failed} class="alert alert-warning text-sm">{@failed}</p>
+        <.checks_list
+          :if={@source == :torrent and @phase in [:loading, :working] and @auto != :pending}
+          checks={@checks}
+        />
+        <p :if={@source == :torrent and @start_error} class="alert alert-warning text-sm">{@start_error}</p>
+        <p :if={@source == :torrent and @phase == :failed} class="alert alert-warning text-sm">{@failed}</p>
         <.heavy_offer :if={
-          @phase == :failed and @failed_reason == :no_light and @mode == :browser and
+          @source == :torrent and @phase == :failed and @failed_reason == :no_light and @mode == :browser and
             @heavy_allowed?
         } />
         <p
-          :if={@phase == :ready and @playable != [] and @external == nil and @auto != :pending}
+          :if={
+            @source == :torrent and @phase == :ready and @playable != [] and @external == nil and
+              @auto != :pending
+          }
           class="text-sm text-base-content/70"
         >
           Pick a release.
         </p>
 
         <.external_panel
-          :if={@external}
+          :if={@source == :torrent and @external}
           external={@external}
           platform={@platform}
           title={@title}
@@ -670,7 +741,7 @@ defmodule RokiWeb.SourcesLive do
         />
 
         <.sources
-          :if={@playable != []}
+          :if={@source == :torrent and @playable != []}
           playable={@playable}
           caps={@caps}
           rest={@rest}
@@ -681,8 +752,9 @@ defmodule RokiWeb.SourcesLive do
         />
 
         <.pengu_sources
-          :if={@title && Roki.Pengu.configured?()}
+          :if={@source == :pengu}
           pengu={@pengu}
+          auto={@auto}
           type={@type}
           id={@id}
           season={@season}
@@ -691,7 +763,10 @@ defmodule RokiWeb.SourcesLive do
       </div>
 
       <.auto_start
-        :if={@linked? and @auto == :pending and @phase in [:loading, :working] and @external == nil}
+        :if={
+          @source == :torrent and @linked? and @auto == :pending and
+            @phase in [:loading, :working] and @external == nil
+        }
         probe={@probe}
         checks={@checks}
         what={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
@@ -704,7 +779,61 @@ defmodule RokiWeb.SourcesLive do
 
   # ── PenguPlay: a second search, on request ──────────────────────────
 
+  attr :source, :atom, required: true
+  attr :cached_at, :any, default: nil
+  attr :busy, :boolean, default: false
+  attr :pengu, :any, default: nil
+
+  # The row above the results: which kind of source is being looked at, and — beside it — how
+  # fresh they are and the button that looks again.
+  defp source_bar(assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-base-300/70 bg-base-100/60 px-4 py-3 text-sm text-base-content/70">
+      <div class="join" role="group" aria-label="Where to look for sources">
+        <button
+          type="button"
+          phx-click="source"
+          phx-value-to="torrent"
+          aria-pressed={@source == :torrent}
+          class={["btn btn-sm join-item", @source == :torrent && "btn-primary"]}
+        >
+          Torrents
+        </button>
+        <button
+          type="button"
+          phx-click="source"
+          phx-value-to="pengu"
+          aria-pressed={@source == :pengu}
+          class={["btn btn-sm join-item", @source == :pengu && "btn-primary"]}
+        >
+          PenguPlay
+        </button>
+      </div>
+
+      <%= if @source == :torrent do %>
+        <span :if={@cached_at} class="badge badge-success badge-outline gap-1">⚡ cached sources</span>
+        <span :if={@cached_at}>found {ago(@cached_at)}, nothing to check.</span>
+        <button :if={@cached_at} phx-click="retry" class="btn btn-xs rounded-full" disabled={@busy}>
+          Retry
+        </button>
+        <span :if={@cached_at} class="text-base-content/50">looks for new ones</span>
+      <% else %>
+        <span :if={match?({:ok, _, _}, @pengu)}>{elem(@pengu, 2)} streams found.</span>
+        <button
+          :if={@pengu != :loading and @pengu != nil}
+          type="button"
+          phx-click="pengu"
+          class="btn btn-xs rounded-full"
+        >
+          Search again
+        </button>
+      <% end %>
+    </div>
+    """
+  end
+
   attr :pengu, :any, required: true
+  attr :auto, :atom, default: :off
   attr :type, :string, required: true
   attr :id, :integer, required: true
   attr :season, :integer, default: nil
@@ -713,33 +842,21 @@ defmodule RokiWeb.SourcesLive do
   defp pengu_sources(assigns) do
     ~H"""
     <section class="space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 class="text-2xl font-semibold tracking-tight">
-          PenguPlay
-          <span :if={match?({:ok, _, _}, @pengu)} class="text-sm font-normal text-base-content/60">
-            {elem(@pengu, 2)} playable
-          </span>
-        </h2>
-        <button
-          :if={@pengu != :loading}
-          type="button"
-          phx-click="pengu"
-          class="inline-flex h-10 items-center gap-2 rounded-full border border-base-300 px-4 text-sm font-semibold transition hover:border-primary/60"
-        >
-          <.icon name="hero-magnifying-glass" class="h-4 w-4" />
-          {if @pengu, do: "Search again", else: "Search PenguPlay sources"}
-        </button>
-      </div>
-      <p :if={@pengu == nil} class="text-sm text-base-content/60">
-        Look for this on the PenguPlay providers too — they run from our side, so it works with or
-        without a debrid account, and can take up to a minute.
-      </p>
-      <div :if={@pengu == :loading} class="flex items-center gap-3 rounded-box bg-base-200 p-4 text-sm">
-        <span class="loading loading-spinner loading-sm"></span> Asking the PenguPlay providers…
+      <div
+        :if={@pengu in [nil, :loading]}
+        class="flex items-center gap-3 rounded-2xl border border-base-300/70 bg-base-100/60 p-4 text-sm"
+      >
+        <span class="loading loading-spinner loading-sm"></span>
+        {if @auto == :pending,
+          do: "Finding the best source…",
+          else: "Asking the PenguPlay providers… this can take up to a minute."}
       </div>
       <p :if={match?({:error, _}, @pengu)} class="alert alert-warning text-sm">{elem(@pengu, 1)}</p>
       <p :if={match?({:ok, [], _}, @pengu)} class="text-sm text-base-content/60">
         PenguPlay found nothing for this.
+      </p>
+      <p :if={match?({:ok, [_ | _], _}, @pengu)} class="text-sm text-base-content/70">
+        Pick a stream.
       </p>
       <div :if={match?({:ok, [_ | _], _}, @pengu)} class="space-y-5">
         <div :for={{provider, streams} <- elem(@pengu, 1)} class="space-y-2">
@@ -775,6 +892,9 @@ defmodule RokiWeb.SourcesLive do
     </section>
     """
   end
+
+  defp pengu_watch(%{type: type, id: id, season: s, episode: e}, sid),
+    do: pengu_watch(type, id, s, e, sid)
 
   defp pengu_watch("movie", id, _s, _e, sid), do: ~p"/watch/movie/#{id}?#{[pg: sid]}"
   defp pengu_watch("tv", id, s, e, sid), do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[pg: sid]}"

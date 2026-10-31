@@ -31,6 +31,8 @@ defmodule RokiWeb.SettingsLive do
   # value) and the site's (the browser player; 4K only where the browser decodes the video
   # itself, 1080p elsewhere), shown one under the other.
   @web_hints %{
+    "play_from" =>
+      "Where the sources page searches first, and where Play finds its source by itself. Torrents are the releases your debrid account streams; PenguPlay is plain https streams that need no account. The sources page has a switch to look at the other one either way.",
     "sources_cache" =>
       "Releases already found and checked are kept this long, so Play starts at once instead of searching again. Retry on a title looks for new ones.",
     "anime_audio" =>
@@ -45,6 +47,7 @@ defmodule RokiWeb.SettingsLive do
       "For the browser player: a release larger than this is left out of the list. Each play is downloaded whole into the server's cache for a few hours, so a 90 GB remux picked by accident costs real disk. The external player has no such limit."
   }
   @web_labels %{
+    "play_from" => "Play from",
     "browser_max_resolution" => "Resolution ceiling — browser player",
     "browser_max_size" => "Size limit — browser player",
     "anime_audio" => "Anime audio",
@@ -844,10 +847,10 @@ defmodule RokiWeb.SettingsLive do
     do:
       Enum.filter(
         specs,
-        &(elem(&1, 0) in ["anime_audio", "browser_work", "external_app", "sources_cache"])
+        &(elem(&1, 0) in ["play_from", "anime_audio", "browser_work", "external_app", "sources_cache"])
       )
       |> Enum.sort_by(
-        &Enum.find_index(["anime_audio", "browser_work", "external_app", "sources_cache"], fn k ->
+        &Enum.find_index(["play_from", "anime_audio", "browser_work", "external_app", "sources_cache"], fn k ->
           k == elem(&1, 0)
         end)
       )

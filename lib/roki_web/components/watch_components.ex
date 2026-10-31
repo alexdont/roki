@@ -26,7 +26,8 @@ defmodule RokiWeb.WatchComponents do
     """
   end
 
-  defp ago(at) do
+  @doc "How long ago, in words: `just now`, `5 min ago`, `3 h ago`."
+  def ago(at) do
     secs = max(System.os_time(:second) - at, 0)
 
     cond do

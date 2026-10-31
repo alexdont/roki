@@ -46,6 +46,10 @@ defmodule RokiWeb.WatchLive do
           # `?pg=` plays a PenguPlay stream (from the sources page's PenguPlay search) instead of
           # a debrid release: no laev account needed, the video is read from its host directly.
           pengu: if(uuid && is_binary(params["pg"]), do: String.slice(params["pg"], 0, 32)),
+          # `?auto=1` with it: Play picked the stream, so a stream that fails is followed by the next best.
+          pengu_auto: params["auto"] == "1",
+          pengu_tried: [],
+          torrent_forced: params["src"] == "torrent" or params["study"] == "1",
           uuid: uuid,
           linked?: uuid != nil and Roki.Laev.connected?(uuid),
           title: nil,
@@ -194,6 +198,24 @@ defmodule RokiWeb.WatchLive do
       end
     end)
   end
+
+  # After a stream Play picked failed: the next best from the same search (kept ten minutes), up to
+  # four in a row. A stream chosen by hand is not replaced behind the viewer's back.
+  defp next_pengu(%{pengu_auto: true, title: %{imdb_id: imdb}} = a, tried) when length(tried) < 4 do
+    with {:ok, streams} <- Roki.Pengu.streams(imdb, a.season, a.episode),
+         do: Roki.Pengu.best(streams, a.caps, tried)
+  end
+
+  defp next_pengu(_assigns, _tried), do: nil
+
+  # Play on an account that looks at PenguPlay first, arriving here with nothing chosen.
+  defp pengu_default?(%{hash: nil, torrent_forced: false, uuid: uuid}) when is_binary(uuid),
+    do: Roki.Pengu.configured?() and Roki.Laev.web_settings(uuid)["play_from"] == "pengu"
+
+  defp pengu_default?(_), do: false
+
+  defp current_path(%{type: "movie", id: id}), do: ~p"/watch/movie/#{id}"
+  defp current_path(%{type: "tv", id: id, season: s, episode: e}), do: ~p"/watch/tv/#{id}/#{s}/#{e}"
 
   defp pengu_failure(:gone),
     do: "That PenguPlay source is no longer listed. Go back and search again."
@@ -364,7 +386,11 @@ defmodule RokiWeb.WatchLive do
         do: load_episodes(socket),
         else: socket
 
-    {:noreply, if(socket.assigns.pengu, do: play_pengu(socket), else: resolve(socket))}
+    cond do
+      socket.assigns.pengu -> {:noreply, play_pengu(socket)}
+      pengu_default?(socket.assigns) -> {:noreply, push_navigate(socket, to: sources_path(socket.assigns, "pengu") <> "?auto=1", replace: true)}
+      true -> {:noreply, resolve(socket)}
+    end
   end
 
   def handle_async(:title, {:ok, {:error, reason}}, socket),
@@ -396,7 +422,9 @@ defmodule RokiWeb.WatchLive do
       media: "pengu:#{socket.assigns.id}",
       os: nil,
       os_langs: [],
-      study: nil
+      study: nil,
+      # A stream that has not started by then is counted as failed (and the next one tried).
+      startup: 25_000
     }
 
     {:noreply, socket |> assign(player: data) |> with_neighbours()}
@@ -643,13 +671,25 @@ defmodule RokiWeb.WatchLive do
   def handle_event("player_failed", params, %{assigns: %{pengu: id, player: %{}}} = socket)
       when is_binary(id) do
     Logger.warning("pengu stream #{id} failed for #{socket.assigns.id}: #{inspect(params["why"])}")
+    tried = [id | socket.assigns.pengu_tried]
 
-    {:noreply,
-     assign(socket,
-       player: nil,
-       failed: "That stream would not play in this browser (#{String.slice(to_string(params["why"]), 0, 120)}). Try another PenguPlay source.",
-       failed_reason: :pengu
-     )}
+    case next_pengu(socket.assigns, tried) do
+      %{id: next} ->
+        {:noreply,
+         socket
+         |> assign(pengu: next, pengu_tried: tried, player: nil)
+         |> push_patch(to: "#{current_path(socket.assigns)}?#{URI.encode_query(pg: next, auto: 1)}", replace: true)
+         |> play_pengu()}
+
+      nil ->
+        {:noreply,
+         assign(socket,
+           player: nil,
+           failed:
+             "That stream would not play in this browser (#{String.slice(to_string(params["why"]), 0, 120)}). Try another PenguPlay source.",
+           failed_reason: :pengu
+         )}
+    end
   end
 
   def handle_event(
@@ -955,9 +995,16 @@ defmodule RokiWeb.WatchLive do
   defp back_path(%{type: "movie", id: id}), do: ~p"/title/movie/#{id}"
   defp back_path(%{type: "tv", id: id}), do: ~p"/title/tv/#{id}/episodes"
 
-  defp sources_path(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
+  # The sources page, opened on the kind of source that is playing — so "Change source" lists the
+  # PenguPlay streams after a PenguPlay one, and the releases after a release.
+  defp sources_path(%{pengu: id} = a) when is_binary(id), do: sources_path(a, "pengu")
+  defp sources_path(a), do: sources_path(a, "torrent")
 
-  defp sources_path(%{type: "tv", id: id, season: s, episode: e}),
+  defp sources_path(a, src), do: sources_base(a) <> if(Roki.Pengu.configured?(), do: "?src=#{src}", else: "")
+
+  defp sources_base(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
+
+  defp sources_base(%{type: "tv", id: id, season: s, episode: e}),
     do: ~p"/sources/tv/#{id}/#{s}/#{e}"
 
   @impl true
@@ -1087,6 +1134,7 @@ defmodule RokiWeb.WatchLive do
       season={@season}
       label={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
       home={if @title, do: back_path(assigns), else: ~p"/home"}
+      sources={sources_path(assigns)}
     />
     <style :if={@player}>
       html, body { overflow: hidden; height: 100%; overscroll-behavior: none; }

@@ -43,6 +43,32 @@ defmodule Roki.PenguTest do
     assert hls.name == "1080p • HLS"
   end
 
+  describe "best/3" do
+    defp st(attrs), do: Map.merge(%{id: "x", provider: "Z", quality: "1080P", language: "", size: "2 GB", codec: :other}, attrs)
+
+    test "prefers 1080p over 4K, and a player-friendly provider on a tie" do
+      streams = [
+        st(%{id: "a", quality: "4K"}),
+        st(%{id: "b", provider: "VidLink"}),
+        st(%{id: "c", provider: "Arctic"})
+      ]
+
+      assert Pengu.best(streams).id == "c"
+    end
+
+    test "leaves out HEVC unless the browser decodes it, and anything already tried" do
+      streams = [st(%{id: "h", codec: :hevc, provider: "Arctic"}), st(%{id: "o", provider: "VidLink"})]
+      assert Pengu.best(streams).id == "o"
+      assert Pengu.best(streams, %{hevc: true}).id == "h"
+      assert Pengu.best(streams, %{}, ["o"]) == nil
+    end
+
+    test "English (or unlabelled) audio beats another language" do
+      streams = [st(%{id: "es", language: "Spanish", provider: "Arctic"}), st(%{id: "en", language: "English, Hindi"})]
+      assert Pengu.best(streams).id == "en"
+    end
+  end
+
   test "group puts the provider with the best quality first" do
     assert [{"2Peckle", _}, {"Cinejoy", _}] = @streams |> Pengu.parse() |> Pengu.group()
   end

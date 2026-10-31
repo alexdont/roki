@@ -69,6 +69,7 @@ defmodule Roki.Pengu do
       quality: quality(desc, name),
       language: desc |> line("🎧") |> String.replace(~r/^Audio:\s*/, ""),
       size: line(desc, "💾"),
+      codec: codec(desc <> " " <> to_string(hints["filename"])),
       label:
         desc
         |> String.split("\n")
@@ -99,6 +100,54 @@ defmodule Roki.Pengu do
     if Regex.match?(~r/\.(mkv|mp4|avi|webm|m4v)$/i, file),
       do: file,
       else: line(desc, "🎞️")
+  end
+
+  defp codec(text) do
+    cond do
+      Regex.match?(~r/hevc|x265|h\.?265/i, text) -> :hevc
+      Regex.match?(~r/\bav1\b/i, text) -> :av1
+      true -> :other
+    end
+  end
+
+  @doc """
+  The stream to start without asking, or nil: what a browser can play first, then the language,
+  then the sharpest picture up to 1080p (4K only when nothing else is left), then the providers
+  whose streams have played best here. `caps` is what the browser said it decodes (`Roki.Direct.caps/1`);
+  HEVC and AV1 are left out unless it did. `skip` is ids that already failed.
+  """
+  def best(streams, caps \\ %{}, skip \\ []) do
+    streams
+    |> Enum.reject(&(&1.id in skip or not decodable?(&1, caps)))
+    |> Enum.min_by(&score/1, fn -> nil end)
+  end
+
+  defp decodable?(%{codec: :hevc}, caps), do: caps[:hevc] == true
+  defp decodable?(%{codec: :av1}, caps), do: caps[:av1] == true
+  defp decodable?(_, _caps), do: true
+
+  # Lower is better. Providers are listed in the order their streams actually played when tried on
+  # The Matrix (2026-10-31); the rest follow, untried ones before the ones that stalled.
+  @providers ~w(Arctic HDHub4u VegaMovies LaMovie Moflix Vidy MovieBox VidFast Cinejoy VidLink 2Peckle VAPlayer)
+  @tiers %{"1080P" => 0, "720P" => 1, "1440P" => 2, "480P" => 3, "360P" => 4, "4K" => 5, "2160P" => 5}
+
+  defp score(s) do
+    {language_rank(s.language), Map.get(@tiers, s.quality, 6),
+     Enum.find_index(@providers, &(&1 == s.provider)) || 6, size_gb(s.size)}
+  end
+
+  defp language_rank(""), do: 0
+  defp language_rank(lang), do: if(String.contains?(lang, "English"), do: 0, else: 1)
+
+  defp size_gb(size) do
+    case Regex.run(~r/([\d.]+)\s*(GB|MB)/i, size) do
+      [_, n, unit] ->
+        {v, _} = Float.parse(n)
+        if String.upcase(unit) == "MB", do: v / 1024, else: v
+
+      _ ->
+        0.0
+    end
   end
 
   @doc "The stream called `id` among `streams`, or nil."
