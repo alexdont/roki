@@ -169,7 +169,7 @@ defmodule Roki.Mood do
   def sorts, do: @sorts
 
   @doc "The mood named by a slug, or nil (never an atom from input)."
-  def get(slug), do: Enum.find(@moods, &(&1.slug == slug))
+  def get(slug), do: Enum.find(@moods, &(&1.slug == slug)) || Roki.Seasonal.get(slug)
 
   @doc "A kind named in an address, else `:all`."
   def kind(value), do: Enum.find(@kinds, :all, &(Atom.to_string(&1) == value))
@@ -187,16 +187,22 @@ defmodule Roki.Mood do
     with %{} = mood <- get(slug) || {:error, :no_such_mood},
          sort = if(sort in Keyword.keys(@sorts), do: sort, else: :popular),
          {:ok, {items, more?}} <-
-           Browse.cached_page({:mood, 2, slug, kind, sort, n}, fn ->
+           Browse.cached_page(key(slug, kind, sort, n), fn ->
              fetch(mood, kind, sort, n, uuid)
            end) do
       {:ok, items, more?}
     end
   end
 
+  # Bumped when what a kept page contains changes (the keywords a season is asked for, say).
+  @cache_version 4
+
+  @doc false
+  def key(slug, kind, sort, n), do: {:mood, @cache_version, slug, kind, sort, n}
+
   @doc "A mood's page as it is already held, no request: `{:ok, items, more?}` or `:miss`."
   def peek(slug, kind \\ :all, sort \\ :popular, n \\ 1),
-    do: Browse.peek_page({:mood, 2, slug, kind, sort, n})
+    do: Browse.peek_page(key(slug, kind, sort, n))
 
   @doc """
   The picker's slides: `%{slug => items}`, the first mixed page of every mood with the titles
@@ -336,10 +342,10 @@ defmodule Roki.Mood do
         true -> [with_genres: Enum.join(genres, "|")]
       end
 
-    kw_param =
-      if type == "tv" and mood.tv_kw != [],
-        do: [with_keywords: Enum.join(mood.tv_kw, "|")],
-        else: []
+    # Keywords: TV where it has no genre for the mood, and — for a season, which is made of
+    # keywords alone — films too.
+    keywords = if type == "movie", do: Map.get(mood, :movie_kw, []), else: mood.tv_kw
+    kw_param = if keywords != [], do: [with_keywords: Enum.join(keywords, "|")], else: []
 
     lang_param = if anime?, do: [with_original_language: "ja"], else: []
     adult = if type == "movie", do: [include_adult: false], else: []

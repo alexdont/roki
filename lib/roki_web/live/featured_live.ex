@@ -17,18 +17,25 @@ defmodule RokiWeb.FeaturedLive do
   # chevron is pressed); the rest are on the Lists page.
   @lists_first 6
   @lists_chunk 6
+  @page_size 20
 
   @titles %{movies: "Trending movies", shows: "Trending shows", anime: "Anime airing now"}
 
   @impl true
   def mount(_params, _session, socket) do
+    shelf = %{items: [], page: 0, more?: false, loading?: true}
+
     shelves =
-      Map.new(Featured.kinds(), &{&1, %{items: [], page: 0, more?: false, loading?: true}})
+      Featured.kinds()
+      |> Map.new(&{&1, shelf})
+      # The Seasonal row: what suits the time of year (`Roki.Seasonal`), twenty titles like the rest.
+      |> Map.put(:seasonal, shelf)
 
     socket =
       socket
       |> assign(:page_title, "Featured")
       |> assign(:shelves, shelves)
+      |> assign(:season, Roki.Seasonal.current())
       |> assign(:error, nil)
       |> assign(:seen, MapSet.new())
       |> assign(:upcoming, %{})
@@ -117,6 +124,7 @@ defmodule RokiWeb.FeaturedLive do
   defp start(socket) do
     %{uuid: uuid, lists: lists} = socket.assigns
     socket = Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1))
+    socket = fetch_seasonal(socket)
 
     if uuid, do: Phoenix.PubSub.subscribe(Roki.PubSub, Roki.Activity.topic())
     socket = load_activity(socket)
@@ -154,7 +162,37 @@ defmodule RokiWeb.FeaturedLive do
     end)
   end
 
+  # The Seasonal row: the first page of the season's titles (films and shows mixed), cut to twenty.
+  defp fetch_seasonal(socket) do
+    %{uuid: uuid, season: season} = socket.assigns
+
+    start_async(socket, :seasonal, fn ->
+      case Roki.Mood.page(season.slug, :all, :popular, 1, uuid) do
+        {:ok, items, _more?} ->
+          items = Enum.take(items, @page_size)
+          {:ok, Roki.Laev.annotate(uuid, items), Roki.Laev.seen_keys(uuid, items)}
+
+        error ->
+          error
+      end
+    end)
+  end
+
   @impl true
+  def handle_async(:seasonal, {:ok, {:ok, items, seen}}, socket) do
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     socket
+     |> assign(:seen, MapSet.union(socket.assigns.seen, seen))
+     |> start_async({:dates, :seasonal, 1}, fn -> Roki.Watch.upcoming(uuid, items) end)
+     |> put_shelf(:seasonal, %{socket.assigns.shelves.seasonal | items: items, loading?: false})}
+  end
+
+  # No page-wide error for it: the row is simply not drawn when it has nothing to show.
+  def handle_async(:seasonal, _other, socket),
+    do: {:noreply, put_shelf(socket, :seasonal, %{socket.assigns.shelves.seasonal | loading?: false})}
+
   def handle_async({:page, kind}, {:ok, {page, {:ok, items, more?}, seen}}, socket) do
     shelf = socket.assigns.shelves[kind]
     known = MapSet.new(shelf.items, & &1.id)
@@ -382,7 +420,9 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:titles, @titles)
       |> assign(
         :loading?,
-        Enum.any?(assigns.shelves, fn {_k, s} -> s.loading? and s.items == [] end)
+        Enum.any?(Map.delete(assigns.shelves, :seasonal), fn {_k, s} ->
+          s.loading? and s.items == []
+        end)
       )
 
     ~H"""
@@ -401,6 +441,7 @@ defmodule RokiWeb.FeaturedLive do
 
       <.shelf_rows
         shelves={@shelves}
+        season={@season}
         seen={@seen}
         upcoming={@upcoming}
         cached_titles={@cached_titles}
@@ -824,21 +865,33 @@ defmodule RokiWeb.FeaturedLive do
   end
 
   attr :shelves, :map, required: true
+  attr :season, :map, default: nil
   attr :seen, :any, required: true
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
 
   attr :signed_in?, :boolean, default: false
 
-  # A wide screen: one row each for films, shows and anime, side by side in nothing but scrolling.
+  # One row each for films, shows and anime, side by side in nothing but scrolling — and, last, what
+  # suits the time of year (the Seasonal row), which links to that season's own page.
   @doc false
   def shelf_rows(assigns) do
+    seasonal = assigns.shelves[:seasonal]
+
     assigns =
-      assign(assigns, :rows, [
-        {:movies, "Trending Movies", "/movies"},
-        {:shows, "Trending Shows", "/shows"},
-        {:anime, "Anime Airing Now", "/anime"}
-      ])
+      assign(
+        assigns,
+        :rows,
+        [
+          {:movies, "Trending Movies", "/movies"},
+          {:shows, "Trending Shows", "/shows"},
+          {:anime, "Anime Airing Now", "/anime"}
+        ] ++
+          if(assigns.season && seasonal && (seasonal.items != [] or seasonal.loading?),
+            do: [{:seasonal, "Seasonal · #{assigns.season.label}", "/mood/#{assigns.season.slug}"}],
+            else: []
+          )
+      )
 
     ~H"""
     <div class="space-y-7 pb-4 pt-6 lg:space-y-9 lg:pb-6 lg:pt-8">

@@ -36,8 +36,8 @@ defmodule Roki.MoodTest do
       }
     ]
 
-    Roki.TTLCache.put({:mood, 2, "scared", :all, :popular, 1}, 60, {:ok, {films, true}})
-    on_exit(fn -> Roki.TTLCache.delete({:mood, 2, "scared", :all, :popular, 1}) end)
+    Roki.TTLCache.put(Roki.Mood.key("scared", :all, :popular, 1), 60, {:ok, {films, true}})
+    on_exit(fn -> Roki.TTLCache.delete(Roki.Mood.key("scared", :all, :popular, 1)) end)
 
     assert {:ok, [%{title: "Held Scare"}], true} = Mood.page("scared", :all, :popular, 1, nil)
     assert {:ok, [%{title: "Held Scare"}], true} = Mood.peek("scared")

@@ -172,4 +172,43 @@ defmodule RokiWeb.FeaturedLiveTest do
       assert tiles.() == 12
     end
   end
+
+  describe "the Seasonal row" do
+    setup do
+      season = Roki.Seasonal.current()
+
+      on_exit(fn ->
+        for kind <- [:all, :movies, :shows, :anime],
+            do: Roki.TTLCache.delete(Roki.Mood.key(season.slug, kind, :popular, 1))
+      end)
+
+      %{season: season}
+    end
+
+    test "is last, named for the season, and leads to the season's own page", %{
+      conn: conn,
+      season: season
+    } do
+      items = for i <- 1..25, do: %{id: 900 + i, type: "movie", title: "Seasonal #{i}", poster: nil, year: "2020"}
+      Roki.TTLCache.put(Roki.Mood.key(season.slug, :all, :popular, 1), 60, {:ok, {items, true}})
+
+      {:ok, view, _} = live(conn, "/home")
+      render_async(view, 3000)
+      html = render_async(view, 3000)
+
+      assert html =~ "Seasonal · #{season.label}"
+      assert html =~ ~s(href="/mood/#{season.slug}")
+      assert html =~ ~s(href="/title/movie/901")
+      # twenty, like the rest
+      assert html =~ ~s(href="/title/movie/920")
+      refute html =~ ~s(href="/title/movie/921")
+    end
+
+    test "is not drawn when the season could not be read", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/home")
+      render_async(view, 3000)
+      html = render_async(view, 3000)
+      refute html =~ "Seasonal ·"
+    end
+  end
 end

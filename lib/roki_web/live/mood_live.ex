@@ -260,9 +260,13 @@ defmodule RokiWeb.MoodLive do
         <div class="flex flex-col gap-6 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
           <div class="max-w-xl space-y-3 sm:max-w-3xl lg:max-w-4xl lg:space-y-4">
             <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
-              <span class="font-mono tabular-nums text-white">{Roki.Mood.number(@mood)}</span>
-              <span class="hidden h-px w-8 bg-white/40 sm:block" aria-hidden="true"></span>
-              Tonight I want to
+              <%= if @mood[:season] do %>
+                <.icon name="hero-calendar-days" class="h-4 w-4 text-white" /> In season now
+              <% else %>
+                <span class="font-mono tabular-nums text-white">{Roki.Mood.number(@mood)}</span>
+                <span class="hidden h-px w-8 bg-white/40 sm:block" aria-hidden="true"></span>
+                Tonight I want to
+              <% end %>
             </p>
             <h1
               class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl lg:text-8xl"
@@ -280,7 +284,9 @@ defmodule RokiWeb.MoodLive do
           </div>
 
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <form phx-submit="search" class="flex w-full max-w-xl gap-2 lg:w-96">
+            <%!-- A season is made of keywords, which a search result does not carry, so there is nothing to
+                  keep a search to: the box is only for moods. --%>
+            <form :if={!@mood[:season]} phx-submit="search" class="flex w-full max-w-xl gap-2 lg:w-96">
               <label class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-white backdrop-blur-md focus-within:border-white/60">
                 <.icon name="hero-magnifying-glass" class="h-5 w-5 shrink-0 opacity-70" />
                 <input

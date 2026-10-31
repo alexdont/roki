@@ -25,17 +25,17 @@ defmodule RokiWeb.MoodLiveTest do
       }
     ]
 
-    Roki.TTLCache.put({:mood, 2, "scared", :all, :popular, 1}, 60, {:ok, {items, false}})
+    Roki.TTLCache.put(Roki.Mood.key("scared", :all, :popular, 1), 60, {:ok, {items, false}})
 
     Roki.TTLCache.put(
-      {:mood, 2, "scared", :movies, :popular, 1},
+      Roki.Mood.key("scared", :movies, :popular, 1),
       60,
       {:ok, {Enum.take(items, 1), false}}
     )
 
     on_exit(fn ->
-      Roki.TTLCache.delete({:mood, 2, "scared", :all, :popular, 1})
-      Roki.TTLCache.delete({:mood, 2, "scared", :movies, :popular, 1})
+      Roki.TTLCache.delete(Roki.Mood.key("scared", :all, :popular, 1))
+      Roki.TTLCache.delete(Roki.Mood.key("scared", :movies, :popular, 1))
     end)
 
     :ok
@@ -83,5 +83,21 @@ defmodule RokiWeb.MoodLiveTest do
     # Nothing in the band is a pictograph. (The posters below it carry a plain "★" for a rating,
     # which is type, not a picture.)
     refute band =~ ~r/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}]/u
+  end
+
+  test "a season's page says it is in season and has no search box", %{conn: conn} do
+    items = [%{id: 601, type: "movie", title: "A Season Film", poster: nil, year: "2019", popularity: 1.0, vote: 7.0}]
+    key = Roki.Mood.key("halloween", :all, :popular, 1)
+    Roki.TTLCache.put(key, 60, {:ok, {items, false}})
+    on_exit(fn -> Roki.TTLCache.delete(key) end)
+
+    {:ok, view, _} = live(conn, "/mood/halloween")
+    html = render_async(view, 3000)
+
+    assert html =~ "In season now"
+    assert html =~ "Halloween"
+    assert html =~ "A Season Film"
+    refute html =~ "Tonight I want to"
+    refute html =~ ~s(phx-submit="search")
   end
 end
