@@ -2004,11 +2004,29 @@ defmodule Roki.Watch do
         "anime" => ctx.anime,
         "search_title" => ctx.search_title,
         "mal_id" => ctx.mal_id,
-        "source" => %{"name" => source.name, "magnet" => source.magnet, "hash" => source.hash},
         "updated_at" => System.os_time(:second)
       })
+      |> put_source(source)
 
     Laev.Resume.put(ctx.type, ctx.tmdb_id, entry)
+  end
+
+  defp put_source(entry, nil), do: entry
+
+  defp put_source(entry, source),
+    do: Map.put(entry, "source", %{"name" => source.name, "magnet" => source.magnet, "hash" => source.hash})
+
+  @doc """
+  A PenguPlay stream starts playing: the title goes into the user's history and as the thing to
+  continue, exactly as a release does, and where they got to last time is returned (seconds). Its
+  stream is not remembered as the source — it has no magnet, and what the terminal app continues
+  from (`entry["source"]`) is left as it was.
+  """
+  def pengu_start(uuid, ctx) do
+    Roki.Laev.run(uuid, fn ->
+      save_resume(ctx, nil)
+      Laev.Position.saved_position(ctx) || 0
+    end)
   end
 
   @doc "Remember the resolution picked by hand for this title, so its next episode starts there too."

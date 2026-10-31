@@ -189,11 +189,22 @@ defmodule RokiWeb.WatchLive do
   defp play_pengu(socket) do
     %{title: title, season: season, episode: episode, pengu: id} = socket.assigns
 
+    %{uuid: uuid, linked?: linked?} = socket.assigns
+
     start_async(socket, :pengu, fn ->
       with {:ok, streams} <- Roki.Pengu.streams(title.imdb_id, season, episode) do
         case Roki.Pengu.find(streams, id) do
-          nil -> {:error, :gone}
-          stream -> {:ok, stream}
+          nil ->
+            {:error, :gone}
+
+          stream ->
+            # History and the place to resume from live in the laev account, so they need one.
+            if linked? do
+              ctx = Watch.ctx(uuid, title, season, episode)
+              {:ok, stream, ctx, Watch.pengu_start(uuid, ctx)}
+            else
+              {:ok, stream, nil, 0}
+            end
         end
       end
     end)
@@ -213,6 +224,14 @@ defmodule RokiWeb.WatchLive do
     do: Roki.Pengu.configured?() and Roki.Laev.web_settings(uuid)["play_from"] == "pengu"
 
   defp pengu_default?(_), do: false
+
+  # Another episode of the title playing: from PenguPlay, back through the sources page asking for
+  # its best stream (the next episode is another search); from a release, straight to that release.
+  defp episode_path(%{assigns: %{pengu: pg, id: id}}, s, e, _query) when is_binary(pg),
+    do: ~p"/sources/tv/#{id}/#{s}/#{e}?#{[src: "pengu", auto: 1]}"
+
+  defp episode_path(%{assigns: %{id: id}} = socket, s, e, query),
+    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}"
 
   defp current_path(%{type: "movie", id: id}), do: ~p"/watch/movie/#{id}"
   defp current_path(%{type: "tv", id: id, season: s, episode: e}), do: ~p"/watch/tv/#{id}/#{s}/#{e}"
@@ -399,7 +418,7 @@ defmodule RokiWeb.WatchLive do
   def handle_async(:title, {:exit, reason}, socket),
     do: {:noreply, assign(socket, :title_error, reason)}
 
-  def handle_async(:pengu, {:ok, {:ok, stream}}, socket) do
+  def handle_async(:pengu, {:ok, {:ok, stream, ctx, from}}, socket) do
     local? = stream.kind == :file and socket.assigns.caps[:local] == true
 
     # A playlist is read from PenguPlay directly (it allows cross-origin reads, and so do its
@@ -414,7 +433,7 @@ defmodule RokiWeb.WatchLive do
       local: local?,
       audio_lang: nil,
       filesize: nil,
-      resume: 0,
+      resume: from,
       start: 0,
       tracks: [],
       prefer: nil,
@@ -427,7 +446,7 @@ defmodule RokiWeb.WatchLive do
       startup: 25_000
     }
 
-    {:noreply, socket |> assign(player: data) |> with_neighbours()}
+    {:noreply, socket |> assign(player: data, ctx: ctx) |> with_neighbours()}
   end
 
   def handle_async(:pengu, {:ok, {:error, reason}}, socket),
@@ -801,7 +820,7 @@ defmodule RokiWeb.WatchLive do
   def handle_event(
         "goto",
         %{"episode" => n} = params,
-        %{assigns: %{type: "tv", id: id, season: s}} = socket
+        %{assigns: %{type: "tv", season: s}} = socket
       )
       when is_integer(n) do
     s = if is_integer(params["season"]) and params["season"] >= 0, do: params["season"], else: s
@@ -814,7 +833,7 @@ defmodule RokiWeb.WatchLive do
 
     {:noreply,
      push_navigate(socket,
-       to: ~p"/watch/tv/#{id}/#{s}/#{n}?#{query ++ study_q(socket)}",
+       to: episode_path(socket, s, n, query),
        replace: true
      )}
   end
@@ -868,7 +887,7 @@ defmodule RokiWeb.WatchLive do
     {:noreply, push_navigate(socket, to: path, replace: true)}
   end
 
-  def handle_event("next", _params, %{assigns: %{up_next: {s, e}, id: id}} = socket) do
+  def handle_event("next", _params, %{assigns: %{up_next: {s, e}}} = socket) do
     query =
       case socket.assigns.current do
         {source, _} -> [prefer: source.hash]
@@ -877,14 +896,14 @@ defmodule RokiWeb.WatchLive do
 
     {:noreply,
      push_navigate(socket,
-       to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}",
+       to: episode_path(socket, s, e, query),
        replace: true
      )}
   end
 
   def handle_event("next", _params, socket), do: {:noreply, socket}
 
-  def handle_event("previous", _params, %{assigns: %{up_prev: {s, e, _tag}, id: id}} = socket) do
+  def handle_event("previous", _params, %{assigns: %{up_prev: {s, e, _tag}}} = socket) do
     query =
       case socket.assigns.current do
         {source, _} -> [prefer: source.hash]
@@ -893,7 +912,7 @@ defmodule RokiWeb.WatchLive do
 
     {:noreply,
      push_navigate(socket,
-       to: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}",
+       to: episode_path(socket, s, e, query),
        replace: true
      )}
   end
@@ -929,7 +948,7 @@ defmodule RokiWeb.WatchLive do
 
       {:noreply,
        push_navigate(socket,
-         to: ~p"/watch/tv/#{socket.assigns.id}/#{season}/#{episode}?#{query ++ study_q(socket)}"
+         to: episode_path(socket, season, episode, query)
        )}
     else
       _ -> {:noreply, assign(socket, :up_next, next)}
