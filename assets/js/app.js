@@ -272,6 +272,11 @@ window.addEventListener("phx:roki:player", e => {
   document.documentElement.dataset.player = e.detail.mode
 })
 
+// The account menu's source switch: light the chosen side at once (the server has saved it).
+window.addEventListener("phx:roki:source", e => {
+  document.querySelectorAll("[data-source-switch]").forEach(el => { el.dataset.source = e.detail.value })
+})
+
 // Close a panel the server is done with (a search that found its season).
 window.addEventListener("phx:roki:hide", e => {
   const el = document.getElementById(e.detail.id)
