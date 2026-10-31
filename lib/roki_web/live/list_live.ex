@@ -157,7 +157,8 @@ defmodule RokiWeb.ListLive do
 
         <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
           <li :for={i <- @items} class="space-y-1">
-            <.poster item={i} seen={@watched?.(i)} cached_titles={@cached_titles} />
+            <%!-- Watched is the greyed poster; the eye on top of it would only crowd the grid. --%>
+            <.poster item={i} seen={@watched?.(i)} cached_titles={@cached_titles} mark?={false} />
           </li>
         </ul>
       </div>
