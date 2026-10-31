@@ -168,6 +168,7 @@ defmodule RokiWeb.UserHomeLive do
     |> start_async(:completed, fn -> Roki.Profile.history(uuid) end)
     |> start_async(:stats, fn -> Roki.Profile.totals(uuid) end)
     |> start_async(:pulse, fn -> Roki.Calendar.load(client, uuid) end)
+    |> start_async(:ratings_refresh, fn -> Roki.Profile.refresh_ratings(uuid) end)
   end
 
   # Posters for the part of Completed on screen: titles laev has never drawn have none yet, and
@@ -272,6 +273,13 @@ defmodule RokiWeb.UserHomeLive do
     do: {:noreply, assign(socket, :hero, {key, url})}
 
   def handle_async(:hero, _other, socket), do: {:noreply, socket}
+
+  # The ratings under the posters are the site's copy of the ones on TMDB / MyAnimeList, copied at
+  # most once an hour. When this page has just made a copy, the new ratings are drawn.
+  def handle_async(:ratings_refresh, {:ok, :ok}, %{assigns: %{uuid: uuid}} = socket),
+    do: {:noreply, assign(socket, :ratings, Roki.Profile.ratings(uuid))}
+
+  def handle_async(:ratings_refresh, _other, socket), do: {:noreply, socket}
 
   def handle_async(:completed, {:ok, items}, socket) when is_list(items),
     do:

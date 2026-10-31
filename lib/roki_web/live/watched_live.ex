@@ -108,7 +108,16 @@ defmodule RokiWeb.WatchedLive do
     socket
     |> start_async(:ratings, fn -> Profile.ratings(uuid) end)
     |> start_async(:history, fn -> Profile.history_all(uuid) end)
+    |> refresh_ratings()
   end
+
+  # The ratings shown are the site's copy of the ones on TMDB / MyAnimeList, and a rating made over
+  # there (or in the terminal app) is not in it until it is copied again. Opening your own list
+  # copies them if that has not happened in the last hour, and draws the new ones when it has.
+  defp refresh_ratings(%{assigns: %{owner?: true, uuid: uuid}} = socket),
+    do: start_async(socket, :ratings_refresh, fn -> Profile.refresh_ratings(uuid) end)
+
+  defp refresh_ratings(socket), do: socket
 
   # One show selected, and laev's record says which of its seasons were watched: that is the
   # only time a season can be dated on its own. Looked up when the dialog opens rather than
@@ -369,6 +378,13 @@ defmodule RokiWeb.WatchedLive do
     do: {:noreply, assign(socket, :ratings, ratings)}
 
   def handle_async(:ratings, _other, socket), do: {:noreply, socket}
+
+  # A copy was just made: read the ratings again. (`:recent` — made within the hour — changes
+  # nothing, and neither does an account that is not connected.)
+  def handle_async(:ratings_refresh, {:ok, :ok}, %{assigns: %{uuid: uuid}} = socket),
+    do: {:noreply, start_async(socket, :ratings, fn -> Profile.ratings(uuid) end)}
+
+  def handle_async(:ratings_refresh, _other, socket), do: {:noreply, socket}
 
   # Genres are read from TMDB in the background, once for each title. While some are still to come
   # the page looks again every few seconds, so a filtered list fills in by itself.

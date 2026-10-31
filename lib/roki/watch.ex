@@ -355,18 +355,26 @@ defmodule Roki.Watch do
           case target do
             {:mal, mal} ->
               case Laev.MAL.list_status(mal) do
-                %{score: n} when is_integer(n) and n > 0 -> {:mal, {:ok, n * 1.0}}
-                _ -> {:mal, {:ok, nil}}
+                %{score: n} when is_integer(n) and n > 0 ->
+                  # Asked of the source, so the site's copy is behind: note it, and the lists
+                  # that draw ratings under the posters have it too.
+                  Roki.Profile.note_rating(uuid, key, n * 1.0)
+                  {:mal, {:ok, n * 1.0}}
+
+                _ ->
+                  {:mal, {:ok, nil}}
               end
 
             :tmdb ->
               if provider == :tmdb do
-                {:tmdb,
-                 {:ok,
+                rating =
                   if(title.type == "movie",
                     do: Laev.Tmdb.movie_rating(title.id),
                     else: Laev.Tmdb.tv_rating(title.id)
-                  )}}
+                  )
+
+                if is_number(rating) and rating > 0, do: Roki.Profile.note_rating(uuid, key, rating)
+                {:tmdb, {:ok, rating}}
               else
                 {:roki, {:ok, nil}}
               end
