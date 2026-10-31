@@ -789,12 +789,14 @@ export const StudySidebar = {
       this.el.addEventListener("roki:wake", () => { wake(); evaluate() })
       this.wakeTimer = setInterval(evaluate, 250)
       evaluate()
-      $("[data-role=close]").addEventListener("click", () => {
+      // The X, top left — and Escape does the same (see the keydown below) when nothing else is open.
+      this.closePlayer = () => {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
         // Always to the title (a film's page, a show's episode list), never "back": back is the sources
         // list, which starts the release that has just failed all over again.
         window.location.assign(this.el.dataset.home || "/home")
-      })
+      }
+      $("[data-role=close]").addEventListener("click", () => this.closePlayer())
     }
 
     // ── theater and fullscreen
@@ -900,8 +902,16 @@ export const StudySidebar = {
       const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("study-pop") || n.matches("[data-role=subs-btn], [data-role=audio-btn], [data-role=settings-btn], [data-role=ep-btn]")))
       if (!inside) this.closePops()
     })
+    // Escape closes what is open first (a menu, a phone's list); with nothing open it closes the
+    // player, like the X. Not while typing in a field, and not when something else already took it.
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { this.closePops(); if (!this.wide.matches) this.setSheet(false) }
+      if (e.key !== "Escape") return
+      const menuOpen = this.pops && Object.values(this.pops).some((pop) => !pop.menu.hidden)
+      const sheetOpen = !this.wide.matches && this.ui.dataset.sheet === "open"
+      this.closePops()
+      if (!this.wide.matches) this.setSheet(false)
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable
+      if (!menuOpen && !sheetOpen && !typing && !e.defaultPrevented && this.closePlayer) this.closePlayer()
     })
 
     // ── the next episode: the page finds its sources and starts the best one
