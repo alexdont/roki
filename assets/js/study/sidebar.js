@@ -358,6 +358,9 @@ export const StudySidebar = {
   // seekable range tells, and then nothing is added. Everything that says or takes a time in
   // the film goes through these.
   abs() {
+    // A seek that has to read from a new place leaves the video at 0:00 and paused until the read
+    // lands (seconds, on a phone); the bar and the clock stay where it was asked to go meanwhile.
+    if (this.local && this.local.seeking && this.local.target != null) return this.local.target
     this.calibrate()
     return this.video.currentTime + this.shift
   },
@@ -1515,6 +1518,7 @@ export const StudySidebar = {
           onLog: (line) => console.info(line),
           onFail: (why) => { if (this.playerUrl === p.url) this.pushEvent("player_failed", {why, local: true, ua: navigator.userAgent.slice(0, 160)}) },
           onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio() },
+          onSeeking: (on) => { if (this.playerUrl === p.url && this.stage) this.stage.dataset.seeking = on ? "true" : "false"; this.video.dispatchEvent(new Event("timeupdate")) },
         })
         // The release's own subtitle tracks arrive as the file is read; each time, into the list.
         if (this.local && this.playerUrl === p.url) { const ctl = this.local; ctl.onSubtitleTracks(() => { if (this.local === ctl) this.addLocalSubtitles(ctl) }) }

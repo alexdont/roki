@@ -107,7 +107,9 @@ export async function startLocalPlayer(video, url, opts = {}) {
     }))
 
   const MS = window.ManagedMediaSource || window.MediaSource
-  const state = {run: null, stopped: false, seeking: false, expect: null, starts: 0}
+  // `seeking`: a read from a new place is under way (nothing of it is on screen yet); `target` is
+  // where it begins and `pending` a later seek asked for meanwhile (the newest one wins).
+  const state = {run: null, stopped: false, seeking: false, expect: null, starts: 0, target: null, pending: null}
 
   // One read of the file from `from`: a conversion into a fresh MediaSource.
   async function start(from) {
@@ -216,15 +218,31 @@ export async function startLocalPlayer(video, url, opts = {}) {
     if (e === null) return
     for (let i = 0; i < video.buffered.length; i++) if (e >= video.buffered.start(i) - 0.5 && e <= video.buffered.end(i)) { state.expect = null; return }
   }
+  // The page is told (`onSeeking`) while this runs: until the new read has something to show the
+  // video reads 0:00 and sits paused, so the bar and clock keep to `target` instead, and a seek
+  // asked for meanwhile is not lost, nor does it start a second read on top of the first — when
+  // this one lands, the newest asked-for place is read next.
   async function restartAt(t) {
     state.seeking = true
-    const from = Math.max(0, Math.floor(t))
+    if (opts.onSeeking) opts.onSeeking(true)
     const wasPaused = video.paused
-    state.expect = from
-    await start(from)
-    video.currentTime = from
+    let from = Math.max(0, Math.floor(t))
+    try {
+      for (;;) {
+        state.target = from
+        state.expect = from
+        await start(from)
+        video.currentTime = from
+        if (state.pending === null) break
+        from = Math.max(0, Math.floor(state.pending))
+        state.pending = null
+      }
+    } finally {
+      state.target = null
+      state.seeking = false
+      if (opts.onSeeking) opts.onSeeking(false)
+    }
     if (!wasPaused) video.play().catch(() => {})
-    state.seeking = false
   }
   video.addEventListener("seeking", onSeeking)
   video.addEventListener("progress", onProgress)
@@ -246,7 +264,14 @@ export async function startLocalPlayer(video, url, opts = {}) {
     },
     get subtitleTracks() { return subtitleTracks() },
     onSubtitleTracks(fn) { scanner.onTracks = () => fn(subtitleTracks()); if (scanner.subtitleTracks.length) fn(subtitleTracks()) },
-    seek(t) { video.currentTime = Math.max(0, t) },
+    seek(t) {
+      const to = Math.max(0, t)
+      if (state.seeking) state.pending = to
+      else video.currentTime = to
+    },
+    get seeking() { return state.seeking },
+    // Where the video is going while a read from a new place has not yet reached it.
+    get target() { return state.pending !== null ? state.pending : state.target },
     stats() { const r = state.run; return r ? {from: r.from, bytes: r.bytes(), processed: r.processed(), type: r.type, starts: state.starts, subtitles: scanner.stats} : null },
     async stop() {
       state.stopped = true
