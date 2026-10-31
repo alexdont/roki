@@ -53,7 +53,8 @@ defmodule RokiWeb.Relay do
 
   @doc "Stream `url` to the connection, the request's `Range` forwarded, the answer's status and headers kept."
   def stream(conn, url) do
-    url = final_url(url, 5)
+    asked = url
+    url = resolved(url)
     headers = for v <- get_req_header(conn, "range"), do: {"range", v}
     Process.put(:relay_conn, nil)
 
@@ -80,9 +81,31 @@ defmodule RokiWeb.Relay do
           end
         )
 
+      # A cached address that has gone stale is looked up afresh next time.
+      if resp.status >= 400, do: Roki.TTLCache.delete({:relay_final, asked})
+
       Process.get(:relay_conn) || open(conn, resp)
     rescue
       e -> Process.get(:relay_conn) || send_resp(conn, 502, "upstream: #{Exception.message(e)}")
+    end
+  end
+
+  # Every read of a file — the first, and each seek outside what is buffered — comes here, and
+  # PenguPlay's own address answers slowly (up to a second) just to say where the file is. Where it
+  # ended up is kept for two minutes, so only the first read pays for it.
+  defp resolved(url) do
+    case URI.parse(url) do
+      %URI{host: "pengu.uk"} ->
+        case Roki.TTLCache.fetch({:relay_final, url}, 120, fn ->
+               final = final_url(url, 5)
+               if final == url, do: {:error, :unresolved}, else: {:ok, final}
+             end) do
+          {:ok, final} -> final
+          _ -> url
+        end
+
+      _ ->
+        url
     end
   end
 

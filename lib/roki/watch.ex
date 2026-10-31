@@ -1713,10 +1713,12 @@ defmodule Roki.Watch do
     end)
   end
 
-  defp place_auto(play_id, lang, %{label: label, vtt: vtt}) do
+  defp place_auto(play_id, lang, found, file \\ nil)
+
+  defp place_auto(play_id, lang, %{label: label, vtt: vtt}, file) do
     dir = Laev.Remux.dir(play_id)
     File.mkdir_p!(dir)
-    file = "ext-#{String.slice(lang, 0, 2)}.vtt"
+    file = file || "ext-#{String.slice(lang, 0, 2)}.vtt"
     File.write!(Path.join(dir, file), vtt)
     %{lang: lang, label: label, url: "/stream/#{play_id}/#{file}"}
   end
@@ -2015,6 +2017,52 @@ defmodule Roki.Watch do
 
   defp put_source(entry, source),
     do: Map.put(entry, "source", %{"name" => source.name, "magnet" => source.magnet, "hash" => source.hash})
+
+  @doc "The 16-hex id PenguPlay stream `id` is known by in `/stream/:id/…` (where its subtitles are put)."
+  def pengu_play_id(id),
+    do: :crypto.hash(:sha256, "pengu:" <> id) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+  @doc """
+  The subtitle files a PenguPlay stream came with (`[%{url:, lang:}]`), fetched here, turned into
+  WebVTT and placed beside the stream as tracks — a few at a time, each given a few seconds, the
+  ones that do not answer left out. Most streams carry none; the account's own language is then
+  fetched from OpenSubtitles like for any release (`external_langs/4`).
+  """
+  def pengu_tracks(play_id, subs) do
+    subs
+    |> Enum.take(8)
+    |> Enum.with_index()
+    |> Task.async_stream(&pengu_track(play_id, &1),
+      max_concurrency: 4,
+      timeout: 15_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.flat_map(fn
+      {:ok, %{} = track} -> [track]
+      _ -> []
+    end)
+    |> Enum.uniq_by(& &1.url)
+  end
+
+  defp pengu_track(play_id, {%{url: url, lang: lang}, i}) do
+    code = if short_code(lang) =~ ~r/^[a-z]{2,3}$/, do: short_code(lang), else: "und"
+
+    with {:ok, %{status: 200, body: body}} when is_binary(body) and byte_size(body) in 1..2_000_000 <-
+           Req.get(url, receive_timeout: 10_000, retry: false, decode_body: false),
+         vtt when is_binary(vtt) <- Laev.Subtitles.to_vtt("pengu-#{i}.srt", body),
+         true <- String.contains?(vtt, "-->") do
+      place_auto(
+        play_id,
+        code,
+        %{label: "#{language(code)} · PenguPlay", vtt: vtt},
+        "ext-#{code}-#{i}.vtt"
+      )
+    else
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
 
   @doc """
   A PenguPlay stream starts playing: the title goes into the user's history and as the thing to

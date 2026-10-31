@@ -69,6 +69,11 @@ defmodule Roki.PenguTest do
     end
   end
 
+  test "a stream's subtitles live under an id the stream controller accepts" do
+    assert Laev.Remux.valid_id?(Roki.Watch.pengu_play_id("M2gdgS143b8H8Kk-"))
+    refute Roki.Watch.pengu_play_id("a") == Roki.Watch.pengu_play_id("b")
+  end
+
   test "group puts the provider with the best quality first" do
     assert [{"2Peckle", _}, {"Cinejoy", _}] = @streams |> Pengu.parse() |> Pengu.group()
   end

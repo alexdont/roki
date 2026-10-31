@@ -437,7 +437,7 @@ defmodule RokiWeb.WatchLive do
       start: 0,
       tracks: [],
       prefer: nil,
-      key: stream.id,
+      key: Watch.pengu_play_id(stream.id),
       media: "pengu:#{socket.assigns.id}",
       os: nil,
       os_langs: [],
@@ -446,8 +446,39 @@ defmodule RokiWeb.WatchLive do
       startup: 25_000
     }
 
-    {:noreply, socket |> assign(player: data, ctx: ctx) |> with_neighbours()}
+    socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours()
+
+    # The subtitles the stream came with, then — for a linked account — its own language from
+    # OpenSubtitles, as for any release.
+    play_id = Watch.pengu_play_id(stream.id)
+    subs = stream.subtitles
+
+    {:noreply,
+     start_async(socket, :pengu_subs, fn -> {play_id, Watch.pengu_tracks(play_id, subs)} end)}
   end
+
+  def handle_async(:pengu_subs, {:ok, {play_id, tracks}}, %{assigns: %{player: %{} = player}} = socket)
+      when is_binary(play_id) do
+    %{uuid: uuid, ctx: ctx, token: token} = socket.assigns
+    player = %{player | tracks: Enum.uniq_by(player.tracks ++ tracks, & &1.url)}
+    socket = assign(socket, :player, player)
+
+    langs = if ctx, do: Watch.external_langs(uuid, ctx, player.tracks), else: []
+
+    socket =
+      for lang <- langs, reduce: socket do
+        acc ->
+          start_async(
+            acc,
+            {:ext_subs, lang},
+            Roki.Study.wrap(fn -> {token, external(uuid, ctx, play_id, lang, "PenguPlay")} end)
+          )
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_async(:pengu_subs, _other, socket), do: {:noreply, socket}
 
   def handle_async(:pengu, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, failed: pengu_failure(reason), failed_reason: :pengu)}
