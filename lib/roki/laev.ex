@@ -370,6 +370,7 @@ defmodule Roki.Laev do
              tally: shift_tally(Shelf.tally(), moved),
              watchlist:
                watchlist(rows)
+               |> with_true_counts()
                |> Map.new(fn {k, v} ->
                  {k, v |> mark_seen() |> then(&if(k == :behind, do: with_resume(&1), else: &1))}
                end),
@@ -1418,6 +1419,48 @@ defmodule Roki.Laev do
   defp episodes_out_or_due(card, today) do
     card |> begun_seasons(today) |> Enum.map(&(&1["episode_count"] || 0)) |> Enum.sum()
   end
+
+  # Laev's note on a show ("2/20 episodes watched") counts the episodes marked on TMDB's side only.
+  # An anime whose first season was marked through its MyAnimeList entry (10 episodes) and whose
+  # second has no entry there yet (2 marked on TMDB) is 12 of 20, not 2: the count the posters
+  # already give (`episodes_done/3`) is put in the note. A row for one MyAnimeList entry is that
+  # season's own, and its note is right — unless it counts more than the entry has ("26/4": a short
+  # special filed under the show it belongs to, counted with all of the show), when the entry's own
+  # marks are used instead.
+  defp with_true_counts(sections) do
+    anime = Laev.Position.anime_marks()
+    shows = Laev.Position.episode_marks()
+
+    done = fn
+      %{mal_id: mal} when is_integer(mal) -> Map.get(anime, mal)
+      item -> episodes_done(item, anime, shows)
+    end
+
+    Map.new(sections, fn {k, items} -> {k, Enum.map(items, &true_count(&1, done))} end)
+  end
+
+  @doc false
+  # `done` says how many episodes of a row's show (or, for a MyAnimeList entry, of the entry) are
+  # watched, all ways of marking them counted.
+  def true_count(%{type: "tv", note: note} = item, done) when is_binary(note) do
+    with [_, shown, total] <- Regex.run(~r/(\d+)\s*\/\s*(\d+)\s+episodes/, note),
+         {shown, total} = {String.to_integer(shown), String.to_integer(total)},
+         true <- item[:mal_id] == nil or shown > total,
+         n when is_integer(n) <- done.(item),
+         true <- n > shown or shown > total do
+      %{
+        item
+        | note:
+            Regex.replace(~r/\d+\s*\/\s*\d+(\s+episodes)/, note, "#{min(n, total)}/#{total}\\1",
+              global: false
+            )
+      }
+    else
+      _ -> item
+    end
+  end
+
+  def true_count(item, _done), do: item
 
   defp watchlist(rows) do
     {sections, _} =
