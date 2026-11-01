@@ -1282,6 +1282,7 @@ defmodule RokiWeb.TitleLive do
         {if(t.type == "movie", do: "Released", else: "First aired"), release_date(t[:date])},
         {"Runtime", t.minutes && "#{t.minutes} min"},
         {"Seasons", seasons_text(t)},
+        {"Newest season", newest_season(t)},
         {"Directed by", join(c.directors)},
         {"Written by", join(c.writers)},
         {"Language", join(t[:spoken]) || t[:language]},
@@ -1547,6 +1548,22 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp seasons_text(_), do: false
+
+  # "Season 4 · 12 Mar 2026 (233 days ago)": when the latest season came (or comes), for a show
+  # that has had more than one — with one, "First aired" already says it.
+  defp newest_season(%{type: "tv", seasons: seasons}) do
+    dated = Enum.filter(seasons, &(&1.number > 0 and is_binary(&1.air_date)))
+
+    with true <- length(dated) > 1,
+         %{number: n, air_date: date} <- Enum.max_by(dated, & &1.number),
+         when_ when is_binary(when_) <- release_date(date) do
+      "Season #{n} · #{when_}"
+    else
+      _ -> nil
+    end
+  end
+
+  defp newest_season(_), do: nil
 
   defp episodes_text(%{type: "tv", seasons: seasons}) do
     n = seasons |> Enum.filter(&(&1.number > 0)) |> Enum.map(&(&1.episodes || 0)) |> Enum.sum()
