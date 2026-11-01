@@ -367,6 +367,10 @@ export const StudySidebar = {
 
   // How long the film is, as far as is known: what the playlist has so far, on the film's clock.
   total() {
+    // The device player knows the film's length from the file itself. The video element does not,
+    // for as long as a read from a new place is loading (Safari then reports no duration and
+    // nothing seekable): the bar would read empty and the timeline be switched off, mid-seek.
+    if (this.local && this.local.duration > 0) return this.local.duration
     this.calibrate()
     const v = this.video
     const r = v.seekable
