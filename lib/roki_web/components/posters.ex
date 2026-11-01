@@ -103,6 +103,7 @@ defmodule RokiWeb.PosterComponents do
               corner — just the shape, small and muted so it does not shout, with the notch of a real one. --%>
         <span
           :if={@item[:saved]}
+          data-saved-mark
           title="Saved for later"
           class="absolute right-2.5 top-0 z-10 block h-5 w-3 bg-primary/70 saturate-[0.7] drop-shadow-[0_1px_1px_rgb(0_0_0/0.3)] [clip-path:polygon(0_0,100%_0,100%_100%,50%_72%,0_100%)]"
         >

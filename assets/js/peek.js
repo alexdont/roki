@@ -2,6 +2,7 @@
 // the story — plus where you are in it. Only the facts the page already has are drawn at
 // once; the rest comes from `/peek/:type/:id` the first time you rest the pointer on a poster
 // (the server remembers it, and so does this page). Mouse only: a touch screen has no hover.
+import {setSavedMark} from "./saved_mark"
 const DELAY_MS = 350
 const cache = new Map()
 let card = null
@@ -134,6 +135,8 @@ async function act(el, what, button) {
     }
   }
   if (currentState) {
+    // The bookmark on the poster is drawn, or taken away, with the click.
+    setSavedMark(el, currentState.saved)
     // The poster greys out like any watched title, without waiting for the page to refresh.
     el.closest("a")?.classList.toggle("opacity-50", currentState.watched)
     el.querySelector("img")?.classList.toggle("grayscale", currentState.watched)

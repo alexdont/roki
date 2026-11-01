@@ -8,6 +8,7 @@
 // the neighbours make way as flex items). Once it is open this fetches what the card shows that
 // the page did not carry — length, genres, the wide picture, the trailer — and, a moment after it
 // opened, swaps the picture for the trailer playing muted. Leaving the card stops it.
+import {setSavedMark} from "./saved_mark"
 const cache = new Map()
 const STILL_MS = 260 // how long the pointer must rest on a poster before it opens
 const STILL_PX = 5 // …and how little it may drift while it does
@@ -39,6 +40,8 @@ async function libraryState(key) {
 }
 
 const setSaved = (li, saved) => {
+  // The bookmark on the poster itself, drawn or taken away now.
+  setSavedMark(li.querySelector("a.poster-card [data-peek]"), saved)
   const btn = li.querySelector("[data-card-save]")
   if (!btn) return
   btn.querySelector("[data-off]")?.classList.toggle("hidden", !!saved)
