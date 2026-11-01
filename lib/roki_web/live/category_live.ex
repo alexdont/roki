@@ -410,7 +410,7 @@ defmodule RokiWeb.CategoryLive do
             </h1>
           </div>
 
-          <div class="relative flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
+          <div class="relative flex w-full items-center gap-1.5 sm:gap-2">
             <.picker
               :if={@kind == :anime}
               id="season-picker"
@@ -493,8 +493,18 @@ defmodule RokiWeb.CategoryLive do
               />
             </.picker>
 
+            <%!-- On a phone the three sizes would not fit beside the pickers: one button steps through them. --%>
+            <button
+              phx-click="size"
+              phx-value-size={next_size(@size)}
+              title="Poster size"
+              aria-label="Poster size"
+              class="btn btn-square btn-ghost h-12 min-h-0 w-12 shrink-0 rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md hover:bg-white/15 sm:hidden"
+            >
+              <.size_icon size={@size} />
+            </button>
             <div
-              class="join ml-auto overflow-hidden rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md"
+              class="join ml-auto overflow-hidden max-sm:hidden rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md"
               role="group"
               aria-label="Grid size"
             >
@@ -603,11 +613,11 @@ defmodule RokiWeb.CategoryLive do
   # A big button that says what is chosen and opens a panel under it.
   defp picker(assigns) do
     ~H"""
-    <div id={@id} class="min-w-0 flex-1 basis-[7.5rem] sm:relative sm:flex-none sm:basis-auto">
+    <div id={@id} class="min-w-0 flex-1 basis-0 sm:relative sm:flex-none sm:basis-auto">
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}-panel", display: "block")}
-        class="btn h-12 min-h-0 w-full justify-between gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-left font-semibold text-white backdrop-blur-md hover:border-white/60 hover:bg-black/45"
+        class="btn h-12 min-h-0 w-full justify-between gap-1 rounded-full border border-white/25 bg-black/30 px-3.5 text-left sm:gap-2 sm:px-4 font-semibold text-white backdrop-blur-md hover:border-white/60 hover:bg-black/45"
         aria-haspopup="listbox"
       >
         <span class="min-w-0">
@@ -616,7 +626,7 @@ defmodule RokiWeb.CategoryLive do
           </span>
           <span class="block truncate text-base leading-tight text-white">{@value}</span>
         </span>
-        <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 text-white/80" />
+        <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 text-white/80 max-sm:hidden" />
       </button>
       <div
         id={"#{@id}-panel"}
@@ -747,6 +757,10 @@ defmodule RokiWeb.CategoryLive do
 
   defp season_text(nil), do: "All anime"
   defp season_text(season), do: Laev.Season.label(season)
+
+  defp next_size("s"), do: "m"
+  defp next_size("m"), do: "l"
+  defp next_size(_), do: "s"
 
   defp sort_text(sorts, sort, _corner), do: Keyword.get(sorts, sort, "Popular")
 

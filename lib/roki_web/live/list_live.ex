@@ -160,11 +160,11 @@ defmodule RokiWeb.ListLive do
           </p>
         </div>
 
-        <div :if={@tabs != []} class="tabs tabs-box w-fit max-w-full overflow-x-auto" role="tablist">
+        <div :if={@tabs != []} class="tabs tabs-box w-fit max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]" role="tablist">
           <.link
             :for={t <- @tabs}
             patch={tab_path(@slug, t.key)}
-            class={["tab", @tier == t.key && "tab-active"]}
+            class={["tab shrink-0 whitespace-nowrap", @tier == t.key && "tab-active"]}
             title={t.blurb}
           >
             {t.label}
