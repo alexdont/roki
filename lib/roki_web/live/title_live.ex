@@ -918,10 +918,20 @@ defmodule RokiWeb.TitleLive do
 
   defp release_date(iso) do
     case Date.from_iso8601(iso) do
-      {:ok, d} -> Calendar.strftime(d, "%-d %b %Y")
+      {:ok, d} -> "#{Calendar.strftime(d, "%-d %b %Y")} (#{how_long(Date.diff(Date.utc_today(), d))})"
       _ -> nil
     end
   end
+
+  # "233 days ago", as the card over a poster says it; a title not out yet says when it will be.
+  defp how_long(0), do: "today"
+  defp how_long(1), do: "yesterday"
+  defp how_long(-1), do: "tomorrow"
+  defp how_long(days) when days > 1, do: "#{group_digits(days)} days ago"
+  defp how_long(days), do: "in #{group_digits(-days)} days"
+
+  defp group_digits(n),
+    do: n |> Integer.to_string() |> String.replace(~r/\B(?=(\d{3})+$)/, ",")
 
   attr :cached?, :boolean, default: false
   attr :title, :map, required: true
