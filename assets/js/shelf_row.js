@@ -96,6 +96,7 @@ export const ShelfRow = {
     this.scroller = this.el.querySelector("[data-row-scroller]")
     this.asked = false
     this.sync()
+    this.keepOpen()
   },
 
   // The chevrons are faintly there while the pointer is in the row, and darker the nearer it gets
@@ -193,6 +194,22 @@ export const cardMethods = {
       const seen = e.target.closest?.("[data-card-watched]")
       if (seen) { e.preventDefault(); this.toggle(seen.closest("[data-card]"), "watched") }
     })
+  },
+
+  // A page patch (posters arriving, a season's picture swapped in) redraws the tile and drops what
+  // was set on it here; the card is still the one the pointer is on, so it is opened again as it was.
+  keepOpen() {
+    const li = this.hot
+    if (!li) return
+    if (!li.isConnected) { this.hot = null; return }
+    if (li.dataset.open === "true") return
+    li.dataset.open = "true"
+    if (this.grid) {
+      const r = li.getBoundingClientRect()
+      const extra = r.width * 0.35 + 12
+      li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
+      this.nudge(li)
+    }
   },
 
   leave() {

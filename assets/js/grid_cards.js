@@ -11,6 +11,10 @@ export const GridCards = {
     this.cards()
   },
 
+  updated() {
+    this.keepOpen()
+  },
+
   destroyed() {
     this.close()
   },
