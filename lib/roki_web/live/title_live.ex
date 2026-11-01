@@ -896,6 +896,20 @@ defmodule RokiWeb.TitleLive do
   defp hero_backdrop(url),
     do: Roki.Images.local(String.replace(url, "/w1280/", "/original/"))
 
+  # The page of this kind of title, filtered by one of its genres; nil when that kind has no such genre.
+  defp genre_path(title, name) do
+    kind = browse_kind(title)
+
+    case Roki.Genres.slug_for_name(name, kind) do
+      nil -> nil
+      slug -> "/#{kind}?genre=#{slug}"
+    end
+  end
+
+  defp browse_kind(%{anime?: true}), do: :anime
+  defp browse_kind(%{type: "tv"}), do: :shows
+  defp browse_kind(_), do: :movies
+
   defp kind_label(%{anime?: true}), do: "Anime"
   defp kind_label(%{type: "movie"}), do: "Film"
   defp kind_label(_), do: "Series"
@@ -1013,12 +1027,22 @@ defmodule RokiWeb.TitleLive do
           <span :if={@title.minutes}>{@title.minutes} min</span>
           <span :if={seasons_text(@title)}>{seasons_text(@title)}</span>
           <span :if={episodes_text(@title)}>{episodes_text(@title)}</span>
-          <span
-            :for={g <- Enum.take(@title.genres, 3)}
-            class="rounded-full border border-white/30 px-3 py-0.5 text-white/80"
-          >
-            {g}
-          </span>
+          <%!-- A genre leads to that kind's page, filtered by it: more of the same. --%>
+          <%= for g <- Enum.take(@title.genres, 3) do %>
+            <.link
+              :if={genre_path(@title, g)}
+              navigate={genre_path(@title, g)}
+              class="rounded-full border border-white/30 px-3 py-0.5 text-white/80 transition hover:border-white/70 hover:bg-white/15 hover:text-white"
+            >
+              {g}
+            </.link>
+            <span
+              :if={!genre_path(@title, g)}
+              class="rounded-full border border-white/30 px-3 py-0.5 text-white/80"
+            >
+              {g}
+            </span>
+          <% end %>
         </div>
 
         <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>

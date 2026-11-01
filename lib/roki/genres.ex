@@ -73,6 +73,48 @@ defmodule Roki.Genres do
   def keyword(slug, kind),
     do: if(type_of(kind) == "tv" and ids(slug, kind) == [], do: @keywords[slug])
 
+  # What TMDB calls a genre in a title's own record, which is not one list: a film's "Science
+  # Fiction" is a show's "Sci-Fi & Fantasy", and a show's "Action & Adventure" is one genre for
+  # both of the slugs here.
+  @names %{
+    "Action" => "action",
+    "Adventure" => "adventure",
+    "Action & Adventure" => "action",
+    "Animation" => "animation",
+    "Comedy" => "comedy",
+    "Crime" => "crime",
+    "Documentary" => "documentary",
+    "Drama" => "drama",
+    "Family" => "family",
+    "Fantasy" => "fantasy",
+    "History" => "history",
+    "Horror" => "horror",
+    "Kids" => "kids",
+    "Music" => "music",
+    "Mystery" => "mystery",
+    "Reality" => "reality",
+    "Romance" => "romance",
+    "Science Fiction" => "scifi",
+    "Sci-Fi & Fantasy" => "scifi",
+    "Thriller" => "thriller",
+    "War" => "war",
+    "War & Politics" => "war",
+    "Western" => "western"
+  }
+
+  @doc """
+  The slug browsing knows a title's genre name by (`"Science Fiction"` → `"scifi"`), when the kind
+  (`:movies`, `:shows`, `:anime`) can be browsed by it; nil for one it cannot (Soap, Talk, TV Movie).
+  """
+  def slug_for_name(name, kind) do
+    with slug when is_binary(slug) <- @names[name],
+         true <- Enum.any?(browse_options(kind), fn {s, _} -> s == slug end) do
+      slug
+    else
+      _ -> nil
+    end
+  end
+
   @doc "A genre named in an address, else nil (never made into an atom from input)."
   def parse(value), do: Enum.find_value(@genres, fn {slug, _, _, _} -> slug == value && slug end)
 
