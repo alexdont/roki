@@ -410,6 +410,17 @@ defmodule RokiWeb.TitleLive do
     {:noreply, assign(socket, :lib, %{lib | saved?: saved?})}
   end
 
+  # "Remove watch progress" in the ⋯ menu: what was played and where it was left, so the title leaves
+  # the Watchlist and History. The page is opened again, so everything on it that came from that
+  # (Continue, the episode marks, the buttons) is read afresh.
+  def handle_event("forget_progress", _params, %{assigns: %{uuid: uuid, title: title}} = socket)
+      when is_binary(uuid) do
+    Watch.forget_progress(uuid, title.type, title.id)
+    {:noreply, push_navigate(socket, to: ~p"/title/#{title.type}/#{title.id}")}
+  end
+
+  def handle_event("forget_progress", _params, socket), do: {:noreply, socket}
+
   def handle_event("toggle_hold", _params, socket) do
     %{uuid: uuid, title: title, lib: lib} = socket.assigns
     held? = Watch.toggle_hold(uuid, title) == :held
@@ -1923,6 +1934,15 @@ defmodule RokiWeb.TitleLive do
           />
           {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}
         </button>
+        <button
+          :if={@linked? and @lib[:progress?]}
+          type="button"
+          phx-click={JS.push("forget_progress") |> JS.hide(to: "##{@id}")}
+          data-confirm={forget_confirm(@title)}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-error hover:bg-error/10"
+        >
+          <.icon name="hero-arrow-uturn-left" class="h-5 w-5" /> Remove watch progress
+        </button>
         <a
           :for={{label, url} <- @links}
           href={url}
@@ -1937,6 +1957,11 @@ defmodule RokiWeb.TitleLive do
     </div>
     """
   end
+
+  defp forget_confirm(%{type: "tv", title: title}),
+    do: "Remove all watch progress for #{title}? The episodes you marked as watched are cleared too."
+
+  defp forget_confirm(%{title: title}), do: "Remove the watch progress for #{title}?"
 
   # Where else the title lives: MyAnimeList first for anime (its first season's entry, or the
   # film itself — the cross-id list, no request), then TMDB and, when TMDB knows it, IMDb.

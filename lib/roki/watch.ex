@@ -216,6 +216,9 @@ defmodule Roki.Watch do
 
       %{
         saved?: Laev.Watchlist.has?(title.type, title.id),
+        # Anything that keeps it on the shelf as being watched: a place left (the resume record), a
+        # film's saved spot, or a show's watched episodes. What "Remove watch progress" takes away.
+        progress?: progress?(title, ctx),
         held?: not title.anime? and Laev.Holds.held?(title.type, title.id),
         watched?: title.type == "movie" and Laev.Position.finished?(ctx),
         # "Completed": the series' own mark, which is what puts it in the Completed section.
@@ -223,6 +226,18 @@ defmodule Roki.Watch do
         all_watched?: title.type == "tv" and completed?(title)
       }
     end)
+  end
+
+  defp progress?(title, ctx) do
+    Laev.Resume.get(title.type, title.id) != nil or
+      case title.type do
+        "movie" ->
+          Laev.Position.saved_position(ctx) != nil
+
+        _ ->
+          Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{}) |> map_size() > 0 or
+            Enum.any?(Laev.AnimeMap.mal_ids("tv", title.id), &(Map.get(Laev.Position.anime_marks(), &1, 0) > 0))
+      end
   end
 
   # What makes a series completed, as laev keeps it: a mark on the show itself — separate from
@@ -515,6 +530,29 @@ defmodule Roki.Watch do
   @doc "Take a title off the saved-for-later list."
   def unsave(uuid, type, id) do
     Roki.Laev.run(uuid, fn -> Laev.Watchlist.remove(type, id) end)
+    library_changed(uuid)
+  end
+
+  @doc """
+  Take a title's watch progress away, so it leaves what the shelf shows as being watched (Watchlist
+  and History): where it was left (the resume record) and, for a title not finished, what was
+  played of it — a film's saved spot, a show's watched episodes (and a season of anime by its
+  MyAnimeList entry), which also leaves the time they added to the stats. A film that has been
+  watched to the end keeps its mark: only its place in History goes. Sent to the user's other
+  devices.
+  """
+  def forget_progress(uuid, type, id) when type in ["movie", "tv"] and is_integer(id) do
+    Roki.Laev.run(uuid, fn ->
+      finished? = type == "movie" and Laev.Position.finished?(%{type: "movie", tmdb_id: id})
+      Laev.Resume.delete(type, id)
+
+      unless finished? do
+        Laev.Position.forget(type, id)
+        for mal <- Laev.AnimeMap.mal_ids(type, id), do: Laev.Position.forget("mal", mal)
+      end
+    end)
+
+    Roki.Laev.forget_shelf(uuid)
     library_changed(uuid)
   end
 
