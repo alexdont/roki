@@ -224,9 +224,12 @@ defmodule RokiWeb.SourcesLive do
     %{type: type, id: id, uuid: uuid} = socket.assigns
 
     linked? = socket.assigns.linked?
+    season = socket.assigns.season
 
     start_async(socket, :title, fn ->
+      # An anime is drawn as the season being watched, not as its first (`Roki.SeasonPosters`).
       with {:ok, title} <- Watch.title(type, id, uuid),
+           title = Roki.SeasonPosters.for_title(title, season, uuid),
            do: {:ok, title, not linked? or Watch.auto_start?(uuid)}
     end)
   end

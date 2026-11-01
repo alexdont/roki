@@ -106,7 +106,17 @@ defmodule RokiWeb.WatchLive do
 
   defp load(socket) do
     %{type: type, id: id, uuid: uuid} = socket.assigns
-    start_async(socket, :title, Roki.Study.wrap(fn -> Watch.title(type, id, uuid) end))
+    season = socket.assigns.season
+
+    start_async(
+      socket,
+      :title,
+      Roki.Study.wrap(fn ->
+        # The picture the phone's lock screen shows is the season's, for an anime.
+        with {:ok, title} <- Watch.title(type, id, uuid),
+             do: {:ok, Roki.SeasonPosters.for_title(title, season, uuid)}
+      end)
+    )
   end
 
   # The title is known: find the release, start it, and (for a series) fetch the season's
@@ -390,6 +400,17 @@ defmodule RokiWeb.WatchLive do
 
   defp start(uuid, ctx, {source, stream}, caps), do: Watch.start(uuid, ctx, source, stream, caps)
 
+  # What the system shows of what is playing (the lock screen, the phone's media controls): its
+  # name and, for an anime, the season's own poster.
+  defp media_info(%{title: %{} = title, season: season, episode: episode}) do
+    %{
+      heading: title.title <> now_playing(title, season, episode),
+      artwork: title.poster && Roki.Images.local(title.poster)
+    }
+  end
+
+  defp media_info(_assigns), do: %{}
+
   # What this browser said it decodes itself, sent with the connection (see app.js).
   defp caps_param(socket) do
     params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
@@ -447,6 +468,8 @@ defmodule RokiWeb.WatchLive do
       # A stream that has not started by then is counted as failed (and the next one tried).
       startup: 25_000
     }
+
+    data = Map.merge(data, media_info(socket.assigns))
 
     socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours()
 
@@ -516,6 +539,8 @@ defmodule RokiWeb.WatchLive do
       os_langs: os_langs(prefer),
       study: study_subtitles(uuid, socket.assigns.study)
     }
+
+    data = Map.merge(data, media_info(socket.assigns))
 
     if res.key, do: SourceCache.mark_good(uuid, res.key, source.hash)
 

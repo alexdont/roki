@@ -336,6 +336,16 @@ export const StudySidebar = {
     for (const ev of ["seeking", "seeked", "ratechange"]) v.addEventListener(ev, () => { last = v.currentTime })
   },
 
+  // What the system draws of what is playing — the lock screen, the phone's media controls, the
+  // browser's own: its name, and the season's poster.
+  setMediaSession(p) {
+    if (!("mediaSession" in navigator) || !p.heading) return
+    try {
+      const artwork = p.artwork ? [{src: new URL(p.artwork, location.href).href, sizes: "500x750"}] : []
+      navigator.mediaSession.metadata = new MediaMetadata({title: p.heading, artist: "roki", artwork})
+    } catch (e) {}
+  },
+
   postProgress(paused = false) {
     const t = this.abs()
     if (!this.ready || !(t > 0)) return
@@ -1460,6 +1470,7 @@ export const StudySidebar = {
     if (p.url !== this.playerUrl) {
       this.playerUrl = p.url
       this.startMedia(p)
+      this.setMediaSession(p)
     }
     this.prevBtn.hidden = !p.prev
     this.prevBtn.title = p.prev ? `Play the previous episode (${p.prev})` : "Play the previous episode"
