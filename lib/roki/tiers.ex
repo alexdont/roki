@@ -85,10 +85,11 @@ defmodule Roki.Tiers do
     if moved != [] do
       Task.Supervisor.start_child(Roki.TaskSupervisor, fn ->
         for {{type, id}, score} <- moved do
-          title = %{type: type, id: id, title: titles[{type, id}]}
+          title = rating_title(uuid, type, id, titles[{type, id}])
 
           try do
-            Roki.Watch.rate(uuid, title, score * 1.0)
+            # A season is rated on its own MyAnimeList entry, not on the show.
+            Roki.Watch.rate(uuid, title, score * 1.0, if(type == "mal", do: id))
           rescue
             e ->
               require Logger
@@ -98,6 +99,22 @@ defmodule Roki.Tiers do
       end)
     end
   end
+
+  # What `Roki.Watch.rate/4` is told it is rating: a film or show by its TMDB id; a season by the
+  # show it belongs to (laev's cross-id list) and — passed beside it — its MyAnimeList entry.
+  defp rating_title(uuid, "mal", mal, name) do
+    tmdb =
+      Roki.Laev.run(uuid, fn ->
+        case Laev.AnimeMap.tmdb(mal) do
+          {"tv", id, _season} -> id
+          _ -> nil
+        end
+      end)
+
+    %{type: "tv", id: tmdb, anime?: true, title: name}
+  end
+
+  defp rating_title(_uuid, type, id, name), do: %{type: type, id: id, title: name}
 
   @doc """
   Everything this account has finished, as the board draws it: each entry its own tier when it
@@ -111,20 +128,30 @@ defmodule Roki.Tiers do
 
     items =
       for i <- Profile.history(uuid) do
-        key = Profile.favorite_key(i)
-        from_rating = tier(ratings[key] || ratings[{i.type, i.id}])
+        key = tier_key(i)
+        # What the show itself was filed under: a rating on TMDB covers every season that has none of
+        # its own, and a place saved before a season had a key of its own is still its place.
+        legacy = Profile.favorite_key(i)
+        from_rating = tier(ratings[key] || ratings[legacy])
+        saved_tier = saved[key] || saved[legacy]
 
         Map.merge(i, %{
           key: key,
           key_string: "#{elem(key, 0)}:#{elem(key, 1)}",
-          tier: saved[key] || from_rating || "pool",
-          placed?: saved[key] == nil and from_rating != nil,
+          tier: saved_tier || from_rating || "pool",
+          placed?: saved_tier == nil and from_rating != nil,
           mode: mode_of(i)
         })
       end
 
     {Enum.group_by(items, & &1.tier), Enum.filter(items, & &1.placed?)}
   end
+
+  # A season of an anime is its MyAnimeList entry: it is rated there, one score to a season, and
+  # that — not the show's TMDB id, which every season shares — is what it is on the board. Two
+  # seasons filed under one key were one entry, and a rating on either was nobody's.
+  def tier_key(%{mal_id: mal}) when is_integer(mal), do: {"mal", mal}
+  def tier_key(item), do: Profile.favorite_key(item)
 
   defp mode_of(%{anime: true}), do: "anime"
   defp mode_of(%{type: type}), do: type
