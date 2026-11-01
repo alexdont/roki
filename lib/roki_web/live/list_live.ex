@@ -11,7 +11,6 @@ defmodule RokiWeb.ListLive do
   use RokiWeb, :live_view
 
   import RokiWeb.PageHero
-  import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Lists
@@ -185,12 +184,20 @@ defmodule RokiWeb.ListLive do
 
         <p :if={@cards_note} class="alert text-sm">{@cards_note}</p>
 
-        <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          <li :for={i <- @items} class="space-y-1">
-            <%!-- Watched is the greyed poster; the eye on top of it would only crowd the grid. --%>
-            <.poster item={i} seen={@watched?.(i)} cached_titles={@cached_titles} mark?={false} />
-          </li>
-        </ul>
+        <%!-- Watched is the greyed poster; the eye on top of it would only crowd the grid. The card
+              that opens over a poster is the one Movies and Shows have (`GridCards`). --%>
+        <div id="grid-cards" phx-hook="GridCards">
+          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+            <RokiWeb.FeaturedLive.tile
+              :for={i <- @items}
+              item={i}
+              kind={:list}
+              seen={@watched?.(i)}
+              cached_titles={@cached_titles}
+              signed_in?={@uuid != nil}
+            />
+          </ul>
+        </div>
       </div>
     </Layouts.app>
     """

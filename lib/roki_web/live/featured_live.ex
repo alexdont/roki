@@ -989,6 +989,15 @@ defmodule RokiWeb.FeaturedLive do
     """
   end
 
+  # A list can hold one show once for each of its seasons (or anime entries): their cards need
+  # ids of their own.
+  defp entry_suffix(item) do
+    case item[:mal_id] || item[:season] do
+      nil -> ""
+      n -> "-#{n}"
+    end
+  end
+
   attr :item, :map, required: true
   attr :key, :string, required: true
   attr :kind, :atom, required: true
@@ -1024,7 +1033,7 @@ defmodule RokiWeb.FeaturedLive do
         />
         <div
           data-card-trailer
-          id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}"}
+          id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}#{entry_suffix(@item)}"}
           phx-update="ignore"
           class="absolute inset-0 opacity-0 transition-opacity duration-500"
         >
@@ -1117,6 +1126,9 @@ defmodule RokiWeb.FeaturedLive do
 
   attr :item, :map, required: true
   attr :kind, :atom, required: true
+  attr :seen, :boolean, default: false
+  attr :cached_titles, :any, default: nil
+  attr :signed_in?, :boolean, default: true
   slot :inner_block
 
   # One title in a list of posters: a film or a show opens into the card the rows have (the
@@ -1124,7 +1136,13 @@ defmodule RokiWeb.FeaturedLive do
   @doc false
   def tile(%{item: %{type: type}} = assigns) when type in ["movie", "tv"] do
     ~H"""
-    <.grid_card kind={@kind} item={@item} signed_in?>
+    <.grid_card
+      kind={@kind}
+      item={@item}
+      seen={@seen}
+      cached_titles={@cached_titles}
+      signed_in?={@signed_in?}
+    >
       {render_slot(@inner_block)}
     </.grid_card>
     """
@@ -1133,7 +1151,7 @@ defmodule RokiWeb.FeaturedLive do
   def tile(assigns) do
     ~H"""
     <li class="space-y-1">
-      <.poster item={@item} compact title?={false} />
+      <.poster item={@item} seen={@seen} cached_titles={@cached_titles} compact title?={false} />
       {render_slot(@inner_block)}
     </li>
     """
@@ -1143,6 +1161,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :item, :map, required: true
   attr :seen, :boolean, default: false
   attr :upcoming, :map, default: %{}
+  attr :cached_titles, :any, default: nil
   attr :signed_in?, :boolean, default: false
   slot :inner_block, doc: "under the poster, outside the card that opens"
 
@@ -1178,6 +1197,7 @@ defmodule RokiWeb.FeaturedLive do
           item={@item}
           seen={@seen}
           upcoming={@upcoming}
+          cached_titles={@cached_titles}
           compact
           title?={false}
           rating_corner={:top_left}

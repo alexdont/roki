@@ -12,7 +12,6 @@ defmodule RokiWeb.SearchLive do
 
   import RokiWeb.ListComponents
   import RokiWeb.PageHero
-  import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
 
@@ -363,23 +362,26 @@ defmodule RokiWeb.SearchLive do
           </h2>
           <%!-- The same grid as Movies, Shows and Anime: larger posters, whole rows while there is
               more, and "Load more" under it. --%>
-          <ul
-            id="grid"
-            phx-hook="FillGrid"
-            data-more={to_string(@shelf.more?)}
-            data-page={@shelf.page}
-            data-restore-y={@place_y}
-            class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
-          >
-            <li :for={i <- @shelf.items} class="space-y-1">
-              <.poster
+          <%!-- The card that opens over a poster is the one Movies and Shows have (`GridCards`). --%>
+          <div id="grid-cards" phx-hook="GridCards">
+            <ul
+              id="grid"
+              phx-hook="FillGrid"
+              data-more={to_string(@shelf.more?)}
+              data-page={@shelf.page}
+              data-restore-y={@place_y}
+              class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+            >
+              <RokiWeb.FeaturedLive.tile
+                :for={i <- @shelf.items}
                 item={i}
+                kind={:search}
                 seen={MapSet.member?(@seen, {i.type, i.id})}
                 cached_titles={@cached_titles}
-                compact
+                signed_in?={@uuid != nil}
               />
-            </li>
-          </ul>
+            </ul>
+          </div>
           <div :if={@shelf.more?} class="flex justify-center pt-4">
             <button phx-click="more" class="btn btn-wide" disabled={@shelf.loading?}>
               <span :if={@shelf.loading?} class="loading loading-spinner loading-sm"></span> Load more
