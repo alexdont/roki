@@ -130,6 +130,9 @@ defmodule RokiWeb.TitleLive do
           do: Watch.play_for(uuid, title, sections, resume),
           else: Watch.play_info(sections, resume)
 
+      # An anime is drawn as the season Play is on, not as its first.
+      title = Roki.SeasonPosters.for_title(title, play.season, uuid)
+
       # MyAnimeList rates and lists by season: the one you are watching is the one rated.
       mal = play_mal(title, sections, play)
       rating = if linked?, do: Watch.my_rating(uuid, title, mal)
@@ -206,6 +209,7 @@ defmodule RokiWeb.TitleLive do
           socket.assigns.episodes == nil ->
         socket
         |> assign(section: wanted, season: wanted.season, episodes: nil)
+        |> assign(:title, with_season_poster(socket.assigns.title, wanted.season))
         |> follow_section(wanted)
         |> load_episodes(wanted)
 
@@ -215,6 +219,16 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp select(socket), do: socket
+
+  # The season on screen on the episodes page gives the poster, when an anime's seasons are kept.
+  defp with_season_poster(%{type: "tv", anime?: true} = title, season) when is_integer(season) do
+    case Roki.SeasonPosters.stored_poster(title.id, season) do
+      nil -> title
+      url -> %{title | poster: String.replace(url, "/w342/", "/w500/")}
+    end
+  end
+
+  defp with_season_poster(title, _season), do: title
 
   # `?s=` names a section ("2", or "1.2" for the second part of season 1); a bare season number
   # (an old link) is that season's first section.

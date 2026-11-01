@@ -30,6 +30,7 @@ defmodule RokiWeb.ListLive do
      |> assign(:tier, "all")
      |> assign(:cards, %{})
      |> assign(:seen, nil)
+     |> assign(:season_posters, %{})
      |> assign(:cards_note, nil)}
   end
 
@@ -68,8 +69,12 @@ defmodule RokiWeb.ListLive do
       socket
       |> assign(:cards, %{})
       |> assign(:seen, nil)
+      |> assign(:season_posters, %{})
       |> assign(:cards_note, nil)
       |> start_async(:cards, fn -> Lists.cards(client, uuid, slug, entries) end)
+      # An entry that is a season of a show gets that season's poster, not the show's: JoJo's list
+      # is seven parts, not seven copies of the first.
+      |> start_async(:season_posters, fn -> Lists.season_posters(entries, uuid) end)
       |> start_async(:seen, fn -> if uuid, do: Roki.Laev.seen_keys(uuid, items) end)
     else
       socket
@@ -91,6 +96,11 @@ defmodule RokiWeb.ListLive do
   def handle_async(:cards, {:exit, _}, socket),
     do: {:noreply, assign(socket, :cards_note, "Couldn't load posters from TMDB just now.")}
 
+  def handle_async(:season_posters, {:ok, %{} = posters}, socket),
+    do: {:noreply, assign(socket, :season_posters, posters)}
+
+  def handle_async(:season_posters, _other, socket), do: {:noreply, socket}
+
   def handle_async(:seen, {:ok, seen}, socket), do: {:noreply, assign(socket, :seen, seen)}
   def handle_async(:seen, {:exit, _}, socket), do: {:noreply, socket}
 
@@ -99,7 +109,15 @@ defmodule RokiWeb.ListLive do
     f = assigns.franchise
     entries = if f, do: Lists.entries(f, assigns.tier), else: []
     seen = assigns.seen
-    items = Enum.map(entries, &Lists.item(&1, assigns.cards))
+    items =
+      Enum.map(entries, fn entry ->
+        item = Lists.item(entry, assigns.cards)
+
+        case assigns.season_posters[{entry.tmdb_id, entry.season}] do
+          nil -> item
+          poster -> %{item | poster: poster}
+        end
+      end)
     watched? = fn i -> seen != nil and MapSet.member?(seen, {i.type, i.id}) end
     left = if seen, do: Enum.count(items, &(not watched?.(&1))), else: nil
 

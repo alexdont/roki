@@ -622,13 +622,18 @@ defmodule Roki.Profile do
 
     cards = Roki.Titles.cards(for i <- items, do: card_key(i))
 
-    Enum.map(items, fn i ->
-      card = cards[card_key(i)] || %{}
+    items =
+      Enum.map(items, fn i ->
+        card = cards[card_key(i)] || %{}
 
-      i
-      |> Map.put(:year, card[:year])
-      |> Map.merge(%{poster: card[:poster], title: i.title || card[:title]})
-    end)
+        i
+        |> Map.put(:year, card[:year])
+        |> Map.merge(%{poster: card[:poster], title: i.title || card[:title]})
+      end)
+
+    # A season of a show is drawn with that season's poster, not the show's: a tier list of the
+    # seven parts of JoJo is seven pictures, not one seven times.
+    Roki.SeasonPosters.apply(items, uuid)
   end
 
   # A title's card is TMDB's; an anime with no TMDB title has MyAnimeList's, under its MAL id.

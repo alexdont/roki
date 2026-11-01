@@ -205,6 +205,18 @@ defmodule Roki.Lists do
 
   def entries(franchise, tier), do: Franchises.entries(franchise, tier)
 
+  @doc """
+  The poster of each entry that is a season of a show, by `{tmdb_id, season}`: what
+  `Roki.SeasonPosters` keeps, read now for the first few shows and behind the page for the rest.
+  """
+  def season_posters(entries, uuid) do
+    entries
+    |> Enum.map(&base_item/1)
+    |> Roki.SeasonPosters.apply(uuid)
+    |> Enum.filter(& &1.poster)
+    |> Map.new(&{{&1.id, &1.season}, &1.poster})
+  end
+
   @doc "A title straight from the curated file — everything but the poster."
   def base_item(entry) do
     %{

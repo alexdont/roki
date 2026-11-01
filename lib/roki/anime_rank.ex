@@ -139,23 +139,11 @@ defmodule Roki.AnimeRank do
   end
 
   @doc """
-  A show's seasons as TMDB lists them — `[%{n:, air_date:, poster:}]` (`[]` when it cannot be read) —
-  kept for half a day, whoever asks. Runs in `uuid`'s scope (or the site's own key): it is called
-  from several tasks at once, none of which has one.
+  A show's seasons — `[%{n:, air_date:, poster:}]`, `[]` when they cannot be read — from the store
+  `Roki.SeasonPosters` keeps. Called from several tasks at once, none of which has a scope: it asks
+  in `uuid`'s (or the site's) own.
   """
-  def seasons_of(id, uuid) do
-    case Roki.TTLCache.fetch({:anime_seasons, id}, 12 * 3600, fn ->
-           Roki.Laev.public(uuid, fn ->
-             case Laev.Tmdb.tv(id) do
-               {:ok, details} -> {:ok, parse_seasons(details)}
-               _ -> {:error, :unknown}
-             end
-           end)
-         end) do
-      {:ok, seasons} -> seasons
-      _ -> []
-    end
-  end
+  def seasons_of(id, uuid), do: Roki.SeasonPosters.seasons(id, uuid)
 
   @doc false
   def parse_seasons(%{"seasons" => seasons}) when is_list(seasons) do

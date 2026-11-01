@@ -340,6 +340,21 @@ defmodule Roki.Laev do
   has never connected (and nothing is created on disk for them).
   """
   def overview(uuid) do
+    with {:ok, data} <- overview_raw(uuid), do: {:ok, season_posters(data, uuid)}
+  end
+
+  # What the watchlist and history draw: the poster of the season each title is on (the one it was
+  # left at, or the anime entry being watched), not the show's. The first few shows not seen before
+  # are waited for; the rest are read behind the page.
+  defp season_posters(%{watchlist: wl, continue: cont} = data, uuid) do
+    fix = &Roki.SeasonPosters.apply(&1, uuid, inline: 6)
+
+    %{data | watchlist: Map.new(wl, fn {k, items} -> {k, fix.(items)} end), continue: fix.(cont)}
+  end
+
+  defp season_posters(data, _uuid), do: data
+
+  defp overview_raw(uuid) do
     if File.exists?(Path.join(dir(uuid), "config")) do
       run(uuid, fn ->
         if Sync.enabled?() do
