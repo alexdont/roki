@@ -7,6 +7,7 @@ defmodule RokiWeb.ListsLive do
   use RokiWeb, :live_view
 
   import RokiWeb.ListComponents
+  import RokiWeb.PageHero
 
   alias PhoenixKit.Users.Auth.Scope
 
@@ -38,19 +39,20 @@ defmodule RokiWeb.ListsLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path="/lists"
     >
-      <div class="space-y-6">
-        <div class="space-y-1">
-          <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Lists</h1>
-          <p class="text-base-content/70">
-            Curated franchises and collections, start to finish, in release order. Searching any
-            title also offers the series it belongs to.
-          </p>
-        </div>
+      <.page_hero eyebrow="Curated" title="Lists" hue={24}>
+        <p class="max-w-2xl text-white/80">
+          Franchises and collections, start to finish, in release order. Searching any title also
+          offers the series it belongs to.
+        </p>
+      </.page_hero>
 
+      <div class={content_class()}>
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <.list_card :for={l <- @lists} list={l} />
         </div>

@@ -11,6 +11,7 @@ defmodule RokiWeb.SearchLive do
   use RokiWeb, :live_view
 
   import RokiWeb.ListComponents
+  import RokiWeb.PageHero
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
@@ -207,178 +208,185 @@ defmodule RokiWeb.SearchLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path="/search"
     >
-      <form phx-submit="search" role="search" class="mx-auto flex max-w-2xl gap-2 pb-2">
-        <input
-          type="search"
-          name="q"
-          value={@q}
-          placeholder="Search movies and shows — or paste an IMDb id"
-          autocomplete="off"
-          autofocus
-          maxlength="120"
-          class="input input-bordered w-full"
-        />
-        <button type="submit" class="btn btn-primary">Search</button>
-      </form>
+      <.page_hero eyebrow={if @q != "", do: "Results for “#{@q}”"} title="Search" hue={24}>
+        <form phx-submit="search" role="search" class="flex max-w-2xl gap-2">
+          <input
+            type="search"
+            name="q"
+            value={@q}
+            placeholder="Search movies and shows — or paste an IMDb id"
+            autocomplete="off"
+            autofocus
+            maxlength="120"
+            style="background-color: rgb(0 0 0 / 0.3)"
+            class="input h-12 w-full rounded-full border border-white/25 px-5 text-white backdrop-blur-md placeholder:text-white/60 focus:border-white/60 focus:outline-none"
+          />
+          <button type="submit" class="btn btn-primary h-12 min-h-0 rounded-full px-6">Search</button>
+        </form>
 
-      <%!-- The genre: the same search, only the titles of one. --%>
-      <div :if={@q != ""} class="mx-auto flex max-w-2xl items-center gap-2 pb-2">
-        <div class="dropdown">
-          <div
-            tabindex="0"
-            role="button"
-            class={[
-              "btn btn-sm h-9 gap-1 rounded-full border-0 text-sm font-medium",
-              @genre && "btn-primary",
-              !@genre && "bg-base-200"
-            ]}
-          >
-            {if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
-            <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
-          </div>
-          <div
-            tabindex="0"
-            class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
-          >
-            <div class="grid grid-cols-3 gap-1.5">
-              <.link
-                patch={search_path(@q, nil)}
-                onclick="document.activeElement.blur()"
-                class={[
-                  "btn btn-sm rounded-full border-0 px-1",
-                  @genre == nil && "btn-primary",
-                  @genre != nil && "bg-base-200"
-                ]}
-              >
-                All
-              </.link>
-              <.link
-                :for={{slug, label} <- Roki.Genres.all()}
-                patch={search_path(@q, slug)}
-                onclick="document.activeElement.blur()"
-                class={[
-                  "btn btn-sm rounded-full border-0 px-1 text-xs",
-                  @genre == slug && "btn-primary",
-                  @genre != slug && "bg-base-200"
-                ]}
-              >
-                {label}
-              </.link>
+        <%!-- The genre: the same search, only the titles of one. --%>
+        <div :if={@q != ""} class="flex items-center gap-2">
+          <div class="dropdown">
+            <div
+              tabindex="0"
+              role="button"
+              class={[
+                "btn h-11 min-h-0 gap-1 rounded-full border bg-black/30 px-4 font-semibold text-white backdrop-blur-md hover:bg-black/45",
+                @genre && "border-primary",
+                !@genre && "border-white/25 hover:border-white/60"
+              ]}
+            >
+              {if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
+              <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
+            </div>
+            <div
+              tabindex="0"
+              class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+            >
+              <div class="grid grid-cols-3 gap-1.5">
+                <.link
+                  patch={search_path(@q, nil)}
+                  onclick="document.activeElement.blur()"
+                  class={[
+                    "btn btn-sm rounded-full border-0 px-1",
+                    @genre == nil && "btn-primary",
+                    @genre != nil && "bg-base-200"
+                  ]}
+                >
+                  All
+                </.link>
+                <.link
+                  :for={{slug, label} <- Roki.Genres.all()}
+                  patch={search_path(@q, slug)}
+                  onclick="document.activeElement.blur()"
+                  class={[
+                    "btn btn-sm rounded-full border-0 px-1 text-xs",
+                    @genre == slug && "btn-primary",
+                    @genre != slug && "bg-base-200"
+                  ]}
+                >
+                  {label}
+                </.link>
+              </div>
             </div>
           </div>
+          <.link
+            :if={@genre}
+            patch={search_path(@q, nil)}
+            class="text-sm text-white/70 hover:text-white"
+          >Clear</.link>
         </div>
-        <.link
-          :if={@genre}
-          patch={search_path(@q, nil)}
-          class="text-sm text-base-content/60 hover:text-base-content"
-        >Clear</.link>
-      </div>
+      </.page_hero>
 
-      <p :if={@q == ""} class="py-16 text-center text-base-content/60">
-        Search by title. Add a year to narrow it — <code>heat 1995</code>.
-      </p>
-      <p :if={@q != "" and String.length(@q) < 2} class="py-16 text-center text-base-content/60">
-        Type at least two characters.
-      </p>
+      <div class={content_class()}>
+        <p :if={@q == ""} class="py-16 text-center text-base-content/60">
+          Search by title. Add a year to narrow it — <code>heat 1995</code>.
+        </p>
+        <p :if={@q != "" and String.length(@q) < 2} class="py-16 text-center text-base-content/60">
+          Type at least two characters.
+        </p>
 
-      <div
-        :if={@shelf.loading? and @shelf.items == []}
-        class="flex justify-center gap-3 py-24 text-base-content/60"
-      >
-        <span class="loading loading-spinner"></span> Searching…
-      </div>
-
-      <p :if={@error == :no_tmdb_key} class="alert text-sm">
-        Search needs a TMDB key — set <code>TMDB_API_KEY</code>
-        on the server, or connect laev and carry your keys.
-      </p>
-      <p :if={match?({:rate_limited, _}, @error)} class="alert alert-warning text-sm">
-        You're searching a little fast — try again in {elem(@error, 1)}s.
-      </p>
-      <p
-        :if={@error not in [nil, :no_tmdb_key] and not match?({:rate_limited, _}, @error)}
-        class="alert alert-error text-sm"
-      >
-        Couldn't reach TMDB just now. Try again in a minute.
-      </p>
-
-      <p
-        :if={@shelf.searched? and not @shelf.loading? and @shelf.items == [] and @error == nil}
-        class="py-16 text-center text-base-content/60"
-      >
-        Nothing on TMDB matches “{@q}”{if @genre, do: " in #{Roki.Genres.label(@genre)}"}.
-      </p>
-
-      <section :if={@franchises != []} class="space-y-3">
-        <h2 class="text-xl font-semibold">Lists</h2>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <.list_card :for={l <- @franchises} list={l} />
+        <div
+          :if={@shelf.loading? and @shelf.items == []}
+          class="flex justify-center gap-3 py-24 text-base-content/60"
+        >
+          <span class="loading loading-spinner"></span> Searching…
         </div>
-      </section>
 
-      <%!-- Manga keeps its own section rather than joining the grid: a chapter of a manhwa and
+        <p :if={@error == :no_tmdb_key} class="alert text-sm">
+          Search needs a TMDB key — set <code>TMDB_API_KEY</code>
+          on the server, or connect laev and carry your keys.
+        </p>
+        <p :if={match?({:rate_limited, _}, @error)} class="alert alert-warning text-sm">
+          You're searching a little fast — try again in {elem(@error, 1)}s.
+        </p>
+        <p
+          :if={@error not in [nil, :no_tmdb_key] and not match?({:rate_limited, _}, @error)}
+          class="alert alert-error text-sm"
+        >
+          Couldn't reach TMDB just now. Try again in a minute.
+        </p>
+
+        <p
+          :if={@shelf.searched? and not @shelf.loading? and @shelf.items == [] and @error == nil}
+          class="py-16 text-center text-base-content/60"
+        >
+          Nothing on TMDB matches “{@q}”{if @genre, do: " in #{Roki.Genres.label(@genre)}"}.
+        </p>
+
+        <section :if={@franchises != []} class="space-y-3">
+          <h2 class="text-xl font-semibold">Lists</h2>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <.list_card :for={l <- @franchises} list={l} />
+          </div>
+        </section>
+
+        <%!-- Manga keeps its own section rather than joining the grid: a chapter of a manhwa and
             a film are not the same kind of thing, and the sources are searched on their own
             page. --%>
-      <section :if={@uuid && String.length(@q) >= 2} class="space-y-3">
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 class="text-xl font-semibold">Manga</h2>
-          <a href={"/manga/search?q=" <> URI.encode_www_form(@q)} class="text-sm text-primary">
-            Search every source for “{@q}” →
-          </a>
-        </div>
-        <ul
-          :if={@manga != []}
-          class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
-        >
-          <li :for={m <- @manga} class="space-y-1">
-            <a href={~p"/manga/#{m.source}/#{m.slug}"} title={m.title}>
-              <img
-                src={manga_cover(m)}
-                alt={m.title}
-                loading="lazy"
-                class="aspect-[2/3] w-full rounded-box object-cover"
-              />
+        <section :if={@uuid && String.length(@q) >= 2} class="space-y-3">
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 class="text-xl font-semibold">Manga</h2>
+            <a href={"/manga/search?q=" <> URI.encode_www_form(@q)} class="text-sm text-primary">
+              Search every source for “{@q}” →
             </a>
-          </li>
-        </ul>
-        <p :if={@manga == []} class="text-sm text-base-content/60">
-          Nothing you are reading matches.
-        </p>
-      </section>
+          </div>
+          <ul
+            :if={@manga != []}
+            class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+          >
+            <li :for={m <- @manga} class="space-y-1">
+              <a href={~p"/manga/#{m.source}/#{m.slug}"} title={m.title}>
+                <img
+                  src={manga_cover(m)}
+                  alt={m.title}
+                  loading="lazy"
+                  class="aspect-[2/3] w-full rounded-box object-cover"
+                />
+              </a>
+            </li>
+          </ul>
+          <p :if={@manga == []} class="text-sm text-base-content/60">
+            Nothing you are reading matches.
+          </p>
+        </section>
 
-      <section :if={@shelf.items != []} class="space-y-3">
-        <h2 class="text-xl font-semibold">
-          Results for “{@q}”
-        </h2>
-        <%!-- The same grid as Movies, Shows and Anime: larger posters, whole rows while there is
+        <section :if={@shelf.items != []} class="space-y-3">
+          <h2 class="text-xl font-semibold">
+            Results for “{@q}”
+          </h2>
+          <%!-- The same grid as Movies, Shows and Anime: larger posters, whole rows while there is
               more, and "Load more" under it. --%>
-        <ul
-          id="grid"
-          phx-hook="FillGrid"
-          data-more={to_string(@shelf.more?)}
-          data-page={@shelf.page}
-          data-restore-y={@place_y}
-          class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
-        >
-          <li :for={i <- @shelf.items} class="space-y-1">
-            <.poster
-              item={i}
-              seen={MapSet.member?(@seen, {i.type, i.id})}
-              cached_titles={@cached_titles}
-              compact
-            />
-          </li>
-        </ul>
-        <div :if={@shelf.more?} class="flex justify-center pt-4">
-          <button phx-click="more" class="btn btn-wide" disabled={@shelf.loading?}>
-            <span :if={@shelf.loading?} class="loading loading-spinner loading-sm"></span> Load more
-          </button>
-        </div>
-      </section>
+          <ul
+            id="grid"
+            phx-hook="FillGrid"
+            data-more={to_string(@shelf.more?)}
+            data-page={@shelf.page}
+            data-restore-y={@place_y}
+            class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+          >
+            <li :for={i <- @shelf.items} class="space-y-1">
+              <.poster
+                item={i}
+                seen={MapSet.member?(@seen, {i.type, i.id})}
+                cached_titles={@cached_titles}
+                compact
+              />
+            </li>
+          </ul>
+          <div :if={@shelf.more?} class="flex justify-center pt-4">
+            <button phx-click="more" class="btn btn-wide" disabled={@shelf.loading?}>
+              <span :if={@shelf.loading?} class="loading loading-spinner loading-sm"></span> Load more
+            </button>
+          </div>
+        </section>
+      </div>
     </Layouts.app>
     """
   end

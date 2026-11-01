@@ -10,6 +10,7 @@ defmodule RokiWeb.ListLive do
   """
   use RokiWeb, :live_view
 
+  import RokiWeb.PageHero
   import RokiWeb.PosterComponents
 
   alias PhoenixKit.Users.Auth.Scope
@@ -109,6 +110,7 @@ defmodule RokiWeb.ListLive do
     f = assigns.franchise
     entries = if f, do: Lists.entries(f, assigns.tier), else: []
     seen = assigns.seen
+
     items =
       Enum.map(entries, fn entry ->
         item = Lists.item(entry, assigns.cards)
@@ -118,6 +120,7 @@ defmodule RokiWeb.ListLive do
           poster -> %{item | poster: poster}
         end
       end)
+
     watched? = fn i -> seen != nil and MapSet.member?(seen, {i.type, i.id}) end
     left = if seen, do: Enum.count(items, &(not watched?.(&1))), else: nil
 
@@ -145,22 +148,31 @@ defmodule RokiWeb.ListLive do
     <Layouts.app
       socket={@socket}
       flash={@flash}
-      wide
+      flush
+      bleed
+      overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path="/lists"
     >
-      <div :if={@franchise} class="space-y-6">
-        <div class="space-y-1">
-          <.link navigate={~p"/lists"} class="text-sm text-base-content/60 hover:text-primary">
+      <.page_hero
+        :if={@franchise}
+        eyebrow={"#{@entry_count} titles, in release order#{summary_tail(@left)}"}
+        title={@franchise.name}
+        hue={:erlang.phash2(@slug, 360)}
+      >
+        <div>
+          <.link navigate={~p"/lists"} class="text-sm font-medium text-white/70 hover:text-white">
             ← All lists
           </.link>
-          <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">🎬 {@franchise.name}</h1>
-          <p class="text-base-content/70">
-            {@entry_count} titles, in release order{summary_tail(@left)}
-          </p>
         </div>
+      </.page_hero>
 
-        <div :if={@tabs != []} class="tabs tabs-box w-fit max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]" role="tablist">
+      <div :if={@franchise} class={content_class()}>
+        <div
+          :if={@tabs != []}
+          class="tabs tabs-box w-fit max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]"
+          role="tablist"
+        >
           <.link
             :for={t <- @tabs}
             patch={tab_path(@slug, t.key)}

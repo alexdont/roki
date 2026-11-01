@@ -136,7 +136,7 @@ defmodule RokiWeb.FeaturedLiveTest do
 
     test "stays an ordinary frosted bar on the pages without a picture behind it, search field included",
          %{conn: conn} do
-      {:ok, view, html} = live(conn, "/lists")
+      {:ok, view, html} = live(conn, "/study")
       refute html =~ "site-header--overlay"
       assert has_element?(view, ~s|header form[role="search"] input#search-input-wide|)
     end
