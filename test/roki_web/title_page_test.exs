@@ -58,7 +58,7 @@ defmodule RokiWeb.TitlePageTest do
 
     # What it shows is asked for when it is opened: held here, so nothing is fetched.
     Roki.TTLCache.put(
-      {:mdblist, "tv", 209_867},
+      {:mdblist, 2, "tv", 209_867},
       60,
       {:ok,
        [%{source: "imdb", order: 5, label: "IMDb", who: "Members", text: "8.9/10", votes: 86_755}]}

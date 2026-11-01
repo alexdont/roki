@@ -2172,6 +2172,11 @@ defmodule RokiWeb.TitleLive do
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <.score_tile :for={sc <- @reviews.scores} sc={sc} />
               </div>
+              <p class="text-xs text-base-content/50">
+                Each score is set against what a typical title gets on that service (the tick on the
+                bar), since a 6.6 on IMDb and a 60% on Rotten Tomatoes are both ordinary. Tap a score to
+                open the title there.
+              </p>
             </section>
 
             <section :if={@reviews.critics} class="space-y-2">
@@ -2216,20 +2221,68 @@ defmodule RokiWeb.TitleLive do
 
   attr :sc, :map, required: true
 
-  # One service's score; a link to the title on that service when we have the address.
+  # One service's score; a link to the title on that service when we have the address. Put against
+  # what is typical on that service (`Roki.Reviews.compare/3`): the number takes the colour of how
+  # it fares — green well above, amber about typical, red well below — and a bar shows the score
+  # with a tick where a typical title sits.
   defp score_tile(assigns) do
+    assigns = assign(assigns, :tone, score_tone(assigns.sc[:verdict]))
+
     ~H"""
-    <.link_or_div url={@sc[:url]}>
-      <div class="text-2xl font-bold tabular-nums leading-tight">{@sc.text}</div>
-      <div class="text-sm font-semibold leading-tight">{@sc.label}</div>
+    <.link_or_div url={@sc[:url]} border={@tone.border}>
+      <div class={["text-2xl font-bold tabular-nums leading-tight", @tone.text]}>{@sc.text}</div>
+      <div class="flex items-center gap-1 text-sm font-semibold leading-tight">
+        {@sc.label}
+        <.icon
+          :if={@sc[:url]}
+          name="hero-arrow-top-right-on-square-micro"
+          class="h-3.5 w-3.5 text-base-content/40"
+        />
+      </div>
       <div class="text-xs text-base-content/60">
         {@sc.who}<span :if={@sc.votes}> · {thousands(@sc.votes)} ratings</span>
+      </div>
+      <div :if={@sc[:norm]} class="mt-2 space-y-1">
+        <div
+          class="relative h-1.5 rounded-full bg-base-300"
+          role="img"
+          aria-label={score_verdict(@sc)}
+          title={"A typical title scores about #{@sc.typical} out of 100 on #{@sc.label}"}
+        >
+          <div class={["h-full rounded-full", @tone.bar]} style={"width: #{min(@sc.norm, 100)}%"}></div>
+          <span
+            class="absolute -top-0.5 h-2.5 w-0.5 rounded bg-base-content/60"
+            style={"left: #{@sc.typical}%"}
+          >
+          </span>
+        </div>
+        <div class={["text-[0.7rem] font-medium leading-tight", @tone.text]}>{score_verdict(@sc)}</div>
       </div>
     </.link_or_div>
     """
   end
 
+  defp score_tone(:great), do: %{text: "text-success", bar: "bg-success", border: "border-success/40"}
+  defp score_tone(:good), do: %{text: "text-success/80", bar: "bg-success/70", border: "border-success/25"}
+  defp score_tone(:typical), do: %{text: "text-warning", bar: "bg-warning/80", border: "border-base-300"}
+  defp score_tone(:below), do: %{text: "text-orange-500", bar: "bg-orange-400", border: "border-orange-400/30"}
+  defp score_tone(:poor), do: %{text: "text-error", bar: "bg-error", border: "border-error/30"}
+  defp score_tone(_), do: %{text: "", bar: "bg-base-content/30", border: "border-base-300"}
+
+  defp score_verdict(%{verdict: verdict, delta: delta}) do
+    sign = if delta > 0, do: "+#{delta}", else: "#{delta}"
+
+    case verdict do
+      :great -> "Far above typical · #{sign}"
+      :good -> "Above typical · #{sign}"
+      :typical -> "About typical"
+      :below -> "Below typical · #{sign}"
+      :poor -> "Far below typical · #{sign}"
+    end
+  end
+
   attr :url, :string, default: nil
+  attr :border, :string, default: "border-base-300"
   slot :inner_block, required: true
 
   defp link_or_div(%{url: url} = assigns) when is_binary(url) do
@@ -2238,7 +2291,7 @@ defmodule RokiWeb.TitleLive do
       href={@url}
       target="_blank"
       rel="noopener"
-      class="block rounded-box border border-base-300 bg-base-200/50 p-3 transition hover:border-primary/50"
+      class={["block rounded-box border bg-base-200/50 p-3 transition hover:border-primary/60 hover:bg-base-200", @border]}
     >
       {render_slot(@inner_block)}
     </a>
@@ -2247,7 +2300,7 @@ defmodule RokiWeb.TitleLive do
 
   defp link_or_div(assigns) do
     ~H"""
-    <div class="rounded-box border border-base-300 bg-base-200/50 p-3">
+    <div class={["rounded-box border bg-base-200/50 p-3", @border]}>
       {render_slot(@inner_block)}
     </div>
     """

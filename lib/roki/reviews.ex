@@ -58,7 +58,7 @@ defmodule Roki.Reviews do
       end)
 
     base =
-      case TTLCache.fetch({:mdblist, type, id}, @ttl_s, fn -> fetch_scores(type, id) end) do
+      case TTLCache.fetch({:mdblist, 2, type, id}, @ttl_s, fn -> fetch_scores(type, id) end) do
         {:ok, list} -> list
         _ -> []
       end
@@ -76,6 +76,7 @@ defmodule Roki.Reviews do
               votes: nil,
               url: url
             }
+            |> compare(score / 5 * 100, 68)
           ]
 
         _ ->
@@ -87,14 +88,21 @@ defmodule Roki.Reviews do
 
   defp fetch_scores(type, id) do
     with k when is_binary(k) <- key(),
-         {:ok, %{status: 200, body: %{"ratings" => ratings}}} <-
+         {:ok, %{status: 200, body: %{"ratings" => ratings} = body}} <-
            Req.get(
              "https://api.mdblist.com/tmdb/#{if type == "movie", do: "movie", else: "show"}/#{id}",
              params: [apikey: k],
              retry: false,
              receive_timeout: 6_000
            ) do
-      {:ok, ratings |> Enum.map(&tile/1) |> Enum.reject(&is_nil/1) |> Enum.sort_by(& &1.order)}
+      ctx = %{ids: body["ids"] || %{}, type: type, id: id}
+
+      {:ok,
+       ratings
+       |> Enum.map(&tile(&1, ctx))
+       |> Enum.reject(&is_nil/1)
+       |> with_user_reviews_link()
+       |> Enum.sort_by(& &1.order)}
     else
       {:ok, %{status: 404}} -> {:ok, []}
       _ -> :error
@@ -103,22 +111,41 @@ defmodule Roki.Reviews do
     _ -> :error
   end
 
-  # source → {order, name, who, how to write the number}
+  # source → {order, name, who, how to write the number, the score a typical title gets there (0–100)}.
+  # The typical scores are rough, long-standing figures for each service's own scale — where most
+  # titles on it sit — not measured by this site: a 6.6 on IMDb and a 60% on Rotten Tomatoes are
+  # both "ordinary", and the two numbers say nothing about each other until they are put against
+  # that.
   @sources %{
-    "tomatoes" => {1, "Rotten Tomatoes", "Critics", :percent},
-    "popcorn" => {2, "Rotten Tomatoes", "Audience", :percent},
-    "metacritic" => {3, "Metacritic", "Critics", :plain},
-    "metacriticuser" => {4, "Metacritic", "Users", :plain},
-    "imdb" => {5, "IMDb", "Members", {:out_of, 10}},
-    "letterboxd" => {6, "Letterboxd", "Members", {:out_of, 5}},
-    "trakt" => {7, "Trakt", "Members", :percent},
-    "tmdb" => {8, "TMDB", "Members", :percent},
-    "myanimelist" => {9, "MyAnimeList", "Members", {:out_of, 10}},
-    "rogerebert" => {10, "Roger Ebert", "Critic", {:out_of, 4}}
+    "tomatoes" => {1, "Rotten Tomatoes", "Critics", :percent, 60},
+    "popcorn" => {2, "Rotten Tomatoes", "Audience", :percent, 65},
+    "metacritic" => {3, "Metacritic", "Critics", :plain, 58},
+    "metacriticuser" => {4, "Metacritic", "Users", :plain, 68},
+    "imdb" => {5, "IMDb", "Members", {:out_of, 10}, 66},
+    "letterboxd" => {6, "Letterboxd", "Members", {:out_of, 5}, 66},
+    "trakt" => {7, "Trakt", "Members", :percent, 70},
+    "tmdb" => {8, "TMDB", "Members", :percent, 64},
+    "myanimelist" => {9, "MyAnimeList", "Members", {:out_of, 10}, 67},
+    "rogerebert" => {10, "Roger Ebert", "Critic", {:out_of, 4}, 70}
   }
 
-  defp tile(%{"source" => source, "value" => value} = r) when is_number(value) do
-    with {order, label, who, how} <- @sources[source] do
+  # MDBList gives Metacritic's users no page of their own: it is the critics' page's user reviews.
+  defp with_user_reviews_link(tiles) do
+    critics = Enum.find(tiles, &(&1.source == "metacritic" and is_binary(&1.url)))
+
+    Enum.map(tiles, fn
+      %{source: "metacriticuser", url: nil} = t when not is_nil(critics) ->
+        %{t | url: String.trim_trailing(critics.url, "/") <> "/user-reviews/"}
+
+      t ->
+        t
+    end)
+  end
+
+  @doc false
+  # One service's score as the sheet draws it. `ctx` is `%{ids:, type:, id:}` from the MDBList answer.
+  def tile(%{"source" => source, "value" => value} = r, ctx) when is_number(value) do
+    with {order, label, who, how, typical} <- @sources[source] do
       %{
         source: source,
         order: order,
@@ -126,14 +153,61 @@ defmodule Roki.Reviews do
         who: who,
         text: number(value, how),
         votes: if(is_integer(r["votes"]) and r["votes"] > 0, do: r["votes"]),
-        url: nil
+        url: link(source, r["url"], ctx)
       }
+      |> compare(normalised(r, value, how), typical)
     else
       _ -> nil
     end
   end
 
-  defp tile(_), do: nil
+  def tile(_, _ctx), do: nil
+
+  # 0–100: MDBList's own conversion where it has one, else from the number and its scale.
+  defp normalised(%{"score" => n}, _value, _how) when is_number(n), do: n * 1.0
+  defp normalised(_r, value, {:out_of, n}), do: value / n * 100
+  defp normalised(_r, value, _how), do: value * 1.0
+
+  @doc """
+  Puts a score against what is typical for its service: `norm` (0–100), `typical`, `delta` (points above
+  or below it) and a `verdict`: `:great` (15 or more above), `:good` (5–15 above), `:typical`,
+  `:below` (5–15 under) or `:poor` (15 or more under).
+  """
+  def compare(tile, norm, typical) when is_number(norm) do
+    delta = norm - typical
+
+    verdict =
+      cond do
+        delta >= 15 -> :great
+        delta >= 5 -> :good
+        delta > -5 -> :typical
+        delta > -15 -> :below
+        true -> :poor
+      end
+
+    Map.merge(tile, %{norm: Float.round(norm * 1.0, 1), typical: typical, delta: round(delta), verdict: verdict})
+  end
+
+  def compare(tile, _norm, _typical), do: tile
+
+  # The title's page on a service. MDBList gives some as a path on the service's own site, some as a
+  # slug, some not at all (then the service's id for the title, which it also gives, makes one).
+  defp link("imdb", _url, %{ids: %{"imdb" => "tt" <> _ = imdb}}), do: "https://www.imdb.com/title/#{imdb}/"
+  defp link(source, "/" <> _ = path, _ctx) when source in ["tomatoes", "popcorn"], do: "https://www.rottentomatoes.com" <> path
+  defp link("metacritic", "/" <> _ = path, %{type: type}), do: "https://www.metacritic.com/#{kind(type)}#{String.trim_trailing(path, "/")}/"
+
+  defp link("metacriticuser", "/" <> _ = path, %{type: type}),
+    do: "https://www.metacritic.com/#{kind(type)}#{String.trim_trailing(path, "/")}/user-reviews/"
+
+  defp link("letterboxd", "/" <> _ = path, _ctx), do: "https://letterboxd.com" <> path
+  defp link("rogerebert", slug, _ctx) when is_binary(slug) and slug != "" and not is_integer(slug), do: "https://www.rogerebert.com/reviews/" <> slug
+  defp link("tmdb", _url, %{type: type, id: id}), do: "https://www.themoviedb.org/#{kind(type)}/#{id}"
+  defp link("trakt", _url, %{ids: %{"imdb" => "tt" <> _ = imdb}}), do: "https://trakt.tv/search/imdb/#{imdb}"
+  defp link("myanimelist", _url, %{ids: %{"mal" => mal}}) when is_integer(mal), do: "https://myanimelist.net/anime/#{mal}"
+  defp link(_source, _url, _ctx), do: nil
+
+  defp kind("movie"), do: "movie"
+  defp kind(_), do: "tv"
 
   defp number(v, :percent), do: "#{round(v)}%"
   defp number(v, :plain), do: trim(v)
