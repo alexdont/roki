@@ -59,37 +59,88 @@ defmodule Roki.AnimeRankTest do
     assert Enum.map(ranked, & &1.id) == [1, 4, 2, 3]
   end
 
-  test "refine asks only about the most popular old shows, and only once each" do
+  defp seasons(list), do: for({n, date, poster} <- list, do: %{n: n, air_date: date && Date.from_iso8601!(date), poster: poster})
+
+  defp jojo,
+    do:
+      seasons([
+        {0, "2017-09-20", "/special.jpg"},
+        {1, "2012-10-06", "/s1.jpg"},
+        {5, "2022-01-08", "/s5.jpg"},
+        {6, "2026-03-19", "/s6.jpg"}
+      ])
+
+  test "a show that is back with a later season is drawn with that season's poster" do
+    items = [%{id: 1, year: "2012", popularity: 120.0, poster: "https://image.tmdb.org/t/p/w342/s1.jpg"}]
+
+    [item] = AnimeRank.refine(items, ~D[2026-12-31], fn 1 -> jojo() end)
+    assert item.poster == "https://image.tmdb.org/t/p/w342/s6.jpg"
+    assert item.season_year == 2026
+  end
+
+  test "the season that counts is the latest one begun by the end of the period looked at" do
+    items = [%{id: 1, year: "2012", popularity: 120.0, poster: "old"}]
+
+    # Looking at the winter of 2022: its season is the fifth, not the one that came later
+    [item] = AnimeRank.refine(items, ~D[2022-03-31], fn 1 -> jojo() end)
+    assert item.poster == "https://image.tmdb.org/t/p/w342/s5.jpg"
+    assert item.season_year == 2022
+  end
+
+  test "a show with one season, or whose latest season is long past, keeps the show's poster" do
+    one = [%{id: 2, year: "2005", popularity: 280.0, poster: "show"}]
+    [item] = AnimeRank.refine(one, ~D[2026-12-31], fn 2 -> seasons([{1, "2005-04-22", "/s1.jpg"}]) end)
+    assert item.poster == "show"
+
+    old = [%{id: 3, year: "2004", popularity: 50.0, poster: "show"}]
+
+    [item] = AnimeRank.refine(old, ~D[2026-12-31], fn 3 -> seasons([{1, "2004-10-05", "/a.jpg"}, {2, "2019-04-01", "/b.jpg"}]) end)
+    assert item.poster == "show"
+    # but the age that counts is still its latest season's
+    assert item.season_year == 2019
+  end
+
+  test "a season with no poster, an undated or special season, or a show not read, leaves the item as it was" do
+    items = [%{id: 4, year: "2010", popularity: 10.0, poster: "show"}, %{id: 5, year: "2011", popularity: 9.0, poster: "show2"}]
+
+    seasons_of = fn
+      4 -> seasons([{1, "2010-01-01", "/a.jpg"}, {2, "2026-04-01", nil}, {0, "2026-05-01", "/special.jpg"}, {3, nil, "/c.jpg"}])
+      5 -> []
+    end
+
+    [a, b] = AnimeRank.refine(items, ~D[2026-12-31], seasons_of)
+    assert a.poster == "show"
+    assert a.season_year == 2026
+    assert b == Enum.at(items, 1)
+  end
+
+  test "new shows and shows begun this year are not asked about; the most popular old ones are, once each" do
     items = [
-      %{id: 1, year: "2004", popularity: 196.0},
-      %{id: 2, year: "2005", popularity: 278.0},
-      %{id: 3, year: "2026", popularity: 25.0},
-      %{id: 4, year: "1990", popularity: 5.0}
+      %{id: 1, year: "2026", popularity: 90.0},
+      %{id: 2, year: "2004", popularity: 196.0},
+      %{id: 3, year: "2005", popularity: 278.0},
+      %{id: 4, year: "1990", popularity: 5.0},
+      %{id: 5, year: nil, popularity: 99.0}
     ]
 
     {:ok, asked} = Agent.start_link(fn -> [] end)
 
-    refined =
-      AnimeRank.refine(
-        items,
-        2026,
-        fn id ->
-          Agent.update(asked, &[id | &1])
-          if id == 1, do: 2022
-        end,
-        2
-      )
-
-    assert Agent.get(asked, & &1) |> Enum.sort() == [1, 2]
-    assert Enum.find(refined, &(&1.id == 1)).season_year == 2022
-    refute Map.has_key?(Enum.find(refined, &(&1.id == 3)), :season_year)
-    refute Map.has_key?(Enum.find(refined, &(&1.id == 4)), :season_year)
+    AnimeRank.refine(items, ~D[2026-12-31], fn id -> Agent.update(asked, &[id | &1]); [] end, 2)
+    assert Agent.get(asked, & &1) |> Enum.sort() == [2, 3]
   end
 
-  test "the latest season's year is read from TMDB's season list" do
-    details = %{"seasons" => [%{"season_number" => 0, "air_date" => "2030-01-01"}, %{"season_number" => 1, "air_date" => "2004-10-05"}, %{"season_number" => 2, "air_date" => "2022-10-11"}, %{"season_number" => 3, "air_date" => ""}]}
-    assert AnimeRank.season_year(details) == 2022
-    assert AnimeRank.season_year(%{"seasons" => []}) == nil
-    assert AnimeRank.season_year(%{}) == nil
+  test "TMDB's season list is read into dates and posters" do
+    details = %{
+      "seasons" => [
+        %{"season_number" => 0, "air_date" => "2017-09-20", "poster_path" => "/sp.jpg"},
+        %{"season_number" => 1, "air_date" => "2004-10-05", "poster_path" => "/a.jpg"},
+        %{"season_number" => 2, "air_date" => "", "poster_path" => nil}
+      ]
+    }
+
+    assert [%{n: 0}, %{n: 1, air_date: ~D[2004-10-05], poster: "/a.jpg"}, %{n: 2, air_date: nil, poster: nil}] =
+             AnimeRank.parse_seasons(details)
+
+    assert AnimeRank.parse_seasons(%{}) == []
   end
 end

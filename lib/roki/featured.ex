@@ -18,7 +18,7 @@ defmodule Roki.Featured do
 
   # Bumped when what a cached page *contains* changes, so old answers are ignored
   # rather than served for up to 12 hours.
-  @version 6
+  @version 7
 
   # Every shelf is this many titles a page, so Shows is as tall as Movies even though
   # the anime taken out of TMDB's trending list leaves a TMDB page 15-17 short.
@@ -86,19 +86,19 @@ defmodule Roki.Featured do
   # the signed-in user's own carried key. The answer is public data either way, so
   # it lands in the shared cache and the next visitor gets it free.
   defp fetch(kind, n, uuid) do
-    result = Roki.Laev.public(uuid, fn -> call(kind, n) end)
+    result = Roki.Laev.public(uuid, fn -> call(kind, n, uuid) end)
     with {:ok, items, _more?} <- result, do: Roki.Titles.remember_later(items)
     result
   end
 
-  defp call(:movies, n), do: Laev.Tmdb.trending("movie", n)
+  defp call(:movies, n, _uuid), do: Laev.Tmdb.trending("movie", n)
   # Anime airing now, current first: TMDB's list is by popularity, which puts the evergreens
   # (Doraemon, Detective Conan, Bleach) first every week. A few pages of it are read together and
   # put in order by `Roki.AnimeRank`, then cut into pages of twenty.
   @anime_depth 4
 
-  defp call(:anime, n) do
-    with {:ok, pool, _} <- memo(:anime_pool, &anime_pool/0) do
+  defp call(:anime, n, uuid) do
+    with {:ok, pool, _} <- memo(:anime_pool, fn -> anime_pool(uuid) end) do
       {:ok, Enum.slice(pool, (n - 1) * @page_size, @page_size), length(pool) > n * @page_size}
     end
   end
@@ -106,7 +106,7 @@ defmodule Roki.Featured do
   # Anime is what MyAnimeList has an entry for — laev's own definition, the one it
   # splits your stats by — so those come out of Shows. Live-action One Piece is a
   # different TMDB id and stays.
-  defp call(:shows, n) do
+  defp call(:shows, n, _uuid) do
     with {:ok, _count} <- Laev.AnimeMap.ensure() do
       shows_slice(n, &raw_tv/1, &Laev.AnimeMap.anime?("tv", &1))
     end
@@ -116,7 +116,7 @@ defmodule Roki.Featured do
   # TMDB pages page 1 already read.
   defp raw_tv(p), do: memo({:tv_raw, p}, fn -> Laev.Tmdb.trending("tv", p) end)
 
-  defp anime_pool do
+  defp anime_pool(uuid) do
     result =
       Enum.reduce_while(1..@anime_depth, {:ok, []}, fn p, {:ok, acc} ->
         case Laev.Tmdb.discover_anime(p) do
@@ -126,13 +126,13 @@ defmodule Roki.Featured do
       end)
 
     with {:ok, items} <- result do
-      year = Date.utc_today().year
+      today = Date.utc_today()
 
       ranked =
         items
         |> Enum.uniq_by(& &1.id)
-        |> Roki.AnimeRank.refine(year, &Roki.AnimeRank.latest_season_year/1)
-        |> Roki.AnimeRank.rank(year)
+        |> Roki.AnimeRank.refine(today, &Roki.AnimeRank.seasons_of(&1, uuid))
+        |> Roki.AnimeRank.rank(today.year)
 
       {:ok, ranked, false}
     end

@@ -74,58 +74,101 @@ defmodule Roki.AnimeRank do
   defp began(_item), do: 0
 
   @doc """
-  The year each of the most popular old shows among `items` last began a season (`:season_year`),
-  asked of `latest_season_year` (an id → year or nil). Only the `limit` most popular of the shows
-  that began four or more years before `year` are asked about — they are the ones a new season of
-  an old show (Bleach, JoJo) would come from and the ones whose weight it changes.
+  Looks at the seasons of the shows among `items` that began before `ref_date`'s year (the most
+  popular `limit` of them), asked of `seasons_of` (an id → `[%{n:, air_date:, poster:}]`), and
+  sets two things on each:
+
+    * `:season_year` — the year its latest season (by `ref_date`) began, which `age/2` counts by:
+      Bleach began in 2004, its season airing now in 2022.
+    * `:poster` — that season's own poster, when the show has several seasons and the latest of
+      them began within three years of `ref_date`. TMDB's poster for a show is its first season's,
+      so a show that is back with a later season (JoJo's is on its seventh part) would otherwise
+      be drawn as it was years ago. A show with one season, or whose latest season is long past,
+      keeps the show's poster.
+
+  `ref_date` is the end of the period being looked at (today, for what is on now). The seasons of
+  the shows are asked for a few at a time, which is what `uuid` is for: each asks in its own scope.
   """
-  def refine(items, year, latest_season_year, limit \\ 12) do
+  def refine(items, ref_date, seasons_of, limit \\ 40) do
+    year = ref_date.year
+
     asked =
       items
-      |> Enum.filter(&(age(&1, year) >= 4))
+      |> Enum.filter(&(began(&1) in 1..(year - 1)//1))
       |> Enum.sort_by(&(-(&1[:popularity] || 0)))
       |> Enum.take(limit)
-      |> MapSet.new(& &1[:id])
+
+    found =
+      asked
+      |> Task.async_stream(&{&1[:id], seasons_of.(&1[:id])},
+        max_concurrency: 8,
+        timeout: 25_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.reduce(%{}, fn
+        {:ok, {id, [_ | _] = seasons}}, acc -> Map.put(acc, id, seasons)
+        _, acc -> acc
+      end)
 
     Enum.map(items, fn item ->
-      if MapSet.member?(asked, item[:id]),
-        do: Map.put(item, :season_year, latest_season_year.(item[:id])),
-        else: item
+      case Map.get(found, item[:id]) do
+        nil -> item
+        seasons -> apply_seasons(item, seasons, ref_date)
+      end
     end)
   end
 
+  defp apply_seasons(item, seasons, ref_date) do
+    dated =
+      seasons
+      |> Enum.filter(&(&1.n > 0 and match?(%Date{}, &1.air_date) and Date.compare(&1.air_date, ref_date) != :gt))
+      |> Enum.sort_by(& &1.air_date, Date)
+
+    case List.last(dated) do
+      nil ->
+        item
+
+      latest ->
+        item = Map.put(item, :season_year, latest.air_date.year)
+
+        if length(dated) >= 2 and is_binary(latest.poster) and
+             Date.diff(ref_date, latest.air_date) <= 3 * 366,
+           do: Map.put(item, :poster, Laev.Tmdb.poster_url(latest.poster, "w342")),
+           else: item
+    end
+  end
+
   @doc """
-  The year the latest season of a TMDB show began (nil when TMDB dates none), kept for half a
-  day. Season 0 (specials) does not count. Runs in a laev scope that holds a TMDB key.
+  A show's seasons as TMDB lists them — `[%{n:, air_date:, poster:}]` (`[]` when it cannot be read) —
+  kept for half a day, whoever asks. Runs in `uuid`'s scope (or the site's own key): it is called
+  from several tasks at once, none of which has one.
   """
-  def latest_season_year(id) do
-    case Roki.TTLCache.fetch({:anime_season_year, id}, 12 * 3600, fn ->
-           case Laev.Tmdb.tv(id) do
-             {:ok, details} -> {:ok, season_year(details)}
-             _ -> {:error, :unknown}
-           end
+  def seasons_of(id, uuid) do
+    case Roki.TTLCache.fetch({:anime_seasons, id}, 12 * 3600, fn ->
+           Roki.Laev.public(uuid, fn ->
+             case Laev.Tmdb.tv(id) do
+               {:ok, details} -> {:ok, parse_seasons(details)}
+               _ -> {:error, :unknown}
+             end
+           end)
          end) do
-      {:ok, year} -> year
-      _ -> nil
+      {:ok, seasons} -> seasons
+      _ -> []
     end
   end
 
   @doc false
-  def season_year(%{"seasons" => seasons}) when is_list(seasons) do
-    seasons
-    |> Enum.filter(&((&1["season_number"] || 0) > 0))
-    |> Enum.flat_map(fn
-      %{"air_date" => <<year::binary-size(4), _::binary>>} ->
-        case Integer.parse(year) do
-          {n, ""} -> [n]
-          _ -> []
-        end
+  def parse_seasons(%{"seasons" => seasons}) when is_list(seasons) do
+    for s <- seasons, is_integer(s["season_number"]) do
+      air_date =
+        with date when is_binary(date) <- s["air_date"],
+             {:ok, d} <- Date.from_iso8601(date),
+             do: d,
+             else: (_ -> nil)
 
-      _ ->
-        []
-    end)
-    |> Enum.max(fn -> nil end)
+      %{n: s["season_number"], air_date: air_date, poster: s["poster_path"]}
+    end
   end
 
-  def season_year(_details), do: nil
+  def parse_seasons(_details), do: []
 end

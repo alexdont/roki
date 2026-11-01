@@ -111,7 +111,7 @@ defmodule Roki.Browse do
 
   # What a page is kept under. Anime's lists (not the Anime Corner ranking) carry a version of their
   # own, bumped when the order they are in changes, so a kept page of the old order is not shown.
-  @anime_order 4
+  @anime_order 5
 
   defp key(:anime, sort, season, week, genre, n) when sort != :corner,
     do: {:browse, :anime, sort, season, week, genre, n, @anime_order}
@@ -225,11 +225,12 @@ defmodule Roki.Browse do
              {:ok, airing} <- pool(&airing(season, &1, genre)) do
           new = MapSet.new(premiered, & &1.id)
           year = elem(season, 0)
+          {_from, to} = Laev.Season.window(season)
 
           items =
             (airing ++ premiered)
             |> Enum.uniq_by(& &1.id)
-            |> Roki.AnimeRank.refine(year, &Roki.AnimeRank.latest_season_year/1)
+            |> Roki.AnimeRank.refine(Date.from_iso8601!(to), &Roki.AnimeRank.seasons_of(&1, uuid))
 
           {:ok, Roki.AnimeRank.rank(items, year, new)}
         end
