@@ -41,6 +41,14 @@ defmodule Roki.SeasonPosters do
 
   def for_title(title, _season, _uuid), do: title
 
+  @doc "The latest season of a show to have begun when it has several (what its poster shows), or nil."
+  def latest_season(tv_id, uuid) when is_integer(tv_id) do
+    case pick(seasons(tv_id, uuid), nil) do
+      %{n: n} -> n
+      _ -> nil
+    end
+  end
+
   @doc "The poster of one season of a show as kept, with no request: a URL, or nil."
   def stored_poster(tv_id, season) when is_integer(tv_id) and is_integer(season) do
     case read_many([tv_id]) do

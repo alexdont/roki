@@ -26,7 +26,7 @@ defmodule RokiWeb.CardController do
         genres: Enum.take(t.genres || [], 3),
         overview: shorten(t.overview),
         backdrop: t.backdrop && Roki.Images.local(t.backdrop),
-        trailer: Roki.Trailers.key(type, n, uuid),
+        trailer: Roki.Trailers.key(type, n, uuid, trailer_season(t, n, uuid)),
         seasons: if(type == "tv", do: length(t.seasons || []))
       })
     else
@@ -34,6 +34,10 @@ defmodule RokiWeb.CardController do
       _ -> send_resp(conn, 404, "")
     end
   end
+
+  # An anime that is back with a new season shows that season's trailer, as its poster shows its poster.
+  defp trailer_season(%{anime?: true}, n, uuid), do: Roki.SeasonPosters.latest_season(n, uuid)
+  defp trailer_season(_, _, _), do: nil
 
   # A few lines' worth, cut at a word, not in the middle of one.
   @overview_chars 190

@@ -108,11 +108,11 @@ defmodule RokiWeb.TitlePageTest do
 
   describe "the trailer" do
     setup do
-      on_exit(fn -> Roki.TTLCache.delete({:trailer, "tv", 209_867}) end)
+      on_exit(fn -> Roki.TTLCache.delete({:trailer, "tv", 209_867, nil}) end)
     end
 
     test "a title with one has a Trailer button, and a player sheet for it", %{conn: conn} do
-      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, "abc123xyz"})
+      Roki.TTLCache.put({:trailer, "tv", 209_867, nil}, 600, {:ok, "abc123xyz"})
       {:ok, view, _} = live(conn, "/title/tv/209867")
       render_async(view, 8000)
       html = render_async(view, 8000)
@@ -127,7 +127,7 @@ defmodule RokiWeb.TitlePageTest do
     end
 
     test "one without has neither", %{conn: conn} do
-      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, nil})
+      Roki.TTLCache.put({:trailer, "tv", 209_867, nil}, 600, {:ok, nil})
       {:ok, view, _} = live(conn, "/title/tv/209867")
       render_async(view, 8000)
       html = render_async(view, 8000)
@@ -139,7 +139,7 @@ defmodule RokiWeb.TitlePageTest do
 
   describe "the wide-screen page" do
     setup do
-      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, "abc123xyz"})
+      Roki.TTLCache.put({:trailer, "tv", 209_867, nil}, 600, {:ok, "abc123xyz"})
 
       Roki.TTLCache.put(
         {:credits, "tv", 209_867},
@@ -153,7 +153,7 @@ defmodule RokiWeb.TitlePageTest do
       )
 
       on_exit(fn ->
-        Roki.TTLCache.delete({:trailer, "tv", 209_867})
+        Roki.TTLCache.delete({:trailer, "tv", 209_867, nil})
         Roki.TTLCache.delete({:credits, "tv", 209_867})
       end)
     end
@@ -178,7 +178,7 @@ defmodule RokiWeb.TitlePageTest do
     end
 
     test "has no controls to offer when there is no trailer", %{conn: conn} do
-      Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, nil})
+      Roki.TTLCache.put({:trailer, "tv", 209_867, nil}, 600, {:ok, nil})
       html = open_page(conn)
 
       assert html =~ ~s(id="hero")

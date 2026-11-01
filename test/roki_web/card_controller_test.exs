@@ -10,12 +10,12 @@ defmodule RokiWeb.CardControllerTest do
       Code.eval_file(Path.expand("support/fixtures/frieren_title.exs", __DIR__ |> Path.dirname()))
 
     Roki.Titles.put(title)
-    on_exit(fn -> Roki.TTLCache.delete({:trailer, "tv", 209_867}) end)
+    on_exit(fn -> Roki.TTLCache.delete({:trailer, "tv", 209_867, nil}) end)
     :ok
   end
 
   test "a title's facts, its wide picture and its trailer, for anyone", %{conn: conn} do
-    Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, "abc123xyz"})
+    Roki.TTLCache.put({:trailer, "tv", 209_867, nil}, 600, {:ok, "abc123xyz"})
 
     json = conn |> get("/card/tv/209867") |> json_response(200)
 
@@ -33,7 +33,7 @@ defmodule RokiWeb.CardControllerTest do
   end
 
   test "a title with no trailer says so, rather than failing", %{conn: conn} do
-    Roki.TTLCache.put({:trailer, "tv", 209_867}, 600, {:ok, nil})
+    Roki.TTLCache.put({:trailer, "tv", 209_867, nil}, 600, {:ok, nil})
 
     assert %{"trailer" => nil, "title" => _} =
              conn |> get("/card/tv/209867") |> json_response(200)

@@ -15,17 +15,24 @@ defmodule Roki.Trailers do
   @ttl_s 24 * 3600
 
   @doc "The YouTube key of this film's or show's trailer, or nil. `type` is `\"movie\"` or `\"tv\"`."
-  def key(type, id, uuid \\ nil) when type in ["movie", "tv"] and is_integer(id) do
-    case TTLCache.fetch({:trailer, type, id}, @ttl_s, fn -> lookup(type, id, uuid) end) do
+  def key(type, id, uuid \\ nil, season \\ nil) when type in ["movie", "tv"] and is_integer(id) do
+    case TTLCache.fetch({:trailer, type, id, season}, @ttl_s, fn -> lookup(type, id, uuid, season) end) do
       {:ok, key} -> key
       _ -> nil
     end
   end
 
-  defp lookup(type, id, uuid) do
-    case Roki.Laev.public(uuid, fn -> videos(type, id) end) do
-      {:ok, results} -> {:ok, results |> candidates() |> Enum.find(&embeddable?/1)}
-      error -> error
+  # A show's season has its own videos on TMDB; when it has none the show's own are the answer.
+  defp lookup(type, id, uuid, season) do
+    case Roki.Laev.public(uuid, fn -> videos(type, id, season) end) do
+      {:ok, results} ->
+        case results |> candidates() |> Enum.find(&embeddable?/1) do
+          nil when is_integer(season) -> lookup(type, id, uuid, nil)
+          key -> {:ok, key}
+        end
+
+      error ->
+        error
     end
   end
 
@@ -65,8 +72,10 @@ defmodule Roki.Trailers do
     _ -> false
   end
 
-  defp videos(type, id) do
-    case Roki.TmdbApi.get("/#{type}/#{id}/videos", include_video_language: "en,null") do
+  defp videos(type, id, season) do
+    path = if is_integer(season), do: "/tv/#{id}/season/#{season}/videos", else: "/#{type}/#{id}/videos"
+
+    case Roki.TmdbApi.get(path, include_video_language: "en,null") do
       {:ok, %{"results" => results}} -> {:ok, results}
       {:ok, _} -> {:ok, []}
       error -> error
