@@ -191,7 +191,9 @@ defmodule RokiWeb.FeaturedLive do
 
   # No page-wide error for it: the row is simply not drawn when it has nothing to show.
   def handle_async(:seasonal, _other, socket),
-    do: {:noreply, put_shelf(socket, :seasonal, %{socket.assigns.shelves.seasonal | loading?: false})}
+    do:
+      {:noreply,
+       put_shelf(socket, :seasonal, %{socket.assigns.shelves.seasonal | loading?: false})}
 
   def handle_async({:page, kind}, {:ok, {page, {:ok, items, more?}, seen}}, socket) do
     shelf = socket.assigns.shelves[kind]
@@ -888,7 +890,9 @@ defmodule RokiWeb.FeaturedLive do
           {:anime, "Anime Airing Now", "/anime"}
         ] ++
           if(assigns.season && seasonal && (seasonal.items != [] or seasonal.loading?),
-            do: [{:seasonal, "Seasonal · #{assigns.season.label}", "/mood/#{assigns.season.slug}"}],
+            do: [
+              {:seasonal, "Seasonal · #{assigns.season.label}", "/mood/#{assigns.season.slug}"}
+            ],
             else: []
           )
       )
@@ -1163,6 +1167,16 @@ defmodule RokiWeb.FeaturedLive do
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
   attr :signed_in?, :boolean, default: false
+
+  attr :no_card?, :boolean,
+    default: false,
+    doc: "the card does not open (a page that is selecting)"
+
+  attr :keep_colour?, :boolean,
+    default: false,
+    doc: "the poster is never greyed for being watched (a list that is all watched titles)"
+
+  slot :overlay, doc: "over the poster, under the card that opens"
   slot :inner_block, doc: "under the poster, outside the card that opens"
 
   # A title in a grid: the poster, and — on a wide screen with a mouse — the same card that opens
@@ -1190,6 +1204,8 @@ defmodule RokiWeb.FeaturedLive do
       data-grid-card
       data-key={@key}
       data-signed={to_string(@signed_in?)}
+      data-no-card={@no_card? && ""}
+      data-keep-colour={@keep_colour? && ""}
       class="space-y-1"
     >
       <div class="group/card relative hover:z-20">
@@ -1203,6 +1219,7 @@ defmodule RokiWeb.FeaturedLive do
           rating_corner={:top_left}
           mark?={false}
         />
+        {render_slot(@overlay)}
         <.card_panel
           item={@item}
           key={@key}

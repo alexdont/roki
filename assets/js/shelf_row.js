@@ -66,6 +66,8 @@ const setWatched = (li, watched) => {
     )
     btn.title = btn.getAttribute("aria-label")
   }
+  // A list of what was watched (`data-keep-colour`) has no use for the grey: all of it is.
+  if (li.hasAttribute("data-keep-colour")) return
   li.querySelector("a.poster-card")?.classList.toggle("opacity-50", !!watched)
   li.querySelector("a.poster-card img")?.classList.toggle("grayscale", !!watched)
 }
@@ -174,7 +176,7 @@ export const cardMethods = {
     // again; leaving the poster closes it (or cancels the wait).
     this.scroller.addEventListener("mousemove", (e) => {
       const li = e.target.closest?.("[data-card]")
-      if (!li) { this.leave(); return }
+      if (!li || li.hasAttribute("data-no-card")) { this.leave(); return }
       if (li === this.hot) return
       const moved = !this.at || Math.hypot(e.clientX - this.at.x, e.clientY - this.at.y) > STILL_PX
       if (li !== this.cand || moved) {

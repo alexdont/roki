@@ -323,6 +323,8 @@ defmodule RokiWeb.Router do
       live "/:username/calendar", CalendarLive, :index
       live "/:username/settings", SettingsLive, :index
       live "/:username/watched", WatchedLive, :index
+      # A page to try, linked from nowhere yet.
+      live "/:username/dating", DatingLive, :index
       live "/:username/friends", FriendsLive, :index
       # Reading, tiers, boards and what was said — the account's own pages, out of the reader's
       # menu and into the account menu. Each is owner-only.

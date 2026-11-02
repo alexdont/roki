@@ -430,10 +430,18 @@ defmodule RokiWeb.ProfileLiveTest do
     view |> element("button[phx-click=select_toggle][phx-value-key='movie:2']") |> render_click()
     assert render(view) =~ "1</b> selected"
     view |> element("button", "Edit watch date") |> render_click()
+    # One date field, written day/month/year with the calendar beside it; the date sent is ISO.
     assert has_element?(view, "#date-form input[type=date]")
-    # It opens on today's date, not blank, so it is plain what the field is.
-    today = Date.utc_today() |> Date.to_iso8601()
-    assert has_element?(view, "#date-form input[type=date][value='#{today}']")
+    assert has_element?(view, "#date-form input[data-eu-text][placeholder='dd/mm/yyyy']")
+    # It opens on a date, not blank: the day this title is on now (here a title with none: today).
+    today = Date.utc_today()
+    iso = Date.to_iso8601(today)
+    assert has_element?(view, "#date-form input[type=date][value='#{iso}']")
+
+    assert has_element?(
+             view,
+             "#date-form input[data-eu-text][value='#{Calendar.strftime(today, "%d/%m/%Y")}']"
+           )
 
     # The future is refused.
     future = Date.utc_today() |> Date.add(30) |> Date.to_iso8601()

@@ -231,6 +231,26 @@ defmodule Roki.ProfileTest do
            ).rows == [[0]]
   end
 
+  test "a show watched a season or two and not finished takes the date of the latest season dated" do
+    {:ok, bin} = Ecto.UUID.dump(@uuid)
+
+    for {id, title} <- [{3, "Half Watched"}, {4, "Never Dated"}] do
+      Roki.Repo.query!(
+        "insert into roki_watched (user_uuid, type, id, tmdb_type, tmdb_id, title, anime, at, dated, status) values ($1, 'tv', $2, 'tv', $2, $3, false, to_timestamp(0), false, 'progress')",
+        [bin, id, title]
+      )
+    end
+
+    :ok = Profile.set_season_date(@uuid, "tv", 3, 1, ~D[2019-01-16])
+    :ok = Profile.set_season_date(@uuid, "tv", 3, 2, ~D[2020-03-02])
+
+    items = Map.new(Profile.history_all(@uuid), &{&1.title, &1})
+
+    assert %{dated?: true, at: at} = items["Half Watched"]
+    assert DateTime.from_unix!(at) |> DateTime.to_date() == ~D[2020-03-02]
+    assert %{dated?: false} = items["Never Dated"]
+  end
+
   test "a profile's counts follow the finished titles" do
     watched(@uuid, [
       {"movie", 1, "movie", 1, "Film", false},

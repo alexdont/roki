@@ -70,6 +70,13 @@ defmodule RokiWeb.WatchedLive do
           seasons: %{},
           seasons_all: %{},
           whole_title?: true,
+          air: nil,
+          single: nil,
+          released: nil,
+          aired_ok?: false,
+          aired_busy?: false,
+          date_value: nil,
+          season_value: "",
           date_error: nil,
           notice: nil
         )
@@ -189,6 +196,9 @@ defmodule RokiWeb.WatchedLive do
   # list can be changed — and a show that is still going if laev has episode records for it,
   # because one of its seasons can be dated even though the show is not done. That was the gap:
   # a show watched a season at a time is never finished, so it could not be touched at all.
+  defp air_day(%Date{} = d), do: Calendar.strftime(d, "%-d %b %Y")
+  defp air_day(_), do: "?"
+
   defp selectable?(item, seasons_all), do: finished?(item) or seasons_of(item, seasons_all) != %{}
 
   defp seasons_of(item, seasons_all) do
@@ -217,6 +227,118 @@ defmodule RokiWeb.WatchedLive do
     is_list(socket.assigns.history) and
       Enum.any?(socket.assigns.history, &(&1.key == key and finished?(&1)))
   end
+
+  # One show picked: when each of its seasons was on, to date by what is remembered.
+  defp look_up_seasons(%{assigns: %{selected: selected, uuid: uuid}} = socket) do
+    case MapSet.to_list(selected) do
+      [key] ->
+        case Roki.Profile.parse_key(key) do
+          {"tv", id} ->
+            socket
+            |> assign(:air, :loading)
+            |> start_async(:air, fn -> Roki.AirDates.seasons(id, uuid) end)
+
+          _ ->
+            socket
+        end
+
+      _ ->
+        socket
+    end
+  end
+
+  defp shows_only?(selected),
+    do:
+      selected != MapSet.new() and
+        Enum.all?(selected, &match?({"tv", _}, Roki.Profile.parse_key(&1)))
+
+  # Each show on its own air dates. A finished show: every season on the day its last episode came
+  # out, and the show on the day its last season ended. One still going, or caught up: only the
+  # seasons with episodes marked, each on the day the last episode marked came out — a season
+  # stopped in the middle is dated by where it stopped, and seasons not got to are left alone.
+  defp date_as_aired(uuid, targets) do
+    Enum.reduce(targets, {0, 0}, fn {key, id, finished?}, {shows, count} ->
+      dated =
+        if finished? do
+          for s <- Roki.AirDates.seasons(id, uuid), do: %{number: s.number, date: s.last}
+        else
+          Roki.AirDates.watched_seasons(id, uuid)
+        end
+
+      for s <- dated, do: :ok = Profile.set_season_date(uuid, "tv", id, s.number, s.date)
+
+      if finished? and dated != [] do
+        Profile.set_watched_at(uuid, [key], Enum.max_by(dated, & &1.date, Date).date)
+      end
+
+      if dated == [], do: {shows, count}, else: {shows + 1, count + length(dated)}
+    end)
+  end
+
+  # What the dialog opens on: the day one title is on now (when it has a date of its own), else today.
+  defp open_date(socket) do
+    case single_item(socket) do
+      %{dated?: true, at: at} ->
+        at |> DateTime.from_unix!() |> DateTime.to_date() |> Date.to_iso8601()
+
+      _ ->
+        Date.to_iso8601(Date.utc_today())
+    end
+  end
+
+  # The one title selected, when it is one: the dialog tells what it needs to know about it.
+  defp single_item(%{assigns: %{selected: selected}} = socket) do
+    with [key] <- MapSet.to_list(selected),
+         %{} = item <- Enum.find(arranged(socket), &(&1.key == key)) do
+      item
+    else
+      _ -> nil
+    end
+  end
+
+  # When it came out — so a date is chosen with that in front of you — read in the background.
+  defp look_up_release(%{assigns: %{uuid: uuid}} = socket) do
+    case single_item(socket) do
+      %{type: type, id: id} when type in ["movie", "tv"] and is_integer(id) ->
+        socket
+        |> assign(:released, :loading)
+        |> start_async(:released, fn ->
+          with {:ok, t} <- Roki.Watch.title(type, id, uuid),
+               {:ok, date} <- Date.from_iso8601(to_string(t[:date])) do
+            %{type: type, date: date}
+          else
+            _ -> nil
+          end
+        end)
+
+      _ ->
+        socket
+    end
+  end
+
+  # The date the form holds, whichever way it was typed: a day, a month and a year (the way the
+  # dialog asks), or one ISO date. A day the month does not have is the month's last.
+  defp form_date(%{"year" => y, "month" => m, "day" => d}) do
+    with {year, ""} <- Integer.parse(to_string(y)),
+         {month, ""} <- Integer.parse(to_string(m)),
+         {day, ""} <- Integer.parse(to_string(d)),
+         true <- month in 1..12 and year in 1..9999 and day in 1..31 do
+      {:ok, Date.new!(year, month, min(day, Date.days_in_month(Date.new!(year, month, 1))))}
+    else
+      _ -> :error
+    end
+  end
+
+  defp form_date(%{"date" => text}) when is_binary(text) do
+    case Date.from_iso8601(text) do
+      {:ok, date} -> {:ok, date}
+      _ -> :error
+    end
+  end
+
+  defp form_date(_), do: :error
+
+  defp release_day(%Date{} = d), do: Calendar.strftime(d, "%-d %B %Y")
 
   # ── events ─────────────────────────────────────────────────────────
 
@@ -272,27 +394,105 @@ defmodule RokiWeb.WatchedLive do
     if MapSet.size(socket.assigns.selected) > 0,
       do:
         {:noreply,
-         assign(socket,
+         socket
+         |> assign(
            dating?: true,
            date_error: nil,
            seasons: seasons_for(socket),
-           whole_title?: Enum.all?(socket.assigns.selected, &finished_key?(socket, &1))
-         )},
+           whole_title?: Enum.all?(socket.assigns.selected, &finished_key?(socket, &1)),
+           date_value: open_date(socket),
+           season_value: "",
+           aired_ok?: shows_only?(socket.assigns.selected),
+           aired_busy?: false,
+           air: nil,
+           single: single_item(socket),
+           released: nil
+         )
+         |> look_up_release()
+         |> look_up_seasons()},
       else: {:noreply, socket}
   end
 
+  # The form's own values are kept while the dialog redraws (a season's date is put in the box).
+  def handle_event("date_change", params, %{assigns: %{owner?: true}} = socket) do
+    date_value =
+      case form_date(params) do
+        {:ok, date} -> Date.to_iso8601(date)
+        :error -> socket.assigns.date_value
+      end
+
+    {:noreply,
+     assign(socket,
+       date_value: date_value,
+       season_value: Map.get(params, "season", socket.assigns.season_value)
+     )}
+  end
+
+  def handle_event("date_pick", %{"date" => date} = params, %{assigns: %{owner?: true}} = socket) do
+    case Date.from_iso8601(date) do
+      {:ok, d} ->
+        # A show still going can only be dated by season: the one whose date this is is chosen too.
+        season = params["season"]
+
+        season_value =
+          if is_binary(season) and not socket.assigns.whole_title? and
+               Enum.any?(Map.keys(socket.assigns.seasons), &(to_string(&1) == season)),
+             do: season,
+             else: socket.assigns.season_value
+
+        {:noreply,
+         assign(socket,
+           date_value: Date.to_iso8601(d),
+           season_value: season_value,
+           date_error: nil
+         )}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  # "I watched it as it aired": each season goes on the day its last episode came out. For a show
+  # whose seasons are known from the episodes watched only those are dated; a finished show is put
+  # on the day its last season ended.
+  def handle_event("date_aired", _params, %{assigns: %{owner?: true, aired_ok?: true}} = socket) do
+    targets =
+      for key <- socket.assigns.selected,
+          {"tv", id} <- [Roki.Profile.parse_key(key)],
+          item <- [Enum.find(arranged(socket), &(&1.key == key))],
+          item != nil do
+        {key, id, finished?(item)}
+      end
+
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     socket
+     |> assign(aired_busy?: true, date_error: nil)
+     |> start_async(:aired, fn -> date_as_aired(uuid, targets) end)}
+  end
+
   def handle_event("date_close", _params, socket),
-    do: {:noreply, assign(socket, dating?: false, date_error: nil, seasons: %{})}
+    do:
+      {:noreply,
+       assign(socket,
+         dating?: false,
+         date_error: nil,
+         seasons: %{},
+         air: nil,
+         single: nil,
+         released: nil
+       )}
 
   # One season of one show, rather than the whole title: its share of the show's time moves to
   # this day and the rest of the show stays where it was.
   def handle_event(
         "date_save",
-        %{"date" => text, "season" => season},
+        %{"season" => season} = params,
         %{assigns: %{owner?: true, select?: true}} = socket
       )
       when season != "" do
-    with {:ok, date} <- Date.from_iso8601(text),
+    with {:ok, date} <- form_date(params),
          true <- Date.compare(date, Date.utc_today()) != :gt and date.year >= 1900,
          {n, ""} <- Integer.parse(season),
          [key] <- MapSet.to_list(socket.assigns.selected),
@@ -316,10 +516,10 @@ defmodule RokiWeb.WatchedLive do
   # The chosen day goes on every title selected, in the order the list shows them.
   def handle_event(
         "date_save",
-        %{"date" => text},
+        params,
         %{assigns: %{owner?: true, select?: true}} = socket
       ) do
-    with {:ok, date} <- Date.from_iso8601(text),
+    with {:ok, date} <- form_date(params),
          true <- Date.compare(date, Date.utc_today()) != :gt and date.year >= 1900 do
       keys =
         for i <- arranged(socket),
@@ -373,6 +573,45 @@ defmodule RokiWeb.WatchedLive do
     do: {:noreply, socket |> assign(:history, items) |> wait_for_genres()}
 
   def handle_async(:history, _other, socket), do: {:noreply, assign(socket, :history, [])}
+
+  def handle_async(:released, {:ok, %{} = released}, socket),
+    do: {:noreply, assign(socket, :released, released)}
+
+  def handle_async(:released, _other, socket), do: {:noreply, assign(socket, :released, nil)}
+
+  def handle_async(:air, {:ok, list}, socket) when is_list(list),
+    do: {:noreply, assign(socket, :air, list)}
+
+  def handle_async(:air, _other, socket), do: {:noreply, assign(socket, :air, [])}
+
+  def handle_async(:aired, {:ok, {shows, count}}, %{assigns: %{uuid: uuid}} = socket) do
+    {:noreply,
+     socket
+     |> assign(
+       history: Profile.history_all(uuid),
+       dating?: false,
+       selected: MapSet.new(),
+       aired_busy?: false,
+       air: nil,
+       seasons: %{}
+     )
+     |> assign(
+       notice:
+         if(count == 0,
+           do: "No season of #{if shows == 1, do: "it", else: "them"} had an air date to use.",
+           else:
+             "#{count} #{if count == 1, do: "season", else: "seasons"} of #{shows} #{if shows == 1, do: "show", else: "shows"} put on the day each one's last episode aired."
+         )
+     )}
+  end
+
+  def handle_async(:aired, _other, socket),
+    do:
+      {:noreply,
+       assign(socket,
+         aired_busy?: false,
+         date_error: "Could not read the air dates just now. Try again in a minute."
+       )}
 
   def handle_async(:ratings, {:ok, ratings}, socket) when is_map(ratings),
     do: {:noreply, assign(socket, :ratings, ratings)}
@@ -430,15 +669,36 @@ defmodule RokiWeb.WatchedLive do
 
     query =
       Enum.flat_map([:sort, :kind, :rating, :status, :genre, :undated, :months, :q, :view], fn
-        :sort -> if v.sort == :top, do: [sort: "top"], else: []
-        :kind -> if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
-        :rating -> if v.rating, do: [rating: v.rating], else: []
-        :status -> if v.status, do: [status: v.status], else: []
-        :genre -> if v.genre, do: [genre: v.genre], else: []
-        :undated -> if v.undated?, do: [dated: "no"], else: []
-        :months -> if v.months, do: [], else: [months: "0"]
-        :q -> if v.q != "", do: [q: v.q], else: []
-        :view -> if v.view == :rows, do: [view: "rows"], else: []
+        :sort ->
+          case v.sort do
+            :top -> [sort: "top"]
+            :oldest -> [sort: "oldest"]
+            _ -> []
+          end
+
+        :kind ->
+          if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
+
+        :rating ->
+          if v.rating, do: [rating: v.rating], else: []
+
+        :status ->
+          if v.status, do: [status: v.status], else: []
+
+        :genre ->
+          if v.genre, do: [genre: v.genre], else: []
+
+        :undated ->
+          if v.undated?, do: [dated: "no"], else: []
+
+        :months ->
+          if v.months, do: [], else: [months: "0"]
+
+        :q ->
+          if v.q != "", do: [q: v.q], else: []
+
+        :view ->
+          if v.view == :rows, do: [view: "rows"], else: []
       end)
 
     base = "/#{a.username}/watched"
@@ -462,7 +722,7 @@ defmodule RokiWeb.WatchedLive do
 
   defp group_label(_), do: "No date"
 
-  defp groups(items, :latest, true),
+  defp groups(items, sort, true) when sort in [:latest, :oldest],
     do: Enum.chunk_by(items, &group_label/1) |> Enum.map(&{group_label(hd(&1)), &1})
 
   defp groups(items, _sort, _months), do: [{nil, items}]
@@ -481,7 +741,8 @@ defmodule RokiWeb.WatchedLive do
       assign(assigns,
         items: items,
         groups: groups(shown, assigns.sort, assigns.months?),
-        today: Date.utc_today() |> Date.to_iso8601()
+        today: Date.utc_today() |> Date.to_iso8601(),
+        shown_date: Date.from_iso8601!(assigns.date_value || Date.to_iso8601(Date.utc_today()))
       )
 
     ~H"""
@@ -638,7 +899,11 @@ defmodule RokiWeb.WatchedLive do
                 aria-label="Sort and filter"
               >
                 <.icon name="hero-adjustments-horizontal" class="h-4 w-4" />
-                {if @sort == :top, do: "Rating", else: "Latest"}
+                {case @sort do
+                  :top -> "Rating"
+                  :oldest -> "Oldest"
+                  _ -> "Latest"
+                end}
                 <span
                   :if={filters_on(@status, @rating, @genre, @undated?) > 0}
                   class="badge badge-primary badge-xs"
@@ -653,7 +918,9 @@ defmodule RokiWeb.WatchedLive do
                 </p>
                 <div class="grid grid-cols-2 gap-1.5">
                   <.link
-                    :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]}
+                    :for={
+                      {s, label} <- [{:latest, "Latest"}, {:oldest, "Oldest"}, {:top, "By rating"}]
+                    }
                     patch={address(assigns, sort: s)}
                     onclick="document.activeElement.blur()"
                     class={[
@@ -674,7 +941,7 @@ defmodule RokiWeb.WatchedLive do
             <%!-- Wide screen: sort as pills, rating as a menu. --%>
             <div class="hidden items-center gap-1.5 lg:flex">
               <.link
-                :for={{s, label} <- [{:latest, "Latest"}, {:top, "By rating"}]}
+                :for={{s, label} <- [{:latest, "Latest"}, {:oldest, "Oldest"}, {:top, "By rating"}]}
                 patch={address(assigns, sort: s)}
                 class={[
                   "btn btn-sm h-9 rounded-full border-0 text-sm font-medium",
@@ -800,50 +1067,57 @@ defmodule RokiWeb.WatchedLive do
             </h2>
 
             <%!-- Grid: the posters, a tick in the corner while selecting. --%>
-            <ul
+            <%!-- A film or a show opens into the card the rest of the site has (`GridCards`); an anime
+                  with no TMDB title is a plain poster. The same poster in both modes, so turning
+                  select mode on changes nothing's size (and the page does not move): while
+                  selecting, a clear button lies over it, the ring and the tick are drawn on top,
+                  and no card opens. --%>
+            <div
               :if={@view == :grid}
-              class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+              id={"watched-cards-#{:erlang.phash2(label)}"}
+              phx-hook="GridCards"
             >
-              <li :for={i <- group} class="space-y-1">
-                <%!-- The same poster in both modes, so turning select mode on changes nothing's size
-                    (and the page does not move): while selecting, a clear button lies over it and
-                    the ring and the tick are drawn on top. --%>
-                <div class="relative">
-                  <.poster
+              <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+                <%= for i <- group do %>
+                  <RokiWeb.FeaturedLive.grid_card
+                    :if={i.type in ["movie", "tv"]}
+                    kind={:watched}
                     item={Map.put(i, :badge, nil)}
                     cached_titles={@cached_titles}
-                    compact
-                    title?={false}
-                  />
-                  <.status_pill item={i} />
-                  <button
-                    :if={@select? and selectable?(i, @seasons_all)}
-                    type="button"
-                    phx-click="select_toggle"
-                    phx-value-key={i.key}
-                    aria-pressed={to_string(MapSet.member?(@selected, i.key))}
-                    aria-label={"Select #{i.title}"}
-                    class="absolute inset-0 z-10 cursor-pointer"
-                  ></button>
-                  <div
-                    :if={@select? and selectable?(i, @seasons_all)}
-                    class={[
-                      "pointer-events-none absolute inset-x-0 top-0 z-20 aspect-[2/3] rounded-box transition",
-                      MapSet.member?(@selected, i.key) && "ring-4 ring-primary"
-                    ]}
+                    signed_in?={true}
+                    no_card?={@select?}
+                    keep_colour?={true}
                   >
-                    <.tick selected={MapSet.member?(@selected, i.key)} />
-                  </div>
-                </div>
-                <div class="flex items-center justify-between text-xs text-base-content/50">
-                  <span>{day(i)}</span>
-                  <span
-                    :if={i.score != nil and (@owner? or @profile.show_ratings)}
-                    class="font-semibold text-warning"
-                  >★ {Profile.score_text(i.score)}</span>
-                </div>
-              </li>
-            </ul>
+                    <:overlay>
+                      <.select_layer
+                        i={i}
+                        select?={@select?}
+                        selectable?={selectable?(i, @seasons_all)}
+                        selected={MapSet.member?(@selected, i.key)}
+                      />
+                    </:overlay>
+                    <.day_row i={i} show_score={@owner? or @profile.show_ratings} />
+                  </RokiWeb.FeaturedLive.grid_card>
+                  <li :if={i.type not in ["movie", "tv"]} class="space-y-1">
+                    <div class="relative">
+                      <.poster
+                        item={Map.put(i, :badge, nil)}
+                        cached_titles={@cached_titles}
+                        compact
+                        title?={false}
+                      />
+                      <.select_layer
+                        i={i}
+                        select?={@select?}
+                        selectable?={selectable?(i, @seasons_all)}
+                        selected={MapSet.member?(@selected, i.key)}
+                      />
+                    </div>
+                    <.day_row i={i} show_score={@owner? or @profile.show_ratings} />
+                  </li>
+                <% end %>
+              </ul>
+            </div>
 
             <%!-- Rows: one to a line, with what you would want to know. --%>
             <ul
@@ -931,7 +1205,8 @@ defmodule RokiWeb.WatchedLive do
         <form
           id="date-form"
           phx-submit="date_save"
-          class="relative w-full max-w-md space-y-4 rounded-t-box bg-base-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-box"
+          phx-change="date_change"
+          class="relative max-h-[92svh] w-full max-w-md space-y-4 overflow-y-auto rounded-t-box bg-base-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-box"
         >
           <div>
             <h2 class="text-lg font-semibold">
@@ -946,16 +1221,108 @@ defmodule RokiWeb.WatchedLive do
               hours moves there.
             </p>
           </div>
-          <input
-            type="date"
-            name="date"
-            value={@today}
-            required
-            min="1900-01-01"
-            max={@today}
-            class="input input-bordered w-full"
-            autofocus
-          />
+          <%!-- One title: what it is and when it came out, so the day can be chosen with that in view. --%>
+          <div :if={@single} class="rounded-box bg-base-200 px-3 py-2 text-sm">
+            <div class="font-medium">{@single.title}</div>
+            <div class="text-base-content/70">
+              <span :if={@released == :loading}>
+                <span class="loading loading-spinner loading-xs"></span> Looking up the release date…
+              </span>
+              <span :if={is_map(@released)}>
+                {if @released.type == "movie", do: "Released", else: "First aired"} {release_day(
+                  @released.date
+                )}
+              </span>
+              <span :if={@released == nil}>Release date unknown</span>
+            </div>
+            <div :if={@single.dated?} class="text-base-content/70">
+              In your list on {Calendar.strftime(DateTime.from_unix!(@single.at), "%-d %B %Y")}
+            </div>
+          </div>
+          <%!-- Date it by the calendar of the show: when each season was on. --%>
+          <div :if={@air == :loading} class="flex items-center gap-2 text-sm text-base-content/60">
+            <span class="loading loading-spinner loading-sm"></span>
+            Looking up when each season aired…
+          </div>
+          <div :if={is_list(@air) and @air != []} class="space-y-1.5">
+            <div class="text-sm font-medium">When each season was on</div>
+            <ul class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300 text-sm">
+              <li :for={s <- @air} class="flex items-center justify-between gap-2 px-3 py-2">
+                <div class="min-w-0">
+                  <div class="font-medium">Season {s.number}</div>
+                  <div class="text-xs text-base-content/60">
+                    {air_day(s.first)} → {air_day(s.last)}{if !s.ended?, do: " · still airing"} · {s.episodes} {if s.episodes ==
+                                                                                                                     1,
+                                                                                                                   do:
+                                                                                                                     "episode",
+                                                                                                                   else:
+                                                                                                                     "episodes"}
+                  </div>
+                </div>
+                <div class="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    phx-click="date_pick"
+                    phx-value-date={Date.to_iso8601(s.first)}
+                    phx-value-season={s.number}
+                    class="btn btn-xs btn-ghost"
+                    title="Put the date box on the day this season began"
+                  >
+                    Start
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="date_pick"
+                    phx-value-date={Date.to_iso8601(s.last)}
+                    phx-value-season={s.number}
+                    class="btn btn-xs btn-outline"
+                    title="Put the date box on the day this season's last episode aired"
+                  >
+                    End
+                  </button>
+                </div>
+              </li>
+            </ul>
+            <p class="text-xs text-base-content/60">
+              Remember how many seasons were out when you caught up? Press End on the last one you
+              had seen, and save.
+            </p>
+          </div>
+          <%!-- One date field, written day/month/year, with the calendar beside it. The date that is
+                sent is the hidden one (`EuDate`): a real date field, in ISO, for the form. --%>
+          <div id="date-field" phx-hook="EuDate" class="relative">
+            <input
+              type="text"
+              data-eu-text
+              value={Calendar.strftime(@shown_date, "%d/%m/%Y")}
+              placeholder="dd/mm/yyyy"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="10"
+              aria-label="Date, day month year"
+              class="input input-bordered w-full pr-12"
+              autofocus
+            />
+            <button
+              type="button"
+              data-eu-open
+              class="btn btn-ghost btn-sm btn-circle absolute right-1.5 top-1/2 -translate-y-1/2"
+              aria-label="Open the calendar"
+            >
+              <.icon name="hero-calendar-days" class="h-5 w-5" />
+            </button>
+            <input
+              type="date"
+              name="date"
+              data-eu-real
+              value={Date.to_iso8601(@shown_date)}
+              min="1900-01-01"
+              max={@today}
+              tabindex="-1"
+              aria-hidden="true"
+              class="pointer-events-none absolute bottom-0 right-1.5 h-0 w-0 opacity-0"
+            />
+          </div>
           <%!-- A show whose seasons were watched years apart: date one of them without moving
                 the rest. Only offered for a single show laev has episode records for. --%>
           <label :if={@seasons != %{}} class="block space-y-1">
@@ -963,7 +1330,11 @@ defmodule RokiWeb.WatchedLive do
             <select name="season" class="select select-bordered w-full" required={!@whole_title?}>
               <option :if={@whole_title?} value="">The whole title</option>
               <option :if={!@whole_title?} value="" disabled selected>Pick a season</option>
-              <option :for={{season, %{episodes: episodes}} <- Enum.sort(@seasons)} value={season}>
+              <option
+                :for={{season, %{episodes: episodes}} <- Enum.sort(@seasons)}
+                value={season}
+                selected={@season_value == to_string(season)}
+              >
                 Season {season} only · {episodes} {if episodes == 1,
                   do: "episode",
                   else: "episodes"}
@@ -975,9 +1346,27 @@ defmodule RokiWeb.WatchedLive do
             </span>
           </label>
           <p :if={@date_error} class="text-sm text-error">{@date_error}</p>
-          <div class="flex justify-end gap-2">
-            <button type="button" phx-click="date_close" class="btn btn-ghost">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button
+              :if={@aired_ok?}
+              type="button"
+              phx-click="date_aired"
+              disabled={@aired_busy?}
+              class="btn btn-ghost btn-sm"
+              title="Each season goes on the day its last episode aired"
+            >
+              <span :if={@aired_busy?} class="loading loading-spinner loading-xs"></span>
+              I watched {if MapSet.size(@selected) == 1, do: "it", else: "them"} as {if MapSet.size(
+                                                                                          @selected
+                                                                                        ) == 1,
+                                                                                        do: "it",
+                                                                                        else: "they"} aired
+            </button>
+            <span :if={!@aired_ok?}></span>
+            <div class="flex gap-2">
+              <button type="button" phx-click="date_close" class="btn btn-ghost">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
           </div>
         </form>
       </div>
@@ -1007,10 +1396,10 @@ defmodule RokiWeb.WatchedLive do
         @pill && !@a.months? && "bg-base-200",
         !@pill &&
           "flex items-center justify-between rounded-xl bg-base-200 px-3 py-2 text-sm font-medium",
-        @a.sort != :latest && "opacity-50",
+        @a.sort == :top && "opacity-50",
         @class
       ]}
-      title={if @a.sort != :latest, do: "Month headings show when sorted by latest"}
+      title={if @a.sort == :top, do: "Month headings show when sorted by date"}
     >
       <span class="flex items-center gap-1.5">
         <.icon name="hero-calendar-days" class="h-4 w-4" /> By month
@@ -1155,6 +1544,52 @@ defmodule RokiWeb.WatchedLive do
           {label}
         </.link>
       </div>
+    </div>
+    """
+  end
+
+  attr :i, :map, required: true
+  attr :select?, :boolean, default: false
+  attr :selectable?, :boolean, default: false
+  attr :selected, :boolean, default: false
+
+  # Over a poster in the grid: where the title stands, and — while selecting — the clear button
+  # that takes the click, the ring and the tick.
+  defp select_layer(assigns) do
+    ~H"""
+    <.status_pill item={@i} />
+    <button
+      :if={@select? and @selectable?}
+      type="button"
+      phx-click="select_toggle"
+      phx-value-key={@i.key}
+      aria-pressed={to_string(@selected)}
+      aria-label={"Select #{@i.title}"}
+      class="absolute inset-0 z-10 cursor-pointer"
+    ></button>
+    <div
+      :if={@select? and @selectable?}
+      class={[
+        "pointer-events-none absolute inset-x-0 top-0 z-20 aspect-[2/3] rounded-box transition",
+        @selected && "ring-4 ring-primary"
+      ]}
+    >
+      <.tick selected={@selected} />
+    </div>
+    """
+  end
+
+  attr :i, :map, required: true
+  attr :show_score, :boolean, default: false
+
+  # Under a poster: the day it was watched and the score.
+  defp day_row(assigns) do
+    ~H"""
+    <div class="flex items-center justify-between text-xs text-base-content/50">
+      <span>{day(@i)}</span>
+      <span :if={@i.score != nil and @show_score} class="font-semibold text-warning">
+        ★ {Profile.score_text(@i.score)}
+      </span>
     </div>
     """
   end

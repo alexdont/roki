@@ -620,6 +620,8 @@ defmodule Roki.Profile do
         }
       end)
 
+    items = date_from_seasons(items, uuid)
+
     cards = Roki.Titles.cards(for i <- items, do: card_key(i))
 
     items =
@@ -634,6 +636,28 @@ defmodule Roki.Profile do
     # A season of a show is drawn with that season's poster, not the show's: a tier list of the
     # seven parts of JoJo is seven pictures, not one seven times.
     Roki.SeasonPosters.apply(items, uuid)
+  end
+
+  # A show watched a season or two and not finished has no date of its own — laev keeps none for it
+  # — but the owner may have said when each season was watched (`set_season_date/5`). Its date is
+  # the latest of those: the day the last season they watched was watched.
+  defp date_from_seasons(items, uuid) do
+    latest =
+      Enum.reduce(season_dates(uuid), %{}, fn {{type, id, _season}, at}, acc ->
+        Map.update(acc, {type, id}, at, &max(&1, at))
+      end)
+
+    if latest == %{} do
+      items
+    else
+      Enum.map(items, fn
+        %{dated?: false, type: type, id: id} = i when is_map_key(latest, {type, id}) ->
+          %{i | at: latest[{type, id}], dated?: true}
+
+        i ->
+          i
+      end)
+    end
   end
 
   # A title's card is TMDB's; an anime with no TMDB title has MyAnimeList's, under its MAL id.
@@ -701,13 +725,15 @@ defmodule Roki.Profile do
   def kind(value),
     do: Enum.find_value(kinds(), :all, fn {k, _} -> Atom.to_string(k) == value && k end)
 
-  @doc "The order named in an address: :top for the owner's ratings, else :latest."
+  @doc "The order named in an address: :top for the owner's ratings, :oldest for the first watched, else :latest."
   def sort("top"), do: :top
+  def sort("oldest"), do: :oldest
   def sort(_), do: :latest
 
   @doc """
   The history as the page shows it: of one `kind` (`:all`, `:movie`, `:tv`, `:anime`), in
-  `order` (`:latest` — newest first — or `:top` — the owner's own rating first, the unrated last),
+  `order` (`:latest` — newest first — `:oldest` — the first watched first, the undated last — or
+  `:top` — the owner's own rating first, the unrated last),
   and only those rated `rating` when it is a whole number 1 to 10 (a 9 takes 9 to 9.9; `true` is a 10, as the old tens filter was). Each item gets its `score` (nil when unrated) and, in the
   rating order, the score as its badge.
   """
@@ -731,6 +757,9 @@ defmodule Roki.Profile do
           list
           |> Enum.sort_by(&{if(&1.score, do: 0, else: 1), -(&1.score || 0), -&1.at})
           |> Enum.map(&Map.put(&1, :badge, badge(&1.score)))
+
+        :oldest ->
+          Enum.sort_by(list, &{if(&1.dated?, do: 0, else: 1), &1.at})
 
         _ ->
           list

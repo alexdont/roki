@@ -31,6 +31,7 @@ import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
 import {ShelfRow} from "./shelf_row"
 import {GridCards} from "./grid_cards"
+import {EuDate} from "./eu_date"
 import {TrailerSheet} from "./trailer_sheet"
 import {HeroTrailer} from "./hero_trailer"
 
@@ -214,7 +215,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
-  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, ShelfRow, GridCards, TrailerSheet, HeroTrailer},
+  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, ShelfRow, GridCards, EuDate, TrailerSheet, HeroTrailer},
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.
