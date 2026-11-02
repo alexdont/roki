@@ -625,14 +625,19 @@ defmodule RokiWeb.Layouts do
   end
 
   @doc """
-  Which kind of source Play uses: *Torrents* or *PenguPlay*. The same two-part switch as
-  `player_switch/1`, lit from its own `data-source` (so a click shows at once, before the server
-  has answered), and sending `set_play_from` — saved to the account, see `RokiWeb.PlayerMode`. A
-  kind the account has nothing connected for (`avail`) is greyed out and goes to Settings instead.
+  Which kind of source Play uses: *Original* (torrent/debrid), *PenguPlay* or *Nuvio*. The
+  same three-part switch as `player_switch/1`, lit from its own `data-source` (so a click shows
+  at once, before the server has answered), and sending `set_play_from` — saved to the account,
+  see `RokiWeb.PlayerMode`. A kind the account has nothing connected for (`avail`) is greyed out
+  and goes to Settings instead.
   """
   attr :class, :any, default: nil
-  attr :value, :string, required: true, doc: "\"torrent\" or \"pengu\""
-  attr :avail, :map, required: true, doc: "`%{torrent: bool, pengu: bool}` — see `Roki.Sources`"
+  attr :value, :string, required: true, doc: "\"torrent\", \"pengu\" or \"nuvio\""
+
+  attr :avail, :map,
+    required: true,
+    doc: "`%{torrent: bool, pengu: bool, nuvio: bool}` — see `Roki.Sources`"
+
   attr :settings, :string, required: true, doc: "the account's Settings page"
 
   def source_switch(assigns) do
@@ -640,7 +645,7 @@ defmodule RokiWeb.Layouts do
     <div
       data-source-switch
       data-source={@value}
-      class={["inline-grid grid-cols-2 rounded-full bg-base-200 p-0.5", @class]}
+      class={["inline-grid grid-cols-3 rounded-full bg-base-200 p-0.5", @class]}
       role="group"
       aria-label="Where Play finds its source"
     >
@@ -650,9 +655,9 @@ defmodule RokiWeb.Layouts do
         phx-click="set_play_from"
         phx-value-to="torrent"
         class="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-base-content/60 transition hover:text-base-content [[data-source=torrent]_&]:bg-base-100 [[data-source=torrent]_&]:text-base-content [[data-source=torrent]_&]:shadow-sm"
-        title="Releases from your debrid account"
+        title="The original collection: releases from your debrid account"
       >
-        <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Torrents
+        <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Original
       </button>
       <.link
         :if={not @avail.torrent}
@@ -660,7 +665,7 @@ defmodule RokiWeb.Layouts do
         class="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-base-content/30 transition hover:text-base-content/60"
         title="Not connected — add a Real-Debrid or TorBox account in Settings"
       >
-        <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Torrents
+        <.icon name="hero-arrow-down-tray" class="h-4 w-4" /> Original
       </.link>
       <button
         :if={@avail.pengu}
@@ -679,6 +684,24 @@ defmodule RokiWeb.Layouts do
         title="Not connected — add a PenguPlay link in Settings"
       >
         <.icon name="hero-globe-alt" class="h-4 w-4" /> PenguPlay
+      </.link>
+      <button
+        :if={Map.get(@avail, :nuvio, false)}
+        type="button"
+        phx-click="set_play_from"
+        phx-value-to="nuvio"
+        class="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-base-content/60 transition hover:text-base-content [[data-source=nuvio]_&]:bg-base-100 [[data-source=nuvio]_&]:text-base-content [[data-source=nuvio]_&]:shadow-sm"
+        title="Sandboxed providers from the Nuvio manifest"
+      >
+        <.icon name="hero-cube" class="h-4 w-4" /> Nuvio
+      </button>
+      <.link
+        :if={not Map.get(@avail, :nuvio, false)}
+        navigate={@settings <> "#nuvio"}
+        class="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-base-content/30 transition hover:text-base-content/60"
+        title="Not connected — choose Nuvio providers in Settings"
+      >
+        <.icon name="hero-cube" class="h-4 w-4" /> Nuvio
       </.link>
     </div>
     """

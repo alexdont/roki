@@ -63,6 +63,19 @@ defmodule RokiWeb.SettingsLiveTest do
     assert html =~ "RokiWeb.MangaSettings.ReaderSettings"
   end
 
+  test "the Nuvio collection has its own section and does not reach GitHub until asked", %{
+    conn: conn
+  } do
+    {:ok, view, html} = live(conn, "/settingstest/settings")
+
+    assert html =~ ~s(id="nuvio")
+    assert html =~ "Load providers from the manifest"
+    assert html =~ "authorised to watch"
+    refute html =~ "providers in the manifest"
+    # The section is independent of PenguPlay and of the debrid keys.
+    assert has_element?(view, "#nuvio")
+  end
+
   test "the reader's old settings address leads here", %{conn: conn} do
     conn = get(conn, "/manga/settings")
     assert redirected_to(conn) == "/settingstest/settings#reading"

@@ -49,7 +49,7 @@ defmodule RokiWeb.SourcesLive do
           title_error: nil,
           token: 0,
           # Nothing connected for this kind of source: nothing is searched (see `connect_sources/1`).
-          phase: if(avail[source] || source == :pengu, do: :loading, else: :idle),
+          phase: if(avail[source] || source in [:pengu, :nuvio], do: :loading, else: :idle),
           status: "Starting…",
           probe: nil,
           checks: [],
@@ -75,7 +75,8 @@ defmodule RokiWeb.SourcesLive do
           heavy_allowed?: uuid != nil and Roki.Keys.heavy?(uuid),
           caps: caps_param(socket),
           busy?: false,
-          pengu: nil
+          pengu: nil,
+          nuvio: nil
         )
 
       {:ok,
@@ -95,13 +96,16 @@ defmodule RokiWeb.SourcesLive do
     wanted =
       cond do
         params["src"] == "pengu" -> :pengu
+        params["src"] == "nuvio" -> :nuvio
         params["src"] == "torrent" -> :torrent
+        uuid && Roki.Laev.web_settings(uuid)["play_from"] == "nuvio" -> :nuvio
         uuid && Roki.Laev.web_settings(uuid)["play_from"] == "pengu" -> :pengu
         true -> :torrent
       end
 
-    other = if wanted == :pengu, do: :torrent, else: :pengu
-    if not avail[wanted] and avail[other], do: other, else: wanted
+    if Map.get(avail, wanted, false),
+      do: wanted,
+      else: Enum.find([:torrent, :pengu, :nuvio], wanted, &Map.get(avail, &1, false))
   end
 
   # Where an account adds what is missing: its Settings page.
@@ -156,7 +160,7 @@ defmodule RokiWeb.SourcesLive do
       # Playing in the browser, the sources page has nothing to add: the watch page finds the
       # release and starts it itself. Going straight there saves a whole page.
       auto?(params, socket) and socket.assigns.linked? and socket.assigns.mode == :browser and
-          socket.assigns.source == :torrent and socket.assigns.avail.torrent ->
+        socket.assigns.source == :torrent and socket.assigns.avail.torrent ->
         {:noreply, push_navigate(socket, to: direct_watch_path(socket.assigns), replace: true)}
 
       true ->
@@ -195,12 +199,13 @@ defmodule RokiWeb.SourcesLive do
 
   # A source was just connected: use it now, loading the title first when nothing has yet.
   defp activate(socket, source) do
-    socket = assign(socket, source: source, auto: :off, setup_msg: nil, pengu: nil)
+    socket = assign(socket, source: source, auto: :off, setup_msg: nil, pengu: nil, nuvio: nil)
     socket = assign(socket, :avail, Map.put(socket.assigns.avail, source, true))
 
     cond do
       socket.assigns.title == nil -> load(socket)
       source == :pengu -> pengu_search(socket)
+      source == :nuvio -> nuvio_search(socket)
       true -> begin(socket, false)
     end
   end
@@ -213,7 +218,18 @@ defmodule RokiWeb.SourcesLive do
     |> start_async(:pengu, fn -> Roki.Pengu.streams(uuid, imdb, season, episode) end)
   end
 
-  defp pengu_search(socket), do: assign(socket, pengu: {:error, Roki.Pengu.message(:no_imdb_id)}, auto: :off)
+  defp pengu_search(socket),
+    do: assign(socket, pengu: {:error, Roki.Pengu.message(:no_imdb_id)}, auto: :off)
+
+  defp nuvio_search(socket, force \\ false) do
+    %{uuid: uuid, id: id, type: type, season: season, episode: episode} = socket.assigns
+
+    socket
+    |> assign(:nuvio, :loading)
+    |> start_async(:nuvio, fn ->
+      Roki.Nuvio.search(uuid, id, type, season, episode, force: force)
+    end)
+  end
 
   defp clean_path(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 
@@ -304,6 +320,7 @@ defmodule RokiWeb.SourcesLive do
      cond do
        not socket.assigns.avail[socket.assigns.source] -> socket
        socket.assigns.source == :pengu -> pengu_search(socket)
+       socket.assigns.source == :nuvio -> nuvio_search(socket)
        true -> begin(socket, false)
      end}
   end
@@ -378,14 +395,21 @@ defmodule RokiWeb.SourcesLive do
 
     with :pending <- socket.assigns.auto,
          %{id: id} <- Roki.Pengu.best(streams, socket.assigns.caps) do
-      {:noreply, push_navigate(socket, to: pengu_watch(socket.assigns, id) <> "&auto=1", replace: true)}
+      {:noreply,
+       push_navigate(socket, to: pengu_watch(socket.assigns, id) <> "&auto=1", replace: true)}
     else
       _ -> {:noreply, assign(socket, :auto, :off)}
     end
   end
 
   def handle_async(:debrid, {:ok, :ok}, socket) do
-    socket = assign(socket, setup_busy: false, linked?: true, avail: %{socket.assigns.avail | torrent: true})
+    socket =
+      assign(socket,
+        setup_busy: false,
+        linked?: true,
+        avail: %{socket.assigns.avail | torrent: true}
+      )
+
     {:noreply, activate(socket, :torrent)}
   end
 
@@ -393,13 +417,37 @@ defmodule RokiWeb.SourcesLive do
     do: {:noreply, assign(socket, setup_busy: false, setup_msg: {:error, text})}
 
   def handle_async(:debrid, _other, socket),
-    do: {:noreply, assign(socket, setup_busy: false, setup_msg: {:error, "That did not work. Try again."})}
+    do:
+      {:noreply,
+       assign(socket, setup_busy: false, setup_msg: {:error, "That did not work. Try again."})}
 
   def handle_async(:pengu, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, pengu: {:error, Roki.Pengu.message(reason)}, auto: :off)}
 
   def handle_async(:pengu, {:exit, _}, socket),
     do: {:noreply, assign(socket, pengu: {:error, Roki.Pengu.message(:timeout)}, auto: :off)}
+
+  def handle_async(:nuvio, {:ok, {:ok, results}}, socket) do
+    socket = assign(socket, :nuvio, {:ok, results})
+
+    with :pending <- socket.assigns.auto,
+         %{id: id, provider_id: provider_id} <-
+           Roki.Nuvio.best(Roki.Nuvio.streams(results), socket.assigns.caps) do
+      {:noreply,
+       push_navigate(socket,
+         to: nuvio_watch(socket.assigns, provider_id, id) <> "&auto=1",
+         replace: true
+       )}
+    else
+      _ -> {:noreply, assign(socket, :auto, :off)}
+    end
+  end
+
+  def handle_async(:nuvio, {:ok, {:error, reason}}, socket),
+    do: {:noreply, assign(socket, nuvio: {:error, Roki.Nuvio.message(reason)}, auto: :off)}
+
+  def handle_async(:nuvio, {:exit, _}, socket),
+    do: {:noreply, assign(socket, nuvio: {:error, Roki.Nuvio.message(:timeout)}, auto: :off)}
 
   def handle_async(:next, {:ok, {_s, _e, _tag} = next}, socket),
     do: {:noreply, assign(socket, :next, next)}
@@ -498,7 +546,7 @@ defmodule RokiWeb.SourcesLive do
   @impl true
   # The switch in the bar: look at torrents or at PenguPlay. Each is searched the first time it is
   # shown and kept after that.
-  def handle_event("source", %{"to" => to}, socket) when to in ["torrent", "pengu"] do
+  def handle_event("source", %{"to" => to}, socket) when to in ["torrent", "pengu", "nuvio"] do
     source = String.to_existing_atom(to)
     socket = assign(socket, source: source, auto: :off)
 
@@ -507,6 +555,7 @@ defmodule RokiWeb.SourcesLive do
         socket.assigns.title == nil -> socket
         not socket.assigns.avail[source] -> socket
         source == :pengu and socket.assigns.pengu == nil -> pengu_search(socket)
+        source == :nuvio and socket.assigns.nuvio == nil -> nuvio_search(socket)
         source == :torrent and socket.assigns.phase in [:loading, :idle] -> begin(socket, false)
         true -> socket
       end
@@ -515,7 +564,11 @@ defmodule RokiWeb.SourcesLive do
   end
 
   # The paste fields of the "connect a source" panel.
-  def handle_event("setup_pengu", %{"pengu" => %{"url" => url}}, %{assigns: %{uuid: uuid}} = socket)
+  def handle_event(
+        "setup_pengu",
+        %{"pengu" => %{"url" => url}},
+        %{assigns: %{uuid: uuid}} = socket
+      )
       when is_binary(uuid) do
     case Roki.Pengu.save_url(PhoenixKit.Users.Auth.get_user(uuid), url) do
       {:ok, _user} -> {:noreply, activate(socket, :pengu)}
@@ -537,6 +590,11 @@ defmodule RokiWeb.SourcesLive do
     do: {:noreply, pengu_search(socket)}
 
   def handle_event("pengu", _params, socket), do: {:noreply, socket}
+
+  def handle_event("nuvio", _params, %{assigns: %{title: %{}}} = socket),
+    do: {:noreply, nuvio_search(socket, true)}
+
+  def handle_event("nuvio", _params, socket), do: {:noreply, socket}
 
   def handle_event("cancel_auto", _params, %{assigns: %{auto: :pending}} = socket),
     do: {:noreply, assign(socket, :auto, :cancelled)}
@@ -766,6 +824,7 @@ defmodule RokiWeb.SourcesLive do
           cached_at={@cached_at}
           busy={@phase == :working}
           pengu={@pengu}
+          nuvio={@nuvio}
         />
         <.cache_note
           :if={@cached_at != nil and @uuid == nil}
@@ -777,6 +836,7 @@ defmodule RokiWeb.SourcesLive do
           :if={@uuid != nil and not @avail[@source]}
           avail={@avail}
           source={@source}
+          settings={@settings}
           msg={@setup_msg}
           busy={@setup_busy}
         />
@@ -790,10 +850,15 @@ defmodule RokiWeb.SourcesLive do
           :if={@source == :torrent and @phase in [:loading, :working] and @auto != :pending}
           checks={@checks}
         />
-        <p :if={@source == :torrent and @start_error} class="alert alert-warning text-sm">{@start_error}</p>
-        <p :if={@source == :torrent and @phase == :failed} class="alert alert-warning text-sm">{@failed}</p>
+        <p :if={@source == :torrent and @start_error} class="alert alert-warning text-sm">
+          {@start_error}
+        </p>
+        <p :if={@source == :torrent and @phase == :failed} class="alert alert-warning text-sm">
+          {@failed}
+        </p>
         <.heavy_offer :if={
-          @source == :torrent and @phase == :failed and @failed_reason == :no_light and @mode == :browser and
+          @source == :torrent and @phase == :failed and @failed_reason == :no_light and
+            @mode == :browser and
             @heavy_allowed?
         } />
         <p
@@ -836,6 +901,17 @@ defmodule RokiWeb.SourcesLive do
           id={@id}
           season={@season}
           episode={@episode}
+        />
+
+        <.nuvio_sources
+          :if={@source == :nuvio and Map.get(@avail, :nuvio, false)}
+          nuvio={@nuvio}
+          auto={@auto}
+          type={@type}
+          id={@id}
+          season={@season}
+          episode={@episode}
+          settings={@settings}
         />
       </div>
 
@@ -889,6 +965,7 @@ defmodule RokiWeb.SourcesLive do
 
   attr :avail, :map, required: true
   attr :source, :atom, required: true
+  attr :settings, :string, required: true
   attr :msg, :any, default: nil
   attr :busy, :boolean, default: false
 
@@ -900,10 +977,9 @@ defmodule RokiWeb.SourcesLive do
       <div class="space-y-1">
         <h2 class="text-xl font-semibold">Connect a source to start watching</h2>
         <p class="text-sm text-base-content/70">
-          Roki plays from accounts of your own, so nothing plays until one is connected. Pick
-          whichever suits you — {if @source == :torrent,
-            do: "torrents need a debrid account; PenguPlay is free",
-            else: "PenguPlay is free; torrents need a debrid account"}.
+          Roki plays from sources of your own, so nothing plays until one is connected. Pick
+          whichever suits you — the original collection needs a debrid account, PenguPlay is
+          free, and Nuvio runs providers you choose in Settings.
         </p>
       </div>
 
@@ -911,13 +987,18 @@ defmodule RokiWeb.SourcesLive do
 
       <div class="grid gap-4 lg:grid-cols-2">
         <div class="space-y-3 rounded-xl border border-base-300 bg-base-100/70 p-4">
-          <h3 class="font-semibold">PenguPlay <span class="badge badge-success badge-sm ml-1">free</span></h3>
+          <h3 class="font-semibold">
+            PenguPlay <span class="badge badge-success badge-sm ml-1">free</span>
+          </h3>
           <ol class="list-decimal space-y-1 pl-5 text-sm text-base-content/70">
             <li>
-              Open <a href="https://pengu.uk" target="_blank" rel="noopener" class="link link-primary">pengu.uk</a>
+              Open
+              <a href="https://pengu.uk" target="_blank" rel="noopener" class="link link-primary">pengu.uk</a>
               and sign in with Google — about ten seconds.
             </li>
-            <li>Pick the providers you want, then copy the install link (it ends in <code>/manifest.json</code>).</li>
+            <li>
+              Pick the providers you want, then copy the install link (it ends in <code>/manifest.json</code>).
+            </li>
             <li>Paste it here.</li>
           </ol>
           <form phx-submit="setup_pengu" class="flex flex-wrap gap-2">
@@ -935,22 +1016,50 @@ defmodule RokiWeb.SourcesLive do
 
         <div class="space-y-3 rounded-xl border border-base-300 bg-base-100/70 p-4">
           <h3 class="font-semibold">
+            Nuvio <span class="badge badge-ghost badge-sm ml-1">settings</span>
+          </h3>
+          <p class="text-sm text-base-content/70">
+            Nuvio providers are discovered from the All-in-One-Nuvio manifest and run in an
+            isolated Node process. Choose the ones you may use, and acknowledge that you will use
+            them only for content you are authorised to access.
+          </p>
+          <a href={@settings <> "#nuvio"} class="btn btn-sm btn-primary">
+            Choose Nuvio providers
+          </a>
+        </div>
+
+        <div class="space-y-3 rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <h3 class="font-semibold">
             Real-Debrid or TorBox
             <span class="badge badge-ghost badge-sm ml-1">paid, for torrents</span>
           </h3>
           <ol class="list-decimal space-y-1 pl-5 text-sm text-base-content/70">
             <li>
               Sign up at
-              <a href="https://real-debrid.com" target="_blank" rel="noopener" class="link link-primary">real-debrid.com</a>
+              <a
+                href="https://real-debrid.com"
+                target="_blank"
+                rel="noopener"
+                class="link link-primary"
+              >real-debrid.com</a>
               or
               <a href="https://torbox.app" target="_blank" rel="noopener" class="link link-primary">torbox.app</a>
               (either one).
             </li>
             <li>
               Copy your key:
-              <a href="https://real-debrid.com/apitoken" target="_blank" rel="noopener" class="link link-primary">Real-Debrid API token</a>
-              ·
-              <a href="https://torbox.app/settings" target="_blank" rel="noopener" class="link link-primary">TorBox API key</a>.
+              <a
+                href="https://real-debrid.com/apitoken"
+                target="_blank"
+                rel="noopener"
+                class="link link-primary"
+              >Real-Debrid API token</a>
+              · <a
+                href="https://torbox.app/settings"
+                target="_blank"
+                rel="noopener"
+                class="link link-primary"
+              >TorBox API key</a>.
             </li>
             <li>Paste it below. It is checked with the service before it is kept.</li>
           </ol>
@@ -987,6 +1096,7 @@ defmodule RokiWeb.SourcesLive do
   attr :cached_at, :any, default: nil
   attr :busy, :boolean, default: false
   attr :pengu, :any, default: nil
+  attr :nuvio, :any, default: nil
 
   # The row above the results: which kind of source is being looked at, and — beside it — how
   # fresh they are and the button that looks again.
@@ -1010,25 +1120,50 @@ defmodule RokiWeb.SourcesLive do
           missing={@settings <> "#penguplay"}
           hint="Needs a PenguPlay link — add it in Settings"
         />
+        <.source_choice
+          kind={:nuvio}
+          label="Nuvio"
+          source={@source}
+          avail={@avail}
+          missing={@settings <> "#nuvio"}
+          hint="Needs at least one Nuvio provider — choose them in Settings"
+        />
       </div>
 
-      <%= if @source == :torrent do %>
-        <span :if={@cached_at} class="badge badge-success badge-outline gap-1">⚡ cached sources</span>
-        <span :if={@cached_at}>found {ago(@cached_at)}, nothing to check.</span>
-        <button :if={@cached_at} phx-click="retry" class="btn btn-xs rounded-full" disabled={@busy}>
-          Retry
-        </button>
-        <span :if={@cached_at} class="text-base-content/50">looks for new ones</span>
-      <% else %>
-        <span :if={match?({:ok, _, _}, @pengu)}>{elem(@pengu, 2)} streams found.</span>
-        <button
-          :if={@pengu != :loading and @pengu != nil}
-          type="button"
-          phx-click="pengu"
-          class="btn btn-xs rounded-full"
-        >
-          Search again
-        </button>
+      <%= cond do %>
+        <% @source == :torrent -> %>
+          <span :if={@cached_at} class="badge badge-success badge-outline gap-1">⚡ cached sources</span>
+          <span :if={@cached_at}>found {ago(@cached_at)}, nothing to check.</span>
+          <button :if={@cached_at} phx-click="retry" class="btn btn-xs rounded-full" disabled={@busy}>
+            Retry
+          </button>
+          <span :if={@cached_at} class="text-base-content/50">looks for new ones</span>
+        <% @source == :pengu -> %>
+          <span :if={match?({:ok, _, _}, @pengu)}>{elem(@pengu, 2)} streams found.</span>
+          <button
+            :if={@pengu != :loading and @pengu != nil}
+            type="button"
+            phx-click="pengu"
+            class="btn btn-xs rounded-full"
+          >
+            Search again
+          </button>
+        <% @source == :nuvio -> %>
+          <span :if={match?({:ok, _}, @nuvio)}>
+            {Roki.Nuvio.count(elem(@nuvio, 1))} streams from {length(elem(@nuvio, 1))} providers.
+          </span>
+          <button
+            :if={@nuvio != :loading and @nuvio != nil}
+            type="button"
+            phx-click="nuvio"
+            class="btn btn-xs rounded-full"
+          >
+            Search again
+          </button>
+          <span class="text-base-content/50">
+            <a href={@settings <> "#nuvio"} class="link">Choose providers</a>
+          </span>
+        <% true -> %>
       <% end %>
     </div>
     """
@@ -1094,6 +1229,90 @@ defmodule RokiWeb.SourcesLive do
     </section>
     """
   end
+
+  attr :nuvio, :any, required: true
+  attr :auto, :atom, default: :off
+  attr :type, :string, required: true
+  attr :id, :integer, required: true
+  attr :season, :integer, default: nil
+  attr :episode, :integer, default: nil
+  attr :settings, :string, required: true
+
+  defp nuvio_sources(assigns) do
+    ~H"""
+    <section class="space-y-4">
+      <div
+        :if={@nuvio in [nil, :loading]}
+        class="flex items-center gap-3 rounded-2xl border border-base-300/70 bg-base-100/60 p-4 text-sm"
+      >
+        <span class="loading loading-spinner loading-sm"></span>
+        {if @auto == :pending,
+          do: "Finding a Nuvio stream…",
+          else: "Asking the selected Nuvio providers, each in its own sandbox…"}
+      </div>
+      <p :if={match?({:error, _}, @nuvio)} class="alert alert-warning text-sm">{elem(@nuvio, 1)}</p>
+
+      <%= if match?({:ok, _}, @nuvio) do %>
+        <p :if={Roki.Nuvio.count(elem(@nuvio, 1)) == 0} class="text-sm text-base-content/60">
+          No Nuvio provider returned a playable stream. The providers and their errors are listed
+          below; a provider whose site is down does not stop the others.
+        </p>
+        <div :for={result <- elem(@nuvio, 1)} class="space-y-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+              {result.provider.name}
+            </h3>
+            <span class={[
+              "badge badge-sm",
+              result.status == :ok && "badge-success",
+              result.status in [:empty, :timeout, :error] && "badge-warning",
+              result.status == :blocked && "badge-error"
+            ]}>
+              {Roki.Nuvio.status_text(result)}
+            </span>
+            <span :if={result.provider.verification == :obfuscated} class="badge badge-ghost badge-sm">
+              sandboxed · obfuscated
+            </span>
+            <span :if={result.error} class="text-xs text-base-content/50">{result.error}</span>
+          </div>
+          <ul :if={result.streams != []} class="space-y-2">
+            <li :for={s <- result.streams}>
+              <.link
+                navigate={nuvio_watch(@type, @id, @season, @episode, s.provider_id, s.id)}
+                class="group flex w-full items-center gap-4 rounded-2xl border border-base-300 bg-base-100/70 p-4 text-left transition hover:border-primary/60 hover:bg-base-100"
+              >
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <div class="truncate text-sm font-medium" title={s.label}>
+                    {if s.name != "", do: s.name, else: s.label}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span :if={s.quality != ""} class="badge badge-sm badge-primary">{s.quality}</span>
+                    <span :if={s.size != ""} class="badge badge-sm badge-ghost">{s.size}</span>
+                    <span class="badge badge-sm badge-ghost">{result.provider.name}</span>
+                    <span :if={s.language != ""} class="text-base-content/60">🔊 {s.language}</span>
+                    <span :if={s.subtitles != []} class="text-base-content/60">💬 {length(s.subtitles)}</span>
+                  </div>
+                </div>
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-content">
+                  <.icon name="hero-play-solid" class="h-5 w-5" />
+                </span>
+              </.link>
+            </li>
+          </ul>
+        </div>
+      <% end %>
+    </section>
+    """
+  end
+
+  defp nuvio_watch(%{type: type, id: id, season: s, episode: e}, provider_id, sid),
+    do: nuvio_watch(type, id, s, e, provider_id, sid)
+
+  defp nuvio_watch("movie", id, _s, _e, provider_id, sid),
+    do: ~p"/watch/movie/#{id}?#{[nv: "#{provider_id}:#{sid}"]}"
+
+  defp nuvio_watch("tv", id, s, e, provider_id, sid),
+    do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{[nv: "#{provider_id}:#{sid}"]}"
 
   defp pengu_watch(%{type: type, id: id, season: s, episode: e}, sid),
     do: pengu_watch(type, id, s, e, sid)

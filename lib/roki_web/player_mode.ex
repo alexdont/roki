@@ -24,8 +24,9 @@ defmodule RokiWeb.PlayerMode do
       else: {:halt, push_event(socket, "roki:player", %{mode: mode})}
   end
 
-  # The account menu's Torrents / PenguPlay switch: the "Play from" setting, saved to the account.
-  defp handle("set_play_from", %{"to" => to}, socket) when to in ["torrent", "pengu"] do
+  # The account menu's Original / PenguPlay / Nuvio switch: the "Play from" setting, saved to
+  # the account.
+  defp handle("set_play_from", %{"to" => to}, socket) when to in ["torrent", "pengu", "nuvio"] do
     with scope when not is_nil(scope) <- socket.assigns[:phoenix_kit_current_scope],
          uuid when is_binary(uuid) <- PhoenixKit.Users.Auth.Scope.user_uuid(scope),
          true <- Roki.Sources.available(uuid)[String.to_existing_atom(to)],

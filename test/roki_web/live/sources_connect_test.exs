@@ -19,7 +19,9 @@ defmodule RokiWeb.SourcesConnectTest do
     {:ok, conn: Plug.Test.init_test_session(conn, %{user_token: token}), user: user}
   end
 
-  test "nothing connected: the connect panel, with where to get each one, and no spinner", %{conn: conn} do
+  test "nothing connected: the connect panel, with where to get each one, and no spinner", %{
+    conn: conn
+  } do
     {:ok, _view, html} = live(conn, "/sources/movie/603?auto=1")
 
     assert html =~ "Connect a source to start watching"
@@ -30,12 +32,16 @@ defmodule RokiWeb.SourcesConnectTest do
     refute html =~ "Starting…"
   end
 
-  test "both switches grey out what the account has not connected, and point to Settings", %{conn: conn} do
+  test "both switches grey out what the account has not connected, and point to Settings", %{
+    conn: conn
+  } do
     {:ok, _view, html} = live(conn, "/sources/movie/603")
 
     # the sources page's own switch and the account menu's
     assert html =~ ~s(href="/nosource/settings#debrid")
     assert html =~ ~s(href="/nosource/settings#penguplay")
+    assert html =~ ~s(href="/nosource/settings#nuvio")
+    assert html =~ "Nuvio"
     assert html =~ "data-source-switch"
     assert html =~ "Not connected — add a PenguPlay link in Settings"
     refute html =~ ~s(phx-click="set_play_from")
@@ -47,7 +53,9 @@ defmodule RokiWeb.SourcesConnectTest do
 
     html =
       view
-      |> form("form[phx-submit=setup_pengu]", pengu: %{url: "https://example.com/a/manifest.json"})
+      |> form("form[phx-submit=setup_pengu]",
+        pengu: %{url: "https://example.com/a/manifest.json"}
+      )
       |> render_submit()
 
     assert html =~ "Paste the install link from pengu.uk"

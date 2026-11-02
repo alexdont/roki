@@ -32,7 +32,7 @@ defmodule RokiWeb.SettingsLive do
   # itself, 1080p elsewhere), shown one under the other.
   @web_hints %{
     "play_from" =>
-      "Where the sources page searches first, and where Play finds its source by itself. Torrents are the releases your debrid account streams; PenguPlay is plain https streams that need no account. The sources page has a switch to look at the other one either way.",
+      "Where the sources page searches first, and where Play finds its source by itself. The original collection is the releases your debrid account streams; PenguPlay is plain https streams that need no account; Nuvio runs the providers you choose below. The sources page has a switch to look at any of the three either way.",
     "sources_cache" =>
       "Releases already found and checked are kept this long, so Play starts at once instead of searching again. Retry on a title looks for new ones.",
     "anime_audio" =>
@@ -131,10 +131,22 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:os_msg, nil)
           |> assign(:pengu, Roki.Pengu.status(uuid))
           |> assign(:pengu_msg, nil)
+          |> assign(:nuvio, %{catalog: [], loading: true, schemas: %{}})
+          |> assign(:nuvio_msg, nil)
           |> assign(:debrid?, Roki.Laev.debrid?(uuid))
           |> assign(:debrid_msg, nil)
           |> assign(:debrid_busy, false)
           |> assign_reading()
+
+        # The manifest is fetched only when this account already uses Nuvio, or when the
+        # section's "Load providers" button is pressed. Merely opening Settings does not
+        # reach GitHub.
+        socket =
+          if connected?(socket) and Roki.Nuvio.Settings.get(uuid)["enabled"] != [] do
+            start_async(socket, :nuvio, fn -> Roki.Nuvio.catalog(uuid) end)
+          else
+            update(socket, :nuvio, &%{&1 | loading: false})
+          end
 
         {:ok, if(connected?(socket) and linked?, do: load(socket), else: socket)}
     end
@@ -246,6 +258,90 @@ defmodule RokiWeb.SettingsLive do
      socket
      |> assign(debrid_busy: true, debrid_msg: nil)
      |> start_async(:debrid_save, fn -> Roki.Laev.save_debrid(uuid, keys) end)}
+  end
+
+  def handle_event(
+        "nuvio_save_provider",
+        %{"nuvio" => %{"provider" => provider_id} = params},
+        socket
+      ) do
+    enabled? = params["enabled"] == "true"
+    accepted? = params["accepted"] == "true"
+
+    cond do
+      enabled? and not accepted? ->
+        {:noreply,
+         assign(
+           socket,
+           :nuvio_msg,
+           {:error, "Tick the acknowledgement before enabling a provider."}
+         )}
+
+      true ->
+        user = PhoenixKit.Users.Auth.get_user(socket.assigns.uuid)
+
+        case Roki.Nuvio.Settings.set_enabled(user, provider_id, enabled?, accepted?) do
+          {:ok, _user} ->
+            uuid = socket.assigns.uuid
+
+            socket =
+              socket
+              |> assign(:nuvio_msg, {:ok, "Saved #{provider_id}."})
+              |> start_async(:nuvio, fn -> Roki.Nuvio.catalog(uuid) end)
+
+            {:noreply, socket}
+
+          _ ->
+            {:noreply, assign(socket, :nuvio_msg, {:error, "Could not save that provider."})}
+        end
+    end
+  end
+
+  def handle_event("nuvio_options", %{"provider" => provider_id}, socket) do
+    key = {:nuvio_schema, provider_id}
+
+    {:noreply,
+     socket
+     |> assign(:nuvio_msg, nil)
+     |> start_async(key, fn -> Roki.Nuvio.Settings.schema(provider_id) end)}
+  end
+
+  def handle_event("nuvio_save_options", %{"provider" => provider_id} = params, socket) do
+    user = PhoenixKit.Users.Auth.get_user(socket.assigns.uuid)
+    options = params["options"] || %{}
+
+    case Roki.Nuvio.Settings.set_options(user, provider_id, options) do
+      {:ok, _user} ->
+        {:noreply, assign(socket, :nuvio_msg, {:ok, "Options saved for #{provider_id}."})}
+
+      _ ->
+        {:noreply, assign(socket, :nuvio_msg, {:error, "Could not save those options."})}
+    end
+  end
+
+  def handle_event("nuvio_load", _params, socket) do
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     start_async(
+       assign(socket, :nuvio, %{catalog: [], loading: true, schemas: %{}}),
+       :nuvio,
+       fn -> Roki.Nuvio.catalog(uuid) end
+     )}
+  end
+
+  def handle_event("nuvio_refresh", _params, socket) do
+    Roki.Nuvio.Registry.forget()
+    uuid = socket.assigns.uuid
+
+    {:noreply,
+     start_async(
+       assign(socket, :nuvio, %{catalog: [], loading: true, schemas: %{}}),
+       :nuvio,
+       fn ->
+         Roki.Nuvio.catalog(uuid)
+       end
+     )}
   end
 
   def handle_event("pengu_remove", _params, socket) do
@@ -482,7 +578,9 @@ defmodule RokiWeb.SettingsLive do
     do: {:noreply, assign(socket, debrid_busy: false, debrid_msg: {:error, text})}
 
   def handle_async(:debrid_save, _other, socket),
-    do: {:noreply, assign(socket, debrid_busy: false, debrid_msg: {:error, "That did not work. Try again."})}
+    do:
+      {:noreply,
+       assign(socket, debrid_busy: false, debrid_msg: {:error, "That did not work. Try again."})}
 
   def handle_async(:settings, {:ok, {settings, carrying?, server}}, socket),
     do:
@@ -598,6 +696,36 @@ defmodule RokiWeb.SettingsLive do
   def handle_async({:replace, key}, {:exit, _}, socket),
     do: {:noreply, put_result(socket, key, {:error, "could not save"})}
 
+  def handle_async(:nuvio, {:ok, {:ok, catalog}}, socket),
+    do: {:noreply, update(socket, :nuvio, &%{&1 | catalog: catalog, loading: false})}
+
+  def handle_async(:nuvio, {:ok, {:error, reason}}, socket),
+    do:
+      {:noreply,
+       assign(socket,
+         nuvio: %{catalog: [], loading: false, schemas: %{}},
+         nuvio_msg: {:error, Roki.Nuvio.message(reason)}
+       )}
+
+  def handle_async(:nuvio, _other, socket),
+    do: {:noreply, update(socket, :nuvio, &%{&1 | loading: false})}
+
+  def handle_async({:nuvio_schema, provider_id}, {:ok, {:ok, fields}}, socket) do
+    {:noreply, update(socket, :nuvio, fn n -> put_in(n.schemas[provider_id], fields) end)}
+  end
+
+  def handle_async({:nuvio_schema, _provider_id}, {:ok, {:error, reason}}, socket),
+    do:
+      {:noreply,
+       assign(
+         socket,
+         :nuvio_msg,
+         {:error, "Options could not be read: #{inspect(reason, limit: 2)}"}
+       )}
+
+  def handle_async({:nuvio_schema, _provider_id}, _other, socket),
+    do: {:noreply, assign(socket, :nuvio_msg, {:error, "Options could not be read."})}
+
   def handle_async(:sync_op, {:ok, {:error, reason}}, socket),
     do: {:noreply, assign(socket, busy: nil, error: "Sync failed: " <> Laev.explain(reason))}
 
@@ -695,11 +823,7 @@ defmodule RokiWeb.SettingsLive do
                 :for={
                   {key, spec} <-
                     if(group == :playback,
-                      do:
-                        Enum.reject(
-                          external_app_spec(@web_specs),
-                          &(elem(&1, 0) == "play_from" and @pengu.kind == nil)
-                        ),
+                      do: external_app_spec(@web_specs),
                       else: []
                     )
                 }
@@ -785,7 +909,188 @@ defmodule RokiWeb.SettingsLive do
             </button>
           </form>
           <p :if={match?({:ok, _}, @pengu_msg)} class="text-sm text-success">{elem(@pengu_msg, 1)}</p>
-          <p :if={match?({:error, _}, @pengu_msg)} class="text-sm text-error">{elem(@pengu_msg, 1)}</p>
+          <p :if={match?({:error, _}, @pengu_msg)} class="text-sm text-error">
+            {elem(@pengu_msg, 1)}
+          </p>
+        </section>
+
+        <%!-- Nuvio: providers from the All-in-One-Nuvio manifest, each one enabled by hand and
+             run in the sandbox. Independent of PenguPlay and of the debrid collection. --%>
+        <section id="nuvio" class="space-y-3 scroll-mt-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-xl font-semibold">Nuvio</h2>
+            <button type="button" phx-click="nuvio_refresh" class="btn btn-xs rounded-full">
+              Refresh manifest
+            </button>
+          </div>
+          <p class="text-sm text-base-content/60">
+            A third collection, discovered from the
+            <a
+              href="https://github.com/NuvioPlugin/All-in-One-Nuvio"
+              target="_blank"
+              rel="noopener"
+              class="link"
+            >All-in-One-Nuvio</a>
+            manifest. Providers run one at a time in an isolated Node process; they are not
+            trusted, and one that fails does not stop the others.
+          </p>
+          <p class="rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
+            {Roki.Nuvio.Settings.authorization_notice()}
+          </p>
+
+          <p :if={@nuvio.loading} class="flex items-center gap-2 text-sm text-base-content/60">
+            <span class="loading loading-spinner loading-xs"></span> Reading the manifest…
+          </p>
+          <p :if={not @nuvio.loading and @nuvio.catalog != []} class="text-sm text-base-content/60">
+            {length(@nuvio.catalog)} providers in the manifest. Enabled: {Enum.count(
+              @nuvio.catalog,
+              & &1.enabled
+            )}.
+          </p>
+          <button
+            :if={not @nuvio.loading and @nuvio.catalog == []}
+            type="button"
+            phx-click="nuvio_load"
+            class="btn btn-sm btn-primary"
+          >
+            Load providers from the manifest
+          </button>
+          <p :if={match?({:ok, _}, @nuvio_msg)} class="text-sm text-success">{elem(@nuvio_msg, 1)}</p>
+          <p :if={match?({:error, _}, @nuvio_msg)} class="text-sm text-error">
+            {elem(@nuvio_msg, 1)}
+          </p>
+
+          <div class="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
+            <details
+              :for={entry <- @nuvio.catalog}
+              class="rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <summary class="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                <span class="font-semibold">{entry.provider.name}</span>
+                <span class="text-xs text-base-content/50">{entry.provider.id}</span>
+                <span :if={entry.enabled} class="badge badge-success badge-sm">enabled</span>
+                <span :if={entry.provider.has_settings} class="badge badge-ghost badge-sm">options</span>
+                <span :if={entry.provider.limited} class="badge badge-warning badge-sm">limited</span>
+                <span class="text-xs text-base-content/40">
+                  {Enum.join(entry.provider.formats, " · ")}
+                </span>
+              </summary>
+
+              <p class="mt-2 text-sm text-base-content/60">{entry.provider.description}</p>
+
+              <form
+                phx-submit="nuvio_save_provider"
+                class="mt-3 flex flex-wrap items-center gap-3 text-sm"
+              >
+                <input type="hidden" name="nuvio[provider]" value={entry.provider.id} />
+                <label class="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    name="nuvio[enabled]"
+                    value="true"
+                    checked={entry.enabled}
+                    class="checkbox checkbox-sm"
+                  /> Enabled
+                </label>
+                <label class="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    name="nuvio[accepted]"
+                    value="true"
+                    checked={entry.accepted}
+                    class="checkbox checkbox-sm"
+                  /> I am authorised to use this provider for this content
+                </label>
+                <button class="btn btn-xs btn-primary">Save</button>
+                <button
+                  :if={entry.provider.has_settings}
+                  type="button"
+                  phx-click="nuvio_options"
+                  phx-value-provider={entry.provider.id}
+                  class="btn btn-xs btn-ghost"
+                >
+                  Options
+                </button>
+              </form>
+
+              <%= if fields = @nuvio.schemas[entry.provider.id] do %>
+                <form
+                  phx-submit="nuvio_save_options"
+                  class="mt-3 space-y-2 border-t border-base-300 pt-3"
+                >
+                  <input type="hidden" name="provider" value={entry.provider.id} />
+                  <p :if={fields == []} class="text-xs text-base-content/50">
+                    This provider has no options.
+                  </p>
+                  <%= for field <- fields do %>
+                    <div
+                      :if={field.type == :header}
+                      class="pt-1 text-xs font-semibold uppercase tracking-wide text-base-content/50"
+                    >
+                      {field.label}
+                    </div>
+                    <label :if={field.type != :header} class="block space-y-1 text-sm">
+                      <span class="font-medium">{field.label}</span>
+                      <span :if={field.description} class="block text-xs text-base-content/50">
+                        {field.description}
+                      </span>
+                      <%= case field.type do %>
+                        <% :select -> %>
+                          <select
+                            name={"options[#{field.key}]"}
+                            class="select select-bordered select-sm w-full"
+                          >
+                            <option
+                              :for={option <- field.options}
+                              value={option.value}
+                              selected={
+                                option.value ==
+                                  (Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
+                                     field.default)
+                              }
+                            >
+                              {option.label}
+                            </option>
+                          </select>
+                        <% :toggle -> %>
+                          <input
+                            type="checkbox"
+                            name={"options[#{field.key}]"}
+                            value="true"
+                            checked={
+                              to_string(
+                                Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
+                                  field.default
+                              ) in ["true", "1"]
+                            }
+                            class="toggle toggle-sm"
+                          />
+                        <% _ -> %>
+                          <input
+                            type={if field.secret, do: "password", else: "text"}
+                            name={"options[#{field.key}]"}
+                            value={
+                              if field.secret,
+                                do: "",
+                                else:
+                                  to_string(
+                                    Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
+                                      field.default || ""
+                                  )
+                            }
+                            placeholder={field.placeholder}
+                            autocomplete="off"
+                            spellcheck="false"
+                            class="input input-bordered input-sm w-full"
+                          />
+                      <% end %>
+                    </label>
+                  <% end %>
+                  <button class="btn btn-xs btn-primary">Save options</button>
+                </form>
+              <% end %>
+            </details>
+          </div>
         </section>
 
         <%!-- Torrents: a Real-Debrid or TorBox key, for an account that has none yet (and is not lent
@@ -823,7 +1128,9 @@ defmodule RokiWeb.SettingsLive do
               <span :if={@debrid_busy} class="loading loading-spinner loading-xs"></span> Connect
             </button>
           </form>
-          <p :if={match?({:error, _}, @debrid_msg)} class="text-sm text-error">{elem(@debrid_msg, 1)}</p>
+          <p :if={match?({:error, _}, @debrid_msg)} class="text-sm text-error">
+            {elem(@debrid_msg, 1)}
+          </p>
         </section>
 
         <section :if={@state == :ready} id="connections" class="space-y-1 scroll-mt-4">
@@ -995,12 +1302,21 @@ defmodule RokiWeb.SettingsLive do
     do:
       Enum.filter(
         specs,
-        &(elem(&1, 0) in ["play_from", "anime_audio", "browser_work", "external_app", "sources_cache"])
+        &(elem(&1, 0) in [
+            "play_from",
+            "anime_audio",
+            "browser_work",
+            "external_app",
+            "sources_cache"
+          ])
       )
       |> Enum.sort_by(
-        &Enum.find_index(["play_from", "anime_audio", "browser_work", "external_app", "sources_cache"], fn k ->
-          k == elem(&1, 0)
-        end)
+        &Enum.find_index(
+          ["play_from", "anime_audio", "browser_work", "external_app", "sources_cache"],
+          fn k ->
+            k == elem(&1, 0)
+          end
+        )
       )
 
   attr :value, :string, required: true
@@ -1309,7 +1625,12 @@ defmodule RokiWeb.SettingsLive do
           Unlink
         </button>
 
-        <form id="imdb-dates" phx-submit="imdb_dates" phx-change="imdb_validate" class="space-y-2 pt-3">
+        <form
+          id="imdb-dates"
+          phx-submit="imdb_dates"
+          phx-change="imdb_validate"
+          class="space-y-2 pt-3"
+        >
           <p class="text-sm text-base-content/70">
             Brought your ratings over from IMDb? TMDB does not keep when you rated them, so they
             arrive with no date. Export them from IMDb (Your ratings → Export) and add the file

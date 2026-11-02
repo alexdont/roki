@@ -13,10 +13,14 @@ you use — and every account brings its own.
   episodes, ratings, lists, and a profile. Movie and show data comes from TMDB; the terminal app
   [laev](https://github.com/alexdont/laev) (my own Elixir library) does the heavy lifting behind it,
   so the website and the command line share one history.
-- **Two kinds of source, one player.** Torrent releases through a debrid account, or plain https
-  streams from a PenguPlay (Stremio-style) addon link. A switch on the sources page and in the
-  account menu picks which one Play uses; Play then finds the best stream by itself and falls back
-  to the next if one fails to start.
+- **Three independent source collections, one player.** The original collection is torrent
+  releases through a debrid account. PenguPlay adds plain https streams from a Stremio-style
+  addon link. Nuvio adds providers discovered from the
+  [All-in-One-Nuvio](https://github.com/NuvioPlugin/All-in-One-Nuvio) manifest, each enabled and
+  acknowledged in Settings and run one call at a time in an isolated Node sandbox. A switch on
+  the sources page and in the account menu picks which collection Play uses; Play then finds the
+  best stream by itself and falls back to the next if one fails to start. Configuring one
+  collection never configures or disables another.
 - **A player that works in the browser.** Files are taken apart and decoded on the viewer's device
   (Mediabunny → MediaSource, so 4K HEVC and Dolby/DTS audio play without server work); playlists go
   through hls.js; anything else is converted by ffmpeg on the server. Resume position, subtitles
@@ -58,7 +62,20 @@ mix phx.server     # http://localhost:4000
 ```
 
 Optional: `TMDB_API_KEY` (the public Featured page), `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET`
-(MyAnimeList). Each user adds their own debrid keys or PenguPlay link under Settings.
+(MyAnimeList). Each user adds their own debrid keys, PenguPlay link, or Nuvio providers under
+Settings.
+
+Nuvio needs Node.js on the server (`node` on `PATH`, or `config :roki, :nuvio_node`; the manifest
+URL may be overridden with `NUVIO_MANIFEST_URL`). Provider JavaScript is fetched from the
+manifest's own GitHub raw host, checked by `Roki.Nuvio.Validator`, and run through
+`Roki.Nuvio.Sandbox`: no inherited environment, no filesystem or child-process permission, code
+generation disabled, HTTPS-only fetches with private-address checks, a curated `require`, and a
+hard timeout. The only third-party modules available are the vendored `cheerio` and `crypto-js`
+bundles; other Node modules and raw network modules are rejected. A manifest listing is not an
+endorsement or an authorisation to watch anything. Enable a provider only for media you may
+access; DRM and access controls are not circumvented, so streams that need either will not play.
+Failed or timed-out providers are shown individually without stopping the rest of the
+collection.
 
 ```bash
 mix test

@@ -49,6 +49,11 @@ defmodule RokiWeb.WatchLive do
           # `?auto=1` with it: Play picked the stream, so a stream that fails is followed by the next best.
           pengu_auto: params["auto"] == "1",
           pengu_tried: [],
+          # `?nv=provider:id` plays a Nuvio stream chosen on the sources page. Its provider
+          # already ran in the sandbox there; this page uses the ten-minute search cache.
+          nuvio: parse_nuvio(params["nv"]),
+          nuvio_auto: params["auto"] == "1",
+          nuvio_tried: [],
           torrent_forced: params["src"] == "torrent" or params["study"] == "1",
           uuid: uuid,
           linked?: uuid != nil and Roki.Laev.connected?(uuid),
@@ -76,7 +81,9 @@ defmodule RokiWeb.WatchLive do
         )
 
       {:ok,
-       if(connected?(socket) and (socket.assigns.linked? or socket.assigns.pengu),
+       if(
+         connected?(socket) &&
+           (socket.assigns.linked? || socket.assigns.pengu || socket.assigns.nuvio),
          do: load(socket),
          else: socket
        )}
@@ -93,6 +100,21 @@ defmodule RokiWeb.WatchLive do
   end
 
   defp parse_episode(_), do: {nil, nil}
+
+  defp parse_nuvio(term) when is_binary(term) do
+    case String.split(term, ":", parts: 2) do
+      [provider, id] ->
+        if Regex.match?(~r/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, provider) and
+             Regex.match?(~r/^[0-9a-f]{16}$/, id) do
+          {provider, id}
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_nuvio(_), do: nil
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -220,14 +242,46 @@ defmodule RokiWeb.WatchLive do
     end)
   end
 
+  # The Nuvio stream named in the address, from the same cached search the sources page used.
+  defp play_nuvio(socket) do
+    %{id: tmdb_id, type: type, season: season, episode: episode, nuvio: {provider_id, stream_id}} =
+      socket.assigns
+
+    %{uuid: uuid, linked?: linked?, title: title} = socket.assigns
+
+    start_async(socket, :nuvio, fn ->
+      with {:ok, results} <- Roki.Nuvio.search(uuid, tmdb_id, type, season, episode),
+           stream when is_map(stream) <- Roki.Nuvio.find(results, provider_id, stream_id) do
+        if linked? do
+          ctx = Watch.ctx(uuid, title, season, episode)
+          {:ok, stream, ctx, Watch.nuvio_start(uuid, ctx)}
+        else
+          {:ok, stream, nil, 0}
+        end
+      else
+        nil -> {:error, :gone}
+        {:error, reason} -> {:error, reason}
+      end
+    end)
+  end
+
   # After a stream Play picked failed: the next best from the same search (kept ten minutes), up to
   # four in a row. A stream chosen by hand is not replaced behind the viewer's back.
-  defp next_pengu(%{pengu_auto: true, title: %{imdb_id: imdb}} = a, tried) when length(tried) < 4 do
+  defp next_pengu(%{pengu_auto: true, title: %{imdb_id: imdb}} = a, tried)
+       when length(tried) < 4 do
     with {:ok, streams} <- Roki.Pengu.streams(a.uuid, imdb, a.season, a.episode),
          do: Roki.Pengu.best(streams, a.caps, tried)
   end
 
   defp next_pengu(_assigns, _tried), do: nil
+
+  defp next_nuvio(%{nuvio_auto: true, nuvio: {_provider_id, _id}} = a, tried)
+       when length(tried) < 4 do
+    with {:ok, results} <- Roki.Nuvio.search(a.uuid, a.id, a.type, a.season, a.episode),
+         do: Roki.Nuvio.best(Roki.Nuvio.streams(results), a.caps, tried)
+  end
+
+  defp next_nuvio(_assigns, _tried), do: nil
 
   # Play on an account that looks at PenguPlay first, arriving here with nothing chosen.
   defp pengu_default?(%{hash: nil, torrent_forced: false, uuid: uuid}) when is_binary(uuid) do
@@ -237,8 +291,20 @@ defmodule RokiWeb.WatchLive do
 
   defp pengu_default?(_), do: false
 
-  # Another episode of the title playing: from PenguPlay, back through the sources page asking for
-  # its best stream (the next episode is another search); from a release, straight to that release.
+  # Play on an account that looks at Nuvio first.
+  defp nuvio_default?(%{hash: nil, torrent_forced: false, uuid: uuid}) when is_binary(uuid) do
+    avail = Roki.Sources.available(uuid)
+    Map.get(avail, :nuvio, false) and Roki.Sources.current(uuid, avail) == :nuvio
+  end
+
+  defp nuvio_default?(_), do: false
+
+  # Another episode of the title playing: from PenguPlay or Nuvio, back through the sources page
+  # asking for its best stream (the next episode is another search); from a release, straight to
+  # that release.
+  defp episode_path(%{assigns: %{nuvio: {_provider, _id}, id: id}}, s, e, _query),
+    do: ~p"/sources/tv/#{id}/#{s}/#{e}?#{[src: "nuvio", auto: 1]}"
+
   defp episode_path(%{assigns: %{pengu: pg, id: id}}, s, e, _query) when is_binary(pg),
     do: ~p"/sources/tv/#{id}/#{s}/#{e}?#{[src: "pengu", auto: 1]}"
 
@@ -246,12 +312,19 @@ defmodule RokiWeb.WatchLive do
     do: ~p"/watch/tv/#{id}/#{s}/#{e}?#{query ++ study_q(socket)}"
 
   defp current_path(%{type: "movie", id: id}), do: ~p"/watch/movie/#{id}"
-  defp current_path(%{type: "tv", id: id, season: s, episode: e}), do: ~p"/watch/tv/#{id}/#{s}/#{e}"
+
+  defp current_path(%{type: "tv", id: id, season: s, episode: e}),
+    do: ~p"/watch/tv/#{id}/#{s}/#{e}"
 
   defp pengu_failure(:gone),
     do: "That PenguPlay source is no longer listed. Go back and search again."
 
   defp pengu_failure(reason), do: Roki.Pengu.message(reason)
+
+  defp nuvio_failure(:gone),
+    do: "That Nuvio source is no longer listed. Go back and search again."
+
+  defp nuvio_failure(reason), do: Roki.Nuvio.message(reason)
 
   # What did not work before is left out; when that is all that was checked, look at more.
   defp without(_parent, _token, _uuid, _heavy_ok, _caps, res, []), do: res
@@ -429,9 +502,28 @@ defmodule RokiWeb.WatchLive do
         else: socket
 
     cond do
-      socket.assigns.pengu -> {:noreply, play_pengu(socket)}
-      pengu_default?(socket.assigns) -> {:noreply, push_navigate(socket, to: sources_path(socket.assigns, "pengu") <> "?auto=1", replace: true)}
-      true -> {:noreply, resolve(socket)}
+      socket.assigns.nuvio ->
+        {:noreply, play_nuvio(socket)}
+
+      socket.assigns.pengu ->
+        {:noreply, play_pengu(socket)}
+
+      nuvio_default?(socket.assigns) ->
+        {:noreply,
+         push_navigate(socket,
+           to: sources_path(socket.assigns, "nuvio") <> "&auto=1",
+           replace: true
+         )}
+
+      pengu_default?(socket.assigns) ->
+        {:noreply,
+         push_navigate(socket,
+           to: sources_path(socket.assigns, "pengu") <> "&auto=1",
+           replace: true
+         )}
+
+      true ->
+        {:noreply, resolve(socket)}
     end
   end
 
@@ -482,7 +574,11 @@ defmodule RokiWeb.WatchLive do
      start_async(socket, :pengu_subs, fn -> {play_id, Watch.pengu_tracks(play_id, subs)} end)}
   end
 
-  def handle_async(:pengu_subs, {:ok, {play_id, tracks}}, %{assigns: %{player: %{} = player}} = socket)
+  def handle_async(
+        :pengu_subs,
+        {:ok, {play_id, tracks}},
+        %{assigns: %{player: %{} = player}} = socket
+      )
       when is_binary(play_id) do
     %{uuid: uuid, ctx: ctx, token: token} = socket.assigns
     player = %{player | tracks: Enum.uniq_by(player.tracks ++ tracks, & &1.url)}
@@ -510,6 +606,79 @@ defmodule RokiWeb.WatchLive do
 
   def handle_async(:pengu, {:exit, _}, socket),
     do: {:noreply, assign(socket, failed: pengu_failure(:timeout), failed_reason: :pengu)}
+
+  def handle_async(:nuvio, {:ok, {:ok, stream, ctx, from}}, socket) do
+    local? = stream.kind == :file and socket.assigns.caps[:local] == true
+
+    # Files go through the signed Nuvio relay (some hosts need a Referer or cookie, and most send
+    # no CORS headers). Playlists go through the HLS bridge, which rewrites every URI to a signed
+    # URL on this server. The player itself is unchanged.
+    url =
+      if stream.kind == :hls,
+        do: RokiWeb.NuvioController.hls_url(stream.url, stream.headers),
+        else: RokiWeb.Relay.nuvio_url(stream.url, stream.headers)
+
+    data = %{
+      url: url,
+      hls: stream.kind == :hls,
+      hlsjs: stream.kind == :hls,
+      local: local?,
+      audio_lang: nil,
+      filesize: nil,
+      resume: from,
+      start: 0,
+      tracks: [],
+      prefer: nil,
+      key: Watch.nuvio_play_id(stream.id),
+      media: "nuvio:#{socket.assigns.id}",
+      os: nil,
+      os_langs: [],
+      study: nil,
+      startup: 25_000
+    }
+
+    data = Map.merge(data, media_info(socket.assigns))
+    socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours()
+
+    play_id = Watch.nuvio_play_id(stream.id)
+    subs = stream.subtitles
+
+    {:noreply,
+     start_async(socket, :nuvio_subs, fn -> {play_id, Watch.nuvio_tracks(play_id, subs)} end)}
+  end
+
+  def handle_async(
+        :nuvio_subs,
+        {:ok, {play_id, tracks}},
+        %{assigns: %{player: %{} = player}} = socket
+      )
+      when is_binary(play_id) do
+    %{uuid: uuid, ctx: ctx, token: token} = socket.assigns
+    player = %{player | tracks: Enum.uniq_by(player.tracks ++ tracks, & &1.url)}
+    socket = assign(socket, :player, player)
+
+    langs = if ctx, do: Watch.external_langs(uuid, ctx, player.tracks), else: []
+
+    socket =
+      for lang <- langs, reduce: socket do
+        acc ->
+          start_async(
+            acc,
+            {:ext_subs, lang},
+            Roki.Study.wrap(fn -> {token, external(uuid, ctx, play_id, lang, "Nuvio")} end)
+          )
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_async(:nuvio_subs, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:nuvio, {:ok, {:error, reason}}, socket),
+    do: {:noreply, assign(socket, failed: nuvio_failure(reason), failed_reason: :nuvio)}
+
+  def handle_async(:nuvio, {:exit, _}, socket),
+    do: {:noreply, assign(socket, failed: nuvio_failure(:timeout), failed_reason: :nuvio)}
 
   def handle_async(
         :resolve,
@@ -745,9 +914,47 @@ defmodule RokiWeb.WatchLive do
   # convert this release for the browser (the server re-encodes it to H.264, minutes of work), or
   # look for another file the browser plays as it is — are `convert_it` and `find_other`.
   # A PenguPlay stream the browser could not play: nothing to convert or replace here, so say so.
+  def handle_event(
+        "player_failed",
+        params,
+        %{assigns: %{nuvio: {provider_id, id}, player: %{}}} = socket
+      )
+      when is_binary(provider_id) and is_binary(id) do
+    Logger.warning(
+      "nuvio stream #{provider_id}/#{id} failed for #{socket.assigns.id}: #{inspect(params["why"])}"
+    )
+
+    tried = [id | socket.assigns.nuvio_tried]
+
+    case next_nuvio(socket.assigns, tried) do
+      %{id: next_id, provider_id: next_provider} ->
+        {:noreply,
+         socket
+         |> assign(nuvio: {next_provider, next_id}, nuvio_tried: tried, player: nil)
+         |> push_patch(
+           to:
+             "#{current_path(socket.assigns)}?#{URI.encode_query(nv: "#{next_provider}:#{next_id}", auto: 1)}",
+           replace: true
+         )
+         |> play_nuvio()}
+
+      nil ->
+        {:noreply,
+         assign(socket,
+           player: nil,
+           failed:
+             "That Nuvio stream would not play in this browser (#{String.slice(to_string(params["why"]), 0, 120)}). Try another provider.",
+           failed_reason: :nuvio
+         )}
+    end
+  end
+
   def handle_event("player_failed", params, %{assigns: %{pengu: id, player: %{}}} = socket)
       when is_binary(id) do
-    Logger.warning("pengu stream #{id} failed for #{socket.assigns.id}: #{inspect(params["why"])}")
+    Logger.warning(
+      "pengu stream #{id} failed for #{socket.assigns.id}: #{inspect(params["why"])}"
+    )
+
     tried = [id | socket.assigns.pengu_tried]
 
     case next_pengu(socket.assigns, tried) do
@@ -755,7 +962,10 @@ defmodule RokiWeb.WatchLive do
         {:noreply,
          socket
          |> assign(pengu: next, pengu_tried: tried, player: nil)
-         |> push_patch(to: "#{current_path(socket.assigns)}?#{URI.encode_query(pg: next, auto: 1)}", replace: true)
+         |> push_patch(
+           to: "#{current_path(socket.assigns)}?#{URI.encode_query(pg: next, auto: 1)}",
+           replace: true
+         )
          |> play_pengu()}
 
       nil ->
@@ -1074,10 +1284,17 @@ defmodule RokiWeb.WatchLive do
 
   # The sources page, opened on the kind of source that is playing — so "Change source" lists the
   # PenguPlay streams after a PenguPlay one, and the releases after a release.
-  defp sources_path(%{pengu: id} = a) when is_binary(id), do: sources_path(a, "pengu")
-  defp sources_path(a), do: sources_path(a, "torrent")
+  defp sources_path(a), do: sources_path(a, nil)
 
-  defp sources_path(a, src), do: sources_base(a) <> if(Roki.Pengu.configured?(a[:uuid]), do: "?src=#{src}", else: "")
+  defp sources_path(a, nil) do
+    cond do
+      match?(%{nuvio: {_provider, _id}}, a) -> sources_path(a, "nuvio")
+      is_binary(a[:pengu]) -> sources_path(a, "pengu")
+      true -> sources_path(a, "torrent")
+    end
+  end
+
+  defp sources_path(a, src), do: sources_base(a) <> "?src=#{src}"
 
   defp sources_base(%{type: "movie", id: id}), do: ~p"/sources/movie/#{id}"
 

@@ -236,7 +236,10 @@ defmodule Roki.Watch do
 
         _ ->
           Map.get(Laev.Position.episode_marks(), {"tv", title.id}, %{}) |> map_size() > 0 or
-            Enum.any?(Laev.AnimeMap.mal_ids("tv", title.id), &(Map.get(Laev.Position.anime_marks(), &1, 0) > 0))
+            Enum.any?(
+              Laev.AnimeMap.mal_ids("tv", title.id),
+              &(Map.get(Laev.Position.anime_marks(), &1, 0) > 0)
+            )
       end
   end
 
@@ -388,7 +391,9 @@ defmodule Roki.Watch do
                     else: Laev.Tmdb.tv_rating(title.id)
                   )
 
-                if is_number(rating) and rating > 0, do: Roki.Profile.note_rating(uuid, key, rating)
+                if is_number(rating) and rating > 0,
+                  do: Roki.Profile.note_rating(uuid, key, rating)
+
                 {:tmdb, {:ok, rating}}
               else
                 {:roki, {:ok, nil}}
@@ -2062,11 +2067,23 @@ defmodule Roki.Watch do
   defp put_source(entry, nil), do: entry
 
   defp put_source(entry, source),
-    do: Map.put(entry, "source", %{"name" => source.name, "magnet" => source.magnet, "hash" => source.hash})
+    do:
+      Map.put(entry, "source", %{
+        "name" => source.name,
+        "magnet" => source.magnet,
+        "hash" => source.hash
+      })
 
   @doc "The 16-hex id PenguPlay stream `id` is known by in `/stream/:id/…` (where its subtitles are put)."
   def pengu_play_id(id),
     do: :crypto.hash(:sha256, "pengu:" <> id) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+  @doc "The same kind of id for a Nuvio stream, kept in its own namespace."
+  def nuvio_play_id(id),
+    do: :crypto.hash(:sha256, "nuvio:" <> id) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+  @doc "The subtitle files a Nuvio stream came with, placed beside it the same way as PenguPlay's."
+  def nuvio_tracks(play_id, subs), do: pengu_tracks(play_id, subs, "Nuvio")
 
   @doc """
   The subtitle files a PenguPlay stream came with (`[%{url:, lang:}]`), fetched here, turned into
@@ -2074,11 +2091,11 @@ defmodule Roki.Watch do
   ones that do not answer left out. Most streams carry none; the account's own language is then
   fetched from OpenSubtitles like for any release (`external_langs/4`).
   """
-  def pengu_tracks(play_id, subs) do
+  def pengu_tracks(play_id, subs, label \\ "PenguPlay") do
     subs
     |> Enum.take(8)
     |> Enum.with_index()
-    |> Task.async_stream(&pengu_track(play_id, &1),
+    |> Task.async_stream(&pengu_track(play_id, &1, label),
       max_concurrency: 4,
       timeout: 15_000,
       on_timeout: :kill_task
@@ -2090,17 +2107,18 @@ defmodule Roki.Watch do
     |> Enum.uniq_by(& &1.url)
   end
 
-  defp pengu_track(play_id, {%{url: url, lang: lang}, i}) do
+  defp pengu_track(play_id, {%{url: url, lang: lang}, i}, label) do
     code = if short_code(lang) =~ ~r/^[a-z]{2,3}$/, do: short_code(lang), else: "und"
 
-    with {:ok, %{status: 200, body: body}} when is_binary(body) and byte_size(body) in 1..2_000_000 <-
+    with {:ok, %{status: 200, body: body}}
+         when is_binary(body) and byte_size(body) in 1..2_000_000 <-
            Req.get(url, receive_timeout: 10_000, retry: false, decode_body: false),
          vtt when is_binary(vtt) <- Laev.Subtitles.to_vtt("pengu-#{i}.srt", body),
          true <- String.contains?(vtt, "-->") do
       place_auto(
         play_id,
         code,
-        %{label: "#{language(code)} · PenguPlay", vtt: vtt},
+        %{label: "#{language(code)} · #{label}", vtt: vtt},
         "ext-#{code}-#{i}.vtt"
       )
     else
@@ -2122,6 +2140,9 @@ defmodule Roki.Watch do
       Laev.Position.saved_position(ctx) || 0
     end)
   end
+
+  @doc "A Nuvio stream starts playing: the same history and resume handling as a PenguPlay stream."
+  def nuvio_start(uuid, ctx), do: pengu_start(uuid, ctx)
 
   @doc "Remember the resolution picked by hand for this title, so its next episode starts there too."
   def remember_resolution(uuid, ctx, %{resolution: r}) when is_binary(r) do

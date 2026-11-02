@@ -256,6 +256,9 @@ defmodule RokiWeb.Router do
     get "/images/hevc-test", PageController, :hevc_test
     # The player lab: the browser does the whole job itself (owner only).
     get "/relay", RelayController, :bytes
+    get "/relay/nuvio", RelayController, :nuvio
+    # Nuvio playlists that need request headers: their URIs are rewritten to signed relay URLs.
+    get "/nuvio/hls", NuvioController, :hls
     get "/lab/sample/:name", LabController, :sample
     get "/lab/bytes", LabController, :bytes
     post "/lab/report", LabController, :report
