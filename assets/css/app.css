@@ -139,6 +139,17 @@ body {
   min-height: 100svh;
 }
 
+/* The light page gets the dark one's depth: colour that fades in and out of the paper. The same
+   three washes, but strong enough to read on white, and a cool one low on the left so it is not all
+   warm. The dark theme keeps the quiet version above. */
+[data-theme=light] body {
+  background-image:
+    radial-gradient(64rem 44rem at 88% -12%, color-mix(in oklab, var(--color-primary) 34%, transparent), transparent 62%),
+    radial-gradient(54rem 40rem at -12% 28%, color-mix(in oklab, var(--color-accent) 24%, transparent), transparent 62%),
+    radial-gradient(48rem 34rem at 108% 78%, color-mix(in oklab, var(--color-primary) 22%, transparent), transparent 62%),
+    radial-gradient(46rem 32rem at 12% 112%, color-mix(in oklab, oklch(72% 0.14 215) 20%, transparent), transparent 62%);
+}
+
 body::before {
   content: "";
   position: fixed;

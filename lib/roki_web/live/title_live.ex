@@ -1057,19 +1057,6 @@ defmodule RokiWeb.TitleLive do
 
         <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>
 
-        <p
-          :if={@title.overview}
-          class="max-w-2xl text-sm lg:hidden leading-relaxed text-white/85 sm:text-base xl:text-lg"
-        >
-          <span class="line-clamp-3">{@title.overview}</span>
-          <a
-            href="#details"
-            class="text-sm font-medium text-white/60 underline-offset-4 hover:text-white hover:underline"
-          >
-            More
-          </a>
-        </p>
-
         <div class="flex flex-wrap items-center gap-2 pt-3 sm:gap-3">
           <.play_button
             title={@title}
@@ -1962,7 +1949,7 @@ defmodule RokiWeb.TitleLive do
       </button>
       <div
         id={@id}
-        class="absolute right-0 top-full z-40 mt-1 hidden w-56 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        class="absolute right-0 top-full z-40 mt-1 hidden w-56 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
         phx-click-away={JS.hide(to: "##{@id}")}
         phx-window-keydown={JS.hide(to: "##{@id}")}
         phx-key="escape"
