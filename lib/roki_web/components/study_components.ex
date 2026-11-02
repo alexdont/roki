@@ -52,7 +52,10 @@ defmodule RokiWeb.StudyComponents do
 
   attr :season, :integer, default: nil, doc: "the season that is playing"
   attr :home, :string, default: "/home", doc: "where closing goes when there is no page behind"
-  attr :sources, :string, default: nil, doc: "the sources page, for a \"Change source\" button in the bar"
+
+  attr :sources, :string,
+    default: nil,
+    doc: "the sources page, for a \"Change source\" button in the bar"
 
   slot :controls,
     doc: "extra controls above the video (the /study page puts its file pickers here)"

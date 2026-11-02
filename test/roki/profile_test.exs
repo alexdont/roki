@@ -282,7 +282,8 @@ defmodule Roki.ProfileTest do
   end
 
   describe "dating titles that appear on the list" do
-    defp finished(id), do: %{type: "movie", id: id, title: "Film #{id}", at: 0, dated?: false, status: "finished"}
+    defp finished(id),
+      do: %{type: "movie", id: id, title: "Film #{id}", at: 0, dated?: false, status: "finished"}
 
     defp dated_count do
       {:ok, bin} = Ecto.UUID.dump(@uuid)

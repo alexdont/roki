@@ -29,7 +29,8 @@ defmodule Roki.SeasonPostersTest do
     :ok
   end
 
-  defp item(attrs), do: Map.merge(%{type: "tv", id: @tv, poster: "show-poster", title: "T"}, attrs)
+  defp item(attrs),
+    do: Map.merge(%{type: "tv", id: @tv, poster: "show-poster", title: "T"}, attrs)
 
   test "a title that is a season gets that season's poster" do
     [a, b] = SeasonPosters.apply([item(%{season: 2}), item(%{season: 3})], nil)
@@ -67,7 +68,9 @@ defmodule Roki.SeasonPostersTest do
 
   test "a show with one season gets nothing to say when no season is named" do
     keep(990_003, [{1, "2020-01-01", "/only.jpg"}])
-    assert [%{poster: "show-poster"}] = SeasonPosters.apply([item(%{id: 990_003, anime: true})], nil)
+
+    assert [%{poster: "show-poster"}] =
+             SeasonPosters.apply([item(%{id: 990_003, anime: true})], nil)
   end
 
   test "stored_poster reads what is kept, and nothing else" do
@@ -78,7 +81,10 @@ defmodule Roki.SeasonPostersTest do
 
   test "an anime's title page is drawn as the season on screen" do
     title = %{type: "tv", anime?: true, id: @tv, poster: "first"}
-    assert SeasonPosters.for_title(title, 3, nil).poster == "https://image.tmdb.org/t/p/w500/s3.jpg"
+
+    assert SeasonPosters.for_title(title, 3, nil).poster ==
+             "https://image.tmdb.org/t/p/w500/s3.jpg"
+
     assert SeasonPosters.for_title(title, 9, nil) == title
     plain = %{type: "tv", anime?: false, id: @tv, poster: "first"}
     assert SeasonPosters.for_title(plain, 3, nil) == plain

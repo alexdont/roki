@@ -23,7 +23,15 @@ defmodule Roki.SeasonalTest do
 
   test "a season is shaped like a mood, and the mood page finds it" do
     season = Seasonal.get("halloween")
-    assert %{slug: "halloween", label: "Halloween", movie_kw: [_ | _], tv_kw: [_ | _], season: true} = season
+
+    assert %{
+             slug: "halloween",
+             label: "Halloween",
+             movie_kw: [_ | _],
+             tv_kw: [_ | _],
+             season: true
+           } = season
+
     assert Mood.get("halloween") == season
     assert Mood.get("scared").slug == "scared"
     assert Mood.get("nonsense") == nil
@@ -34,7 +42,8 @@ defmodule Roki.SeasonalTest do
   end
 
   test "every season's typeface is one the page loads" do
-    families = Mood.fonts() |> Enum.map(&(&1 |> String.split(":") |> hd() |> String.replace("+", " ")))
+    families =
+      Mood.fonts() |> Enum.map(&(&1 |> String.split(":") |> hd() |> String.replace("+", " ")))
 
     for s <- Seasonal.all() do
       [name] = Regex.run(~r/'([^']+)'/, s.font, capture: :all_but_first)

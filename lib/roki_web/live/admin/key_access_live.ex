@@ -54,7 +54,8 @@ defmodule RokiWeb.Admin.KeyAccessLive do
           owner?: u.uuid == config.owner_uuid,
           stat: stats[u.uuid],
           today_plays: if(grants[u.uuid], do: Keys.plays_today(u.uuid), else: 0),
-          today_pengu: if(grants[u.uuid] && grants[u.uuid].pengu, do: Keys.pengu_today(u.uuid), else: 0)
+          today_pengu:
+            if(grants[u.uuid] && grants[u.uuid].pengu, do: Keys.pengu_today(u.uuid), else: 0)
         }
       end)
       |> Enum.sort_by(

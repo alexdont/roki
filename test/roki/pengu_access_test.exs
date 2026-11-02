@@ -65,7 +65,9 @@ defmodule Roki.PenguAccessTest do
     assert Keys.pengu_lent?(friend.uuid), "taking the keys away keeps the PenguPlay lending"
   end
 
-  test "a lent account stops at its daily cap, before anything is asked of PenguPlay", %{friend: friend} do
+  test "a lent account stops at its daily cap, before anything is asked of PenguPlay", %{
+    friend: friend
+  } do
     Keys.set_pengu!(friend.uuid, true)
     Keys.set_daily_pengu!(friend.uuid, 2)
     assert Keys.pengu_allowed?(friend.uuid)

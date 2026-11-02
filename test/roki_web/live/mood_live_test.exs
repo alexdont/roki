@@ -86,7 +86,18 @@ defmodule RokiWeb.MoodLiveTest do
   end
 
   test "a season's page says it is in season and has no search box", %{conn: conn} do
-    items = [%{id: 601, type: "movie", title: "A Season Film", poster: nil, year: "2019", popularity: 1.0, vote: 7.0}]
+    items = [
+      %{
+        id: 601,
+        type: "movie",
+        title: "A Season Film",
+        poster: nil,
+        year: "2019",
+        popularity: 1.0,
+        vote: 7.0
+      }
+    ]
+
     key = Roki.Mood.key("halloween", :all, :popular, 1)
     Roki.TTLCache.put(key, 60, {:ok, {items, false}})
     on_exit(fn -> Roki.TTLCache.delete(key) end)

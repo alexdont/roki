@@ -18,6 +18,7 @@ defmodule Roki.Repo.Migrations.CreateLinkEvents do
 
     create unique_index(:roki_link_events, [:link_id, :season, :episode])
     create index(:roki_link_events, [:tmdb_id])
+
     execute "create index roki_link_events_participants_index on roki_link_events using gin (participants)",
             "drop index roki_link_events_participants_index"
   end

@@ -3,7 +3,18 @@ defmodule Roki.WatchlistCountTest do
 
   alias Roki.Laev
 
-  defp row(attrs), do: Map.merge(%{type: "tv", id: 105_248, mal_id: nil, title: "Edgerunners", note: " · 2/20 episodes watched"}, attrs)
+  defp row(attrs),
+    do:
+      Map.merge(
+        %{
+          type: "tv",
+          id: 105_248,
+          mal_id: nil,
+          title: "Edgerunners",
+          note: " · 2/20 episodes watched"
+        },
+        attrs
+      )
 
   test "episodes marked through MyAnimeList are counted with the ones marked on TMDB" do
     # Season 1 (10) marked on its MyAnimeList entry, 2 of season 2 on TMDB: laev says 2
@@ -18,7 +29,9 @@ defmodule Roki.WatchlistCountTest do
 
   test "the rest of the note is kept as it was" do
     assert %{note: "Up next S2E3 · 12/20 episodes watched · 1 new"} =
-             Laev.true_count(row(%{note: "Up next S2E3 · 2/20 episodes watched · 1 new"}), fn _ -> 12 end)
+             Laev.true_count(row(%{note: "Up next S2E3 · 2/20 episodes watched · 1 new"}), fn _ ->
+               12
+             end)
   end
 
   test "a row for one MyAnimeList entry keeps its own count — unless it counts more than the entry has" do

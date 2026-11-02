@@ -26,7 +26,12 @@ defmodule Roki.ForgetProgressTest do
     Roki.Laev.run(@uuid, fn ->
       ctx = %{type: type, tmdb_id: id, season: nil, episode: nil, mal_id: nil}
 
-      Laev.Resume.put(type, id, %{"type" => type, "tmdb_id" => id, "title" => "T#{id}", "updated_at" => 1})
+      Laev.Resume.put(type, id, %{
+        "type" => type,
+        "tmdb_id" => id,
+        "title" => "T#{id}",
+        "updated_at" => 1
+      })
 
       Laev.Position.record(ctx, %{
         position: position,
@@ -82,6 +87,7 @@ defmodule Roki.ForgetProgressTest do
       poster_path: nil,
       search: nil
     }
+
     assert %{progress?: false} = Watch.library(@uuid, title)
 
     play("movie", 9003, 1200, false)

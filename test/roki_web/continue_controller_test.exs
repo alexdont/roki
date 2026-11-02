@@ -48,7 +48,9 @@ defmodule RokiWeb.ContinueControllerTest do
     assert path =~ ~r{^/sources/tv/209867/\d+/\d+\?auto=1$}
   end
 
-  test "someone not signed in, or a bad address, goes to the title's own page or home", %{conn: conn} do
+  test "someone not signed in, or a bad address, goes to the title's own page or home", %{
+    conn: conn
+  } do
     assert redirected_to(get(conn, "/continue/movie/10331")) == "/title/movie/10331"
     assert redirected_to(get(conn, "/continue/movie/abc")) == "/home"
     assert redirected_to(get(conn, "/continue/manga/5")) == "/home"

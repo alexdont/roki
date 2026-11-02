@@ -129,6 +129,7 @@ defmodule Roki.Tiers do
     items =
       for i <- Profile.history(uuid) do
         key = tier_key(i)
+
         # What the show itself was filed under: a rating on TMDB covers every season that has none of
         # its own, and a place saved before a season had a key of its own is still its place.
         legacy = Profile.favorite_key(i)

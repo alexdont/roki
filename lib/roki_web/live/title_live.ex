@@ -918,8 +918,11 @@ defmodule RokiWeb.TitleLive do
 
   defp release_date(iso) do
     case Date.from_iso8601(iso) do
-      {:ok, d} -> "#{Calendar.strftime(d, "%-d %b %Y")} (#{how_long(Date.diff(Date.utc_today(), d))})"
-      _ -> nil
+      {:ok, d} ->
+        "#{Calendar.strftime(d, "%-d %b %Y")} (#{how_long(Date.diff(Date.utc_today(), d))})"
+
+      _ ->
+        nil
     end
   end
 
@@ -2011,7 +2014,8 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp forget_confirm(%{type: "tv", title: title}),
-    do: "Remove all watch progress for #{title}? The episodes you marked as watched are cleared too."
+    do:
+      "Remove all watch progress for #{title}? The episodes you marked as watched are cleared too."
 
   defp forget_confirm(%{title: title}), do: "Remove the watch progress for #{title}?"
 
@@ -2326,23 +2330,33 @@ defmodule RokiWeb.TitleLive do
           aria-label={score_verdict(@sc)}
           title={"A typical title scores about #{@sc.typical} out of 100 on #{@sc.label}"}
         >
-          <div class={["h-full rounded-full", @tone.bar]} style={"width: #{min(@sc.norm, 100)}%"}></div>
+          <div class={["h-full rounded-full", @tone.bar]} style={"width: #{min(@sc.norm, 100)}%"}>
+          </div>
           <span
             class="absolute -top-0.5 h-2.5 w-0.5 rounded bg-base-content/60"
             style={"left: #{@sc.typical}%"}
-          >
-          </span>
+          ></span>
         </div>
-        <div class={["text-[0.7rem] font-medium leading-tight", @tone.text]}>{score_verdict(@sc)}</div>
+        <div class={["text-[0.7rem] font-medium leading-tight", @tone.text]}>
+          {score_verdict(@sc)}
+        </div>
       </div>
     </.link_or_div>
     """
   end
 
-  defp score_tone(:great), do: %{text: "text-success", bar: "bg-success", border: "border-success/40"}
-  defp score_tone(:good), do: %{text: "text-success/80", bar: "bg-success/70", border: "border-success/25"}
-  defp score_tone(:typical), do: %{text: "text-warning", bar: "bg-warning/80", border: "border-base-300"}
-  defp score_tone(:below), do: %{text: "text-orange-500", bar: "bg-orange-400", border: "border-orange-400/30"}
+  defp score_tone(:great),
+    do: %{text: "text-success", bar: "bg-success", border: "border-success/40"}
+
+  defp score_tone(:good),
+    do: %{text: "text-success/80", bar: "bg-success/70", border: "border-success/25"}
+
+  defp score_tone(:typical),
+    do: %{text: "text-warning", bar: "bg-warning/80", border: "border-base-300"}
+
+  defp score_tone(:below),
+    do: %{text: "text-orange-500", bar: "bg-orange-400", border: "border-orange-400/30"}
+
   defp score_tone(:poor), do: %{text: "text-error", bar: "bg-error", border: "border-error/30"}
   defp score_tone(_), do: %{text: "", bar: "bg-base-content/30", border: "border-base-300"}
 
@@ -2368,7 +2382,10 @@ defmodule RokiWeb.TitleLive do
       href={@url}
       target="_blank"
       rel="noopener"
-      class={["block rounded-box border bg-base-200/50 p-3 transition hover:border-primary/60 hover:bg-base-200", @border]}
+      class={[
+        "block rounded-box border bg-base-200/50 p-3 transition hover:border-primary/60 hover:bg-base-200",
+        @border
+      ]}
     >
       {render_slot(@inner_block)}
     </a>

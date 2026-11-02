@@ -102,6 +102,7 @@ defmodule Roki.Featured do
       {:ok, Enum.slice(pool, (n - 1) * @page_size, @page_size), length(pool) > n * @page_size}
     end
   end
+
   # TMDB's "trending TV" includes anime (One Piece, Bleach …), which has its own shelf.
   # Anime is what MyAnimeList has an entry for — laev's own definition, the one it
   # splits your stats by — so those come out of Shows. Live-action One Piece is a

@@ -185,25 +185,45 @@ defmodule Roki.Reviews do
         true -> :poor
       end
 
-    Map.merge(tile, %{norm: Float.round(norm * 1.0, 1), typical: typical, delta: round(delta), verdict: verdict})
+    Map.merge(tile, %{
+      norm: Float.round(norm * 1.0, 1),
+      typical: typical,
+      delta: round(delta),
+      verdict: verdict
+    })
   end
 
   def compare(tile, _norm, _typical), do: tile
 
   # The title's page on a service. MDBList gives some as a path on the service's own site, some as a
   # slug, some not at all (then the service's id for the title, which it also gives, makes one).
-  defp link("imdb", _url, %{ids: %{"imdb" => "tt" <> _ = imdb}}), do: "https://www.imdb.com/title/#{imdb}/"
-  defp link(source, "/" <> _ = path, _ctx) when source in ["tomatoes", "popcorn"], do: "https://www.rottentomatoes.com" <> path
-  defp link("metacritic", "/" <> _ = path, %{type: type}), do: "https://www.metacritic.com/#{kind(type)}#{String.trim_trailing(path, "/")}/"
+  defp link("imdb", _url, %{ids: %{"imdb" => "tt" <> _ = imdb}}),
+    do: "https://www.imdb.com/title/#{imdb}/"
+
+  defp link(source, "/" <> _ = path, _ctx) when source in ["tomatoes", "popcorn"],
+    do: "https://www.rottentomatoes.com" <> path
+
+  defp link("metacritic", "/" <> _ = path, %{type: type}),
+    do: "https://www.metacritic.com/#{kind(type)}#{String.trim_trailing(path, "/")}/"
 
   defp link("metacriticuser", "/" <> _ = path, %{type: type}),
     do: "https://www.metacritic.com/#{kind(type)}#{String.trim_trailing(path, "/")}/user-reviews/"
 
   defp link("letterboxd", "/" <> _ = path, _ctx), do: "https://letterboxd.com" <> path
-  defp link("rogerebert", slug, _ctx) when is_binary(slug) and slug != "" and not is_integer(slug), do: "https://www.rogerebert.com/reviews/" <> slug
-  defp link("tmdb", _url, %{type: type, id: id}), do: "https://www.themoviedb.org/#{kind(type)}/#{id}"
-  defp link("trakt", _url, %{ids: %{"imdb" => "tt" <> _ = imdb}}), do: "https://trakt.tv/search/imdb/#{imdb}"
-  defp link("myanimelist", _url, %{ids: %{"mal" => mal}}) when is_integer(mal), do: "https://myanimelist.net/anime/#{mal}"
+
+  defp link("rogerebert", slug, _ctx)
+       when is_binary(slug) and slug != "" and not is_integer(slug),
+       do: "https://www.rogerebert.com/reviews/" <> slug
+
+  defp link("tmdb", _url, %{type: type, id: id}),
+    do: "https://www.themoviedb.org/#{kind(type)}/#{id}"
+
+  defp link("trakt", _url, %{ids: %{"imdb" => "tt" <> _ = imdb}}),
+    do: "https://trakt.tv/search/imdb/#{imdb}"
+
+  defp link("myanimelist", _url, %{ids: %{"mal" => mal}}) when is_integer(mal),
+    do: "https://myanimelist.net/anime/#{mal}"
+
   defp link(_source, _url, _ctx), do: nil
 
   defp kind("movie"), do: "movie"

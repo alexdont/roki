@@ -189,7 +189,10 @@ defmodule RokiWeb.FeaturedLiveTest do
       conn: conn,
       season: season
     } do
-      items = for i <- 1..25, do: %{id: 900 + i, type: "movie", title: "Seasonal #{i}", poster: nil, year: "2020"}
+      items =
+        for i <- 1..25,
+            do: %{id: 900 + i, type: "movie", title: "Seasonal #{i}", poster: nil, year: "2020"}
+
       Roki.TTLCache.put(Roki.Mood.key(season.slug, :all, :popular, 1), 60, {:ok, {items, true}})
 
       {:ok, view, _} = live(conn, "/home")

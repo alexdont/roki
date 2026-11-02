@@ -32,7 +32,10 @@ defmodule Roki.AnimeRank do
   """
   def rank(items, year, new \\ MapSet.new()) do
     {evergreen, current} =
-      Enum.split_with(items, &(not MapSet.member?(new, &1[:id]) and age(&1, year) >= @evergreen_years))
+      Enum.split_with(
+        items,
+        &(not MapSet.member?(new, &1[:id]) and age(&1, year) >= @evergreen_years)
+      )
 
     by_score(current, year, new) ++ by_score(evergreen, year, new)
   end
@@ -47,7 +50,10 @@ defmodule Roki.AnimeRank do
   @doc "The popularity a title is ranked by."
   def score(item, year, new) do
     popularity = item[:popularity] || 0
-    if MapSet.member?(new, item[:id]), do: popularity * 1.0, else: popularity * weight(age(item, year))
+
+    if MapSet.member?(new, item[:id]),
+      do: popularity * 1.0,
+      else: popularity * weight(age(item, year))
   end
 
   @doc """
@@ -121,7 +127,9 @@ defmodule Roki.AnimeRank do
   defp apply_seasons(item, seasons, ref_date) do
     dated =
       seasons
-      |> Enum.filter(&(&1.n > 0 and match?(%Date{}, &1.air_date) and Date.compare(&1.air_date, ref_date) != :gt))
+      |> Enum.filter(
+        &(&1.n > 0 and match?(%Date{}, &1.air_date) and Date.compare(&1.air_date, ref_date) != :gt)
+      )
       |> Enum.sort_by(& &1.air_date, Date)
 
     case List.last(dated) do

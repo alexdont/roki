@@ -62,7 +62,9 @@ defmodule Roki.Pengu do
     _ -> nil
   end
 
-  defp base_of(url), do: url |> String.trim() |> String.trim_trailing("/manifest.json") |> String.trim_trailing("/")
+  defp base_of(url),
+    do:
+      url |> String.trim() |> String.trim_trailing("/manifest.json") |> String.trim_trailing("/")
 
   @doc """
   Save the link pasted in Settings. It must be a `https://pengu.uk/…/manifest.json` address whose
@@ -90,7 +92,10 @@ defmodule Roki.Pengu do
   @doc "Forget the link this account saved."
   def remove_url(user) do
     result =
-      PhoenixKit.Users.Auth.update_user_custom_fields(user, Map.delete(user.custom_fields || %{}, @field))
+      PhoenixKit.Users.Auth.update_user_custom_fields(
+        user,
+        Map.delete(user.custom_fields || %{}, @field)
+      )
 
     TTLCache.delete({:pengu_own, user.uuid})
     Roki.Sources.forget(user.uuid)
@@ -199,7 +204,8 @@ defmodule Roki.Pengu do
       kind: kind(url),
       headers: get_in(hints, ["proxyHeaders", "request"]) || %{},
       filename: hints["filename"],
-      subtitles: for(%{"url" => u} = sub <- s["subtitles"] || [], do: %{url: u, lang: sub["lang"]})
+      subtitles:
+        for(%{"url" => u} = sub <- s["subtitles"] || [], do: %{url: u, lang: sub["lang"]})
     }
   end
 
@@ -208,7 +214,9 @@ defmodule Roki.Pengu do
   defp id(url) do
     uri = URI.parse(url)
 
-    :crypto.hash(:sha256, "#{uri.host}#{uri.path}") |> Base.url_encode64(padding: false) |> binary_part(0, 16)
+    :crypto.hash(:sha256, "#{uri.host}#{uri.path}")
+    |> Base.url_encode64(padding: false)
+    |> binary_part(0, 16)
   end
 
   # What to call a stream in a list: the release's file name when it has one, else the description's
@@ -248,7 +256,15 @@ defmodule Roki.Pengu do
   # Lower is better. Providers are listed in the order their streams actually played when tried on
   # The Matrix (2026-10-31); the rest follow, untried ones before the ones that stalled.
   @providers ~w(Arctic HDHub4u VegaMovies LaMovie Moflix Vidy MovieBox VidFast Cinejoy VidLink 2Peckle VAPlayer)
-  @tiers %{"1080P" => 0, "720P" => 1, "1440P" => 2, "480P" => 3, "360P" => 4, "4K" => 5, "2160P" => 5}
+  @tiers %{
+    "1080P" => 0,
+    "720P" => 1,
+    "1440P" => 2,
+    "480P" => 3,
+    "360P" => 4,
+    "4K" => 5,
+    "2160P" => 5
+  }
 
   defp score(s) do
     {language_rank(s.language), Map.get(@tiers, s.quality, 6),
@@ -298,7 +314,8 @@ defmodule Roki.Pengu do
     end)
   end
 
-  defp kind(url), do: if(String.contains?(URI.parse(url).path || "", "m3u8"), do: :hls, else: :file)
+  defp kind(url),
+    do: if(String.contains?(URI.parse(url).path || "", "m3u8"), do: :hls, else: :file)
 
   @doc "Streams grouped by provider, best quality first: `[{provider, [stream]}]`."
   def group(streams) do
@@ -311,8 +328,13 @@ defmodule Roki.Pengu do
   defp rank(%{quality: q}), do: Enum.find_index(@qualities, &(&1 == q)) || 9
 
   @doc "What to tell the viewer when a search failed."
-  def message(:not_configured), do: "PenguPlay is not set up for this account — add your link in Settings."
-  def message(:cap), do: "Today's PenguPlay searches on the shared link are used up. Add your own PenguPlay link in Settings for no limit."
+  def message(:not_configured),
+    do: "PenguPlay is not set up for this account — add your link in Settings."
+
+  def message(:cap),
+    do:
+      "Today's PenguPlay searches on the shared link are used up. Add your own PenguPlay link in Settings for no limit."
+
   def message(:no_imdb_id), do: "This title has no IMDb id, which PenguPlay looks titles up by."
   def message({:http, status}), do: "PenguPlay answered #{status}."
   def message(:timeout), do: "PenguPlay did not answer in time."

@@ -15,7 +15,9 @@ defmodule Roki.PenguTest do
       "url" => "https://pengu.uk/hls/cinejoy/playlist/g/index.m3u8?psig=1",
       "name" => "🐧 PenguPlay 1080p • Cinejoy · secret",
       "description" => "🎞️ 1080p • HLS\n🛰️ Source: Cinejoy · secret\n🎧 Audio: English, Portuguese",
-      "behaviorHints" => %{"proxyHeaders" => %{"request" => %{"Referer" => "https://cinejoy.pk/"}}},
+      "behaviorHints" => %{
+        "proxyHeaders" => %{"request" => %{"Referer" => "https://cinejoy.pk/"}}
+      },
       "subtitles" => [%{"url" => "https://x/s.vtt", "lang" => "eng"}]
     },
     %{
@@ -44,7 +46,12 @@ defmodule Roki.PenguTest do
   end
 
   describe "best/3" do
-    defp st(attrs), do: Map.merge(%{id: "x", provider: "Z", quality: "1080P", language: "", size: "2 GB", codec: :other}, attrs)
+    defp st(attrs),
+      do:
+        Map.merge(
+          %{id: "x", provider: "Z", quality: "1080P", language: "", size: "2 GB", codec: :other},
+          attrs
+        )
 
     test "prefers 1080p over 4K, and a player-friendly provider on a tie" do
       streams = [
@@ -57,14 +64,22 @@ defmodule Roki.PenguTest do
     end
 
     test "leaves out HEVC unless the browser decodes it, and anything already tried" do
-      streams = [st(%{id: "h", codec: :hevc, provider: "Arctic"}), st(%{id: "o", provider: "VidLink"})]
+      streams = [
+        st(%{id: "h", codec: :hevc, provider: "Arctic"}),
+        st(%{id: "o", provider: "VidLink"})
+      ]
+
       assert Pengu.best(streams).id == "o"
       assert Pengu.best(streams, %{hevc: true}).id == "h"
       assert Pengu.best(streams, %{}, ["o"]) == nil
     end
 
     test "English (or unlabelled) audio beats another language" do
-      streams = [st(%{id: "es", language: "Spanish", provider: "Arctic"}), st(%{id: "en", language: "English, Hindi"})]
+      streams = [
+        st(%{id: "es", language: "Spanish", provider: "Arctic"}),
+        st(%{id: "en", language: "English, Hindi"})
+      ]
+
       assert Pengu.best(streams).id == "en"
     end
   end
@@ -85,7 +100,13 @@ defmodule Roki.PenguTest do
 
   test "only a pengu.uk manifest link is accepted" do
     user = %{custom_fields: %{}, uuid: "x"}
-    for bad <- ["", "http://pengu.uk/a/manifest.json", "https://example.com/a/manifest.json", "https://pengu.uk/a/other.json"] do
+
+    for bad <- [
+          "",
+          "http://pengu.uk/a/manifest.json",
+          "https://example.com/a/manifest.json",
+          "https://pengu.uk/a/other.json"
+        ] do
       assert {:error, text} = Pengu.save_url(user, bad)
       assert is_binary(text)
     end

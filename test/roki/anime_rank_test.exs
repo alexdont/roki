@@ -34,7 +34,13 @@ defmodule Roki.AnimeRankTest do
   end
 
   test "a tie keeps the order it came in; unknown years are middle-aged; nothing is lost" do
-    items = [a(1, 2026, 10.0), a(2, 2026, 10.0), %{id: 3, year: nil, popularity: 10.0}, %{id: 4, popularity: nil, year: "2026"}]
+    items = [
+      a(1, 2026, 10.0),
+      a(2, 2026, 10.0),
+      %{id: 3, year: nil, popularity: 10.0},
+      %{id: 4, popularity: nil, year: "2026"}
+    ]
+
     ranked = AnimeRank.rank(items, 2026)
     assert Enum.map(ranked, & &1.id) == [1, 2, 3, 4]
     assert length(ranked) == 4
@@ -59,7 +65,12 @@ defmodule Roki.AnimeRankTest do
     assert Enum.map(ranked, & &1.id) == [1, 4, 2, 3]
   end
 
-  defp seasons(list), do: for({n, date, poster} <- list, do: %{n: n, air_date: date && Date.from_iso8601!(date), poster: poster})
+  defp seasons(list),
+    do:
+      for(
+        {n, date, poster} <- list,
+        do: %{n: n, air_date: date && Date.from_iso8601!(date), poster: poster}
+      )
 
   defp jojo,
     do:
@@ -71,7 +82,9 @@ defmodule Roki.AnimeRankTest do
       ])
 
   test "a show that is back with a later season is drawn with that season's poster" do
-    items = [%{id: 1, year: "2012", popularity: 120.0, poster: "https://image.tmdb.org/t/p/w342/s1.jpg"}]
+    items = [
+      %{id: 1, year: "2012", popularity: 120.0, poster: "https://image.tmdb.org/t/p/w342/s1.jpg"}
+    ]
 
     [item] = AnimeRank.refine(items, ~D[2026-12-31], fn 1 -> jojo() end)
     assert item.poster == "https://image.tmdb.org/t/p/w342/s6.jpg"
@@ -89,23 +102,41 @@ defmodule Roki.AnimeRankTest do
 
   test "a show with one season, or whose latest season is long past, keeps the show's poster" do
     one = [%{id: 2, year: "2005", popularity: 280.0, poster: "show"}]
-    [item] = AnimeRank.refine(one, ~D[2026-12-31], fn 2 -> seasons([{1, "2005-04-22", "/s1.jpg"}]) end)
+
+    [item] =
+      AnimeRank.refine(one, ~D[2026-12-31], fn 2 -> seasons([{1, "2005-04-22", "/s1.jpg"}]) end)
+
     assert item.poster == "show"
 
     old = [%{id: 3, year: "2004", popularity: 50.0, poster: "show"}]
 
-    [item] = AnimeRank.refine(old, ~D[2026-12-31], fn 3 -> seasons([{1, "2004-10-05", "/a.jpg"}, {2, "2019-04-01", "/b.jpg"}]) end)
+    [item] =
+      AnimeRank.refine(old, ~D[2026-12-31], fn 3 ->
+        seasons([{1, "2004-10-05", "/a.jpg"}, {2, "2019-04-01", "/b.jpg"}])
+      end)
+
     assert item.poster == "show"
     # but the age that counts is still its latest season's
     assert item.season_year == 2019
   end
 
   test "a season with no poster, an undated or special season, or a show not read, leaves the item as it was" do
-    items = [%{id: 4, year: "2010", popularity: 10.0, poster: "show"}, %{id: 5, year: "2011", popularity: 9.0, poster: "show2"}]
+    items = [
+      %{id: 4, year: "2010", popularity: 10.0, poster: "show"},
+      %{id: 5, year: "2011", popularity: 9.0, poster: "show2"}
+    ]
 
     seasons_of = fn
-      4 -> seasons([{1, "2010-01-01", "/a.jpg"}, {2, "2026-04-01", nil}, {0, "2026-05-01", "/special.jpg"}, {3, nil, "/c.jpg"}])
-      5 -> []
+      4 ->
+        seasons([
+          {1, "2010-01-01", "/a.jpg"},
+          {2, "2026-04-01", nil},
+          {0, "2026-05-01", "/special.jpg"},
+          {3, nil, "/c.jpg"}
+        ])
+
+      5 ->
+        []
     end
 
     [a, b] = AnimeRank.refine(items, ~D[2026-12-31], seasons_of)
@@ -125,7 +156,16 @@ defmodule Roki.AnimeRankTest do
 
     {:ok, asked} = Agent.start_link(fn -> [] end)
 
-    AnimeRank.refine(items, ~D[2026-12-31], fn id -> Agent.update(asked, &[id | &1]); [] end, 2)
+    AnimeRank.refine(
+      items,
+      ~D[2026-12-31],
+      fn id ->
+        Agent.update(asked, &[id | &1])
+        []
+      end,
+      2
+    )
+
     assert Agent.get(asked, & &1) |> Enum.sort() == [2, 3]
   end
 
@@ -138,7 +178,11 @@ defmodule Roki.AnimeRankTest do
       ]
     }
 
-    assert [%{n: 0}, %{n: 1, air_date: ~D[2004-10-05], poster: "/a.jpg"}, %{n: 2, air_date: nil, poster: nil}] =
+    assert [
+             %{n: 0},
+             %{n: 1, air_date: ~D[2004-10-05], poster: "/a.jpg"},
+             %{n: 2, air_date: nil, poster: nil}
+           ] =
              AnimeRank.parse_seasons(details)
 
     assert AnimeRank.parse_seasons(%{}) == []

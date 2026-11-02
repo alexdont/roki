@@ -32,10 +32,14 @@ defmodule Roki.SeasonPosters do
   An anime's title page's poster: the one for `season` (the season Play offers, or the one on screen),
   at the page's size, or the title as it was. A show's own poster is its first season's.
   """
-  def for_title(%{type: "tv", anime?: true, id: id} = title, season, uuid) when is_integer(season) do
+  def for_title(%{type: "tv", anime?: true, id: id} = title, season, uuid)
+      when is_integer(season) do
     case Enum.find(seasons(id, uuid), &(&1.n == season)) do
-      %{poster: path} when is_binary(path) -> %{title | poster: Roki.Titles.poster_url(path, "w500")}
-      _ -> title
+      %{poster: path} when is_binary(path) ->
+        %{title | poster: Roki.Titles.poster_url(path, "w500")}
+
+      _ ->
+        title
     end
   end
 
@@ -105,13 +109,21 @@ defmodule Roki.SeasonPosters do
 
   # MyAnimeList's entry → the TMDB season it is (laev's cross-id list), for what names no season.
   defp mal_seasons(items, uuid) do
-    mals = for %{mal_id: mal} = i <- items, is_integer(mal), not is_integer(i[:season]), uniq: true, do: mal
+    mals =
+      for %{mal_id: mal} = i <- items,
+          is_integer(mal),
+          not is_integer(i[:season]),
+          uniq: true,
+          do: mal
 
     if mals == [] do
       %{}
     else
       Roki.Laev.run(uuid, fn ->
-        for mal <- mals, {"tv", _id, season} <- [Laev.AnimeMap.tmdb(mal)], into: %{}, do: {mal, season || 1}
+        for mal <- mals,
+            {"tv", _id, season} <- [Laev.AnimeMap.tmdb(mal)],
+            into: %{},
+            do: {mal, season || 1}
       end)
     end
   end
@@ -125,7 +137,9 @@ defmodule Roki.SeasonPosters do
 
     dated =
       list
-      |> Enum.filter(&(&1.n > 0 and match?(%Date{}, &1.air_date) and Date.compare(&1.air_date, today) != :gt))
+      |> Enum.filter(
+        &(&1.n > 0 and match?(%Date{}, &1.air_date) and Date.compare(&1.air_date, today) != :gt)
+      )
       |> Enum.sort_by(& &1.air_date, Date)
 
     if length(dated) >= 2, do: List.last(dated)
@@ -156,7 +170,11 @@ defmodule Roki.SeasonPosters do
           [fresh]
         )
 
-      by_show = Enum.group_by(rows, &hd/1, fn [_, n, date, path] -> %{n: n, air_date: date, poster: path} end)
+      by_show =
+        Enum.group_by(rows, &hd/1, fn [_, n, date, path] ->
+          %{n: n, air_date: date, poster: path}
+        end)
+
       Map.new(fresh, &{&1, Map.get(by_show, &1, [])})
     end
   end

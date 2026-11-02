@@ -16,7 +16,9 @@ defmodule Roki.Trailers do
 
   @doc "The YouTube key of this film's or show's trailer, or nil. `type` is `\"movie\"` or `\"tv\"`."
   def key(type, id, uuid \\ nil, season \\ nil) when type in ["movie", "tv"] and is_integer(id) do
-    case TTLCache.fetch({:trailer, type, id, season}, @ttl_s, fn -> lookup(type, id, uuid, season) end) do
+    case TTLCache.fetch({:trailer, type, id, season}, @ttl_s, fn ->
+           lookup(type, id, uuid, season)
+         end) do
       {:ok, key} -> key
       _ -> nil
     end
@@ -73,7 +75,10 @@ defmodule Roki.Trailers do
   end
 
   defp videos(type, id, season) do
-    path = if is_integer(season), do: "/tv/#{id}/season/#{season}/videos", else: "/#{type}/#{id}/videos"
+    path =
+      if is_integer(season),
+        do: "/tv/#{id}/season/#{season}/videos",
+        else: "/#{type}/#{id}/videos"
 
     case Roki.TmdbApi.get(path, include_video_language: "en,null") do
       {:ok, %{"results" => results}} -> {:ok, results}
