@@ -121,10 +121,7 @@ defmodule RokiWeb.Layouts do
           class="flex items-center gap-2 pr-1.5 text-lg font-bold tracking-tight min-[420px]:pr-3"
           aria-label="roki — home"
         >
-          <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-content">
-            <.icon name="hero-play-solid" class="h-4 w-4" />
-          </span>
-          <span class="hidden min-[340px]:inline">roki</span>
+          <RokiWeb.Logo.logo class="h-7 w-auto" />
         </a>
 
         <nav class="hidden items-stretch md:flex" aria-label="Sections">

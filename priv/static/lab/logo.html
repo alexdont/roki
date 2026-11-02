@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roki logo test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ceviche+One&family=Outfit:wght@700&display=swap">
+<style>
+  :root { --orange: #ff6a13; --orange2: #ff8a3d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f4f1ee; color: #222; }
+  h1 { font-size: 1rem; margin: 0 0 .25rem; }
+  p.note { margin: 0 0 1.5rem; color: #666; font-size: .9rem; max-width: 60ch; }
+  main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+  .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .card { border-radius: 14px; padding: 1.25rem; min-height: 200px; display: flex; flex-direction: column; justify-content: space-between; }
+  .card small { font: 12px system-ui; opacity: .6; margin-top: 1rem; }
+  .light { background: #fffdfb; color: #2b2523; border: 1px solid #e6e0da; }
+  .dark { background: #0d0d0f; color: #fff; }
+  .orange { background: var(--orange); color: #fff; }
+  .logo { font-family: "Ceviche One", cursive; line-height: 1; display: inline-flex; align-items: baseline; letter-spacing: .01em; }
+  /* the nose is the "o": as tall as the letters' x-height, sitting on the baseline */
+  .logo .o { display: inline-block; width: .68em; height: .49em; margin: 0 .04em 0 .12em; transform: translateY(.045em); background: currentColor;
+             -webkit-mask: url(logo-nose.png) center / contain no-repeat; mask: url(logo-nose.png) center / contain no-repeat; }
+  .logo.big { font-size: 7rem; }
+  .logo.mid { font-size: 3.2rem; }
+  .logo.hdr { font-size: 2.1rem; }
+  .logo.fav { font-size: 1rem; }
+  .accent .o { color: var(--orange); }
+  .grad .o { background: linear-gradient(135deg, var(--orange2), var(--orange) 55%, #e8480c); }
+  .tall .o { height: .64em; transform: translateY(.06em); }
+  .bar { display: flex; align-items: center; gap: .9rem; overflow: hidden; white-space: nowrap; padding: .7rem 1rem; border-radius: 10px; }
+  .bar .links { font: 13px system-ui; opacity: .7; display: flex; gap: .7rem; }
+  .row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .tile { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; background: var(--orange); color: #fff; }
+  .tile .o { width: 34px; height: 25px; display: block; background: #fff; -webkit-mask: url(logo-nose.png) center / contain no-repeat; mask: url(logo-nose.png) center / contain no-repeat; }
+  .tile.sm { width: 32px; height: 32px; border-radius: 8px; } .tile.sm .o { width: 20px; height: 15px; }
+  .current { font-family: "Outfit", sans-serif; font-weight: 700; font-size: 1.9rem; display: inline-flex; align-items: center; gap: .5rem; }
+  .current i { width: 1.6rem; height: 1.6rem; background: var(--orange); border-radius: 6px; display: inline-block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Roki logo — idea test</h1>
+  <p class="note">Word-mark in Ceviche One (Google Fonts) with your nose picture as the “o”. The nose here is your picture used as a mask, so it takes any colour; the real thing would be a traced SVG. Nothing on the site uses this yet.</p>
+
+  <div class="grid">
+    <div class="card light"><span class="logo big">R<span class="o"></span>ki</span><small>light page, one colour, large</small></div>
+    <div class="card dark"><span class="logo big accent">R<span class="o"></span>ki</span><small>dark page, nose in the site's orange</small></div>
+    <div class="card orange"><span class="logo big">R<span class="o"></span>ki</span><small>on orange, all white</small></div>
+    <div class="card dark"><span class="logo big grad">R<span class="o"></span>ki</span><small>nose with an orange gradient</small></div>
+    <div class="card light"><span class="logo big accent tall">R<span class="o"></span>ki</span><small>nose a touch taller, orange</small></div>
+    <div class="card dark"><span class="logo mid">R<span class="o"></span>ki</span><small>medium (3.2rem)</small></div>
+  </div>
+
+  <h1 style="margin-top:2rem">In the header</h1>
+  <p class="note">Roughly the size it would be in the site header, next to the current mark.</p>
+  <div class="grid">
+    <div class="card dark" style="min-height:0"><div class="bar"><span class="logo hdr accent">R<span class="o"></span>ki</span><span class="links"><span>Movies</span><span>Shows</span><span>Anime</span><span>Manga</span></span></div><small>new, dark header</small></div>
+    <div class="card light" style="min-height:0"><div class="bar"><span class="logo hdr accent">R<span class="o"></span>ki</span><span class="links"><span>Movies</span><span>Shows</span><span>Anime</span><span>Manga</span></span></div><small>new, light header</small></div>
+    <div class="card dark" style="min-height:0"><div class="bar"><span class="current"><i></i>roki</span><span class="links"><span>Movies</span><span>Shows</span><span>Anime</span><span>Manga</span></span></div><small>for comparison: the current mark (approximation)</small></div>
+  </div>
+
+  <h1 style="margin-top:2rem">Small: app icon and tab icon</h1>
+  <p class="note">A word does not fit in an icon, so the nose alone would be the app icon.</p>
+  <div class="row"><div class="tile"><span class="o"></span></div><div class="tile sm"><span class="o"></span></div></div>
+</main>
+</body>
+</html>
