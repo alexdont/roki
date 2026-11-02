@@ -642,9 +642,20 @@ defmodule Roki.Manga.Library do
       |> Map.put(:user_id, user_id)
       |> Map.put_new(:newest_chapter_at, DateTime.utc_now() |> DateTime.truncate(:second))
 
-    %SavedManga{}
-    |> SavedManga.changeset(attrs)
-    |> Repo.insert(on_conflict: :nothing)
+    result =
+      %SavedManga{}
+      |> SavedManga.changeset(attrs)
+      |> Repo.insert(on_conflict: :nothing)
+
+    # What was tried in the reader before the series was saved is kept with it.
+    with {:ok, %{id: id}} when not is_nil(id) <- result,
+         %{} = trial <- Roki.Manga.Trial.take(user_id, attrs.source, attrs.slug) do
+      SavedManga
+      |> where(id: ^id)
+      |> Repo.update_all(set: Map.to_list(trial))
+    end
+
+    result
   end
 
   @progress_fields [

@@ -74,11 +74,21 @@ defmodule Roki.Manga.MangaReader.Store do
 
   @impl true
   def reader_state(user, [source, slug]) do
-    Library.get_saved_manga(user.uuid, source, slug)
+    # A series that is not saved has no row, but it can be tried: what was chosen for it in the
+    # reader (scroll mode, a direction) is held for a while, so the page opens that way. Saving
+    # the series keeps it (`Roki.Manga.Trial`).
+    Library.get_saved_manga(user.uuid, source, slug) ||
+      Roki.Manga.Trial.get(user.uuid, source, slug)
   end
 
   @impl true
   def put_setting(user, [source, slug], setting, value, device) do
+    if Library.saved?(user.uuid, source, slug),
+      do: put_saved_setting(user, [source, slug], setting, value, device),
+      else: Roki.Manga.Trial.put(user.uuid, source, slug, setting, value, device)
+  end
+
+  defp put_saved_setting(user, [source, slug], setting, value, device) do
     case setting do
       :reading_mode ->
         Library.update_reading_mode(user.uuid, source, slug, value, device)
