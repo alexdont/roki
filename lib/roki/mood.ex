@@ -15,6 +15,8 @@ defmodule Roki.Mood do
   # typeface its name is set in. A mood has no picture of its own: it is its name, set in its own
   # typeface, in its own colour, and the number it has in the list (`number/1`) (Google Fonts, linked from the root layout; `@fonts` below lists
   # what to ask for there).
+  # `movie_not`, `tv_not`, `tv_not_kw`: what a mood leaves out even when a title also has one of its
+  # genres — a comedy that is also a horror film is a horror film, and not for a night of laughing.
   # A film's Thriller or Romance has no genre on TV: TMDB's keyword stands in there, as the
   # Horror filter does on Shows (see `Roki.Genres`).
   @moods [
@@ -26,7 +28,9 @@ defmodule Roki.Mood do
       movie: [27],
       tv: [],
       tv_kw: [315_058],
-      hue: 350
+      hue: 350,
+      movie_not: [35, 10751],
+      tv_not: [35]
     },
     %{
       slug: "laugh",
@@ -36,7 +40,10 @@ defmodule Roki.Mood do
       movie: [35],
       tv: [35],
       tv_kw: [],
-      hue: 42
+      hue: 42,
+      movie_not: [27, 53, 10752],
+      tv_not: [10768],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "love",
@@ -46,7 +53,9 @@ defmodule Roki.Mood do
       movie: [10749],
       tv: [],
       tv_kw: [9840],
-      hue: 335
+      hue: 335,
+      movie_not: [27, 53],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "thrill",
@@ -56,7 +65,9 @@ defmodule Roki.Mood do
       movie: [53],
       tv: [80, 9648],
       tv_kw: [],
-      hue: 200
+      hue: 200,
+      movie_not: [35, 10751, 16],
+      tv_not: [35, 16, 10762]
     },
     %{
       slug: "action",
@@ -66,7 +77,9 @@ defmodule Roki.Mood do
       movie: [28],
       tv: [10759],
       tv_kw: [],
-      hue: 22
+      hue: 22,
+      movie_not: [27],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "escape",
@@ -76,7 +89,9 @@ defmodule Roki.Mood do
       movie: [14, 878],
       tv: [10765],
       tv_kw: [],
-      hue: 268
+      hue: 268,
+      movie_not: [27],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "cry",
@@ -86,7 +101,10 @@ defmodule Roki.Mood do
       movie: [18],
       tv: [18],
       tv_kw: [],
-      hue: 215
+      hue: 215,
+      movie_not: [27, 28, 53],
+      tv_not: [10759],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "mystery",
@@ -96,7 +114,9 @@ defmodule Roki.Mood do
       movie: [9648],
       tv: [9648],
       tv_kw: [],
-      hue: 245
+      hue: 245,
+      movie_not: [27],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "adventure",
@@ -106,7 +126,9 @@ defmodule Roki.Mood do
       movie: [12],
       tv: [10759],
       tv_kw: [],
-      hue: 150
+      hue: 150,
+      movie_not: [27, 53],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "kid",
@@ -116,7 +138,10 @@ defmodule Roki.Mood do
       movie: [16, 10751],
       tv: [16, 10762, 10751],
       tv_kw: [],
-      hue: 48
+      hue: 48,
+      movie_not: [27, 53, 80, 10752],
+      tv_not: [80],
+      tv_not_kw: [315_058]
     },
     %{
       slug: "past",
@@ -195,7 +220,7 @@ defmodule Roki.Mood do
   end
 
   # Bumped when what a kept page contains changes (the keywords a season is asked for, say).
-  @cache_version 4
+  @cache_version 5
 
   @doc false
   def key(slug, kind, sort, n), do: {:mood, @cache_version, slug, kind, sort, n}
@@ -347,13 +372,25 @@ defmodule Roki.Mood do
     keywords = if type == "movie", do: Map.get(mood, :movie_kw, []), else: mood.tv_kw
     kw_param = if keywords != [], do: [with_keywords: Enum.join(keywords, "|")], else: []
 
+    # Left out: genres (not for anime, whose genre is Animation and nothing else), and keywords.
+    not_genres =
+      if anime?,
+        do: [],
+        else: Map.get(mood, if(type == "movie", do: :movie_not, else: :tv_not), [])
+
+    not_keywords = if type == "movie", do: [], else: Map.get(mood, :tv_not_kw, [])
+
+    without =
+      if(not_genres != [], do: [without_genres: Enum.join(not_genres, "|")], else: []) ++
+        if(not_keywords != [], do: [without_keywords: Enum.join(not_keywords, "|")], else: [])
+
     lang_param = if anime?, do: [with_original_language: "ja"], else: []
     adult = if type == "movie", do: [include_adult: false], else: []
 
     Browse.discover(
       type,
       [page: n, "#{date_field(type)}.lte": today] ++
-        genre_param ++ kw_param ++ lang_param ++ adult ++ order
+        genre_param ++ kw_param ++ without ++ lang_param ++ adult ++ order
     )
   end
 
