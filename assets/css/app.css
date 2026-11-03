@@ -296,17 +296,36 @@ html.study-open .site-header { display: none; }
 }
 
 @media all {
+  /* Over a picture the header starts clear (a dark gradient for its words) and becomes the frosted
+     bar as the page scrolls, gradually: `--hdr` (0 → 1 over the first ~120 px, polish.js) crosses
+     the two layers over. */
   .site-header--overlay {
     position: fixed;
     left: 0;
     right: 0;
-    border-bottom-color: transparent;
-    background: linear-gradient(to bottom, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.34) 62%, transparent 100%);
-    background-origin: border-box;
-    background-repeat: no-repeat;
+    border-bottom-color: color-mix(in oklab, var(--color-base-300) calc(60% * var(--hdr, 0)), transparent);
+    background: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    transition: background-color 0.25s ease, border-color 0.25s ease;
+    transition: color 0.3s ease, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .site-header--overlay::before,
+  .site-header--overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .site-header--overlay::before {
+    background: linear-gradient(to bottom, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.34) 62%, transparent 100%);
+    opacity: calc(1 - var(--hdr, 0));
+  }
+  .site-header--overlay::after {
+    background: color-mix(in oklab, var(--color-base-100) 78%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+    opacity: var(--hdr, 0);
   }
 
   html:not([data-scrolled]) .site-header--overlay {
@@ -324,9 +343,6 @@ html.study-open .site-header { display: none; }
   }
 
   html[data-scrolled] .site-header--overlay {
-    background: color-mix(in oklab, var(--color-base-100) 78%, transparent);
-    -webkit-backdrop-filter: blur(18px) saturate(1.4);
-    backdrop-filter: blur(18px) saturate(1.4);
     border-bottom-color: color-mix(in oklab, var(--color-base-300) 60%, transparent);
   }
 }
@@ -1121,3 +1137,64 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   }
 }
 
+/* ── Polish (polish.js) ─────────────────────────────────────────────────── */
+
+/* The header slides away while scrolling down a page, back on any move up. */
+.site-header { transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+html[data-hdr-hidden] .site-header { transform: translateY(-100%); }
+/* A bar that sticks under the header (the manga chips, Watched's filters) goes with it and comes
+   back with it: left behind, it floated on its own with the header's gap above it. */
+.sticky.top-14 { transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+html[data-hdr-hidden] .sticky.top-14 { transform: translateY(calc(-100% - 3.5rem - env(safe-area-inset-top, 0px))); }
+@media (min-width: 1024px) {
+  .lg\:sticky.lg\:top-14 { transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  html[data-hdr-hidden] .lg\:sticky.lg\:top-14 { transform: translateY(calc(-100% - 3.5rem)); }
+}
+
+/* Pictures fade (and sharpen) in as they arrive instead of popping in. Only once the script is
+   there to say they have (`img-fade` on <html>), and never for what was there already. */
+html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data-fade]) img:not([data-loaded]) {
+  opacity: 0;
+  filter: blur(6px);
+}
+html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data-fade]) img {
+  transition: opacity 0.45s ease, filter 0.6s ease, transform 0.15s ease, scale 0.15s ease;
+}
+
+/* Sections rise into place the first time they come into view; what was on screen when the page
+   opened (`data-instant`) is simply there. */
+[data-reveal]:not([data-shown]) { opacity: 0; transform: translate3d(0, 18px, 0); }
+[data-reveal][data-shown]:not([data-instant]) { transition: opacity 0.6s ease, transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* A row fades out at the side where there is more to scroll, so a poster is never seen cut off
+   (wide screens; on a phone the row runs off the edge, which says the same). */
+@media (min-width: 1024px) {
+  [data-row-scroller] {
+    --fade-l: 0px;
+    --fade-r: 0px;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+  }
+  [data-start="false"] [data-row-scroller] { --fade-l: 56px; }
+  [data-end="false"] [data-row-scroller] { --fade-r: 56px; }
+  /* No fade under an opened card, which must be seen whole. */
+  [data-row-scroller]:has(> [data-open]) { -webkit-mask-image: none; mask-image: none; }
+}
+
+/* With a pointer on a poster, the others step back a little, so the one under it comes forward. */
+@media (hover: hover) and (min-width: 1024px) {
+  [data-card-row] > li, ul.grid > [data-grid-card] { transition: filter 0.3s ease; }
+  [data-card-row]:has(> li:hover) > li:not(:hover),
+  ul.grid:has(> [data-grid-card]:hover) > [data-grid-card]:not(:hover) { filter: brightness(0.6) saturate(0.85); }
+}
+
+/* A poster growing into its title page: the picture moves and scales, the rest of the page
+   crossfades, quickly. */
+::view-transition-group(roki-art) { animation-duration: 0.45s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.25s; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1 !important; transform: none !important; }
+  html.img-fade img { transition: none !important; filter: none !important; opacity: 1 !important; }
+  .site-header { transition: none; }
+}

@@ -318,19 +318,21 @@ defmodule RokiWeb.MoodLive do
                 </button>
               </form>
 
-              <div class="flex flex-wrap items-center gap-2">
+              <%!-- One row, a phone included: the kind, the order (a small menu on a phone), and the
+                    poster size (one stepping button on a phone), at the end. --%>
+              <div class="flex items-center gap-2 sm:flex-wrap">
                 <div
-                  class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
+                  class="inline-flex shrink-0 rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
                   role="group"
                   aria-label="Kind"
                 >
                   <button
                     :for={
-                      {k, label} <- [
-                        all: "Everything",
-                        movies: "Movies",
-                        shows: "Shows",
-                        anime: "Anime"
+                      {k, label, short} <- [
+                        {:all, "Everything", "All"},
+                        {:movies, "Movies", "Movies"},
+                        {:shows, "Shows", "Shows"},
+                        {:anime, "Anime", "Anime"}
                       ]
                     }
                     type="button"
@@ -338,17 +340,17 @@ defmodule RokiWeb.MoodLive do
                     phx-value-kind={k}
                     aria-pressed={to_string(@kind == k)}
                     class={[
-                      "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
+                      "rounded-full px-3 py-1.5 text-sm font-semibold transition sm:px-3.5",
                       @kind == k && "bg-white text-neutral-900 shadow",
                       @kind != k && "text-white/80 hover:text-white"
                     ]}
                   >
-                    {label}
+                    <span class="sm:hidden">{short}</span><span class="max-sm:hidden">{label}</span>
                   </button>
                 </div>
                 <div
                   :if={@q == ""}
-                  class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
+                  class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md max-sm:hidden"
                   role="group"
                   aria-label="Order"
                 >
@@ -367,6 +369,40 @@ defmodule RokiWeb.MoodLive do
                     {label}
                   </button>
                 </div>
+                <%!-- A phone: the order behind one button. --%>
+                <div :if={@q == ""} class="dropdown dropdown-end sm:hidden">
+                  <div
+                    tabindex="0"
+                    role="button"
+                    title="Order"
+                    aria-label={"Order: #{Keyword.get(Mood.sorts(), @sort)}"}
+                    class="flex h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md"
+                  >
+                    <.icon name="hero-arrows-up-down" class="h-5 w-5" />
+                  </div>
+                  <ul
+                    tabindex="0"
+                    class="dropdown-content menu z-40 mt-2 w-44 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+                  >
+                    <li :for={{s, label} <- Mood.sorts()}>
+                      <button
+                        type="button"
+                        phx-click="sort"
+                        phx-value-sort={s}
+                        class={[@sort == s && "font-semibold text-primary"]}
+                      >
+                        {label}
+                        <.icon :if={@sort == s} name="hero-check" class="ml-auto h-4 w-4" />
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <RokiWeb.GridSize.grid_switch
+                  size={@grid_size}
+                  tone={:glass}
+                  step_on_phone
+                  class="ml-auto"
+                />
               </div>
             </div>
           </div>
@@ -382,10 +418,6 @@ defmodule RokiWeb.MoodLive do
         <p :if={@error} class="alert alert-error text-sm">
           Couldn't reach TMDB just now. Try again in a minute.
         </p>
-
-        <div class="flex justify-end">
-          <RokiWeb.GridSize.grid_switch size={@grid_size} />
-        </div>
 
         <%!-- A search within the mood: its finds, in place of the list. --%>
         <section :if={@q != ""} class="space-y-3">

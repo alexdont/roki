@@ -88,6 +88,16 @@ export const ShelfRow = {
     }
     this.scroller?.addEventListener("scroll", this.sync, {passive: true})
     window.addEventListener("resize", this.sync)
+    // Where it was scrolled to, kept for this tab: coming back to the page, each row is where it
+    // was left. Saved a moment after scrolling stops; put back once there is enough drawn to reach it.
+    this.placeKey = `roki:row:${location.pathname}:${this.el.id}`
+    this.scroller?.addEventListener("scroll", () => {
+      clearTimeout(this.saveTimer)
+      this.saveTimer = setTimeout(() => {
+        try { sessionStorage.setItem(this.placeKey, String(Math.round(this.scroller.scrollLeft))) } catch {}
+      }, 200)
+    }, {passive: true})
+    this.restorePlace()
     this.sync()
     this.cards()
     if (matchMedia("(hover: hover) and (min-width: 1024px)").matches && this.scroller && !this.grid) this.watchNear()
@@ -96,6 +106,7 @@ export const ShelfRow = {
   // The page re-renders as posters arrive: the attributes set here are the first to go.
   updated() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
+    this.restorePlace()
     this.asked = false
     this.sync()
     this.keepOpen()
@@ -117,6 +128,17 @@ export const ShelfRow = {
       set(Math.min(1, Math.max(0, l)), Math.min(1, Math.max(0, r)))
     })
     this.el.addEventListener("mouseleave", () => set(0, 0))
+  },
+
+  restorePlace() {
+    if (this.restored || !this.scroller) return
+    let x = 0
+    try { x = Number(sessionStorage.getItem(this.placeKey)) || 0 } catch {}
+    if (x <= 0) { this.restored = true; return }
+    const s = this.scroller
+    if (s.scrollWidth - s.clientWidth < x - 4) return // not yet drawn that far
+    s.scrollTo({left: x, behavior: "instant"}) // not the row's own smooth scrolling
+    this.restored = true
   },
 
   // A row that draws what is in view and the rest on demand (`data-more`): there is more to ask for.
@@ -150,6 +172,7 @@ export const ShelfRow = {
   },
 
   destroyed() {
+    clearTimeout(this.saveTimer)
     window.removeEventListener("resize", this.sync)
     this.close()
   },

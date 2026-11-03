@@ -453,6 +453,11 @@ stays on the sources page with a message and the list.
 - Also over the top of a mood's page (`MoodLive`, `data-mood` + `data-amount="0.7"`, not for a season). On both pages it thins out with the scroll past the area (`thin` in `loop`) and stops at two thirds; each effect is run a few seconds ahead unseen (`WARM`) so it fades in already under way.
 - Site-wide switch: `config :roki, mood_fx: false`. In the console, `document.querySelector("#mood-fx").fxStats` says what it is doing.
 
+## Polish (moving around the site)
+- `assets/js/polish.js` (+ "Polish" in app.css): pictures fade in as they arrive (`data-loaded`; `img-fade` on <html> once the script runs, so a first paint never hides anything); `data-reveal` sections rise into place the first time they scroll into view (`data-shown`, `data-instant` for what was on screen already); the header over a picture crosses from its gradient to the frosted bar with the scroll (`--hdr` on <html>, `data-scrolled` past 60 px) and slides away scrolling down (`data-hdr-hidden`); a poster link to `/title/...` grows into the title page's hero art and back (a view transition, `roki-art`; waits for `phx:page-loading-stop` with a timer — never a rAF, which does not run while a transition holds the screen).
+- LiveView patches drop attributes the server did not send: `keep` (LiveSocket `dom.onBeforeElUpdated`) carries those marks over.
+- Rows (`ShelfRow`) remember their sideways scroll per tab (`sessionStorage["roki:row:<path>:<id>"]`); on a wide screen a row fades at a side with more to scroll, and the posters other than the one under the pointer dim a little.
+
 ## Loading overlay
 - `assets/js/study/loading.js` (`bindLoading`, pure `describe` tested in `loading.test.mjs`): over the picture from Play to the first frame — "Connecting" / "Reading the file’s length and tracks" (the device player's `computeDuration`) / "Loading the first seconds" or "Loading from 1:07:32" — with bytes arrived, speed, time left on the hls.js part being fetched (its `frag.stats`), time waited, and "another source in N s" in the last 15 s of `startup`. Also: a conversion catching up to the resume point (`study.catchup`, set by `seekWhenReachable`), a device-player seek ("Loading from …"), a stall over 0.6 s. The device player reports reads through `onRead` (only bytes not seen before) and `onPhase`.
 

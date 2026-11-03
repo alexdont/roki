@@ -31,9 +31,9 @@ const dropSprite = (kind) => sprite(64, (g) => {
   const cx = 32, cy = 32, R = 27
   const body = g.createRadialGradient(cx - 6, cy - 8, 2, cx, cy, R)
   if (kind === "blood") {
-    body.addColorStop(0, "rgba(200,26,36,0.96)")
-    body.addColorStop(0.65, "rgba(125,0,12,0.96)")
-    body.addColorStop(0.94, "rgba(48,0,5,0.96)")
+    body.addColorStop(0, "rgba(200,26,36,0.6)")
+    body.addColorStop(0.65, "rgba(125,0,12,0.6)")
+    body.addColorStop(0.94, "rgba(48,0,5,0.7)")
     body.addColorStop(1, "rgba(40,0,4,0)")
   } else {
     body.addColorStop(0, "rgba(255,255,255,0.22)")
@@ -131,21 +131,56 @@ const RAIN = {
     // The drops that sit still: how often a runner leaves one behind (a second), how long one that
     // lands stays before drying (s), and how strongly they are drawn.
     residue: 2.2, still: [8, 18], stillAlpha: 1,
+    // A running drop's body: clear water, darker at its edge, light down one side.
+    rim: "rgba(0,0,0,0.3)", glint: "rgba(255,255,255,0.3)",
+    lens: [[0, "rgba(255,255,255,0.2)"], [0.55, "rgba(205,218,238,0.08)"], [0.85, "rgba(0,0,0,0.22)"], [1, "rgba(0,0,0,0.38)"]],
+    under: "rgba(235,242,255,0.38)", spark: "rgba(255,255,255,0.85)",
   },
   scared: {
-    streak: "rgba(175,12,22,0.62)", width: 1.8, speed: [1050, 1400], len: [20, 38], rate: 72,
-    stick: 0.38, sprite: "blood", trail: "rgba(95,0,8,0.55)", splash: "rgba(170,14,24,0.75)",
+    streak: "rgba(175,12,22,0.4)", width: 1.8, speed: [1050, 1400], len: [20, 38], rate: 72,
+    stick: 0.38, sprite: "blood", trail: "rgba(95,0,8,0.32)", splash: "rgba(170,14,24,0.45)",
     slide: 0.65, fadeInRow: 0.22, trailW: 0.7,
     // Red dots sitting still were the loudest thing on the page: fewer, drying sooner, fainter.
     residue: 0.6, still: [3, 7], stillAlpha: 0.6,
+    rim: "rgba(40,0,4,0.5)", glint: "rgba(255,120,120,0.18)",
+    lens: [[0, "rgba(205,30,40,0.55)"], [0.6, "rgba(120,0,12,0.55)"], [1, "rgba(50,0,5,0.65)"]],
+    under: null, spark: "rgba(255,210,210,0.55)",
   },
+}
+
+// A drop's own shape, for its life. The head's edge is a sum of a few slow waves of its own (so it
+// is lumpy in its own way, not a ball pulled about); the tail bends in its own curve, is fuller on
+// one side than the other, and on some has a bead of water partway up.
+function makeShape() {
+  const waves = []
+  for (let i = 0; i < 4; i++) waves.push({k: 2 + i + Math.floor(Math.random() * 2), a: rand(-1, 1) * [0.2, 0.13, 0.08, 0.05][i], p: rand(0, 6)})
+  return {
+    len: rand(0.9, 3.4), full: rand(0.45, 1.3), neck: rand(0.1, 0.6),
+    hw: rand(0.85, 1.12), hd: rand(0.8, 1.2), sag: rand(-0.3, 0.3), waves,
+    bend: rand(-1, 1) * rand(0.2, 1.1), bendF: rand(0.7, 2.2), bendP: rand(0, 6),
+    sideL: rand(0.65, 1.3), sideR: rand(0.65, 1.3),
+    knot: Math.random() < 0.45 ? {at: rand(0.3, 0.7), size: rand(0.25, 0.55)} : null,
+    lx: rand(-0.45, -0.1), ly: rand(-0.35, 0.05),
+  }
+}
+
+// How far the edge of a lumpy round reaches at angle `t` (1 = its plain radius).
+const lump = (sh, t) => {
+  let k = 1
+  for (const w of sh.waves) k += w.a * Math.sin(w.k * t + w.p)
+  return k
 }
 
 function rain(fx, m) {
   const img = fx.sprites[m.sprite]
   let streaks = [], drops = [], bits = [], ghosts = [], acc = 0
   const max = () => Math.round((fx.phone ? 130 : 340) * Math.min(1, fx.amount() / 1.5))
-  const drop = (x, y, r, life) => ({x, y, r, life, age: 0, vy: 0, sliding: false, stall: 0, wob: Math.random() * 6, trail: [], dead: false})
+  // Each drop its own shape, kept for its life: tail length, how full it stays before narrowing,
+  // how wide its neck, a lean to one side, an uneven edge, a slightly squashed head.
+  const drop = (x, y, r, life) => ({
+    x, y, r, life, age: 0, vy: 0, sliding: false, stall: 0, wob: Math.random() * 6, trail: [], dead: false,
+    shape: makeShape(),
+  })
 
   const impact = (s, active) => {
     for (let i = 0; i < 3; i++) bits.push({x: s.x, y: s.hitY, vx: rand(-70, 70), vy: rand(-140, -40), life: rand(0.15, 0.3)})
@@ -190,7 +225,7 @@ function rain(fx, m) {
           const speed = (18 + (d.r - 3.8) * 24) * m.slide
           d.vy += (speed - d.vy) * Math.min(1, dt * 4)
           d.y += d.vy * dt
-          d.x += Math.sin(d.age * 0.6 + d.wob) * dt * 1.6
+          d.x += Math.sin(d.age * 0.6 + d.wob) * dt * (1.6 + Math.abs(d.shape.bend) * 2.5)
           if (Math.random() < dt * 0.6) { d.stall = rand(0.15, 0.9); d.x += rand(-1.2, 1.2) }
         }
         d.life = Math.max(d.life, 1.5) // a running drop runs out by shrinking, not by time
@@ -256,11 +291,122 @@ function rain(fx, m) {
         g.stroke()
       }
       for (const t of ghosts) line(t.pts, t.r, Math.min(1, t.life / 1.6))
+
+      // The tapered body of a running drop: from its head up along the last stretch of its path,
+      // as wide as the drop at the bottom and narrowing to a point, filled, with a darker rim
+      // (and, for water, light down one side).
+      // A running drop, drawn whole as one outline: its head at the bottom — each its own width,
+      // depth and slight lopsidedness — rising into a tail that narrows (each at its own rate, to
+      // its own neck, leaning a little) along the way it came. Shaded as a lens: dark at the rim,
+      // light where it catches it, and for water a bright lower edge.
+      const body = (d, a) => {
+        const sh = d.shape
+        const R = d.r * 0.92
+        const hw = R * sh.hw, hd = R * sh.hd
+        const len = d.r * sh.len * (m.sprite === "blood" ? 1.15 : 1)
+        const pts = [{x: d.x, y: d.y, s: 0}]
+        let s = 0
+        for (let i = d.trail.length - 1; i >= 0 && s < len; i--) {
+          const p = d.trail[i], q = pts[pts.length - 1]
+          s += Math.hypot(q.x - p.x, q.y - p.y)
+          pts.push({x: p.x, y: p.y, s: Math.min(s, len)})
+        }
+        const tail = pts.length >= 2 && s >= d.r * 0.4
+        const kOf = (p) => p.s / Math.max(s, 1)
+        // The tail's width on each side: narrowing at the drop's own rate, fuller on one side, and
+        // swelling where it has a bead of water.
+        const width = (p, side) => {
+          const k = kOf(p)
+          let w = hw * Math.pow(1 - k, sh.full) * (1 - sh.neck * k) * (side < 0 ? sh.sideL : sh.sideR)
+          if (sh.knot) w += R * sh.knot.size * Math.exp(-(((k - sh.knot.at) / 0.1) ** 2)) * (1 - k * 0.5)
+          // Where it meets the head, the two widths agree with the head's own edge.
+          const join = Math.min(1, k * 4)
+          return Math.max(0.3, w * join + hw * lump(sh, side < 0 ? Math.PI : 0) * (1 - join))
+        }
+        // The tail lies on the path the drop took, the trail's own line: any curve is the path's.
+        const off = () => 0
+        // Down at the bottom the head sags a little to one side, as weight pulls it.
+        const headPt = (t) => {
+          const k = lump(sh, t)
+          return [d.x + Math.cos(t) * hw * k + sh.sag * hw * Math.sin(t) ** 3, d.y + Math.sin(t) * hd * k]
+        }
+
+        g.beginPath()
+        if (tail) {
+          for (const p of pts) g.lineTo(p.x + off(p) - width(p, -1), p.y)
+          for (let i = pts.length - 1; i >= 1; i--) g.lineTo(pts[i].x + off(pts[i]) + width(pts[i], 1), pts[i].y)
+        } else {
+          for (let t = Math.PI; t <= Math.PI * 2 + 0.01; t += Math.PI / 10) { const k = lump(sh, t); g.lineTo(d.x + Math.cos(t) * hw * k, d.y + Math.sin(t) * hw * 0.8 * k) }
+        }
+        for (let t = 0; t <= Math.PI + 0.01; t += Math.PI / 18) g.lineTo(...headPt(t))
+        g.closePath()
+
+        g.globalAlpha = a
+        const cx = d.x + sh.lx * hw, cy = d.y + sh.ly * hd
+        const grad = g.createRadialGradient(cx, cy, 0, d.x, d.y + hd * 0.1, Math.max(hw, hd) * 1.2)
+        for (const [at, c] of m.lens) grad.addColorStop(at, c)
+        g.fillStyle = grad
+        g.fill()
+        g.strokeStyle = m.rim
+        g.lineWidth = 0.8
+        g.stroke()
+        if (m.under) {
+          g.strokeStyle = m.under
+          g.lineWidth = Math.max(0.8, hd * 0.18)
+          g.beginPath()
+          for (let t = 0.35; t <= Math.PI - 0.35; t += Math.PI / 16) {
+            const [x, y] = headPt(t)
+            g.lineTo(d.x + (x - d.x) * 0.82, d.y + (y - d.y) * 0.82)
+          }
+          g.stroke()
+        }
+        g.fillStyle = m.spark
+        g.beginPath()
+        g.ellipse(cx, cy, Math.max(0.6, hw * 0.2), Math.max(0.5, hd * 0.14), -0.5 + sh.bend * 0.3, 0, Math.PI * 2)
+        g.fill()
+        if (tail && m.glint) {
+          g.strokeStyle = m.glint
+          g.lineWidth = Math.max(0.6, d.r * 0.18)
+          g.beginPath()
+          pts.forEach((p, i) => { if (i === 0) return; const x = p.x + off(p) - width(p, -1) * 0.45; i === 1 ? g.moveTo(x, p.y) : g.lineTo(x, p.y) })
+          g.stroke()
+        }
+      }
+      // A still drop big enough to see its shape: a lumpy round of its own, shaded like the runners.
+      const blob = (d, a) => {
+        const sh = d.shape, R = d.r * 0.95
+        g.beginPath()
+        for (let t = 0; t < Math.PI * 2; t += Math.PI / 12) {
+          const k = lump(sh, t)
+          g.lineTo(d.x + Math.cos(t) * R * sh.hw * k, d.y + Math.sin(t) * R * sh.hd * 0.9 * k)
+        }
+        g.closePath()
+        g.globalAlpha = a
+        const cx = d.x + sh.lx * R, cy = d.y + sh.ly * R
+        const grad = g.createRadialGradient(cx, cy, 0, d.x, d.y, R * 1.2)
+        for (const [at, c] of m.lens) grad.addColorStop(at, c)
+        g.fillStyle = grad
+        g.fill()
+        g.strokeStyle = m.rim
+        g.lineWidth = 0.7
+        g.stroke()
+        g.fillStyle = m.spark
+        g.beginPath()
+        g.ellipse(cx, cy, Math.max(0.5, R * 0.2), Math.max(0.4, R * 0.13), -0.5, 0, Math.PI * 2)
+        g.fill()
+      }
       for (const d of drops) if (d.trail.length > 1) line(d.trail, d.r, Math.min(1, d.life / 1.5), d.x, d.y)
+      // A running drop is a drop, not a bead on a line: the water gathers at the bottom under its own
+      // weight and tapers up along the way it came into a thin neck, which the wet trail goes on from.
+      for (const d of drops) if (d.sliding) body(d, alpha * Math.max(0, Math.min(1, d.life / 1.5)))
+      // Still drops: the larger ones lumpy rounds of their own, the specks the plain stamped bead.
       for (const d of drops) {
-        g.globalAlpha = alpha * Math.max(0, Math.min(1, d.life / 1.5)) * (d.sliding ? 1 : m.stillAlpha)
-        const w = d.r * 2.4, h = d.sliding ? w * 1.25 : w
-        g.drawImage(img, d.x - w / 2, d.y - h / 2, w, h)
+        if (d.sliding) continue
+        const a = alpha * Math.max(0, Math.min(1, d.life / 1.5)) * m.stillAlpha
+        if (d.r >= 2.2) { blob(d, a); continue }
+        g.globalAlpha = a
+        const w = d.r * 2.4
+        g.drawImage(img, d.x - w / 2, d.y - w / 2, w, w)
       }
       g.globalAlpha = alpha
       g.fillStyle = m.splash

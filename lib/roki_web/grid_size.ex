@@ -54,6 +54,10 @@ defmodule RokiWeb.GridSize do
   attr :default, :string, default: "s"
   attr :class, :any, default: nil
 
+  attr :tone, :atom,
+    default: :plain,
+    doc: ":glass over a picture (the mood page's band), as its other pills"
+
   attr :step_on_phone, :boolean,
     default: false,
     doc: "on a phone, one button that steps through the sizes (a crowded toolbar), as Movies has"
@@ -76,7 +80,9 @@ defmodule RokiWeb.GridSize do
       title="Poster size"
       aria-label="Poster size"
       class={[
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-200 text-base-content sm:hidden",
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:hidden",
+        @tone == :glass && "h-10 w-10 border border-white/25 bg-black/30 text-white backdrop-blur-md",
+        @tone != :glass && "bg-base-200 text-base-content",
         @class
       ]}
     >
@@ -84,7 +90,9 @@ defmodule RokiWeb.GridSize do
     </button>
     <div
       class={[
-        "inline-flex shrink-0 rounded-full bg-base-200 p-0.5",
+        "inline-flex shrink-0 rounded-full",
+        @tone == :glass && "border border-white/25 bg-black/30 p-1 backdrop-blur-md",
+        @tone != :glass && "bg-base-200 p-0.5",
         @step_on_phone && "max-sm:hidden",
         @class
       ]}
@@ -101,8 +109,10 @@ defmodule RokiWeb.GridSize do
         aria-pressed={to_string(@on == size)}
         class={[
           "flex h-8 w-9 items-center justify-center rounded-full transition",
-          @on == size && "bg-base-100 text-base-content shadow-sm",
-          @on != size && "text-base-content/60 hover:text-base-content"
+          @on == size && @tone == :glass && "bg-white text-neutral-900 shadow",
+          @on != size && @tone == :glass && "text-white/80 hover:text-white",
+          @on == size && @tone != :glass && "bg-base-100 text-base-content shadow-sm",
+          @on != size && @tone != :glass && "text-base-content/60 hover:text-base-content"
         ]}
       >
         <.size_icon size={size} />

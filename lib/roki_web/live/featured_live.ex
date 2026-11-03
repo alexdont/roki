@@ -472,7 +472,7 @@ defmodule RokiWeb.FeaturedLive do
       <div :if={@uuid} class="mx-auto max-w-6xl px-4 pt-4 sm:px-6 lg:max-w-none lg:px-12 xl:px-16">
         <%!-- What people did lately, as one row to scroll along (or ignore): finished, started, saved,
             rated, put on an earlier day. Narrowed by kind and by whose. A group opens as a list. --%>
-        <section :if={@uuid} class="space-y-2" aria-label="Activity">
+        <section :if={@uuid} class="space-y-2" aria-label="Activity" data-reveal>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
             <h2 class="text-xl font-semibold">Activity</h2>
             <div
@@ -588,6 +588,7 @@ defmodule RokiWeb.FeaturedLive do
     <section
       id="row-lists"
       phx-hook="ShelfRow"
+      data-reveal
       data-kind="lists"
       data-more={to_string(@more?)}
       data-start="true"
@@ -950,6 +951,7 @@ defmodule RokiWeb.FeaturedLive do
       phx-hook="ShelfRow"
       data-start="true"
       data-end="false"
+      data-reveal
       class="group/row"
       aria-label={@title}
     >

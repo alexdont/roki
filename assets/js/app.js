@@ -37,12 +37,10 @@ import {EuDate} from "./eu_date"
 import {TrailerSheet} from "./trailer_sheet"
 import {HeroTrailer} from "./hero_trailer"
 
-// The home page's header floats clear over its picture until the page is scrolled (see the
-// `.site-header--overlay` rules). The mark is on <html>, which no LiveView patch touches.
-const markScrolled = () => document.documentElement.toggleAttribute("data-scrolled", window.scrollY > 24)
-window.addEventListener("scroll", markScrolled, {passive: true})
-window.addEventListener("phx:page-loading-stop", markScrolled)
-markScrolled()
+// The header over a picture settles as the page scrolls, pictures fade in, sections rise into
+// place, a poster grows into its page (polish.js). The marks are on <html>, which no patch touches.
+import {polish, keep} from "./polish"
+polish()
 import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
 // The manga reader, as the app it came from loads it. PhoenixKit ships Fresco and Etcher of its
@@ -236,6 +234,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
     place: placeParam(),
     caps: deviceCaps(),
   }),
+  // Marks the page's scripts put on elements (a picture that has arrived, a section shown) survive
+  // the server's patches.
+  dom: {onBeforeElUpdated: (from, to) => { keep(from, to); return true }},
   hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, MoodFx, ShelfRow, GridCards, EuDate, TrailerSheet, HeroTrailer},
 })
 
