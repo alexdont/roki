@@ -796,30 +796,13 @@ defmodule RokiWeb.WatchedLive do
           @select? && "pb-28"
         ]}
       >
-        <%!-- The header. On a phone: a slim title bar that stays at the top (Select always in
-              reach), then the search with the view switch, then the kind tabs with the sort in
-              a small menu. On a wide screen the same pieces become one toolbar (the wrappers
-              vanish with `contents` and `order-*` lays the pieces out). --%>
+        <%!-- The header. On a phone: one bar that stays at the top with the search, the view
+              switch and (for the owner) Select, then the kind tabs with the sort in a small
+              menu. On a wide screen the same pieces become one toolbar (the wrappers vanish
+              with `contents` and `order-*` lays the pieces out). --%>
         <div class="contents lg:sticky lg:top-14 lg:z-30 lg:-mx-12 lg:flex lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 lg:border-b lg:border-base-300/60 lg:bg-base-100/90 lg:px-12 lg:py-3 lg:backdrop-blur xl:-mx-16 xl:px-16">
-          <div class="sticky top-14 z-30 -mx-4 flex items-center gap-2.5 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
-            <%!-- Select mode, for the owner: one button, on and off. --%>
-            <button
-              :if={@owner?}
-              type="button"
-              phx-click="select_mode"
-              aria-pressed={to_string(@select?)}
-              class={[
-                "btn btn-sm ml-auto gap-1.5 rounded-full lg:order-7 lg:btn-md",
-                @select? && "btn-primary"
-              ]}
-            >
-              <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
-              {if @select?, do: "Done", else: "Select"}
-            </button>
-          </div>
-
-          <%!-- The search, and beside it how the list is laid out: posters or rows. --%>
-          <div class="flex items-center gap-2 pb-3 pt-3 lg:contents lg:py-0">
+          <%!-- The search, how the list is laid out (posters or rows), and Select. --%>
+          <div class="sticky top-14 z-30 -mx-4 flex items-center gap-2 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:contents">
             <form
               id="watched-search"
               phx-change="search"
@@ -832,10 +815,11 @@ defmodule RokiWeb.WatchedLive do
                   type="text"
                   name="q"
                   value={@q}
-                  placeholder={
+                  placeholder="Search watched…"
+                  aria-label={
                     if @owner?,
-                      do: "Search what you watched…",
-                      else: "Search what #{@username} watched…"
+                      do: "Search what you watched",
+                      else: "Search what #{@username} watched"
                   }
                   autocomplete="off"
                   phx-debounce="300"
@@ -871,10 +855,24 @@ defmodule RokiWeb.WatchedLive do
                 <.icon name="hero-bars-3" class="h-5 w-5" />
               </.link>
             </div>
+            <%!-- Select mode, for the owner: one button, on and off. --%>
+            <button
+              :if={@owner?}
+              type="button"
+              phx-click="select_mode"
+              aria-pressed={to_string(@select?)}
+              class={[
+                "btn btn-sm ml-auto h-10 shrink-0 gap-1.5 rounded-full lg:order-7 lg:btn-md",
+                @select? && "btn-primary"
+              ]}
+            >
+              <.icon name={if @select?, do: "hero-check", else: "hero-check-circle"} class="h-4 w-4" />
+              {if @select?, do: "Done", else: "Select"}
+            </button>
           </div>
 
           <%!-- The kinds as tabs, and the sort: a menu on a phone, plain buttons on a wide screen. --%>
-          <div class="flex items-center gap-3 pb-4 lg:order-8 lg:basis-full lg:gap-4 lg:pb-0">
+          <div class="flex items-center gap-3 pb-4 pt-3 lg:order-8 lg:pt-0 lg:basis-full lg:gap-4 lg:pb-0">
             <div class="grid min-w-0 flex-1 grid-cols-4 rounded-full bg-base-200 p-0.5 lg:flex lg:flex-none lg:bg-transparent lg:p-0 lg:gap-1.5">
               <.link
                 :for={{k, label} <- Profile.kinds()}
