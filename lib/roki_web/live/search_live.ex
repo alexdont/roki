@@ -214,7 +214,9 @@ defmodule RokiWeb.SearchLive do
       current_path="/search"
     >
       <.page_hero eyebrow={if @q != "", do: "Results for “#{@q}”"} title="Search" hue={24}>
-        <form phx-submit="search" role="search" class="flex max-w-2xl gap-2">
+        <%!-- One row at any width: the box, the genre (a filter icon on a phone, the same search with
+              only the titles of one), and Search (an icon on a phone). --%>
+        <form phx-submit="search" role="search" class="flex max-w-3xl items-center gap-2">
           <input
             type="search"
             name="q"
@@ -224,29 +226,34 @@ defmodule RokiWeb.SearchLive do
             autofocus
             maxlength="120"
             style="background-color: rgb(0 0 0 / 0.3)"
-            class="input h-12 w-full rounded-full border border-white/25 px-5 text-white backdrop-blur-md placeholder:text-white/60 focus:border-white/60 focus:outline-none"
+            class="input h-12 min-w-0 flex-1 rounded-full border border-white/25 px-5 text-white backdrop-blur-md placeholder:text-white/60 focus:border-white/60 focus:outline-none"
           />
-          <button type="submit" class="btn btn-primary h-12 min-h-0 rounded-full px-6">Search</button>
-        </form>
-
-        <%!-- The genre: the same search, only the titles of one. --%>
-        <div :if={@q != ""} class="flex items-center gap-2">
-          <div class="dropdown">
+          <div :if={@q != ""} class="dropdown dropdown-end shrink-0">
             <div
               tabindex="0"
               role="button"
+              title="Genre"
+              aria-label={"Genre: " <> if(@genre, do: Roki.Genres.label(@genre), else: "all")}
               class={[
-                "btn h-11 min-h-0 gap-1 rounded-full border bg-black/30 px-4 font-semibold text-white backdrop-blur-md hover:bg-black/45",
-                @genre && "border-primary",
+                "btn relative h-12 min-h-0 gap-1 rounded-full border bg-black/30 font-semibold text-white backdrop-blur-md hover:bg-black/45 max-sm:w-12 max-sm:px-0 sm:px-4",
+                @genre && "border-primary max-sm:text-primary",
                 !@genre && "border-white/25 hover:border-white/60"
               ]}
             >
-              {if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
-              <.icon name="hero-chevron-down-micro" class="h-4 w-4" />
+              <.icon name="hero-adjustments-horizontal" class="h-5 w-5 sm:hidden" />
+              <span
+                :if={@genre}
+                class="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-primary sm:hidden"
+                aria-hidden="true"
+              ></span>
+              <span class="max-sm:hidden">
+                {if @genre, do: Roki.Genres.label(@genre), else: "All genres"}
+              </span>
+              <.icon name="hero-chevron-down-micro" class="h-4 w-4 max-sm:hidden" />
             </div>
             <div
               tabindex="0"
-              class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-xl"
+              class="dropdown-content z-40 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-3 text-base-content shadow-xl"
             >
               <div class="grid grid-cols-3 gap-1.5">
                 <.link
@@ -275,12 +282,15 @@ defmodule RokiWeb.SearchLive do
               </div>
             </div>
           </div>
-          <.link
-            :if={@genre}
-            patch={search_path(@q, nil)}
-            class="text-sm text-white/70 hover:text-white"
-          >Clear</.link>
-        </div>
+          <button
+            type="submit"
+            aria-label="Search"
+            class="btn btn-primary h-12 min-h-0 shrink-0 rounded-full max-sm:w-12 max-sm:px-0 sm:px-6"
+          >
+            <.icon name="hero-magnifying-glass" class="h-5 w-5 sm:hidden" />
+            <span class="max-sm:hidden">Search</span>
+          </button>
+        </form>
       </.page_hero>
 
       <div class={content_class()}>
