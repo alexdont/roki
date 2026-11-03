@@ -67,7 +67,7 @@ defmodule Roki.MixProject do
       # reading mode, `manhwa` is the reader itself, `fresco`/`fresco_strip` the paged and
       # scrolling viewers, `etcher` the drawing layer over them. See
       # dev_docs/manga-migration-plan.md.
-      {:manga, "~> 0.1.4"},
+      {:manga, "~> 0.1.5"},
       {:manhwa, "~> 0.1.9"},
       {:fresco, "~> 0.15.0"},
       {:fresco_strip, "~> 0.3.0"},
