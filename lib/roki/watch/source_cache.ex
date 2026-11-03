@@ -48,18 +48,50 @@ defmodule Roki.Watch.SourceCache do
   is missing the heavy releases, so it never replaces a full list and only serves the same kind.
   """
   def put(uuid, key, playable, rest, light? \\ false) do
-    if light? and get(uuid, key, 1_000_000) |> full?() do
+    old = get(uuid, key, 1_000_000)
+
+    if light? and full?(old) do
       :ok
     else
-      write(uuid, key, %{
-        at: now(),
-        v: @version,
-        playable: playable,
-        rest: rest,
-        good: nil,
-        light: light?
-      })
+      write(uuid, key, merge(uuid, old, playable, rest, light?))
     end
+  end
+
+  # A save adds to what is kept rather than replacing it. Several searches write the same entry —
+  # the sources page, the watch page looking further, the background one when a title is opened
+  # (which does not know the device and may stop at a lower ceiling) — and the last to finish used
+  # to win: seven releases found on the sources page became the three the background search had,
+  # and "Change source" showed three. Now every release found playable stays (ranked again), what
+  # is still to check is the union of both lists minus what is known to play, and the release that
+  # last started is kept. A list of another kind (light vs full) is replaced, as before.
+  defp merge(uuid, %{playable: old_playable, rest: old_rest} = old, playable, rest, light?)
+       when is_list(old_playable) do
+    if Map.get(old, :light, false) == light? do
+      seen = MapSet.new(playable, fn {source, _} -> source.hash end)
+      extra = Enum.reject(old_playable, fn {source, _} -> source.hash in seen end)
+      playable = if extra == [], do: playable, else: rank(uuid, playable ++ extra)
+      playing = MapSet.new(playable, fn {source, _} -> source.hash end)
+
+      rest =
+        (rest ++ (old_rest || []))
+        |> Enum.uniq_by(&(Map.get(&1, :hash) || &1))
+        |> Enum.reject(&(Map.get(&1, :hash) in playing))
+
+      %{at: now(), v: @version, playable: playable, rest: rest, good: old[:good], light: light?}
+    else
+      fresh(playable, rest, light?)
+    end
+  end
+
+  defp merge(_uuid, _old, playable, rest, light?), do: fresh(playable, rest, light?)
+
+  defp fresh(playable, rest, light?),
+    do: %{at: now(), v: @version, playable: playable, rest: rest, good: nil, light: light?}
+
+  defp rank(uuid, pairs) do
+    Roki.Laev.run(uuid, fn -> Roki.Watch.rank_playable(pairs) end)
+  rescue
+    _ -> pairs
   end
 
   defp full?(%{} = entry), do: not Map.get(entry, :light, false)

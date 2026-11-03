@@ -50,6 +50,26 @@ defmodule Roki.Watch.SourceCacheTest do
     assert SourceCache.get(@uuid, @key, 12).good == "b"
   end
 
+  test "a later search adds to what was found, it does not replace it" do
+    # The sources page found a, b, c; a background search with a lower ceiling found only c, d.
+    SourceCache.put(@uuid, @key, [pair("a"), pair("b"), pair("c")], [%{hash: "x"}, %{hash: "d"}])
+    SourceCache.mark_good(@uuid, @key, "b")
+    SourceCache.put(@uuid, @key, [pair("c"), pair("d")], [%{hash: "y"}])
+
+    entry = SourceCache.get(@uuid, @key, 12)
+    assert entry.playable |> Enum.map(fn {s, _} -> s.hash end) |> Enum.sort() == ~w(a b c d)
+    # Still to check: both lists, less what is now known to play (d).
+    assert entry.rest |> Enum.map(& &1.hash) |> Enum.sort() == ~w(x y)
+    assert entry.good == "b"
+  end
+
+  test "a release taken out for not starting stays out of a later save that lacks it" do
+    SourceCache.put(@uuid, @key, [pair("a"), pair("b")], [])
+    SourceCache.mark_bad(@uuid, @key, "a")
+    SourceCache.put(@uuid, @key, [pair("b")], [])
+    assert SourceCache.get(@uuid, @key, 12).playable |> Enum.map(fn {s, _} -> s.hash end) == ["b"]
+  end
+
   test "episodes are separate entries, and the keys come back as a set" do
     SourceCache.put(@uuid, {"tv", 1396, 1, 1}, [pair("a")], [])
     SourceCache.put(@uuid, {"tv", 1396, 1, 2}, [pair("b")], [])
