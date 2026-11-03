@@ -213,7 +213,11 @@ html.study-open .site-header { display: none; }
    widening does, and nothing waits when the pointer leaves. A poster opens only once the pointer has
    come to rest on it (`data-open`, set by the hooks), not while it is passing over. */
 [data-card-row] > [data-card] {
-  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* `filter`: the posters around an opened card dim (the Polish section below). Listed here
+     because this rule outranks that one, and a transition list replaces, not adds: without it
+     the dimming snapped on at once. */
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.45s ease;
 }
 
 @media (hover: hover) and (min-width: 1024px) {
@@ -1181,11 +1185,12 @@ html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data
   [data-row-scroller]:has(> [data-open]) { -webkit-mask-image: none; mask-image: none; }
 }
 
-/* With a pointer on a poster, the others step back a little, so the one under it comes forward. */
+/* When a poster opens into its card (the pointer has come to rest on it, `data-open`), the others
+   step back, fading down as it widens and back up as it closes. */
 @media (hover: hover) and (min-width: 1024px) {
-  [data-card-row] > li, ul.grid > [data-grid-card] { transition: filter 0.3s ease; }
-  [data-card-row]:has(> li:hover) > li:not(:hover),
-  ul.grid:has(> [data-grid-card]:hover) > [data-grid-card]:not(:hover) { filter: brightness(0.6) saturate(0.85); }
+  [data-card-row] > li, ul.grid > [data-grid-card] { transition: filter 0.45s ease; }
+  [data-card-row]:has(> [data-open]) > li:not([data-open]),
+  ul.grid:has(> [data-grid-card][data-open]) > [data-grid-card]:not([data-open]) { filter: brightness(0.6) saturate(0.85); }
 }
 
 /* A poster growing into its title page: the picture moves and scales, the rest of the page
