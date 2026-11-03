@@ -2189,10 +2189,14 @@
         if (st.chapter !== lastObservedChapter) {
           lastObservedChapter = st.chapter;
           SHELL.dataset.chapter = st.chapter;
-          const newUrl = "/manga/" +
-            encodeURIComponent(SHELL.dataset.source) + "/" +
-            encodeURIComponent(SHELL.dataset.slug) + "/" +
-            encodeURIComponent(st.chapter);
+          // The title's clean address when it has one (Roki.Manga.Address), else the source's.
+          const cleanBase = document.querySelector("meta[name='roki-clean-base']")?.content;
+          const newUrl = cleanBase
+            ? cleanBase + "/" + encodeURIComponent(st.chapter)
+            : "/manga/" +
+              encodeURIComponent(SHELL.dataset.source) + "/" +
+              encodeURIComponent(SHELL.dataset.slug) + "/" +
+              encodeURIComponent(st.chapter);
           try { history.replaceState({ chapter: st.chapter }, "", newUrl); } catch (_) {}
         }
       }

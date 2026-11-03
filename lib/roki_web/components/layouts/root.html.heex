@@ -6,6 +6,9 @@
           keeps its buttons clear of the rounded corners with the safe-area insets (app.css). --%>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="csrf-token" content={get_csrf_token()} />
+    <%!-- A manga page reached by its source's address shows its clean one (Roki.Manga.Address). --%>
+    <meta :if={assigns[:clean_url]} name="roki-clean-url" content={@clean_url} />
+    <meta :if={assigns[:clean_base]} name="roki-clean-base" content={@clean_base} />
     <%!-- Installed to the home screen or as a desktop app it opens as its own window, without the
           browser's back and reload buttons (manifest.webmanifest: display "standalone"). --%>
     <link rel="manifest" href="/manifest.webmanifest" />

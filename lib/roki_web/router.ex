@@ -239,6 +239,10 @@ defmodule RokiWeb.Router do
     #   scroll              → Fresco scroll-strip reader (show_fresco_strip)
     # Legacy is only reachable via explicit /manga/legacy/manga/... URLs.
     get "/:source/:slug/:chapter", RokiWeb.MangaController, :show
+    # A title's clean address, `/manga/<name>` (Roki.Manga.Address): one wildcard segment, so
+    # after every literal one under /manga. Its chapter and page forms are the two routes above,
+    # told apart from the old ones by their first segment not being a source's name.
+    get "/:name", RokiWeb.MangaController, :by_name
   end
 
   scope "/", RokiWeb do

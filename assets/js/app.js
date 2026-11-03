@@ -41,6 +41,49 @@ import {HeroTrailer} from "./hero_trailer"
 // place, a poster grows into its page (polish.js). The marks are on <html>, which no patch touches.
 import {polish, keep} from "./polish"
 polish()
+
+// A manga page reached by its source's address (`/manga/kotatsu/MANGAPILL~…/86`) shows its clean
+// one (`/manga/nozoki-ana/86`) in the bar, the query kept: no reload, and the clean one works on
+// its own when copied or reloaded.
+{
+  const clean = document.querySelector("meta[name='roki-clean-url']")?.content
+  if (clean && clean !== location.pathname) {
+    const q = new URLSearchParams(location.search)
+    q.delete("page")
+    const qs = q.toString()
+    try { history.replaceState(history.state, "", clean + (qs ? "?" + qs : "") + location.hash) } catch {}
+  }
+}
+
+// The packaged manga reader (`/manga/v3/<source>/<slug>/<chapter>?page=N`) writes its own
+// addresses from its series base (`data-settings-base`), which its requests use too. Given the
+// title's clean name (`?n=`, from MangaController.show; kept for the tab), every address it writes
+// is shown as the clean one instead: `/manga/<name>/<chapter>/<page>`.
+{
+  const base = document.querySelector("[data-settings-base]")?.dataset.settingsBase
+  if (base) {
+    const key = "roki:clean:" + base
+    let name = new URLSearchParams(location.search).get("n")
+    try { if (name) sessionStorage.setItem(key, name); else name = sessionStorage.getItem(key) } catch {}
+    if (name) {
+      const cleanOf = (url) => {
+        const u = new URL(url, location.href)
+        if (!u.pathname.startsWith(base + "/")) return url
+        const chapter = u.pathname.slice(base.length + 1)
+        const page = u.searchParams.get("page")
+        u.searchParams.delete("page")
+        u.searchParams.delete("n")
+        const qs = u.searchParams.toString()
+        return `/manga/${name}/${chapter}${page ? "/" + page : ""}${qs ? "?" + qs : ""}${u.hash}`
+      }
+      for (const f of ["pushState", "replaceState"]) {
+        const own = history[f].bind(history)
+        history[f] = (state, title, url) => own(state, title, url == null ? url : cleanOf(String(url)))
+      }
+      history.replaceState(history.state, "", location.href)
+    }
+  }
+}
 import {startLocalPlayer} from "./study/local_player.js"
 import {SubtitleScanner} from "./study/ebml_subs.js"
 // The manga reader, as the app it came from loads it. PhoenixKit ships Fresco and Etcher of its

@@ -1165,11 +1165,19 @@
       return candidate;
     }
 
+    // The clean address of the title (`/manga/nozoki-ana`, Roki.Manga.Address), when it has one:
+    // the bar shows `/manga/nozoki-ana/86/5` rather than the source's address.
+    const cleanBase = document.querySelector("meta[name='roki-clean-base']")?.content || "";
+    function cleanChapterUrl(ch, p) {
+      return cleanBase ? cleanBase + "/" + encodeURIComponent(ch) + (p ? "/" + p : "") : "";
+    }
     function pageUrl(p) {
       const qs = new URLSearchParams();
-      qs.set("page", String(p));
       if (doubleMode) qs.set("double", "1");
       if (direction === "ltr") qs.set("dir", "ltr");
+      const clean = cleanChapterUrl(chapter, p);
+      if (clean) return clean + (qs.toString() ? "?" + qs.toString() : "");
+      qs.set("page", String(p));
       return "/manga/" + source + "/" + slug + "/" + chapter + "?" + qs.toString();
     }
 
@@ -1777,7 +1785,7 @@
         shell.dataset.prevChapterUrl = prevChapterUrl;
         shell.dataset.nextChapterUrl = nextChapterUrl;
         shell.dataset.page = "1";
-        history.pushState({ chapter: data.chapter, page: 1 }, "", url);
+        history.pushState({ chapter: data.chapter, page: 1 }, "", cleanChapterUrl(data.chapter, 1) || url);
 
         try { fitToPage(1); } catch (_) {}
         try { updatePageIndicator(); } catch (_) {}

@@ -774,7 +774,15 @@ defmodule RokiWeb.MangaController do
     redirect(conn, to: "/u/#{username}/stats#reading")
   end
 
-  def index(conn, %{"source" => source, "slug" => slug} = params) do
+  # `/manga/<name>/<chapter>`: two segments as the old `/manga/<source>/<slug>` has. A first
+  # segment that is no source's name is a title's clean name (Roki.Manga.Address).
+  def index(conn, %{"source" => name, "slug" => chapter}) when is_binary(name) do
+    if Sources.valid?(name),
+      do: do_old_index(conn, conn.params),
+      else: clean(conn, name, chapter, nil)
+  end
+
+  defp do_old_index(conn, %{"source" => source, "slug" => slug} = params) do
     if reader_v2?(conn.assigns[:phoenix_kit_current_user]) do
       qs = if conn.query_string != "", do: "?" <> conn.query_string, else: ""
       redirect(conn, to: ~p"/manga/manga2/#{source}/#{slug}" <> qs)
@@ -786,6 +794,51 @@ defmodule RokiWeb.MangaController do
   # Parallel test route for the redesigned details page (v2 hero +
   # About card + chapter tiles). Same data and modals — template only.
   def index2(conn, params), do: do_index(conn, params, :index2)
+
+  @doc """
+  The clean addresses (Roki.Manga.Address): `/manga/<name>` is the title's page,
+  `/manga/<name>/<chapter>` and `/manga/<name>/<chapter>/<page>` read it. The name says which
+  source entry — the reader's own saved copy first — and the page is the one the old address
+  draws; it puts the clean address in the bar (`clean_url`).
+  """
+  def by_name(conn, %{"name" => name}), do: clean(conn, name, nil, nil)
+
+  defp clean(conn, name, chapter, page) do
+    user = conn.assigns[:phoenix_kit_current_user]
+
+    case Roki.Manga.Address.resolve(name, user && user.uuid) do
+      nil ->
+        conn |> put_flash(:error, "No manga at that address.") |> redirect(to: "/manga")
+
+      {source, slug} ->
+        params = Map.merge(conn.params, %{"source" => source, "slug" => slug})
+
+        cond do
+          chapter == nil ->
+            do_index(conn, params, if(reader_v2?(user), do: :index2, else: :index))
+
+          true ->
+            params = Map.put(params, "chapter", chapter)
+            params = if page, do: Map.put(params, "page", page), else: Map.delete(params, "page")
+            do_show(conn, params)
+        end
+    end
+  end
+
+  # The clean address of what a page draws, for the bar (the root layout's `roki-clean-url`), and
+  # the title's own, for a reader to build its page and chapter addresses on (`roki-clean-base`).
+  defp clean_urls(source, slug, title, chapter \\ nil, page \\ nil) do
+    case Roki.Manga.Address.name_for(source, slug, title) do
+      nil ->
+        [clean_url: nil, clean_base: nil]
+
+      name ->
+        [
+          clean_url: Roki.Manga.Address.path(name, chapter, page),
+          clean_base: Roki.Manga.Address.path(name)
+        ]
+    end
+  end
 
   defp do_index(conn, %{"source" => source, "slug" => slug} = params, template) do
     # Kotatsu browse links carry the search-result title as `?st=` —
@@ -933,61 +986,69 @@ defmodule RokiWeb.MangaController do
                 saved_manga.last_chapter_total_pages
               )
 
-          render(conn, template,
-            source: source,
-            source_url: Sources.source_url(source, slug),
-            source_label: Sources.label(source),
-            slug: slug,
-            manga: manga,
-            display_title: (saved_manga && saved_manga.title) || manga.title,
-            saved: !!saved_manga,
-            manga_readers: manga_readers,
-            reading_mode: reading_mode,
-            last_chapter: saved_manga && saved_manga.last_chapter,
-            max_chapter: saved_manga && (saved_manga.max_chapter || saved_manga.last_chapter),
-            last_page: saved_manga && saved_manga.last_page,
-            last_page_fraction: saved_manga && saved_manga.last_page_fraction,
-            last_chapter_total_pages: saved_manga && saved_manga.last_chapter_total_pages,
-            reading_seconds: saved_manga && saved_manga.reading_seconds,
-            reading_seconds_adjusted: saved_manga && saved_manga.reading_seconds_adjusted,
-            onsite_activity_seconds:
-              (saved_manga && Library.onsite_activity_seconds(user.uuid, source, slug)) || 0,
-            reading_seconds_offsite: saved_manga && saved_manga.reading_seconds_offsite,
-            reading_seconds_offsite_approximate:
-              saved_manga && saved_manga.reading_seconds_offsite_approximate,
-            date_started:
-              case saved_manga && Library.started_event_at(user.uuid, source, slug) do
-                %DateTime{} = dt ->
-                  dt
-                  |> DateTime.add(Library.timezone_offset_seconds(user.user_timezone), :second)
-                  |> DateTime.to_date()
+          render(
+            conn,
+            template,
+            clean_urls(source, slug, (saved_manga && saved_manga.title) || manga.title) ++
+              [
+                source: source,
+                source_url: Sources.source_url(source, slug),
+                source_label: Sources.label(source),
+                slug: slug,
+                manga: manga,
+                display_title: (saved_manga && saved_manga.title) || manga.title,
+                saved: !!saved_manga,
+                manga_readers: manga_readers,
+                reading_mode: reading_mode,
+                last_chapter: saved_manga && saved_manga.last_chapter,
+                max_chapter: saved_manga && (saved_manga.max_chapter || saved_manga.last_chapter),
+                last_page: saved_manga && saved_manga.last_page,
+                last_page_fraction: saved_manga && saved_manga.last_page_fraction,
+                last_chapter_total_pages: saved_manga && saved_manga.last_chapter_total_pages,
+                reading_seconds: saved_manga && saved_manga.reading_seconds,
+                reading_seconds_adjusted: saved_manga && saved_manga.reading_seconds_adjusted,
+                onsite_activity_seconds:
+                  (saved_manga && Library.onsite_activity_seconds(user.uuid, source, slug)) || 0,
+                reading_seconds_offsite: saved_manga && saved_manga.reading_seconds_offsite,
+                reading_seconds_offsite_approximate:
+                  saved_manga && saved_manga.reading_seconds_offsite_approximate,
+                date_started:
+                  case saved_manga && Library.started_event_at(user.uuid, source, slug) do
+                    %DateTime{} = dt ->
+                      dt
+                      |> DateTime.add(
+                        Library.timezone_offset_seconds(user.user_timezone),
+                        :second
+                      )
+                      |> DateTime.to_date()
 
-                _ ->
-                  nil
-              end,
-            last_read_at: saved_manga && saved_manga.updated_at,
-            comment_count: comment_count,
-            chapter_comment_counts: chapter_comment_counts,
-            story_arcs: story_arcs,
-            story_volumes: story_volumes,
-            # The arcs (or volumes) that can be given a date of their own in the
-            # Adjust Time Read dialog, each with the share of the off-site hours
-            # it would carry. See `Roki.Manga.ArcDates`.
-            arc_dates: Roki.Manga.ArcDates.datable(user.uuid, saved_manga, story_row),
-            chapter_titles: chapter_titles,
-            finished_chapters: finished_chapters,
-            cover_img_src: cover_img_src,
-            search_back_url: search_back_url,
-            search_params: search_params,
-            categories: categories,
-            manga_category_ids: manga_category_ids,
-            current_category_id: saved_manga && saved_manga.category_id,
-            completed: saved_manga && saved_manga.completed,
-            reading_rank: reading_rank,
-            user_tier: user_tier,
-            reading_estimate: reading_estimate,
-            percent_read: percent_read,
-            current_chapter_percent: current_chapter_percent
+                    _ ->
+                      nil
+                  end,
+                last_read_at: saved_manga && saved_manga.updated_at,
+                comment_count: comment_count,
+                chapter_comment_counts: chapter_comment_counts,
+                story_arcs: story_arcs,
+                story_volumes: story_volumes,
+                # The arcs (or volumes) that can be given a date of their own in the
+                # Adjust Time Read dialog, each with the share of the off-site hours
+                # it would carry. See `Roki.Manga.ArcDates`.
+                arc_dates: Roki.Manga.ArcDates.datable(user.uuid, saved_manga, story_row),
+                chapter_titles: chapter_titles,
+                finished_chapters: finished_chapters,
+                cover_img_src: cover_img_src,
+                search_back_url: search_back_url,
+                search_params: search_params,
+                categories: categories,
+                manga_category_ids: manga_category_ids,
+                current_category_id: saved_manga && saved_manga.category_id,
+                completed: saved_manga && saved_manga.completed,
+                reading_rank: reading_rank,
+                user_tier: user_tier,
+                reading_estimate: reading_estimate,
+                percent_read: percent_read,
+                current_chapter_percent: current_chapter_percent
+              ]
           )
 
         {:error, reason} ->
@@ -2089,7 +2150,16 @@ defmodule RokiWeb.MangaController do
   # User-Agent and pick the matching field — falls back to the generic
   # `reading_mode` when the per-device slot is unset (so existing
   # users without per-device prefs keep their old behavior).
-  def show(conn, %{"source" => source, "slug" => slug, "chapter" => chapter} = params) do
+  # `/manga/<name>/<chapter>/<page>`: three segments, as the old `/manga/<source>/<slug>/<chapter>`.
+  def show(conn, %{"source" => name, "slug" => chapter, "chapter" => page} = params) do
+    if Sources.valid?(name),
+      do: do_show(conn, params),
+      else: clean(conn, name, chapter, page)
+  end
+
+  def show(conn, params), do: do_show(conn, params)
+
+  defp do_show(conn, %{"source" => source, "slug" => slug, "chapter" => chapter} = params) do
     if Sources.valid?(source) do
       user = conn.assigns[:phoenix_kit_current_user]
 
@@ -2112,7 +2182,22 @@ defmodule RokiWeb.MangaController do
       # same reader, which every chapter link reached until now. They are left in place: putting
       # a chapter back on them is this one redirect, and nothing else, until the package has had
       # long enough to be sure of.
-      qs = if conn.query_string != "", do: "?" <> conn.query_string, else: ""
+      #
+      # The query carries the page (a clean `/manga/<name>/<ch>/<page>` has it in the path) and
+      # the title's clean name (`n`), for app.js to show the clean address while it reads.
+      saved_title =
+        case user && Library.get_saved_manga(user.uuid, source, slug) do
+          %{title: title} -> title
+          _ -> nil
+        end
+
+      query =
+        conn.query_params
+        |> Map.merge(Map.take(params, ["page"]))
+        |> Map.put("n", Roki.Manga.Address.name_for(source, slug, saved_title))
+        |> Enum.reject(fn {_k, v} -> v in [nil, ""] end)
+
+      qs = if query == [], do: "", else: "?" <> URI.encode_query(query)
       redirect(conn, to: "/manga/v3/#{source}/#{slug}/#{chapter}" <> qs)
     else
       send_resp(conn, 404, "Unknown source")
@@ -2263,31 +2348,36 @@ defmodule RokiWeb.MangaController do
 
           reading_rotation = (saved_manga && saved_manga.reading_rotation) || 0
 
-          render(conn, :show_fresco,
-            source: source,
-            slug: slug,
-            chapter: chapter,
-            images: images,
-            total_pages: total,
-            page: page,
-            double_page: double?,
-            direction: direction,
-            spread_starts: spread_starts,
-            solo_pages: MapSet.to_list(solo_set),
-            inserted_pages: MapSet.to_list(inserted_set),
-            chapters: chapters,
-            prev_chapter: prev_chapter,
-            next_chapter: next_chapter,
-            manga_title: manga_title,
-            current_user: user,
-            etcher_annotations: etcher_annotations,
-            reading_rotation: reading_rotation,
-            # `?ann=` means the user landed here from a comment deep-link
-            # (notification, /comments index, etc.) — JS gates progress
-            # saves until the user proves they're actually rereading
-            # (≥2 min on page + ≥2 page flips).
-            transient_mode: params["ann"] != nil,
-            page_title: "[fresco-test] #{manga_title} — Ch. #{chapter} (p.#{page})"
+          render(
+            conn,
+            :show_fresco,
+            clean_urls(source, slug, saved_manga && saved_manga.title, chapter, page) ++
+              [
+                source: source,
+                slug: slug,
+                chapter: chapter,
+                images: images,
+                total_pages: total,
+                page: page,
+                double_page: double?,
+                direction: direction,
+                spread_starts: spread_starts,
+                solo_pages: MapSet.to_list(solo_set),
+                inserted_pages: MapSet.to_list(inserted_set),
+                chapters: chapters,
+                prev_chapter: prev_chapter,
+                next_chapter: next_chapter,
+                manga_title: manga_title,
+                current_user: user,
+                etcher_annotations: etcher_annotations,
+                reading_rotation: reading_rotation,
+                # `?ann=` means the user landed here from a comment deep-link
+                # (notification, /comments index, etc.) — JS gates progress
+                # saves until the user proves they're actually rereading
+                # (≥2 min on page + ≥2 page flips).
+                transient_mode: params["ann"] != nil,
+                page_title: "[fresco-test] #{manga_title} — Ch. #{chapter} (p.#{page})"
+              ]
           )
 
         {:error, reason} ->
@@ -2386,27 +2476,32 @@ defmodule RokiWeb.MangaController do
               {1, 0.0}
             end
 
-          render(conn, :show_fresco_strip,
-            source: source,
-            slug: slug,
-            chapter: chapter,
-            page_padding_defaults:
-              Roki.Manga.Library.page_padding_defaults(user && user.custom_fields),
-            images: images,
-            total_pages: length(images),
-            chapters: chapters,
-            prev_chapter: prev_chapter,
-            next_chapter: next_chapter,
-            manga_title: manga_title,
-            current_user: user,
-            etcher_annotations: etcher_annotations,
-            resume_page: resume_page,
-            resume_fraction: resume_fraction,
-            # `?ann=` means the user landed here from a comment deep-link.
-            # JS gates progress saves until the user proves they're
-            # actually rereading (≥2 min on page + ≥2 page transitions).
-            transient_mode: params["ann"] != nil,
-            page_title: "#{manga_title} — Ch. #{chapter}"
+          render(
+            conn,
+            :show_fresco_strip,
+            clean_urls(source, slug, saved_manga && saved_manga.title, chapter) ++
+              [
+                source: source,
+                slug: slug,
+                chapter: chapter,
+                page_padding_defaults:
+                  Roki.Manga.Library.page_padding_defaults(user && user.custom_fields),
+                images: images,
+                total_pages: length(images),
+                chapters: chapters,
+                prev_chapter: prev_chapter,
+                next_chapter: next_chapter,
+                manga_title: manga_title,
+                current_user: user,
+                etcher_annotations: etcher_annotations,
+                resume_page: resume_page,
+                resume_fraction: resume_fraction,
+                # `?ann=` means the user landed here from a comment deep-link.
+                # JS gates progress saves until the user proves they're
+                # actually rereading (≥2 min on page + ≥2 page transitions).
+                transient_mode: params["ann"] != nil,
+                page_title: "#{manga_title} — Ch. #{chapter}"
+              ]
           )
 
         {:error, reason} ->
