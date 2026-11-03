@@ -563,7 +563,7 @@ defmodule RokiWeb.WatchLive do
 
     data = Map.merge(data, media_info(socket.assigns))
 
-    socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours()
+    socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours() |> with_skips()
 
     # The subtitles the stream came with, then — for a linked account — its own language from
     # OpenSubtitles, as for any release.
@@ -638,7 +638,7 @@ defmodule RokiWeb.WatchLive do
     }
 
     data = Map.merge(data, media_info(socket.assigns))
-    socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours()
+    socket = socket |> assign(player: data, ctx: ctx) |> with_neighbours() |> with_skips()
 
     play_id = Watch.nuvio_play_id(stream.id)
     subs = stream.subtitles
@@ -719,6 +719,7 @@ defmodule RokiWeb.WatchLive do
       socket
       |> assign(player: data, current: pair, ctx: res.ctx, key: res.key)
       |> with_neighbours()
+      |> with_skips()
       |> name_the_release(source.hash)
 
     # What the release did not carry: their language, and for anime the original Japanese
@@ -791,6 +792,15 @@ defmodule RokiWeb.WatchLive do
 
   def handle_async(:restart, _other, socket), do: {:noreply, socket}
 
+  def handle_async(
+        :skips,
+        {:ok, {mal, ep, {:ok, skips}}},
+        %{assigns: %{player: %{} = player, ctx: %{mal_id: mal, episode: ep}}} = socket
+      ),
+      do: {:noreply, assign(socket, :player, Map.put(player, :skips, skips))}
+
+  def handle_async(:skips, _other, socket), do: {:noreply, socket}
+
   def handle_async(:episodes, {:ok, {:ok, eps}}, socket) do
     socket = assign(socket, :episodes, eps)
     {:noreply, socket |> assign(:up_next, next_episode(socket.assigns)) |> with_neighbours()}
@@ -834,6 +844,16 @@ defmodule RokiWeb.WatchLive do
   end
 
   defp with_neighbours(socket), do: socket
+
+  # An anime episode's opening and ending from AniSkip, for the player's skip button (it finds
+  # them in the subtitles otherwise). Asked once per player; the answer is cached a day.
+  defp with_skips(%{assigns: %{player: %{} = player, ctx: %{anime: true} = ctx}} = socket)
+       when not is_map_key(player, :skips) and is_integer(ctx.mal_id) and is_integer(ctx.episode) do
+    %{mal_id: mal, episode: ep} = ctx
+    start_async(socket, :skips, fn -> {mal, ep, Roki.AniSkip.times(mal, ep)} end)
+  end
+
+  defp with_skips(socket), do: socket
 
   # The address names the release that is playing, so a reload — or a copy of it — plays the same.
   # This browser is not asked for HEVC/AV1/VP9 as they are again (it remembers).

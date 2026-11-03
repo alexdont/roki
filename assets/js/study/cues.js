@@ -84,3 +84,94 @@ export function formatTime(seconds) {
   const sec = String(s % 60).padStart(2, "0")
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`
 }
+
+// A line that is only a sound or music ("[door slams]", "(music)", "♪ la la ♪", "*"): not dialogue.
+const NOISE = /\[[^\]]*\]|\([^)]*\)|[♪♫♬♩#*~\-–—.,…!?:;"'\s]/g
+export function isDialogue(text) {
+  const t = String(text || "")
+  // A sung line ("♪ lyrics ♪") is music, whatever words it carries.
+  if (/[♪♫♬♩]/.test(t)) return false
+  return t.replace(NOISE, "") !== ""
+}
+
+// Where people talk, for drawing on a timeline `width` pixels wide that stands for `total`
+// seconds: each spoken line becomes a span [x0, x1] in pixels, at least one pixel wide, moved by
+// the sync `offset`, and spans that touch or overlap are merged. Lines past `total` (a film still
+// being converted) are left out until the bar reaches them.
+export function dialogueSpans(cues, total, width, offset = 0) {
+  if (!(total > 0) || !(width > 0) || !cues || !cues.length) return []
+  const k = width / total
+  const spans = []
+  for (const c of cues) {
+    if (!isDialogue(c.text)) continue
+    const a = c.start + offset
+    const b = Math.max(c.end, c.start) + offset
+    if (b <= 0 || a >= total) continue
+    let x0 = Math.max(0, a) * k
+    let x1 = Math.min(total, b) * k
+    if (x1 - x0 < 1) x1 = Math.min(width, x0 + 1)
+    const last = spans[spans.length - 1]
+    if (last && x0 <= last[1] + 0.5) last[1] = Math.max(last[1], x1)
+    else spans.push([x0, x1])
+  }
+  return spans
+}
+
+// Openings and credits, found where nobody talks (`cues`, moved by the sync `offset`) in a film
+// `total` seconds long, as `[{kind: "intro" | "credits", from, to, tail}]` on the film's clock.
+// `to` is where the next line begins (a second early), so a skip lands just before someone
+// speaks; `tail` marks credits that run to the end with no line after them, which only a
+// complete track can tell (`complete: false` leaves those out).
+// - intro: the longest gap of 50–150 s that begins in the first ten minutes (or third);
+// - credits: the last gap of 45–240 s in the last quarter that has a line after it (an
+//   ending before a post-credits scene or a preview), and/or the silence from the last line
+//   to the end when that is 30 s or more.
+export function findSkips(cues, total, offset = 0, {complete = true} = {}) {
+  const lines = (cues || [])
+    .filter((c) => isDialogue(c.text))
+    .map((c) => [c.start + offset, Math.max(c.end, c.start) + offset])
+    .sort((a, b) => a[0] - b[0])
+  if (lines.length < 10) return []
+  const lastEnd = lines.reduce((m, l) => Math.max(m, l[1]), 0)
+  const length = Math.max(total || 0, lastEnd)
+  const gaps = []
+  let reach = 0
+  for (const [a, b] of lines) {
+    if (a - reach > 0) gaps.push([reach, a])
+    reach = Math.max(reach, b)
+  }
+  const out = []
+  const intro = gaps
+    .filter(([a, b]) => b - a >= 50 && b - a <= 150 && a < Math.min(600, length / 3))
+    .sort((x, y) => (y[1] - y[0]) - (x[1] - x[0]))[0]
+  if (intro) out.push({kind: "intro", from: intro[0], to: Math.max(intro[0], intro[1] - 1), tail: false})
+  const ending = gaps
+    .filter(([a, b]) => b - a >= 45 && b - a <= 240 && a >= length * 0.75 && a !== intro?.[0])
+    .pop()
+  if (ending) out.push({kind: "credits", from: ending[0], to: Math.max(ending[0], ending[1] - 1), tail: false})
+  if (complete && total > 0 && total - lastEnd >= 30 && lastEnd >= total * 0.75)
+    out.push({kind: "credits", from: lastEnd, to: total, tail: true})
+  return out
+}
+
+// AniSkip's times (`[{kind: "op" | "ed", from, to, length}]`) for a file `total` seconds long.
+// Times measured on a cut of another length belong to another file and are dropped; while the
+// length is not known yet (a conversion still under way, `total` short of theirs) they are kept.
+export function aniskipSkips(times, total) {
+  const out = []
+  for (const t of times || []) {
+    const fits = !(t.length > 0) || !(total > 0) || Math.abs(t.length - total) <= 5 || total < t.length - 5
+    if (!fits) continue
+    const kind = t.kind === "op" ? "intro" : "credits"
+    if (out.some((o) => o.kind === kind)) continue
+    out.push({kind, from: t.from, to: t.to, tail: total > 0 && t.to >= total - 3})
+  }
+  return out
+}
+
+// The skip to offer at `now`: the first one that `now` is inside of, at least `settle` seconds
+// in (a growing track may still fill a gap that is only not read yet) and more than two seconds
+// from its end. `null` when there is none.
+export function skipAt(skips, now, settle = 1.5) {
+  return (skips || []).find((s) => now >= s.from + settle && now < s.to - 2) || null
+}

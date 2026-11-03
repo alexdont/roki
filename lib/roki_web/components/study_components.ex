@@ -123,6 +123,16 @@ defmodule RokiWeb.StudyComponents do
               </div>
               <div data-role="overlay" class="study-overlay"></div>
               <button
+                :if={@immersive?}
+                type="button"
+                data-role="skip"
+                hidden
+                class="study-skip btn"
+              >
+                <span data-role="skip-label">Skip intro</span>
+                <.icon name="hero-forward" class="h-4 w-4" />
+              </button>
+              <button
                 type="button"
                 data-role="replay"
                 hidden
@@ -710,6 +720,26 @@ defmodule RokiWeb.StudyComponents do
             </div>
           </div>
           <input type="checkbox" data-role="peek" class="toggle toggle-primary" />
+        </label>
+
+        <label class="study-setting cursor-pointer">
+          <div>
+            <div class="font-medium">Dialogue on timeline</div>
+            <div class="text-xs text-base-content/60">
+              Marks where people talk along the bar
+            </div>
+          </div>
+          <input type="checkbox" data-role="talk" class="toggle toggle-primary" />
+        </label>
+
+        <label class="study-setting cursor-pointer">
+          <div>
+            <div class="font-medium">Skip intro &amp; credits</div>
+            <div class="text-xs text-base-content/60">
+              A button to skip openings and credits
+            </div>
+          </div>
+          <input type="checkbox" data-role="skip-setting" class="toggle toggle-primary" />
         </label>
       </div>
     </div>

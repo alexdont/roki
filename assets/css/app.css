@@ -473,6 +473,10 @@ html.study-open .site-header { display: none; }
 .study-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .study-replay { position: absolute; left: 0.75rem; bottom: 3.6rem; z-index: 3; opacity: 0.9; }
 .study-replay[hidden] { display: none; }
+/* Skip intro / credits / to the next episode: bottom right, above the bar, while it applies. */
+.study-skip { position: absolute; right: 1rem; bottom: 3.6rem; z-index: 4; gap: 0.4rem; border: 1px solid rgb(255 255 255 / 0.35); background: rgb(20 20 20 / 0.78); color: #fff; font-weight: 600; backdrop-filter: blur(6px); }
+.study-skip:hover { background: rgb(255 255 255 / 0.92); color: #000; }
+.study-skip[hidden] { display: none; }
 
 /* What is being said, over the picture, above the player's own controls. Only the words take
    the pointer, so the video underneath still gets every click that is not on a word. */
@@ -929,6 +933,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   }
   .study-immersive #study-ui .study-stage .study-overlay, .study-immersive #study-ui .study-stage[data-active] .study-overlay { bottom: calc(6.2rem + env(safe-area-inset-bottom, 0px)); }
   .study-immersive #study-ui .study-replay { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); }
+  .study-immersive #study-ui .study-skip { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); right: calc(0.75rem + env(safe-area-inset-right, 0px)); }
 }
 
 /* The colour choices for the lines. */
@@ -993,6 +998,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-immersive .study-main[data-controls="off"] .study-controls { opacity: 0; transform: translateY(0.4rem); pointer-events: none; }
 .study-immersive .study-stage .study-overlay, .study-immersive .study-stage[data-active] .study-overlay { bottom: 5.6rem; }
 .study-immersive .study-replay { bottom: 6.5rem; }
+.study-immersive .study-skip { bottom: 6.5rem; }
 .study-immersive .study-stage[data-top="off"] .study-close { opacity: 0; pointer-events: none; }
 .study-immersive .study-stage[data-top="on"] .study-close { opacity: 1; pointer-events: auto; }
 
@@ -1003,6 +1009,10 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 /* Where a click on the timeline would land: a thin white mark, the time above it. */
 .study-hover { position: absolute; top: 0; width: 0; z-index: 3; pointer-events: none; }
 .study-hover-clip { position: absolute; z-index: 3; overflow: hidden; border-radius: 9999px; pointer-events: none; }
+/* Where people talk: a canvas laid over the timeline, marks along its bottom (transport.js). Under
+   the hover mark and the clock text, never in the way of a click. */
+.study-talk { position: absolute; z-index: 0; pointer-events: none; border-radius: 0.25rem; }
+.study-timeline .study-clock { z-index: 2; }
 .study-hover-mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; }
 .study-hover-time { position: absolute; left: 0; bottom: calc(100% + 0.3rem); transform: translateX(-50%); padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: rgb(0 0 0 / 0.8); color: #fff; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 

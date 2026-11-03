@@ -437,6 +437,11 @@ answered go back to `rest` ("Load more", shown as "slow, set aside"). In the bro
 watch page opens, which then reuses the running remux and plays at once — one wait, not two. A failure to prepare
 stays on the sources page with a message and the list.
 
+## Dialogue on the timeline, skip intro/credits
+- The bar's white marks are where the studied track's lines fall (`dialogueSpans` in `cues.js`, drawn on a canvas by `transport.js`); sound/music lines (`[..]`, `(..)`, anything with ♪) don't count. Player setting "Dialogue on timeline" (`roki:study:talk`).
+- Skip button (`assets/js/study/skip.js`, setting `roki:study:skip`): AniSkip times for anime (`Roki.AniSkip`, MAL id + MAL-local episode, cached a day, 60/min site-wide, off in tests via `aniskip_offline`; sent as `skips` in the player data, dropped when measured on a cut of another length), else gaps in the dialogue (`findSkips`): intro = longest 50–150 s gap starting in the first 10 min, credits = a 45–240 s gap in the last quarter with a line after it, or the silence to the end (only from a complete track, never one still read out of the release on this device). Credits to the end become "Next episode" for a series and nothing for a film. Shown 1.5 s after entering the gap (a growing track may still fill it).
+- Fansub lyrics without ♪ (styled ASS karaoke; laev's converter and ffmpeg drop the style) defeat the guess; AniSkip covers those shows when it knows them.
+
 ## Anime source numbering (resolver)
 - A pack named with a range not starting at 1 ("(13-25)") is probed with the TMDB episode number; other releases with the MAL-local one (`numbered_as/2`).
 - A pick is rejected when its file names another episode/cour (`S02E01`, `- 13v2`) or a pack has no file for the episode (`confirm_episode/3`).

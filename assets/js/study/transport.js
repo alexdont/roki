@@ -2,7 +2,7 @@
 // The video has no controls of its own there. `root` is the element holding the bar; `video`
 // the <video>; `study` the hook, whose `abs()`, `total()` and `seekAbs()` keep the film's own
 // clock (a stream may begin part-way through it). Returns nothing: it only listens.
-import {formatTime} from "./cues.js"
+import {formatTime, dialogueSpans} from "./cues.js"
 
 const KEY = "roki:study:volume"
 
@@ -35,6 +35,7 @@ export function bindTransport(root, video, stage, study) {
       paint(seek, total ? now / total : 0)
     }
     seek.disabled = !total
+    drawTalk(total)
   }
   const showVolume = () => {
     volume.value = video.muted ? 0 : video.volume
@@ -42,6 +43,42 @@ export function bindTransport(root, video, stage, study) {
     mute.querySelector("[data-icon=on]").classList.toggle("hidden", video.muted || video.volume === 0)
     mute.querySelector("[data-icon=off]").classList.toggle("hidden", !(video.muted || video.volume === 0))
   }
+
+  // Where people talk: thin white marks along the bottom of the bar, from the studied track's
+  // lines (`study.p.cues`, moved by the sync offset). Drawn on a canvas laid over the bar and
+  // redrawn only when something it depends on changes; `study.talk === false` switches it off.
+  const talk = document.createElement("canvas")
+  talk.className = "study-talk"
+  talk.hidden = true
+  talk.setAttribute("aria-hidden", "true")
+  seek.parentElement.append(talk)
+  let talkKey = ""
+  const drawTalk = (total = duration()) => {
+    const cues = study.p && study.p.cues
+    const on = study.talk !== false && total > 0 && cues && cues.length > 0
+    const box = seek.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const key = on && box.width > 0
+      ? [cues.length, cues[0].start, cues[cues.length - 1].end, study.offset || 0, Math.round(total), Math.round(box.width), Math.round(box.height), dpr].join("|")
+      : "off"
+    if (key === talkKey) return
+    talkKey = key
+    talk.hidden = key === "off"
+    if (talk.hidden) return
+    const row = seek.parentElement.getBoundingClientRect()
+    Object.assign(talk.style, {left: `${box.left - row.left}px`, top: `${box.top - row.top}px`, width: `${box.width}px`, height: `${box.height}px`})
+    talk.width = Math.round(box.width * dpr)
+    talk.height = Math.round(box.height * dpr)
+    const ctx = talk.getContext("2d")
+    ctx.clearRect(0, 0, talk.width, talk.height)
+    // A strip a little above the bottom edge, so it reads as lines on the bar and not as its border.
+    const h = Math.max(2, Math.round(box.height * 0.16)) * dpr
+    const y = talk.height - h - Math.max(2, Math.round(box.height * 0.14)) * dpr
+    ctx.fillStyle = "rgb(255 255 255 / 0.6)"
+    for (const [a, b] of dialogueSpans(cues, total, talk.width, study.offset || 0)) ctx.fillRect(a, y, Math.max(dpr, b - a), h)
+  }
+  study.redrawTalk = () => { talkKey = ""; drawTalk() }
+  if (window.ResizeObserver) new ResizeObserver(() => drawTalk()).observe(seek)
 
   play.addEventListener("click", toggle)
   // A click that only closes a menu (audio, settings, subtitles…) must not also pause or play: whether one

@@ -13,6 +13,7 @@
 // No framework: the video is a plain <video>, the rest is plain DOM.
 import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
+import {bindSkip} from "./skip.js"
 import {startLocalPlayer} from "./local_player.js"
 
 // Among tracks of one language: a full one first, SDH/CC next, "forced" (signs only) last.
@@ -215,6 +216,10 @@ export const StudySidebar = {
     this.watching = -1
     this.study = store.get("study") === "1"
     this.peek = store.get("peek") === "1"
+    // Dialogue drawn on the timeline (transport.js): on unless switched off.
+    this.talk = store.get("talk") !== "0"
+    // The skip-intro/credits button (skip.js): on unless switched off.
+    this.skip = store.get("skip") !== "0"
     this.scale = Math.min(3, Math.max(0.5, parseFloat(store.get("scale")) || 1))
 
     this.el.study = this // for tests and the console
@@ -770,6 +775,7 @@ export const StudySidebar = {
     const immersive = this.el.dataset.immersive === "true"
     if (immersive) {
       bindTransport(this.el, this.video, this.stage, this)
+      bindSkip(this.el, this.video, this)
 
       // Nothing sits over the picture while it plays: the bar shows only when the pointer goes
       // into the strip at the very bottom (below the lines, which sit just above it), the close
@@ -959,6 +965,7 @@ export const StudySidebar = {
       offsetReset.hidden = this.offset === 0
       store.set("offset:" + (this.mediaKey || ""), String(this.offset))
       this.overlayKey = ""
+      if (this.redrawTalk) this.redrawTalk()
       this.tick()
       this.syncNativeTracks()
     }
@@ -1073,6 +1080,34 @@ export const StudySidebar = {
     }
     peek.addEventListener("change", () => setPeek(peek.checked))
     setPeek(this.peek)
+
+    // Dialogue on the timeline: where the lines of the studied track fall, drawn on the bar.
+    const talk = $("[data-role=talk]")
+    if (talk && !$("[data-role=seek]")) talk.closest("label").hidden = true
+    else if (talk) {
+      const setTalk = (on) => {
+        this.talk = on
+        talk.checked = on
+        store.set("talk", on ? "1" : "0")
+        if (this.redrawTalk) this.redrawTalk()
+      }
+      talk.addEventListener("change", () => setTalk(talk.checked))
+      setTalk(this.talk)
+    }
+
+    // The skip-intro/credits button.
+    const skip = $("[data-role=skip-setting]")
+    if (skip && !$("[data-role=skip]")) skip.closest("label").hidden = true
+    else if (skip) {
+      const setSkip = (on) => {
+        this.skip = on
+        skip.checked = on
+        store.set("skip", on ? "1" : "0")
+        if (this.refreshSkip) this.refreshSkip()
+      }
+      skip.addEventListener("change", () => setSkip(skip.checked))
+      setSkip(this.skip)
+    }
     this.el.addEventListener("click", (e) => {
       const trans = e.target.closest && e.target.closest(".study-trans")
       // Dragging across a word to select it also ends in a click: that must not blur the line again.
@@ -1187,6 +1222,8 @@ export const StudySidebar = {
   setPrimary(vtt, name, track) {
     const p = this.p
     p.cues = parseVtt(vtt)
+    // Read out of the release on this device: it grows as the film plays.
+    p.growing = !!track.read
     p.lang = shortLang(track.lang)
     p.url = track.url
     p.label = name || "Subtitles"
@@ -1197,11 +1234,13 @@ export const StudySidebar = {
     this.overlayKey = ""
     if (p.lang === "ja") loadKuromoji().then(() => this.retokenize())
     this.buildRows()
+    if (this.redrawTalk) this.redrawTalk()
   },
 
   // Another track on: its lines go under the first one's, in the overlay and in the list.
   setExtra(e, vtt, track) {
     e.cues = parseVtt(vtt)
+    e.growing = !!track.read
     e.lang = shortLang(track.lang)
     e.url = track.url
     this.overlayKey = ""
@@ -1220,6 +1259,7 @@ export const StudySidebar = {
   clearMain() {
     const p = this.p
     p.cues = []
+    if (this.redrawTalk) this.redrawTalk()
     p.url = null
     p.lang = ""
     p.loading = null
@@ -1475,6 +1515,9 @@ export const StudySidebar = {
     this.prevBtn.hidden = !p.prev
     this.prevBtn.title = p.prev ? `Play the previous episode (${p.prev})` : "Play the previous episode"
     this.nextBtn.hidden = !p.next
+    // AniSkip's opening/ending times for an anime episode, when the page has them (skip.js).
+    this.aniskip = Array.isArray(p.skips) ? p.skips : []
+    if (this.refreshSkip) this.refreshSkip()
     const label = this.nextBtn.querySelector("[data-role=next-label]")
     if (label) label.textContent = p.next || ""
     this.nextBtn.title = p.next ? `Play the next episode (${p.next})` : "Play the next episode"
