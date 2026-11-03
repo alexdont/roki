@@ -26,7 +26,8 @@ val ktorVersion = "3.1.2"
 // community continuation (drop-in: same packages and API).
 // (7-char hash: JitPack's build of the 10-char form of this same
 // commit died on their infra; the short form built fine)
-val parsersVersion = "dbd62fb"
+// 68f3fed (2026-11-02) picks up "LikeManga: move to mgread.io" (the site moved that day).
+val parsersVersion = "68f3fed"
 
 dependencies {
     implementation("com.github.Kotatsu-Redo:kotatsu-parsers-redo:$parsersVersion")
