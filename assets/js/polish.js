@@ -123,7 +123,7 @@ function transitions() {
   }, true)
   // Back from a title page to where it was opened: the artwork shrinks into its poster again.
   addEventListener("popstate", () => {
-    if (reduced() || !lastKey || !location.pathname.match(/^\/(home|movies|shows|anime|search|mood|lists)/)) return
+    if (reduced() || !lastKey || !location.pathname.match(/^\/($|movies|shows|anime|search|mood|lists|u\/)/)) return
     const art = document.querySelector("[data-hero] > img")
     if (!art) return
     const key = lastKey

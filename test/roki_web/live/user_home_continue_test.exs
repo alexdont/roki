@@ -64,7 +64,7 @@ defmodule RokiWeb.UserHomeContinueTest do
   } do
     reading!(user, "berserk", "Berserk")
 
-    {:ok, view, _} = live(conn, "/continuer/home")
+    {:ok, view, _} = live(conn, "/u/continuer/corner")
     html = render(view)
 
     assert html =~ "Carry on"
@@ -80,7 +80,7 @@ defmodule RokiWeb.UserHomeContinueTest do
     reading!(user, "berserk", "Berserk")
 
     # The first render, before the shelf's data has arrived.
-    {:ok, _view, html} = live(conn, "/continuer/home")
+    {:ok, _view, html} = live(conn, "/u/continuer/corner")
 
     assert html =~ "Carry on"
     assert html =~ ~s(aria-busy="true")
@@ -93,14 +93,14 @@ defmodule RokiWeb.UserHomeContinueTest do
   } do
     reading!(user, "caught", "Caught Up", %{last_chapter: "10", last_chapter_number: 10})
 
-    {:ok, view, _} = live(conn, "/continuer/home")
+    {:ok, view, _} = live(conn, "/u/continuer/corner")
     refute render(view) =~ "Caught Up"
   end
 
   test "nor is one you have finished", %{conn: conn, user: user} do
     reading!(user, "done", "All Done", %{completed: true})
 
-    {:ok, view, _} = live(conn, "/continuer/home")
+    {:ok, view, _} = live(conn, "/u/continuer/corner")
     refute render(view) =~ "All Done"
   end
 end

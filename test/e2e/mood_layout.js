@@ -10,7 +10,7 @@ const widths = (process.env.W || "360,390,430,640,768,1024,1280").split(",").map
     const c = await b.newContext({viewport: {width: w, height: 900}})
     await c.addCookies([{name: "_roki_key", value: fs.readFileSync(process.env.COOKIE || "/tmp/e2e-cookie.txt","utf8").trim(), domain: "roki.ee", path: "/", secure: true, httpOnly: true, sameSite: "Lax"}])
     const p = await c.newPage()
-    await p.goto((process.env.BASE || "https://roki.ee") + "/home", {waitUntil: "load"}); await p.waitForTimeout(6000)
+    await p.goto((process.env.BASE || "https://roki.ee") + "/", {waitUntil: "load"}); await p.waitForTimeout(6000)
     const rows = await p.evaluate(() => {
       const out = []
       for (const s of document.querySelectorAll("#mood-picker [data-mood]")) {

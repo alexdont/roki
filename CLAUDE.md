@@ -226,7 +226,14 @@ Scope is process-bound: call `Roki.Laev` from `start_async`, never from a shared
 
 ## Routes
 
-`/` → redirects (own `/:username/home` when signed in, else `/home`). `/home` — public Featured
+**Addresses.** `/` is the Featured page itself (`FeaturedLive`); `/home` forwards there. A user's
+pages live under `/u/:username/` so no name can clash with the site's own pages: `corner` (their own
+page — watchlist, saved, completed; "Your corner", the header's star), `profile`, `stats`, `calendar`,
+`settings`, `watched`, `friends`, `history`, `dating`, `comments`, `tierlist`, `grid`; `/u/:username`
+alone forwards to `profile`. Every address from before (`/:username`, `/:username/home`,
+`/:username/<page>`, `/home`) forwards for good (301, query kept) through `OldAddressController`
+— notifications already sent carry them. The rest of this file may still say `/:username/...`
+or `/home`; read those as the new forms. `/` — public Featured
 page (`FeaturedLive`, cached 12 h by `Roki.Featured`; needs `TMDB_API_KEY` in the stack `.env`,
 which `config/runtime.exs` hands to laev as `config :laev, tmdb_key:`). `/:username/home` —
 that signed-in user's own shelf (`UserHomeLive`); anyone else is sent to `/home`, a visitor to

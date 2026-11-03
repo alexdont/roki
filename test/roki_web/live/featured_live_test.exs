@@ -11,7 +11,7 @@ defmodule RokiWeb.FeaturedLiveTest do
       Roki.Featured.seed(kind, 1, items)
     end
 
-    {:ok, view, _} = live(conn, "/home")
+    {:ok, view, _} = live(conn, "/")
     render_async(view, 3000)
     html = render_async(view, 3000)
 
@@ -29,7 +29,7 @@ defmodule RokiWeb.FeaturedLiveTest do
       Roki.Featured.seed(kind, 1, items, true)
     end
 
-    {:ok, view, _} = live(conn, "/home")
+    {:ok, view, _} = live(conn, "/")
     render_async(view, 3000)
     html = render_async(view, 3000)
 
@@ -62,7 +62,7 @@ defmodule RokiWeb.FeaturedLiveTest do
         Roki.Activity.insert_now(user.uuid, %{type: "movie", tmdb_id: id, title: title}, "saved")
       end
 
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       html = render_async(view, 3000)
       assert html =~ "saved 2 films"
       assert html =~ "See which"
@@ -88,7 +88,7 @@ defmodule RokiWeb.FeaturedLiveTest do
         "saved"
       )
 
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       html = render_async(view, 3000)
       assert html =~ ~s(href="/title/movie/903")
       refute html =~ "See which"
@@ -99,7 +99,7 @@ defmodule RokiWeb.FeaturedLiveTest do
     @emoji ~r/[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{FE0F}]/u
 
     test "has no emoji in it: the moods are their names and their colours", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       picker = view |> element("#mood-picker") |> render()
 
       refute picker =~ @emoji
@@ -111,7 +111,7 @@ defmodule RokiWeb.FeaturedLiveTest do
     end
 
     test "the first mood is the one shown, its tab selected", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       [first | _] = Roki.Mood.all()
 
       assert has_element?(
@@ -125,7 +125,7 @@ defmodule RokiWeb.FeaturedLiveTest do
 
   describe "the mood animations" do
     test "sit over the carousel on their own canvas, clicks passing through", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
 
       assert has_element?(
                view,
@@ -139,7 +139,7 @@ defmodule RokiWeb.FeaturedLiveTest do
       Application.put_env(:roki, :mood_fx, false)
       on_exit(fn -> Application.delete_env(:roki, :mood_fx) end)
 
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       refute has_element?(view, "#mood-fx-canvas")
       refute has_element?(view, ~s([phx-hook="MoodFx"]))
       assert has_element?(view, "#mood-picker")
@@ -148,7 +148,7 @@ defmodule RokiWeb.FeaturedLiveTest do
 
   describe "the header" do
     test "floats over the picture on the home page, with a search field in it", %{conn: conn} do
-      {:ok, view, html} = live(conn, "/home")
+      {:ok, view, html} = live(conn, "/")
       assert html =~ "site-header--overlay"
       assert has_element?(view, ~s|header form[role="search"] input#search-input-wide[name="q"]|)
       # The icon that opens the search under the bar is still there for narrower screens.
@@ -171,7 +171,7 @@ defmodule RokiWeb.FeaturedLiveTest do
         ])
       end
 
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       render_async(view, 3000)
       render_async(view, 3000)
 
@@ -216,7 +216,7 @@ defmodule RokiWeb.FeaturedLiveTest do
 
       Roki.TTLCache.put(Roki.Mood.key(season.slug, :all, :popular, 1), 60, {:ok, {items, true}})
 
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       render_async(view, 3000)
       html = render_async(view, 3000)
 
@@ -229,7 +229,7 @@ defmodule RokiWeb.FeaturedLiveTest do
     end
 
     test "is not drawn when the season could not be read", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/home")
+      {:ok, view, _} = live(conn, "/")
       render_async(view, 3000)
       html = render_async(view, 3000)
       refute html =~ "Seasonal ·"

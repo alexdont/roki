@@ -58,11 +58,11 @@ defmodule RokiWeb.MoodLiveTest do
   end
 
   test "a mood that does not exist goes home", %{conn: conn} do
-    assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/mood/nothing")
+    assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/mood/nothing")
   end
 
   test "the home page offers every mood and the popular grid", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/home")
+    {:ok, _view, html} = live(conn, "/")
     assert html =~ "What are you in the mood for?"
     for m <- Roki.Mood.all(), do: assert(html =~ ~s(href="/mood/#{m.slug}"))
     assert html =~ ~s(data-mood="scared")

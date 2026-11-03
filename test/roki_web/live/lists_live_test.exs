@@ -43,7 +43,7 @@ defmodule RokiWeb.FeaturedListsSectionTest do
   import Phoenix.LiveViewTest
 
   test "Lists is a section at the bottom of the featured page, not a header link", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/home")
+    {:ok, view, html} = live(conn, ~p"/")
 
     # not in the header, in the bar or the menu
     refute Regex.match?(

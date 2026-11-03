@@ -42,7 +42,7 @@ defmodule RokiWeb.DatingLiveTest do
   end
 
   test "only the imported titles are in the pool, and only those out by the year", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/datinguser/dating?up_to=2005")
+    {:ok, view, _} = live(conn, "/u/datinguser/dating?up_to=2005")
     render_async(view)
     html = render(view)
 
@@ -60,15 +60,15 @@ defmodule RokiWeb.DatingLiveTest do
         "username" => "otherdating"
       })
 
-    assert {:error, {:live_redirect, %{to: "/otherdating/watched"}}} =
-             live(conn, "/otherdating/dating")
+    assert {:error, {:live_redirect, %{to: "/u/otherdating/watched"}}} =
+             live(conn, "/u/otherdating/dating")
   end
 
   test "putting ticked titles in a year takes them out of the pool and dates them", %{
     conn: conn,
     user: user
   } do
-    {:ok, view, _} = live(conn, "/datinguser/dating?up_to=2019")
+    {:ok, view, _} = live(conn, "/u/datinguser/dating?up_to=2019")
     render_async(view)
 
     view |> element(~s(button[phx-value-key="movie:1"])) |> render_click()

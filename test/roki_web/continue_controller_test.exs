@@ -52,7 +52,7 @@ defmodule RokiWeb.ContinueControllerTest do
     conn: conn
   } do
     assert redirected_to(get(conn, "/continue/movie/10331")) == "/title/movie/10331"
-    assert redirected_to(get(conn, "/continue/movie/abc")) == "/home"
-    assert redirected_to(get(conn, "/continue/manga/5")) == "/home"
+    assert redirected_to(get(conn, "/continue/movie/abc")) == "/"
+    assert redirected_to(get(conn, "/continue/manga/5")) == "/"
   end
 end

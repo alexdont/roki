@@ -95,7 +95,7 @@ defmodule RokiWeb.CalendarLive do
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/calendar"}
+      current_path={"/u/#{@username}/calendar"}
     >
       <div class="space-y-6">
         <div
@@ -108,8 +108,8 @@ defmodule RokiWeb.CalendarLive do
         </div>
 
         <div :if={@state == :not_connected} class="alert">
-          <span>Connect laev on your shelf, then save titles to see when they drop.</span>
-          <.link navigate={~p"/#{@username}/home"} class="btn btn-sm">Go to your shelf</.link>
+          <span>Connect laev in your corner, then save titles to see when they drop.</span>
+          <.link navigate={~p"/u/#{@username}/corner"} class="btn btn-sm">Go to your corner</.link>
         </div>
         <p :if={match?({:error, {:rate_limited, _}}, @state)} class="alert alert-warning text-sm">
           You're loading the calendar a little fast — try again in a few seconds.
@@ -146,7 +146,7 @@ defmodule RokiWeb.CalendarLive do
             >
               <.icon name="hero-chevron-right" class="h-4 w-4" />
             </.link>
-            <.link patch={~p"/#{@username}/calendar"} class="btn btn-sm">Today</.link>
+            <.link patch={~p"/u/#{@username}/calendar"} class="btn btn-sm">Today</.link>
           </div>
 
           <p :if={@data.saved == %{}} class="py-10 text-center text-base-content/60">
@@ -303,7 +303,7 @@ defmodule RokiWeb.CalendarLive do
   end
 
   defp month_path(username, date),
-    do: ~p"/#{username}/calendar?#{[m: Calendar.strftime(date, "%Y-%m")]}"
+    do: ~p"/u/#{username}/calendar?#{[m: Calendar.strftime(date, "%Y-%m")]}"
 
   defp when_text(date, today) do
     diff = Date.diff(date, today)

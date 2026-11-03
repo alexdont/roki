@@ -73,7 +73,7 @@ defmodule Roki.AdminWatch do
               "new_account",
               "New account: #{username}",
               "hero-user-plus",
-              "/#{username}"
+              "/u/#{username}/profile"
             ) == :ok
         end)
 

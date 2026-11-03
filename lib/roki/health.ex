@@ -226,7 +226,7 @@ defmodule Roki.Health do
       "connection",
       text,
       icon,
-      if(username, do: "/#{username}/settings", else: "/")
+      if(username, do: "/u/#{username}/settings", else: "/")
     )
 
     remember(bin, service, state, true)

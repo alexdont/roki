@@ -109,7 +109,7 @@ defmodule Roki.CommentHandler.Profile do
   @impl true
   def resolve_comment_resources(uuids) do
     for uuid <- uuids, user = PhoenixKit.Users.Auth.get_user(uuid), user != nil, into: %{} do
-      {uuid, %{title: "#{user.username}'s profile", path: "/#{user.username}"}}
+      {uuid, %{title: "#{user.username}'s profile", path: "/u/#{user.username}/profile"}}
     end
   end
 end

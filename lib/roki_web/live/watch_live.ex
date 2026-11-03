@@ -89,7 +89,7 @@ defmodule RokiWeb.WatchLive do
        )}
     else
       _ ->
-        {:ok, push_navigate(socket, to: ~p"/home")}
+        {:ok, push_navigate(socket, to: ~p"/")}
     end
   end
 
@@ -1447,7 +1447,7 @@ defmodule RokiWeb.WatchLive do
       seasons={if @title, do: @title.seasons, else: []}
       season={@season}
       label={if @title, do: @title.title <> now_playing(@title, @season, @episode)}
-      home={if @title, do: back_path(assigns), else: ~p"/home"}
+      home={if @title, do: back_path(assigns), else: ~p"/"}
       sources={sources_path(assigns)}
     />
     <style :if={@player}>

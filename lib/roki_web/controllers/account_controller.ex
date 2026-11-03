@@ -9,7 +9,7 @@ defmodule RokiWeb.AccountController do
   def services(conn, _params) do
     case conn.assigns[:phoenix_kit_current_user] do
       %{username: name} when is_binary(name) and name != "" ->
-        redirect(conn, to: ~p"/#{name}/settings")
+        redirect(conn, to: ~p"/u/#{name}/settings")
 
       _ ->
         redirect(conn, to: "/phoenix_kit/users/log-in")

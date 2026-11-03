@@ -701,7 +701,7 @@ defmodule RokiWeb.WatchedLive do
           if v.view == :rows, do: [view: "rows"], else: []
       end)
 
-    base = "/#{a.username}/watched"
+    base = "/u/#{a.username}/watched"
     if query == [], do: base, else: base <> "?" <> URI.encode_query(query)
   end
 
@@ -753,7 +753,7 @@ defmodule RokiWeb.WatchedLive do
       bleed
       overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/watched"}
+      current_path={"/u/#{@username}/watched"}
     >
       <p :if={@user == nil} class="px-4 pb-24 pt-40 text-center text-base-content/60">
         There is no one called <strong>{@username}</strong> here.
@@ -772,7 +772,7 @@ defmodule RokiWeb.WatchedLive do
         </div>
         <div class="flex flex-col gap-3 px-4 pb-6 pt-28 sm:px-6 lg:px-12 xl:px-16">
           <.link
-            navigate={"/#{@username}"}
+            navigate={"/u/#{@username}/profile"}
             class="flex w-fit items-center gap-2 text-white/80 hover:text-white"
           >
             <.user_avatar user={@user} size="sm" />

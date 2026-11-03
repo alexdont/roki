@@ -45,9 +45,9 @@ defmodule RokiWeb.SourcesConnectTest do
     {:ok, _view, html} = live(conn, "/sources/movie/603")
 
     # the sources page's own switch and the account menu's
-    assert html =~ ~s(href="/nosource/settings#debrid")
-    assert html =~ ~s(href="/nosource/settings#penguplay")
-    assert html =~ ~s(href="/nosource/settings#nuvio")
+    assert html =~ ~s(href="/u/nosource/settings#debrid")
+    assert html =~ ~s(href="/u/nosource/settings#penguplay")
+    assert html =~ ~s(href="/u/nosource/settings#nuvio")
     assert html =~ "Nuvio"
     assert html =~ "data-source-switch"
     assert html =~ "Not connected — add a PenguPlay link in Settings"

@@ -304,8 +304,8 @@ defmodule RokiWeb.Router do
     scope "/", RokiWeb do
       pipe_through :browser
 
-      live "/", RootLive, :index
-      live "/home", FeaturedLive, :index
+      # The front door is Featured, at the bare address (`/home` forwards here).
+      live "/", FeaturedLive, :index
       live "/mood/:slug", MoodLive, :show
       live "/movies", CategoryLive, :movies
       live "/shows", CategoryLive, :shows
@@ -322,22 +322,37 @@ defmodule RokiWeb.Router do
       live "/lists/:slug", ListLive, :show
       # The saved manga: the account's own shelf of what it reads (signed in only).
       live "/manga", MangaShelfLive, :index
-      live "/:username/home", UserHomeLive, :index
-      live "/:username/stats", StatsLive, :index
-      live "/:username/calendar", CalendarLive, :index
-      live "/:username/settings", SettingsLive, :index
-      live "/:username/watched", WatchedLive, :index
+      # A user's pages, under /u/ so a name can never clash with the site's own pages.
+      # `corner` is the account's own page (watchlist, saved, completed); `/u/:name` alone goes
+      # to the profile.
+      live "/u/:username/corner", UserHomeLive, :index
+      live "/u/:username/profile", ProfileLive, :show
+      live "/u/:username/stats", StatsLive, :index
+      live "/u/:username/calendar", CalendarLive, :index
+      live "/u/:username/settings", SettingsLive, :index
+      live "/u/:username/watched", WatchedLive, :index
       # A page to try, linked from nowhere yet.
-      live "/:username/dating", DatingLive, :index
-      live "/:username/friends", FriendsLive, :index
+      live "/u/:username/dating", DatingLive, :index
+      live "/u/:username/friends", FriendsLive, :index
       # Reading, tiers, boards and what was said — the account's own pages, out of the reader's
       # menu and into the account menu. Each is owner-only.
-      live "/:username/history", Live.HistoryLive, :index
-      get "/:username/comments", MangaController, :annotations
-      get "/:username/tierlist", MangaController, :tierlist
-      get "/:username/grid", MangaController, :grid
-      # The public profile. Last: a name is anything, so every fixed address goes before it.
-      live "/:username", ProfileLive, :show
+      live "/u/:username/history", Live.HistoryLive, :index
+      get "/u/:username/comments", MangaController, :annotations
+      get "/u/:username/tierlist", MangaController, :tierlist
+      get "/u/:username/grid", MangaController, :grid
+      get "/u/:username", OldAddressController, :profile
+
+      # Addresses from before /u/ (bookmarks, shared links, notifications already sent): each to
+      # its new place, for good. The bare name is last: a name is anything.
+      get "/home", OldAddressController, :featured
+      get "/:username/home", OldAddressController, :corner
+
+      for page <-
+            ~w(stats calendar settings watched dating friends history comments tierlist grid) do
+        get "/:username/#{page}", OldAddressController, :page, assigns: %{page: page}
+      end
+
+      get "/:username", OldAddressController, :profile
     end
   end
 

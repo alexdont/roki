@@ -76,7 +76,7 @@ defmodule RokiWeb.TierlistTest do
     watched!(bin, 604, "The Matrix Reloaded", score: 8)
     watched!(bin, 605, "The Matrix Revolutions")
 
-    html = conn |> get("/tiers/tierlist") |> html_response(200)
+    html = conn |> get("/u/tiers/tierlist") |> html_response(200)
 
     assert html =~ "movie:603"
     assert html =~ "movie:604"
@@ -120,13 +120,13 @@ defmodule RokiWeb.TierlistTest do
 
   test "anime is its own kind on the board", %{conn: conn, bin: bin} do
     watched!(bin, 1429, "Attack on Titan", type: "tv", anime: true)
-    html = conn |> get("/tiers/tierlist") |> html_response(200)
+    html = conn |> get("/u/tiers/tierlist") |> html_response(200)
 
     assert html =~ ~s(data-mode="anime")
     assert html =~ "tv:1429"
   end
 
   test "someone else's board is not yours", %{conn: conn} do
-    assert redirected_to(get(conn, "/someone-else/tierlist")) == "/home"
+    assert redirected_to(get(conn, "/u/someone-else/tierlist")) == "/"
   end
 end

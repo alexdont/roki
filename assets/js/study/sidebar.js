@@ -827,7 +827,7 @@ export const StudySidebar = {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
         // Always to the title (a film's page, a show's episode list), never "back": back is the sources
         // list, which starts the release that has just failed all over again.
-        window.location.assign(this.el.dataset.home || "/home")
+        window.location.assign(this.el.dataset.home || "/")
       }
       $("[data-role=close]").addEventListener("click", () => this.closePlayer())
     }

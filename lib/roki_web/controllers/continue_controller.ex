@@ -26,12 +26,12 @@ defmodule RokiWeb.ContinueController do
     end
   end
 
-  def show(conn, _params), do: redirect(conn, to: ~p"/home")
+  def show(conn, _params), do: redirect(conn, to: ~p"/")
 
   defp title_path(type, id) do
     case Integer.parse(id) do
       {n, ""} -> ~p"/title/#{type}/#{n}"
-      _ -> ~p"/home"
+      _ -> ~p"/"
     end
   end
 end

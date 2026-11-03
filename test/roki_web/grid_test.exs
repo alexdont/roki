@@ -57,7 +57,7 @@ defmodule RokiWeb.GridTest do
 
   test "every board is offered, each its own", %{conn: conn, bin: bin} do
     watched!(bin, 603, "The Matrix")
-    html = conn |> get("/gridder/grid?mode=movie") |> html_response(200)
+    html = conn |> get("/u/gridder/grid?mode=movie") |> html_response(200)
 
     for label <- ~w(Overall Movies Shows Anime Manga Manhwa), do: assert(html =~ label)
     assert html =~ "movie:603"
@@ -96,6 +96,6 @@ defmodule RokiWeb.GridTest do
   end
 
   test "someone else's board is not yours", %{conn: conn} do
-    assert redirected_to(get(conn, "/someone-else/grid")) == "/home"
+    assert redirected_to(get(conn, "/u/someone-else/grid")) == "/"
   end
 end

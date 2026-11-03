@@ -85,7 +85,7 @@ defmodule RokiWeb.SourcesLive do
          else: socket
        )}
     else
-      _ -> {:ok, push_navigate(socket, to: ~p"/home")}
+      _ -> {:ok, push_navigate(socket, to: ~p"/")}
     end
   end
 
@@ -104,7 +104,7 @@ defmodule RokiWeb.SourcesLive do
   # Where an account adds what is missing: its Settings page.
   defp settings_path(scope) do
     case scope && Scope.user(scope) do
-      %{username: name} when is_binary(name) and name != "" -> "/#{name}/settings"
+      %{username: name} when is_binary(name) and name != "" -> "/u/#{name}/settings"
       _ -> "/"
     end
   end

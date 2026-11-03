@@ -25,7 +25,7 @@ defmodule RokiWeb.MangaController do
         conn |> redirect(to: "/phoenix_kit/users/log-in") |> halt()
 
       String.downcase(to_string(user.username)) != String.downcase(username) ->
-        conn |> redirect(to: "/home") |> halt()
+        conn |> redirect(to: "/") |> halt()
 
       true ->
         put_layout(conn, html: {RokiWeb.Layouts, :page})
@@ -512,7 +512,7 @@ defmodule RokiWeb.MangaController do
   def moved(conn, _params) do
     username = conn.assigns[:phoenix_kit_current_user].username
     page = conn.request_path |> String.split("/") |> List.last()
-    redirect(conn, to: "/#{username}/#{page}")
+    redirect(conn, to: "/u/#{username}/#{page}")
   end
 
   @doc """
@@ -522,7 +522,7 @@ defmodule RokiWeb.MangaController do
   """
   def settings(conn, _params) do
     username = conn.assigns[:phoenix_kit_current_user].username
-    redirect(conn, to: "/#{username}/settings#reading")
+    redirect(conn, to: "/u/#{username}/settings#reading")
   end
 
   def update_timezone(conn, %{"offset" => offset}) do
@@ -771,7 +771,7 @@ defmodule RokiWeb.MangaController do
   """
   def stats(conn, _params) do
     username = conn.assigns[:phoenix_kit_current_user].username
-    redirect(conn, to: "/#{username}/stats#reading")
+    redirect(conn, to: "/u/#{username}/stats#reading")
   end
 
   def index(conn, %{"source" => source, "slug" => slug} = params) do

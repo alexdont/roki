@@ -26,11 +26,11 @@ defmodule RokiWeb.WatchedSearchTest do
 
   test "on your own page it says you, on someone else's it names them", %{conn: conn} do
     # The placeholder is short so it fits beside Select on a phone; the label says whose list.
-    {:ok, _view, mine} = live(conn, "/watchedme/watched")
+    {:ok, _view, mine} = live(conn, "/u/watchedme/watched")
     assert mine =~ ~s(aria-label="Search what you watched")
     assert mine =~ "Search watched…"
 
-    {:ok, _view, theirs} = live(conn, "/watchedmax/watched")
+    {:ok, _view, theirs} = live(conn, "/u/watchedmax/watched")
     assert theirs =~ ~s(aria-label="Search what watchedmax watched")
     refute theirs =~ "Search what you watched"
   end
@@ -45,12 +45,12 @@ defmodule RokiWeb.WatchedSearchTest do
       )
     end
 
-    {:ok, view, _} = live(conn, "/watchedme/watched")
+    {:ok, view, _} = live(conn, "/u/watchedme/watched")
     html = render_async(view)
     assert html =~ "Dated Film" and html =~ "Undated Film"
     assert html =~ "No date"
 
-    {:ok, view, _} = live(conn, "/watchedme/watched?dated=no")
+    {:ok, view, _} = live(conn, "/u/watchedme/watched?dated=no")
     html = render_async(view)
     assert html =~ "Undated Film"
     refute html =~ "Dated Film"

@@ -121,7 +121,7 @@ const BASE = process.env.BASE || "http://localhost:4000"
     for (const slug of taps) {
       await p.tap(`[data-mood-chip="${slug}"]`)
       await p.waitForTimeout(700)
-      if (path() !== "/home") stayed = false
+      if (path() !== "/") stayed = false
       if ((await lit()) !== slug || (await slide()) !== slug) switched = false
     }
     check("phone: tapping chips one after another stays on the page", stayed, `at ${path()}`)
@@ -148,7 +148,7 @@ const BASE = process.env.BASE || "http://localhost:4000"
     await p.hover('[data-mood-chip="thrill"]')
     await p.waitForTimeout(700)
     const litNow = await p.evaluate(() => document.querySelector('[data-mood-chip][aria-selected="true"]')?.dataset.moodChip)
-    check("desktop: hovering a chip shows that mood without leaving the page", litNow === "thrill" && new URL(p.url()).pathname === "/home")
+    check("desktop: hovering a chip shows that mood without leaving the page", litNow === "thrill" && new URL(p.url()).pathname === "/")
     await p.click('[data-mood-chip="thrill"]')
     await p.waitForURL(/\/mood\/thrill/, {timeout: 8000}).catch(() => {})
     check("desktop: clicking a chip opens that mood's page", new URL(p.url()).pathname === "/mood/thrill", new URL(p.url()).pathname)

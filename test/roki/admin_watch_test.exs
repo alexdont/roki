@@ -32,7 +32,7 @@ defmodule Roki.AdminWatchTest do
     Process.sleep(1_100)
     register("watchnewbie")
     assert AdminWatch.signups(owner.uuid) == 1
-    assert [%{text: "New account: watchnewbie", link: "/watchnewbie"}] = bell(owner)
+    assert [%{text: "New account: watchnewbie", link: "/u/watchnewbie/profile"}] = bell(owner)
 
     # Looked at again: nothing new.
     assert AdminWatch.signups(owner.uuid) == 0

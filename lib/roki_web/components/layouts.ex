@@ -116,7 +116,7 @@ defmodule RokiWeb.Layouts do
         if(@bleed, do: "lg:px-12 xl:px-16", else: "max-w-6xl lg:px-8")
       ]}>
         <a
-          href={~p"/home"}
+          href={~p"/"}
           data-no-reload
           class="flex items-center gap-2 pr-1.5 text-lg font-bold tracking-tight min-[420px]:pr-3"
           aria-label="roki — home"
@@ -174,11 +174,11 @@ defmodule RokiWeb.Layouts do
           </button>
           <.top_icon
             :if={@username}
-            href={~p"/#{@username}/calendar"}
+            href={~p"/u/#{@username}/calendar"}
             icon="hero-calendar-days"
             label="New episodes"
             class="max-md:hidden"
-            active={active?(@current_path, ~p"/#{@username}/calendar")}
+            active={active?(@current_path, ~p"/u/#{@username}/calendar")}
           />
           <%!-- Notifications: PhoenixKit's bell, a sticky nested LiveView, so its count keeps up
                 as pages change. Its button is restyled to match the others. --%>
@@ -205,10 +205,10 @@ defmodule RokiWeb.Layouts do
 
           <.top_icon
             :if={@username}
-            href={~p"/#{@username}/home"}
+            href={~p"/u/#{@username}/corner"}
             icon="hero-star"
-            label="Home"
-            active={active?(@current_path, ~p"/#{@username}/home")}
+            label="Your corner"
+            active={active?(@current_path, ~p"/u/#{@username}/corner")}
           />
 
           <div :if={@username} class="flex items-stretch sm:relative">
@@ -242,7 +242,7 @@ defmodule RokiWeb.Layouts do
               phx-key="escape"
             >
               <.link
-                navigate={~p"/#{@username}"}
+                navigate={~p"/u/#{@username}/profile"}
                 phx-click={JS.hide(to: "#account-pop")}
                 class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-base-200"
               >
@@ -260,10 +260,10 @@ defmodule RokiWeb.Layouts do
               <div class="my-2 border-t border-base-300/70"></div>
 
               <.menu_row
-                href={~p"/#{@username}/calendar"}
+                href={~p"/u/#{@username}/calendar"}
                 icon="hero-calendar-days"
                 class="md:hidden"
-                active={active?(@current_path, ~p"/#{@username}/calendar")}
+                active={active?(@current_path, ~p"/u/#{@username}/calendar")}
               >
                 New episodes
               </.menu_row>
@@ -283,37 +283,37 @@ defmodule RokiWeb.Layouts do
                   class="w-full"
                   value={@source_choice.value}
                   avail={@source_choice.avail}
-                  settings={"/#{@username}/settings"}
+                  settings={"/u/#{@username}/settings"}
                 />
               </div>
 
               <div class="my-2 border-t border-base-300/70"></div>
 
               <.menu_row
-                href={~p"/#{@username}/history"}
+                href={~p"/u/#{@username}/history"}
                 icon="hero-clock"
-                active={active?(@current_path, ~p"/#{@username}/history")}
+                active={active?(@current_path, ~p"/u/#{@username}/history")}
               >
                 History
               </.menu_row>
               <.menu_row
-                href={~p"/#{@username}/tierlist"}
+                href={~p"/u/#{@username}/tierlist"}
                 icon="hero-bars-3-bottom-left"
-                active={active?(@current_path, ~p"/#{@username}/tierlist")}
+                active={active?(@current_path, ~p"/u/#{@username}/tierlist")}
               >
                 Tierlist
               </.menu_row>
               <.menu_row
-                href={~p"/#{@username}/grid"}
+                href={~p"/u/#{@username}/grid"}
                 icon="hero-squares-2x2"
-                active={active?(@current_path, ~p"/#{@username}/grid")}
+                active={active?(@current_path, ~p"/u/#{@username}/grid")}
               >
                 Grid
               </.menu_row>
               <.menu_row
-                href={~p"/#{@username}/comments"}
+                href={~p"/u/#{@username}/comments"}
                 icon="hero-chat-bubble-left-right"
-                active={active?(@current_path, ~p"/#{@username}/comments")}
+                active={active?(@current_path, ~p"/u/#{@username}/comments")}
               >
                 Comments
               </.menu_row>
@@ -321,16 +321,16 @@ defmodule RokiWeb.Layouts do
               <div class="my-2 border-t border-base-300/70"></div>
 
               <.menu_row
-                href={~p"/#{@username}/friends"}
+                href={~p"/u/#{@username}/friends"}
                 icon="hero-user-group"
-                active={active?(@current_path, ~p"/#{@username}/friends")}
+                active={active?(@current_path, ~p"/u/#{@username}/friends")}
               >
                 Friends
               </.menu_row>
               <.menu_row
-                href={~p"/#{@username}/settings"}
+                href={~p"/u/#{@username}/settings"}
                 icon="hero-cog-6-tooth"
-                active={active?(@current_path, ~p"/#{@username}/settings")}
+                active={active?(@current_path, ~p"/u/#{@username}/settings")}
               >
                 Settings
               </.menu_row>

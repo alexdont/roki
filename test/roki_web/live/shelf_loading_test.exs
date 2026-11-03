@@ -30,7 +30,7 @@ defmodule RokiWeb.ShelfLoadingTest do
   test "an account that never connected laev gets its connect card at once, not a skeleton", %{
     conn: conn
   } do
-    {:ok, _view, html} = live(conn, "/shelftest/home")
+    {:ok, _view, html} = live(conn, "/u/shelftest/corner")
     assert html =~ "Set up your shelf"
     assert html =~ "New here?"
     refute html =~ "aria-busy"
@@ -49,7 +49,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       "LAEV_SYNC_URL=https://sync.invalid/laev\nLAEV_SYNC_TOKEN=laev_#{String.duplicate("a", 40)}\n"
     )
 
-    {:ok, _view, html} = live(conn, "/shelftest/home")
+    {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
     # The real strip and its sync button are there from the first paint — and no
     # "Your shelf" title, which says nothing the page does not already.
@@ -95,12 +95,12 @@ defmodule RokiWeb.ShelfLoadingTest do
       Roki.Laev.remember_shelf(user.uuid, shelf(7))
 
       # The first, static render — before any socket exists.
-      html = conn |> get("/shelftest/home") |> html_response(200)
+      html = conn |> get("/u/shelftest/corner") |> html_response(200)
       assert html =~ "in progress"
       refute html =~ "aria-busy"
 
       # And the connected one.
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
       assert html =~ "in progress"
       refute html =~ "aria-busy"
     end
@@ -109,7 +109,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       # Kept while it was connected, then disconnected — no config file now.
       Roki.Laev.remember_shelf(user.uuid, shelf(7))
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
       assert html =~ "Set up your shelf"
       refute html =~ "in progress"
     end
@@ -196,7 +196,7 @@ defmodule RokiWeb.ShelfLoadingTest do
         {:ok, %{at: System.os_time(:second) - 3600, data: shelf(7)}}
       )
 
-      {:ok, view, html} = live(conn, "/shelftest/home")
+      {:ok, view, html} = live(conn, "/u/shelftest/corner")
 
       # What was kept is what the page opens with…
       assert html =~ ~s(<b class="text-base-content">7</b>)
@@ -212,7 +212,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       connect!(user)
       Roki.Laev.remember_shelf(user.uuid, shelf(7))
 
-      {:ok, view, _html} = live(conn, "/shelftest/home")
+      {:ok, view, _html} = live(conn, "/u/shelftest/corner")
       html = render_async(view, 15_000)
 
       # Still the kept figure: nothing replaced it, because nothing was asked for.
@@ -271,7 +271,7 @@ defmodule RokiWeb.ShelfLoadingTest do
     } do
       connect!(user)
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
       # Still waiting for the shelf, and reading is already there.
       assert html =~ "aria-busy"
@@ -284,7 +284,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       Roki.Repo.query!("delete from saved_manga")
       connect!(user)
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
       refute html =~ " read\n"
       refute html =~ "chapters"
@@ -303,7 +303,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       Roki.Laev.remember_totals(user.uuid, @totals)
 
       # The page the server sends, before any socket.
-      html = conn |> get("/shelftest/home") |> html_response(200)
+      html = conn |> get("/u/shelftest/corner") |> html_response(200)
 
       assert html =~ "100h"
       assert html =~ "1,350"
@@ -318,7 +318,7 @@ defmodule RokiWeb.ShelfLoadingTest do
     } do
       connect!(user)
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
       assert html =~ "w-[8.1rem]"
       refute html =~ "films watched"
@@ -331,7 +331,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       connect!(user)
       Roki.Laev.remember_totals(user.uuid, @totals)
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
       # No shelf kept, so the shelf's own placeholders stand in…
       assert html =~ "aria-busy"
@@ -342,7 +342,7 @@ defmodule RokiWeb.ShelfLoadingTest do
     test "are not shown to an account that is no longer connected", %{conn: conn, user: user} do
       Roki.Laev.remember_totals(user.uuid, @totals)
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
       refute html =~ "1,350"
     end
@@ -390,12 +390,12 @@ defmodule RokiWeb.ShelfLoadingTest do
         films: %{}
       })
 
-      {:ok, view, _} = live(conn, "/shelftest/home")
+      {:ok, view, _} = live(conn, "/u/shelftest/corner")
 
       # A link inside a wrapping row is the first thing to drop to a second line when the
       # figures are wide, so it is not inside it.
-      assert has_element?(view, ~s|a[href="/shelftest/stats"]|, "all stats")
-      refute has_element?(view, ~s|a[href="/shelftest/stats"].grid|, "all stats")
+      assert has_element?(view, ~s|a[href="/u/shelftest/stats"]|, "all stats")
+      refute has_element?(view, ~s|a[href="/u/shelftest/stats"].grid|, "all stats")
     end
 
     test "the reading figures are pinned to the end of the row, so those before them cannot move them",
@@ -412,7 +412,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       connect!(user)
       Roki.Laev.remember_shelf(user.uuid, shelf(7))
 
-      {:ok, view, _} = live(conn, "/shelftest/home")
+      {:ok, view, _} = live(conn, "/u/shelftest/corner")
 
       assert has_element?(view, "span.sm\\:ml-auto", "read")
     end
@@ -425,7 +425,7 @@ defmodule RokiWeb.ShelfLoadingTest do
       connect!(user)
       Roki.Laev.remember_shelf(user.uuid, shelf(7))
 
-      {:ok, _view, html} = live(conn, "/shelftest/home")
+      {:ok, _view, html} = live(conn, "/u/shelftest/corner")
 
       # Sized like the figure it stands for…
       assert html =~ "w-[8.1rem]"

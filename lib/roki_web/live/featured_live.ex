@@ -437,7 +437,7 @@ defmodule RokiWeb.FeaturedLive do
       bleed
       overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path="/home"
+      current_path="/"
     >
       <%!-- Flush: the page lays itself out. On a wide screen the mood carousel and the rows reach
             the edges of the window; everything else keeps the old gutters and width. --%>

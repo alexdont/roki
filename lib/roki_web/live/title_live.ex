@@ -22,14 +22,14 @@ defmodule RokiWeb.TitleLive do
   def mount(%{"type" => type, "id" => id}, _session, socket) do
     case {type in ~w(movie tv), Integer.parse(id)} do
       {true, {n, ""}} -> {:ok, init(socket, type, n)}
-      _ -> {:ok, push_navigate(socket, to: ~p"/home")}
+      _ -> {:ok, push_navigate(socket, to: ~p"/")}
     end
   end
 
   def mount(%{"id" => id}, _session, socket) do
     case Integer.parse(id) do
       {n, ""} -> {:ok, init(socket, "tv", n)}
-      _ -> {:ok, push_navigate(socket, to: ~p"/home")}
+      _ -> {:ok, push_navigate(socket, to: ~p"/")}
     end
   end
 
@@ -1656,7 +1656,7 @@ defmodule RokiWeb.TitleLive do
       <a href="/phoenix_kit/users/log-in" class="btn btn-sm">Log in</a>
     </div>
     <div :if={@uuid != nil and not @linked?} class="alert text-sm">
-      <span>Connect laev on your shelf to watch here — your Real-Debrid or TorBox account does the streaming.</span>
+      <span>Connect laev in your corner to watch here — your Real-Debrid or TorBox account does the streaming.</span>
       <.link navigate={~p"/"} class="btn btn-sm">Connect laev</.link>
     </div>
     """

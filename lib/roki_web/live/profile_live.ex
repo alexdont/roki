@@ -482,7 +482,7 @@ defmodule RokiWeb.ProfileLive do
       bleed
       overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}"}
+      current_path={"/u/#{@username}/profile"}
     >
       <p :if={@user == nil} class="px-4 pb-24 pt-40 text-center text-base-content/60">
         There is no one called <strong>{@username}</strong> here.
@@ -563,7 +563,7 @@ defmodule RokiWeb.ProfileLive do
 
             <%!-- The numbers, as the thing they are: big, with a word under each. --%>
             <div class="flex flex-wrap gap-x-10 gap-y-3">
-              <.link navigate={"/#{@username}/watched"} class="group">
+              <.link navigate={"/u/#{@username}/watched"} class="group">
                 <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
                   {if @watched, do: thousands(@watched), else: "…"}
                 </div>
@@ -817,7 +817,7 @@ defmodule RokiWeb.ProfileLive do
   defp friend_bar(assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2 sm:pb-1">
-      <.link navigate={"/#{@username}/friends"} class="btn btn-sm btn-ghost gap-1.5">
+      <.link navigate={"/u/#{@username}/friends"} class="btn btn-sm btn-ghost gap-1.5">
         <.icon name="hero-users" class="h-4 w-4" />
         {@count} {if @count == 1, do: "friend", else: "friends"}
         <span :if={@owner? and @pending > 0} class="badge badge-primary badge-sm">{@pending} new</span>

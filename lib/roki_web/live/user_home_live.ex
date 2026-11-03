@@ -26,7 +26,7 @@ defmodule RokiWeb.UserHomeLive do
         {:ok, push_navigate(socket, to: "/phoenix_kit/users/log-in")}
 
       !same_user?(Scope.user(scope).username, username) ->
-        {:ok, push_navigate(socket, to: ~p"/home")}
+        {:ok, push_navigate(socket, to: ~p"/")}
 
       true ->
         uuid = Scope.user_uuid(scope)
@@ -48,7 +48,7 @@ defmodule RokiWeb.UserHomeLive do
 
         socket =
           socket
-          |> assign(:page_title, "Home")
+          |> assign(:page_title, "Your corner")
           |> assign(:username, username)
           |> assign(:uuid, uuid)
           |> assign(:granted, Roki.Keys.granted?(uuid))
@@ -363,7 +363,7 @@ defmodule RokiWeb.UserHomeLive do
       bleed
       overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/home"}
+      current_path={"/u/#{@username}/corner"}
     >
       <%!-- Without a shelf there is no picture to float the header over: the cards start below it. --%>
       <div
@@ -547,7 +547,7 @@ defmodule RokiWeb.UserHomeLive do
       <div :if={@pulse == nil} class="skeleton h-3 w-72 max-w-full rounded"></div>
       <.link
         :if={@loaded? and (@next || @dropped != [])}
-        navigate={~p"/#{@username}/calendar"}
+        navigate={~p"/u/#{@username}/calendar"}
         class="flex items-start gap-1.5 text-base-content/60 transition hover:text-base-content"
       >
         <.icon name="hero-calendar-days" class="mt-px h-3.5 w-3.5 shrink-0" />
@@ -568,7 +568,7 @@ defmodule RokiWeb.UserHomeLive do
       </.link>
       <.link
         :if={@loaded? and !@next and @dropped == []}
-        navigate={~p"/#{@username}/calendar"}
+        navigate={~p"/u/#{@username}/calendar"}
         class="flex items-start gap-1.5 text-base-content/40 transition hover:text-base-content/70"
       >
         <.icon name="hero-calendar-days" class="mt-px h-3.5 w-3.5 shrink-0" />
@@ -692,7 +692,7 @@ defmodule RokiWeb.UserHomeLive do
                     "all stats" to a second line.) "All stats" is not in the row at all: a link inside
                     a wrapping row is the first thing to drop when the figures are wide. --%>
               <.link
-                navigate={~p"/#{@username}/stats"}
+                navigate={~p"/u/#{@username}/stats"}
                 class="flex min-h-5 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 text-sm tabular-nums text-base-content/60 transition hover:text-base-content sm:gap-y-0.5"
               >
                 <span :if={@data} class="hidden whitespace-nowrap lg:inline">
@@ -750,7 +750,7 @@ defmodule RokiWeb.UserHomeLive do
                 </span>
               </.link>
               <.link
-                navigate={~p"/#{@username}/stats"}
+                navigate={~p"/u/#{@username}/stats"}
                 class="hidden h-5 shrink-0 items-center whitespace-nowrap px-1 text-xs text-base-content/50 transition hover:text-base-content sm:flex"
               >
                 all stats →
@@ -878,7 +878,7 @@ defmodule RokiWeb.UserHomeLive do
         finished. Pick a place to start:
       </p>
       <div class="mt-4 flex flex-wrap justify-center gap-2">
-        <.link navigate={~p"/home"} class="btn btn-primary btn-sm">Featured</.link>
+        <.link navigate={~p"/"} class="btn btn-primary btn-sm">Featured</.link>
         <.link navigate={~p"/movies"} class="btn btn-sm">Movies</.link>
         <.link navigate={~p"/shows"} class="btn btn-sm">Shows</.link>
         <.link navigate={~p"/anime"} class="btn btn-sm">Anime</.link>

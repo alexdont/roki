@@ -47,7 +47,7 @@ defmodule Roki.Social do
             other,
             "#{name(viewer)} sent you a friend request",
             "hero-user-plus",
-            "/#{name(other)}/friends"
+            "/u/#{name(other)}/friends"
           )
 
       ok
@@ -193,7 +193,7 @@ defmodule Roki.Social do
         requester,
         "#{name(accepter)} accepted your friend request",
         "hero-user-group",
-        "/#{name(accepter)}"
+        "/u/#{name(accepter)}/profile"
       )
 
   @doc """
@@ -218,7 +218,7 @@ defmodule Roki.Social do
   end
 
   # The words and the address of the thread a comment was written in.
-  defp thread_place("profile", owner), do: {nil, "/" <> (name(owner) || "")}
+  defp thread_place("profile", owner), do: {nil, "/u/" <> (name(owner) || "") <> "/profile"}
 
   defp thread_place("title", thread) do
     case Roki.CommentHandler.titles([thread])[thread] do

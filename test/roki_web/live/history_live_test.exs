@@ -26,7 +26,7 @@ defmodule RokiWeb.HistoryLiveTest do
       [bin]
     )
 
-    {:ok, view, _} = live(conn, "/histuser/history")
+    {:ok, view, _} = live(conn, "/u/histuser/history")
     html = render(view)
 
     assert html =~ "History"
@@ -34,6 +34,6 @@ defmodule RokiWeb.HistoryLiveTest do
   end
 
   test "someone else's history is not yours", %{conn: conn} do
-    assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/someone-else/history")
+    assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/u/someone-else/history")
   end
 end

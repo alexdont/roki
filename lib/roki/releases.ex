@@ -171,7 +171,7 @@ defmodule Roki.Releases do
              "digest",
              digest_text(episodes, films),
              "hero-calendar-days",
-             if(username, do: "/#{username}/calendar", else: "/")
+             if(username, do: "/u/#{username}/calendar", else: "/")
            ) == :ok,
            do: 1,
            else: 0

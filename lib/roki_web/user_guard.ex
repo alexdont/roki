@@ -11,7 +11,7 @@ defmodule RokiWeb.UserGuard do
 
     cond do
       !(scope && Scope.authenticated?(scope)) -> {:redirect, "/phoenix_kit/users/log-in"}
-      !same_user?(Scope.user(scope).username, username) -> {:redirect, "/home"}
+      !same_user?(Scope.user(scope).username, username) -> {:redirect, "/"}
       true -> {:ok, Scope.user_uuid(scope)}
     end
   end

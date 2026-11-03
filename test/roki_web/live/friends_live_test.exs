@@ -72,7 +72,7 @@ defmodule RokiWeb.FriendsLiveTest do
   end
 
   test "a visitor's buttons on a profile follow how the two stand", %{ann: ann, bob: bob} do
-    {:ok, view, html} = live(signed_in(ann), "/friendbob")
+    {:ok, view, html} = live(signed_in(ann), "/u/friendbob/profile")
     assert html =~ "Add friend"
     assert html =~ "0 friends"
 
@@ -81,17 +81,17 @@ defmodule RokiWeb.FriendsLiveTest do
     refute has_element?(view, "button[phx-click=friend_add]")
 
     # Their side: the request is waiting, on their own page and on the asker's.
-    {:ok, own, own_html} = live(signed_in(bob), "/friendbob")
+    {:ok, own, own_html} = live(signed_in(bob), "/u/friendbob/profile")
     assert own_html =~ "1 new"
     refute has_element?(own, "button[phx-click^=friend_]")
 
-    {:ok, theirs, _} = live(signed_in(bob), "/friendann")
+    {:ok, theirs, _} = live(signed_in(bob), "/u/friendann/profile")
     assert has_element?(theirs, "button[phx-click=friend_accept]")
     theirs |> element("button[phx-click=friend_accept]") |> render_click()
     assert render(theirs) =~ "1 friend"
     assert has_element?(theirs, "button[phx-click=friend_remove]")
 
-    {:ok, _list, friends_html} = live(signed_in(bob), "/friendbob/friends")
+    {:ok, _list, friends_html} = live(signed_in(bob), "/u/friendbob/friends")
     assert friends_html =~ "friendann"
   end
 
@@ -99,7 +99,7 @@ defmodule RokiWeb.FriendsLiveTest do
     {:ok, _} = Social.request(ann.uuid, bob.uuid)
 
     # A visitor sees the page and no requests.
-    {:ok, visitor, html} = live(signed_in(ann), "/friendbob/friends")
+    {:ok, visitor, html} = live(signed_in(ann), "/u/friendbob/friends")
     assert html =~ "Friends"
     refute html =~ "Asking to be your friend"
     # A visitor's answer does nothing.
@@ -107,14 +107,14 @@ defmodule RokiWeb.FriendsLiveTest do
     assert Social.pending_count(bob.uuid) == 1
 
     # The owner sees who asked, and accepts.
-    {:ok, owner, owner_html} = live(signed_in(bob), "/friendbob/friends")
+    {:ok, owner, owner_html} = live(signed_in(bob), "/u/friendbob/friends")
     assert owner_html =~ "Asking to be your friend"
     assert owner_html =~ "friendann"
     owner |> element("button[phx-click=accept]") |> render_click()
     refute render(owner) =~ "Asking to be your friend"
     assert Social.friend_count(bob.uuid) == 1
 
-    {:ok, _gone, missing} = live(signed_in(bob), "/nobody-here-either/friends")
+    {:ok, _gone, missing} = live(signed_in(bob), "/u/nobody-here-either/friends")
     assert missing =~ "There is no one called"
   end
 
@@ -132,7 +132,7 @@ defmodule RokiWeb.FriendsLiveTest do
     assert [
              %{
                text: "friendann sent you a friend request",
-               link: "/friendbob/friends",
+               link: "/u/friendbob/friends",
                icon: "hero-user-plus"
              }
            ] = told(bob)
@@ -140,7 +140,9 @@ defmodule RokiWeb.FriendsLiveTest do
     assert told(ann) == []
 
     {:ok, _} = Social.accept(bob.uuid, ann.uuid)
-    assert [%{text: "friendbob accepted your friend request", link: "/friendbob"}] = told(ann)
+
+    assert [%{text: "friendbob accepted your friend request", link: "/u/friendbob/profile"}] =
+             told(ann)
 
     # Turning someone down is not announced.
     {:ok, _} = Social.remove(ann.uuid, bob.uuid)
@@ -180,7 +182,9 @@ defmodule RokiWeb.FriendsLiveTest do
     {:ok, first} =
       PhoenixKitComments.create_comment("profile", bob.uuid, ann.uuid, %{content: "hello bob"})
 
-    assert [%{text: "friendann commented on your profile", link: "/friendbob"}] = told(bob)
+    assert [%{text: "friendann commented on your profile", link: "/u/friendbob/profile"}] =
+             told(bob)
+
     assert told(ann) == []
 
     # Bob answers on his own page: ann is told, bob is not told of his own writing.
@@ -327,20 +331,20 @@ defmodule RokiWeb.FriendsLiveTest do
     assert %{} = Roki.CommentHandler.Profile.resolve_comment_resources([bob.uuid])
 
     assert Roki.CommentHandler.Profile.resolve_comment_resources([bob.uuid])[bob.uuid].path ==
-             "/friendbob"
+             "/u/friendbob/profile"
   end
 
   test "the bell is in the header of a signed-in person's pages, and not a visitor's", %{ann: ann} do
-    {:ok, _view, html} = live(signed_in(ann), "/friendann")
+    {:ok, _view, html} = live(signed_in(ann), "/u/friendann/profile")
     assert html =~ ~s(title="Notifications")
 
-    {:ok, _view, visitor_html} = live(build_conn(), "/friendann")
+    {:ok, _view, visitor_html} = live(build_conn(), "/u/friendann/profile")
     refute visitor_html =~ ~s(title="Notifications")
   end
 
   test "a profile has a comment thread at its bottom" do
     ann = register("commentann")
-    {:ok, _view, html} = live(signed_in(ann), "/commentann")
+    {:ok, _view, html} = live(signed_in(ann), "/u/commentann/profile")
     assert html =~ "Comments"
   end
 end

@@ -46,7 +46,7 @@ defmodule RokiWeb.StatsLiveTest do
   end
 
   test "an account that has done nothing shows nothing in the list", %{conn: conn} do
-    html = open(conn, "/statstest/stats")
+    html = open(conn, "/u/statstest/stats")
 
     assert html =~ "Nothing in this window."
     refute html =~ "Solo Leveling"
@@ -55,7 +55,7 @@ defmodule RokiWeb.StatsLiveTest do
   test "the page waits for both halves before it shows a number", %{conn: conn, user: user} do
     read!(user, "Solo Leveling", 7200)
 
-    {:ok, view, html} = live(conn, "/statstest/stats")
+    {:ok, view, html} = live(conn, "/u/statstest/stats")
 
     # Reading is in hand at once and watching is a measurement, so the first render shows the
     # shape of the answer rather than reading's half of it: no total, no list.
@@ -75,7 +75,7 @@ defmodule RokiWeb.StatsLiveTest do
     read!(user, "Solo Leveling", 7200)
     read!(user, "Berserk", 3600)
 
-    {:ok, view, _} = live(conn, "/statstest/stats")
+    {:ok, view, _} = live(conn, "/u/statstest/stats")
     html = render_async(view)
 
     # One list, both series in it, and the headline is their sum.
@@ -91,11 +91,11 @@ defmodule RokiWeb.StatsLiveTest do
   test "the kind filter narrows the total and the list", %{conn: conn, user: user} do
     read!(user, "Solo Leveling", 7200)
 
-    html = open(conn, "/statstest/stats?kind=manga")
+    html = open(conn, "/u/statstest/stats?kind=manga")
     assert html =~ "Solo Leveling"
     assert html =~ "across 1 title of manga"
 
-    html = open(conn, "/statstest/stats?kind=movie")
+    html = open(conn, "/u/statstest/stats?kind=movie")
     refute html =~ "Solo Leveling"
     assert html =~ "Nothing in this window."
   end
@@ -115,17 +115,17 @@ defmodule RokiWeb.StatsLiveTest do
     )
 
     # Nothing was read this week, so nothing is in it.
-    html = open(conn, "/statstest/stats?range=week")
+    html = open(conn, "/u/statstest/stats?range=week")
     refute html =~ "Long Ago"
 
     # The year holds that one day, and only what that day holds.
-    html = open(conn, "/statstest/stats?range=year")
+    html = open(conn, "/u/statstest/stats?range=year")
     assert html =~ "Long Ago"
     assert html =~ "1h"
     refute html =~ "10h"
 
     # All time is the whole tally, including time entered by hand with no day on it.
-    html = open(conn, "/statstest/stats?range=all")
+    html = open(conn, "/u/statstest/stats?range=all")
     assert html =~ "10h"
   end
 
@@ -139,7 +139,7 @@ defmodule RokiWeb.StatsLiveTest do
       [bin]
     )
 
-    html = open(conn, "/statstest/stats")
+    html = open(conn, "/u/statstest/stats")
 
     assert html =~ "Day by day"
     # 5400 seconds logged today, so today's cell carries it.
@@ -148,12 +148,12 @@ defmodule RokiWeb.StatsLiveTest do
 
   test "the reader's old stats address leads here", %{conn: conn} do
     conn = get(conn, "/manga/stats")
-    assert redirected_to(conn) == "/statstest/stats#reading"
+    assert redirected_to(conn) == "/u/statstest/stats#reading"
   end
 
   test "each kind is told apart by colour, and a row carries its cover", %{conn: conn, user: user} do
     read!(user, "Solo Leveling", 7200)
-    html = open(conn, "/statstest/stats")
+    html = open(conn, "/u/statstest/stats")
 
     # Reading's bar and its chip are the same colour, so the chips read as the list's legend.
     assert html =~ "bg-success/70"
@@ -174,7 +174,7 @@ defmodule RokiWeb.StatsLiveTest do
     read!(user, "No Cover", 3600)
     Roki.Repo.query!("update saved_manga set cover_url = '' where slug = 'no-cover'")
 
-    html = open(conn, "/statstest/stats")
+    html = open(conn, "/u/statstest/stats")
 
     assert html =~ "No Cover"
     assert html =~ "bg-success/20"
@@ -193,7 +193,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "under the name is the kind and nothing else", %{conn: conn} do
-      html = open(conn, "/statstest/stats?kind=manga")
+      html = open(conn, "/u/statstest/stats?kind=manga")
 
       assert html =~ "Overgeared"
       # The wording that used to follow the kind is gone from the list.
@@ -204,7 +204,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "the number on the right is the way in", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=manga")
       render_async(view)
 
       assert has_element?(
@@ -216,7 +216,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "pressing it opens what was recorded, and closing puts it away", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=manga")
       render_async(view)
 
       html =
@@ -235,7 +235,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "escape closes it too", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=manga")
       render_async(view)
       view |> element(~s|button[phx-value-key="manga:mangadex/overgeared"]|) |> render_click()
 
@@ -244,7 +244,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "a key that is not a title opens nothing", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=manga")
       render_async(view)
 
       render_click(view, "inspect", %{"key" => "nonsense"})
@@ -273,11 +273,11 @@ defmodule RokiWeb.StatsLiveTest do
     defp chip(view, hint), do: element(view, ~s|a[title="#{hint}"]|)
 
     test "pressing a kind once shows only it, and says so", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats")
+      {:ok, view, _} = live(conn, "/u/statstest/stats")
       render_async(view)
 
       view |> chip("Show only manga") |> render_click()
-      assert_patch(view, "/statstest/stats?kind=manga&range=all")
+      assert_patch(view, "/u/statstest/stats?kind=manga&range=all")
 
       html = render(view)
       assert html =~ "across 1 title of manga"
@@ -287,11 +287,11 @@ defmodule RokiWeb.StatsLiveTest do
     test "pressing it again leaves it out: red, struck through, and out of the number", %{
       conn: conn
     } do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=manga")
       render_async(view)
 
       view |> chip("Leave manga out of the numbers") |> render_click()
-      assert_patch(view, "/statstest/stats?hide=manga&range=all")
+      assert_patch(view, "/u/statstest/stats?hide=manga&range=all")
 
       html = render(view)
       # Out of the number and the list…
@@ -304,12 +304,12 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "pressing a red one puts it back", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?hide=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?hide=manga")
       render_async(view)
       refute render(view) =~ "Overgeared"
 
       view |> chip("Put manga back") |> render_click()
-      assert_patch(view, "/statstest/stats?range=all")
+      assert_patch(view, "/u/statstest/stats?range=all")
 
       html = render(view)
       assert html =~ "Overgeared"
@@ -319,7 +319,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "several kinds can be left out at once", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?hide=anime")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?hide=anime")
       render_async(view)
 
       view |> chip("Show only manga") |> render_click()
@@ -334,7 +334,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "leaving out a kind this account has none of changes nothing", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?hide=movie,tv,anime")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?hide=movie,tv,anime")
       render_async(view)
 
       html = render(view)
@@ -343,7 +343,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "kinds shown alone and kinds left out can be mixed", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=movie,manga&hide=movie")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=movie,manga&hide=movie")
       html = render_async(view)
 
       # Films are shown alone and also left out, which leaves manga shown alone, without films.
@@ -352,14 +352,14 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "the sentence names a kind shown alone and a kind left out together", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=movie,tv&hide=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=movie,tv&hide=manga")
       html = render_async(view)
 
       assert html =~ "of films &amp; shows without manga"
     end
 
     test "a kind named in both is left out", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=manga&hide=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=manga&hide=manga")
       html = render_async(view)
 
       refute html =~ "Overgeared"
@@ -367,7 +367,7 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "an address with nonsense in it is read as no filter", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=banana&hide=,,")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=banana&hide=,,")
       html = render_async(view)
 
       assert html =~ "Overgeared"
@@ -375,15 +375,15 @@ defmodule RokiWeb.StatsLiveTest do
     end
 
     test "the window tabs keep the filter, and All clears it", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?kind=movie&hide=manga&range=month")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?kind=movie&hide=manga&range=month")
       render_async(view)
 
-      assert has_element?(view, ~s|a[href="/statstest/stats?hide=manga&kind=movie&range=week"]|)
-      assert has_element?(view, ~s|a[href="/statstest/stats?range=month"]|, "All")
+      assert has_element?(view, ~s|a[href="/u/statstest/stats?hide=manga&kind=movie&range=week"]|)
+      assert has_element?(view, ~s|a[href="/u/statstest/stats?range=month"]|, "All")
     end
 
     test "the figure on a left-out chip is still its own, struck through", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/statstest/stats?hide=manga")
+      {:ok, view, _} = live(conn, "/u/statstest/stats?hide=manga")
       render_async(view)
 
       # The chip says what it would hold, so putting it back is an informed choice.
@@ -413,7 +413,7 @@ defmodule RokiWeb.StatsLiveTest do
       )
     end
 
-    {:ok, view, _} = live(conn, "/statstest/stats")
+    {:ok, view, _} = live(conn, "/u/statstest/stats")
     html = render_async(view)
     assert html =~ "Together"
     assert html =~ "Time together"

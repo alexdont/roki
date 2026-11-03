@@ -182,7 +182,7 @@ defmodule RokiWeb.StatsLive do
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/stats"}
+      current_path={"/u/#{@username}/stats"}
     >
       <div class="space-y-10">
         <.totals
@@ -197,7 +197,7 @@ defmodule RokiWeb.StatsLive do
         />
 
         <.notice :if={@state == :not_connected} username={@username}>
-          Connect laev on your shelf and what you watch is counted here too.
+          Connect laev in your corner and what you watch is counted here too.
         </.notice>
         <.notice :if={@state == {:error, :no_tmdb_key}} username={@username}>
           Watching needs your TMDB key to look up how long films and shows run. Connect laev and
@@ -294,7 +294,7 @@ defmodule RokiWeb.StatsLive do
     ~H"""
     <div class="alert">
       <span>{render_slot(@inner_block)}</span>
-      <.link navigate={~p"/#{@username}/home"} class="btn btn-sm">Go to your shelf</.link>
+      <.link navigate={~p"/u/#{@username}/corner"} class="btn btn-sm">Go to your corner</.link>
     </div>
     """
   end
@@ -427,7 +427,7 @@ defmodule RokiWeb.StatsLive do
       [range: range, kind: Spent.kinds_param(only), hide: Spent.kinds_param(hidden)]
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
-    ~p"/#{username}/stats?#{params}"
+    ~p"/u/#{username}/stats?#{params}"
   end
 
   # What the sentence under the number says about the filter: "of films & shows" for the kinds
@@ -983,7 +983,7 @@ defmodule RokiWeb.StatsLive do
           class="rounded-full bg-base-200 px-3 py-1 text-sm"
           title={"#{p.name}: #{Laev.duration(p.minutes * 60)}"}
         >
-          <.link navigate={~p"/#{p.name}"} class="font-medium hover:underline">{p.name}</.link>
+          <.link navigate={~p"/u/#{p.name}/profile"} class="font-medium hover:underline">{p.name}</.link>
           <span class="text-base-content/60">{Laev.duration(p.minutes * 60)}</span>
         </span>
       </div>

@@ -58,7 +58,7 @@ defmodule RokiWeb.SeasonDateTest do
     token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
     conn = Plug.Test.init_test_session(build_conn(), %{user_token: token})
 
-    {:ok, view, _} = live(conn, "/seasonuser/watched")
+    {:ok, view, _} = live(conn, "/u/seasonuser/watched")
     render_async(view)
 
     # Without episode records there is nothing to date, so it stays unselectable — the rule is

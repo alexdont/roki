@@ -13,7 +13,7 @@ defmodule RokiWeb.MoodLive do
   def mount(%{"slug" => slug}, _session, socket) do
     case Mood.get(slug) do
       nil ->
-        {:ok, push_navigate(socket, to: ~p"/home")}
+        {:ok, push_navigate(socket, to: ~p"/")}
 
       mood ->
         scope = socket.assigns[:phoenix_kit_current_scope]

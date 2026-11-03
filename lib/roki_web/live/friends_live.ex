@@ -66,7 +66,7 @@ defmodule RokiWeb.FriendsLive do
       socket={@socket}
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/friends"}
+      current_path={"/u/#{@username}/friends"}
     >
       <p :if={@user == nil} class="py-24 text-center text-base-content/60">
         There is no one called <strong>{@username}</strong> here.
@@ -75,7 +75,7 @@ defmodule RokiWeb.FriendsLive do
       <div :if={@user} class="space-y-8">
         <div class="flex items-center gap-3">
           <.link
-            navigate={"/#{@user.username}"}
+            navigate={"/u/#{@user.username}/profile"}
             class="flex items-center gap-2 text-base-content/70 hover:text-base-content"
           >
             <.user_avatar user={@user} size="md" />
@@ -142,7 +142,7 @@ defmodule RokiWeb.FriendsLive do
   defp person(assigns) do
     ~H"""
     <.link
-      navigate={"/#{@user.username}"}
+      navigate={"/u/#{@user.username}/profile"}
       class="flex min-w-0 flex-1 items-center gap-3 hover:text-primary"
     >
       <.user_avatar user={@user} size="md" />

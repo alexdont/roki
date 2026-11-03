@@ -69,7 +69,7 @@ defmodule RokiWeb.Live.HistoryLive do
         page_title: "History",
         # The manga layout's navigation row marks where you are; a live page has no conn
         # to read the path from.
-        current_path: "/#{user.username}/history",
+        current_path: "/u/#{user.username}/history",
         user: user,
         offset_seconds: offset_seconds,
         all_activity: all_activity,

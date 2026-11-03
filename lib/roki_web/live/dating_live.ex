@@ -41,7 +41,7 @@ defmodule RokiWeb.DatingLive do
     user = Profile.user(username)
 
     if user == nil or viewer != user.uuid do
-      {:ok, push_navigate(socket, to: "/#{username}/watched")}
+      {:ok, push_navigate(socket, to: "/u/#{username}/watched")}
     else
       socket =
         assign(socket,
@@ -279,7 +279,7 @@ defmodule RokiWeb.DatingLive do
       ]
       |> Enum.reject(&is_nil/1)
 
-    "/#{a.username}/dating?" <> URI.encode_query(query)
+    "/u/#{a.username}/dating?" <> URI.encode_query(query)
   end
 
   defp import_day(%{bound: bound, dated?: true}), do: Calendar.strftime(bound, "%-d %b %Y")
@@ -314,7 +314,7 @@ defmodule RokiWeb.DatingLive do
       bleed
       overlay
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/dating"}
+      current_path={"/u/#{@username}/dating"}
     >
       <.page_hero eyebrow="Try-out page" title="Dating assistant" hue={200}>
         <p class="max-w-2xl text-white/80">

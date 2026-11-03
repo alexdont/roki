@@ -27,9 +27,9 @@ defmodule RokiWeb.WatchFlowTest do
     end
 
     test "nonsense in the address goes home", %{conn: conn} do
-      assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/sources/movie/abc")
-      assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/watch/movie/x")
-      assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/sources/tv/1/a/b")
+      assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/sources/movie/abc")
+      assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/watch/movie/x")
+      assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/sources/tv/1/a/b")
     end
 
     test "a series has an episodes page of its own", %{conn: conn} do

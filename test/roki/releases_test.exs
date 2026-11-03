@@ -169,7 +169,7 @@ defmodule Roki.ReleasesTest do
     assert [
              %{
                text: "Your week ahead: 3 new episodes (Alpha, Beta) and 1 film",
-               link: "/weekfan/calendar"
+               link: "/u/weekfan/calendar"
              }
            ] = bell(user)
 

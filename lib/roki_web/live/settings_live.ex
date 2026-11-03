@@ -527,7 +527,7 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_event("disconnect", _params, socket) do
     :ok = Laev.disconnect(socket.assigns.uuid)
-    {:noreply, push_navigate(socket, to: ~p"/#{socket.assigns.username}/home")}
+    {:noreply, push_navigate(socket, to: ~p"/u/#{socket.assigns.username}/corner")}
   end
 
   defp check(socket, key) do
@@ -579,7 +579,7 @@ defmodule RokiWeb.SettingsLive do
   # A debrid key was saved: the page is opened again so everything on it is read afresh (laev's
   # settings, the Connections section, the switches).
   def handle_async(:debrid_save, {:ok, :ok}, %{assigns: %{username: username}} = socket),
-    do: {:noreply, push_navigate(socket, to: "/#{username}/settings")}
+    do: {:noreply, push_navigate(socket, to: "/u/#{username}/settings")}
 
   def handle_async(:debrid_save, {:ok, {:error, text}}, socket),
     do: {:noreply, assign(socket, debrid_busy: false, debrid_msg: {:error, text})}
@@ -774,7 +774,7 @@ defmodule RokiWeb.SettingsLive do
       flash={@flash}
       wide
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      current_path={"/#{@username}/settings"}
+      current_path={"/u/#{@username}/settings"}
     >
       <div class="mx-auto max-w-3xl space-y-10">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -799,8 +799,8 @@ defmodule RokiWeb.SettingsLive do
         </section>
 
         <div :if={@state == :not_connected} class="alert">
-          <span>Connect laev on your shelf to manage its settings.</span>
-          <.link navigate={~p"/#{@username}/home"} class="btn btn-sm">Go to your shelf</.link>
+          <span>Connect laev in your corner to manage its settings.</span>
+          <.link navigate={~p"/u/#{@username}/corner"} class="btn btn-sm">Go to your corner</.link>
         </div>
 
         <p :if={@error} class="alert alert-error text-sm">{@error}</p>
@@ -1675,7 +1675,10 @@ defmodule RokiWeb.SettingsLive do
           make one at themoviedb.org if you do not have one, then link it here. Each TMDB account
           can be linked by one person.
         </p>
-        <a href={~p"/tmdb/link?#{[return: "/#{@username}/settings"]}"} class="btn btn-primary btn-sm">
+        <a
+          href={~p"/tmdb/link?#{[return: "/u/#{@username}/settings"]}"}
+          class="btn btn-primary btn-sm"
+        >
           Link my TMDB account
         </a>
       </div>

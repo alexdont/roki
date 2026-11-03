@@ -44,7 +44,7 @@ defmodule Roki.HealthTest do
              %{
                text:
                  "Your Real-Debrid key was rejected, so nothing can play. Add a new one in settings.",
-               link: "/healthrd/settings"
+               link: "/u/healthrd/settings"
              }
            ] = bell(user)
 

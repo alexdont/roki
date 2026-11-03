@@ -4,8 +4,8 @@ defmodule RokiWeb.TitleLiveTest do
   import Phoenix.LiveViewTest
 
   test "an unknown kind of title goes back to the featured page", %{conn: conn} do
-    assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/title/book/5")
-    assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/title/movie/abc")
+    assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/title/book/5")
+    assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/title/movie/abc")
   end
 
   test "a visitor is told to log in rather than shown a broken page", %{conn: conn} do

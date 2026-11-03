@@ -43,17 +43,17 @@ defmodule RokiWeb.SettingsLiveTest do
     conn: conn
   } do
     assert {:error, {:live_redirect, %{to: "/phoenix_kit/users/log-in"}}} =
-             live(build_conn(), "/settingstest/settings")
+             live(build_conn(), "/u/settingstest/settings")
 
-    assert {:error, {:live_redirect, %{to: "/home"}}} = live(conn, "/someone-else/settings")
+    assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, "/u/someone-else/settings")
   end
 
   test "the reader's preferences are on this page, whether or not laev is connected", %{
     conn: conn
   } do
-    {:ok, _view, html} = live(conn, "/settingstest/settings")
+    {:ok, _view, html} = live(conn, "/u/settingstest/settings")
 
-    assert html =~ "Connect laev on your shelf"
+    assert html =~ "Connect laev in your corner"
     assert html =~ ~s(id="reading")
     assert html =~ "Default tap zone layout"
     assert html =~ "Default reading direction"
@@ -64,7 +64,7 @@ defmodule RokiWeb.SettingsLiveTest do
   end
 
   test "the Nuvio section lists the providers with the defaults already on", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 5_000)
 
     assert has_element?(view, "#nuvio")
@@ -77,7 +77,7 @@ defmodule RokiWeb.SettingsLiveTest do
   end
 
   test "a Nuvio provider is switched on and off with one toggle", %{conn: conn, user: user} do
-    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
     render_async(view, 5_000)
     switch = ~s(#nuvio-purstream input[role="switch"])
 
@@ -100,7 +100,7 @@ defmodule RokiWeb.SettingsLiveTest do
     conn: conn,
     user: user
   } do
-    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
     render_async(view, 5_000)
     assert render(element(view, "#nuvio-count")) =~ "4 on"
     assert render(element(view, "#nuvio-count")) =~ "up to 18 are asked per search"
@@ -121,7 +121,7 @@ defmodule RokiWeb.SettingsLiveTest do
       user
     end)
 
-    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
     render_async(view, 5_000)
     count = render(element(view, "#nuvio-count"))
     assert count =~ "20 on"
@@ -145,7 +145,7 @@ defmodule RokiWeb.SettingsLiveTest do
     {:ok, user} = Roki.Nuvio.Settings.set_enabled(user, "movix", false)
     {:ok, _user} = Roki.Nuvio.Settings.set_options(user, "purstream", %{"lang" => "fr"})
 
-    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
     render_async(view, 5_000)
     reset = ~s(#nuvio button[phx-click="nuvio_reset"])
     refute has_element?(view, reset <> "[disabled]")
@@ -162,12 +162,12 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "the reader's old settings address leads here", %{conn: conn} do
     conn = get(conn, "/manga/settings")
-    assert redirected_to(conn) == "/settingstest/settings#reading"
+    assert redirected_to(conn) == "/u/settingstest/settings#reading"
   end
 
   test "an account that has not connected laev is pointed at the shelf", %{conn: conn} do
-    {:ok, view, html} = live(conn, "/settingstest/settings")
-    assert html =~ "Connect laev on your shelf"
+    {:ok, view, html} = live(conn, "/u/settingstest/settings")
+    assert html =~ "Connect laev in your corner"
     refute render(view) =~ "Auto-pick"
   end
 
@@ -176,12 +176,12 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 3000)
 
     assert html =~ "TMDB"
     assert html =~ "Link my TMDB account"
-    assert html =~ ~s(href="/tmdb/link?return=%2Fsettingstest%2Fsettings")
+    assert html =~ ~s(href="/tmdb/link?return=%2Fu%2Fsettingstest%2Fsettings")
     refute html =~ "Unlink"
   end
 
@@ -194,7 +194,7 @@ defmodule RokiWeb.SettingsLiveTest do
       File.read!(Path.join(dir, "config")) <> "TMDB_SESSION_ID=abc123\n"
     )
 
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 3000)
     assert html =~ "Date my titles"
     assert html =~ "Your ratings → Export"
@@ -244,7 +244,7 @@ defmodule RokiWeb.SettingsLiveTest do
   test "notification switches: friends' activity starts off, a switch takes effect at once, and it is the person's own",
        %{conn: conn, user: user} do
     # Open to someone who has not connected laev too: it is about the bell, not about laev.
-    {:ok, view, html} = live(conn, "/settingstest/settings")
+    {:ok, view, html} = live(conn, "/u/settingstest/settings")
     assert html =~ "Notifications"
     assert html =~ "New episodes and releases"
 
@@ -268,7 +268,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "the settings are laid out by group, with laev's own labels", %{conn: conn, user: user} do
     connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 3000)
 
     for text <- [
@@ -290,7 +290,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "a choice saves the moment it changes", %{conn: conn, user: user} do
     dir = connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     render_async(view, 3000)
 
     html =
@@ -307,7 +307,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "the terminal app's settings are shown but locked", %{conn: conn, user: user} do
     connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 3000)
 
     assert html =~ "Terminal app only"
@@ -336,7 +336,7 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     dir = connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 3000)
 
     assert html =~ "browser player"
@@ -367,7 +367,7 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     render_async(view, 3000)
 
     assert has_element?(view, "#d-player option[selected]", "External player")
@@ -389,7 +389,7 @@ defmodule RokiWeb.SettingsLiveTest do
         "LAEV_SYNC_TOKEN=laev_#{String.duplicate("a", 40)}.#{String.duplicate("b", 40)}\nLAEV_SYNC_KEYS=on\n"
     )
 
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     html = render_async(view, 3000)
     assert html =~ "No need"
 
@@ -409,7 +409,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "the external player app can be chosen, from a fixed list", %{conn: conn, user: user} do
     connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     render_async(view, 3000)
 
     assert has_element?(view, "#w-external_app option[selected]", "VLC")
@@ -434,7 +434,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "a value laev refuses is explained, not saved", %{conn: conn, user: user} do
     dir = connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     render_async(view, 3000)
 
     html =
@@ -452,7 +452,7 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     connect!(user)
-    {:ok, view, _} = live(conn, "/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings")
     render_async(view, 3000)
 
     html =
@@ -477,7 +477,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "the settings page is in the header", %{conn: conn, user: user} do
     connect!(user)
-    {:ok, _view, html} = live(conn, "/settingstest/settings")
+    {:ok, _view, html} = live(conn, "/u/settingstest/settings")
     assert html =~ ">\n      Settings\n    </a>" or html =~ ~r/>\s*Settings\s*</
   end
 end
