@@ -15,7 +15,7 @@ defmodule RokiWeb.SourcesLive do
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
-  alias Roki.Watch.{Resolver, SourceCache}
+  alias Roki.Watch.{Resolver, SourceCache, Trace}
 
   @impl true
   def mount(%{"id" => id} = params, _session, socket) do
@@ -363,12 +363,20 @@ defmodule RokiWeb.SourcesLive do
       ),
       do: {:noreply, assign(socket, playable: playable, rest: rest, phase: :ready, busy?: false)}
 
-  def handle_async(:prestart, {:ok, {source, {:ok, _player}}}, socket),
-    do:
-      {:noreply,
-       push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
+  def handle_async(:prestart, {:ok, {source, {:ok, _player}}}, socket) do
+    Trace.log({self(), socket.assigns.token}, "sources page prepared, opens the player",
+      release: Trace.release(source)
+    )
 
-  def handle_async(:prestart, {:ok, {_source, {:error, reason}}}, socket) do
+    {:noreply, push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
+  end
+
+  def handle_async(:prestart, {:ok, {source, {:error, reason}}}, socket) do
+    Trace.log({self(), socket.assigns.token}, "sources page could not prepare",
+      release: Trace.release(source),
+      reason: reason
+    )
+
     {:noreply, assign(socket, starting: nil, current: nil, start_error: Resolver.failure(reason))}
   end
 
@@ -458,6 +466,13 @@ defmodule RokiWeb.SourcesLive do
   # The releases are known. Nobody has chosen yet: start the best on its own unless the pop-up was
   # cancelled (or the setting is off), in which case they are listed.
   defp found(socket, res) do
+    Trace.log({self(), socket.assigns.token}, "sources page has releases",
+      playable: length(res.playable),
+      left: length(res.rest),
+      auto: socket.assigns.auto,
+      mode: socket.assigns.mode
+    )
+
     socket =
       assign(socket,
         phase: :ready,
@@ -508,6 +523,10 @@ defmodule RokiWeb.SourcesLive do
   # that is already running instead of starting it, which was a second wait after the first.
   defp start(%{assigns: %{mode: :browser}} = socket, {source, stream} = pair) do
     %{uuid: uuid, ctx: ctx, caps: caps} = socket.assigns
+
+    Trace.log({self(), socket.assigns.token}, "sources page prepares",
+      release: Trace.release(source)
+    )
 
     socket
     |> assign(starting: %{name: source.name}, current: pair, start_error: nil, auto: :done)
@@ -610,7 +629,9 @@ defmodule RokiWeb.SourcesLive do
     end
   end
 
-  def handle_event("more", _params, %{assigns: %{rest: [_ | _]}} = socket) do
+  def handle_event("more", _params, %{assigns: %{rest: [_ | _] = rest}} = socket) do
+    Trace.log({self(), socket.assigns.token}, "load more (button)", left: length(rest))
+
     %{rest: rest, uuid: uuid, ctx: ctx, token: token, playable: have, key: key} = socket.assigns
     parent = self()
     hours = SourceCache.hours(Roki.Laev.web_settings(uuid))

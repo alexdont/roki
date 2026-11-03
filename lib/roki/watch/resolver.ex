@@ -9,6 +9,7 @@ defmodule Roki.Watch.Resolver do
   that asked as `{:status, token, text}` and `{:probe, token, done, playing, total}` messages.
   """
 
+  alias Roki.Watch.Trace
   alias Roki.Watch
   alias Roki.Watch.SourceCache
 
@@ -51,6 +52,19 @@ defmodule Roki.Watch.Resolver do
 
     size_cap = if mode == :browser, do: Watch.size_cap(web)
 
+    Trace.log({parent, token}, "run",
+      title: title.title,
+      id: "#{title.type}/#{title.id}",
+      season: season,
+      episode: episode,
+      mode: mode,
+      force: force?,
+      quick: quick?,
+      light: light?,
+      cached: cached && length(cached[:playable] || []),
+      study: Roki.Study.current()[:lang]
+    )
+
     with :ok <- Watch.subscription(uuid),
          ctx = Watch.ctx(uuid, title, season, episode),
          cap = Watch.ceiling(uuid, ctx, mode, web, caps),
@@ -78,9 +92,11 @@ defmodule Roki.Watch.Resolver do
       {:ok, res}
     else
       {:error, reason} when light? and reason in [:only_heavy, :none_playable] ->
+        Trace.log({parent, token}, "run failed", reason: reason, as: :no_light)
         {:error, token, :no_light}
 
       {:error, reason} ->
+        Trace.log({parent, token}, "run failed", reason: reason)
         {:error, token, reason}
     end
   end
@@ -93,6 +109,12 @@ defmodule Roki.Watch.Resolver do
   def more(parent, token, uuid, ctx, rest, have, key, hours, light? \\ false, caps \\ %{}) do
     {page, rest} = Watch.probe_page(rest)
 
+    Trace.log({parent, token}, "more",
+      checking: length(page),
+      have: length(have),
+      left_after: length(rest)
+    )
+
     {playable, late} =
       Roki.Laev.with_audio(uuid, ctx, fn ->
         probe_page(parent, token, uuid, ctx, page, false, light?, caps)
@@ -100,6 +122,14 @@ defmodule Roki.Watch.Resolver do
 
     rest = late ++ rest
     all = Watch.attach_and_rank(uuid, have ++ playable)
+
+    Trace.log({parent, token}, "more done",
+      playable: length(playable),
+      late: length(late),
+      total: length(all),
+      left: length(rest)
+    )
+
     if hours > 0, do: SourceCache.put(uuid, key, all, rest, light?)
     {:ok, token, all, rest}
   end
@@ -160,11 +190,18 @@ defmodule Roki.Watch.Resolver do
 
     with {:ok, %{query: query, sources: found}} <-
            Watch.sources(title, season, episode, uuid, force?),
+         _ = Trace.log({parent, token}, "found", releases: length(found), query: query),
          sources =
            Watch.with_library(uuid, query, found) |> in_study_order(uuid) |> prioritise(ctx),
          {:ok, sources} <- within_ceiling(uuid, sources, cap),
          {:ok, sources} <- Watch.within_size(sources, size_cap),
          {:ok, sources} <- only_light(sources, light?, caps),
+         _ =
+           Trace.log({parent, token}, "to check",
+             releases: length(sources),
+             cap: cap,
+             size_cap: size_cap
+           ),
          {:ok, playable, rest} <-
            probe_until_playable(parent, token, uuid, ctx, sources, [], quick?, light?, caps) do
       # (A list made for a browser that may not re-encode is saved as such: it lacks the heavy releases.)
@@ -211,7 +248,7 @@ defmodule Roki.Watch.Resolver do
   # Subtitles in the language but the speech in another is no help to someone learning it. Once
   # the tracks of a release have been read, only those with the language in their audio stay
   # (releases whose tracks could not be read are used only when nothing better is left).
-  defp spoken_in_study_language(ranked) do
+  defp spoken_in_study_language(ranked, token) do
     case Roki.Study.current() do
       %{lang: lang} ->
         {yes, rest} =
@@ -219,10 +256,27 @@ defmodule Roki.Watch.Resolver do
             Laev.Sources.audio_in?(source, lang) == true
           end)
 
-        if yes != [],
-          do: yes,
-          else:
-            Enum.filter(rest, fn {source, _} -> Laev.Sources.audio_in?(source, lang) == nil end)
+        kept =
+          if yes != [],
+            do: yes,
+            else:
+              Enum.filter(rest, fn {source, _} -> Laev.Sources.audio_in?(source, lang) == nil end)
+
+        if length(kept) < length(ranked) do
+          Trace.log(token, "study filter",
+            lang: lang,
+            playable: length(ranked),
+            kept: length(kept),
+            dropped:
+              for(
+                {s, _} <- ranked,
+                not Enum.any?(kept, fn {k, _} -> k.hash == s.hash end),
+                do: Trace.release(s)
+              )
+          )
+        end
+
+        kept
 
       _ ->
         ranked
@@ -271,18 +325,50 @@ defmodule Roki.Watch.Resolver do
   defp probe_until_playable(_parent, _token, _uuid, _ctx, [], [], _quick?, _light?, _caps),
     do: {:error, :none_playable}
 
-  defp probe_until_playable(parent, token, uuid, ctx, sources, acc, quick?, light?, caps) do
+  defp probe_until_playable(
+         parent,
+         token,
+         uuid,
+         ctx,
+         sources,
+         acc,
+         quick?,
+         light?,
+         caps,
+         round \\ 1
+       ) do
     {page, rest} = Watch.probe_page(sources, if(quick?, do: 8, else: 12))
     {playable, late} = probe_page(parent, token, uuid, ctx, page, quick?, light?, caps)
     rest = late ++ rest
     # Starting in the browser is what is waited for: what is known from the names ranks it.
-    ranked =
-      Watch.attach_and_rank(uuid, acc ++ playable, fast: quick?) |> spoken_in_study_language()
+    attached = Watch.attach_and_rank(uuid, acc ++ playable, fast: quick?)
+    ranked = spoken_in_study_language(attached, {parent, token})
+
+    Trace.log({parent, token}, "round",
+      n: round,
+      checked: length(page),
+      playable: length(playable),
+      ranked: length(attached),
+      kept: length(ranked),
+      late: length(late),
+      left: length(rest),
+      next:
+        cond do
+          ranked != [] -> :done
+          rest == [] -> :none_playable
+          true -> :another_round
+        end
+    )
 
     cond do
-      ranked != [] -> {:ok, ranked, rest}
-      rest == [] -> {:error, :none_playable}
-      true -> probe_until_playable(parent, token, uuid, ctx, rest, [], quick?, light?, caps)
+      ranked != [] ->
+        {:ok, ranked, rest}
+
+      rest == [] ->
+        {:error, :none_playable}
+
+      true ->
+        probe_until_playable(parent, token, uuid, ctx, rest, [], quick?, light?, caps, round + 1)
     end
   end
 
@@ -325,6 +411,7 @@ defmodule Roki.Watch.Resolver do
         end
 
       send(parent, {:checked, token, source.hash, state})
+      Trace.log({parent, token}, "checked", release: Trace.release(source), result: state)
     end
 
     # A whole page at once (laev's default is two): the first release that plays is what counts,
@@ -503,6 +590,13 @@ defmodule Roki.Watch.Resolver do
         grace = if quick?, do: @quick_grace_ms, else: @grace_ms
 
         if now >= deadline do
+          Trace.log({parent, token}, "page stopped",
+            why: :deadline,
+            ok: ok,
+            answered: length(st.seen),
+            of: length(page)
+          )
+
           Task.shutdown(task, :brutal_kill)
           seen = MapSet.new(st.seen)
 
@@ -549,6 +643,20 @@ defmodule Roki.Watch.Resolver do
          ideal?
        ) do
     if ok >= enough or ideal? or (first && now - first >= grace) do
+      Trace.log({parent, token}, "page stopped",
+        why:
+          cond(
+            do: (
+              ok >= enough -> :enough
+              ideal? -> :ideal
+              true -> :grace
+            )
+          ),
+        ok: ok,
+        answered: length(st.seen),
+        of: length(page)
+      )
+
       Task.shutdown(task, :brutal_kill)
       seen = MapSet.new(st.seen)
       late = Enum.reject(page, &MapSet.member?(seen, &1.hash))

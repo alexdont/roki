@@ -16,7 +16,7 @@ defmodule RokiWeb.WatchLive do
 
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Watch
-  alias Roki.Watch.{Resolver, SourceCache}
+  alias Roki.Watch.{Resolver, SourceCache, Trace}
 
   @impl true
   def mount(%{"id" => id} = params, _session, socket) do
@@ -156,6 +156,16 @@ defmodule RokiWeb.WatchLive do
     hash = if hash in skip, do: nil, else: hash
 
     parent = self()
+
+    Trace.log({parent, token}, "watch page resolves",
+      id: socket.assigns.id,
+      season: season,
+      episode: episode,
+      hash: hash && String.slice(hash, 0, 8),
+      prefer: prefer && String.slice(prefer, 0, 8),
+      skip: length(skip),
+      heavy_ok: heavy_ok
+    )
 
     socket
     |> assign(
@@ -331,6 +341,15 @@ defmodule RokiWeb.WatchLive do
 
   defp without(parent, token, uuid, heavy_ok, caps, res, skip) do
     keep = Enum.reject(res.playable, fn {source, _} -> source.hash in skip end)
+
+    Trace.log({parent, token}, "leave out what failed",
+      playable: length(res.playable),
+      kept: length(keep),
+      skip: length(skip),
+      left: length(res.rest),
+      next: if(keep == [] and res.rest != [], do: :check_more, else: :go_on)
+    )
+
     res = %{res | playable: keep}
 
     if keep == [] and res.rest != [] do
@@ -361,11 +380,20 @@ defmodule RokiWeb.WatchLive do
   # stopping. The ones that failed are told to the page so a retry leaves them out.
   @unskippable [:busy, :over_limit, :no_provider]
   defp start_or_next(parent, token, uuid, caps, res, {source, _} = pair, auto?, tried, left) do
+    Trace.log({parent, token}, "start",
+      release: Trace.release(source),
+      auto: auto?,
+      tries_left: left
+    )
+
     case start(uuid, res.ctx, pair, caps) do
       {:ok, player} ->
+        Trace.log({parent, token}, "started", release: Trace.release(source))
         {:ok, pair, player}
 
       {:error, reason} ->
+        Trace.log({parent, token}, "start failed", release: Trace.release(source), reason: reason)
+
         tried = [source.hash | tried]
         send(parent, {:tried, token, tried})
         # A release that would not start is not kept as the one to go straight to.
@@ -402,7 +430,16 @@ defmodule RokiWeb.WatchLive do
   defp locate(_parent, _token, _uuid, _how, res, nil, _pages), do: {res, nil}
 
   defp locate(parent, token, uuid, {heavy_ok, caps} = how, res, hash, pages) do
-    case Resolver.find(res.playable, hash) do
+    found = Resolver.find(res.playable, hash)
+
+    Trace.log({parent, token}, "locate",
+      hash: String.slice(hash, 0, 8),
+      found: found != nil,
+      pages_left: pages,
+      left: length(res.rest)
+    )
+
+    case found do
       nil when pages > 0 and res.rest != [] ->
         hours = SourceCache.hours(Roki.Laev.web_settings(uuid))
 
@@ -751,7 +788,11 @@ defmodule RokiWeb.WatchLive do
         {:ok, {:error, token, reason}},
         %{assigns: %{token: token}} = socket
       ),
-      do: {:noreply, assign(socket, failed: Resolver.failure(reason), failed_reason: reason)}
+      do:
+        (
+          Trace.log({self(), token}, "watch page failed", reason: reason)
+          {:noreply, assign(socket, failed: Resolver.failure(reason), failed_reason: reason)}
+        )
 
   def handle_async(:resolve, {:exit, reason}, socket),
     do:
@@ -1024,6 +1065,11 @@ defmodule RokiWeb.WatchLive do
       ) do
     caps = socket.assigns.caps
 
+    Trace.log({self(), socket.assigns.token}, "browser could not play",
+      release: Trace.release(source),
+      why: params["why"]
+    )
+
     Logger.warning(
       "player failed for #{socket.assigns.id} (#{inspect(source.name)}): #{inspect(params["why"])} #{inspect(params["ua"])}"
     )
@@ -1215,8 +1261,10 @@ defmodule RokiWeb.WatchLive do
   end
 
   # Look again leaving out the releases that did not work.
-  def handle_event("try_another", _params, %{assigns: %{skip: [_ | _]}} = socket),
-    do: {:noreply, resolve(socket)}
+  def handle_event("try_another", _params, %{assigns: %{skip: [_ | _] = skip}} = socket) do
+    Trace.log({self(), socket.assigns.token}, "try another (button)", skip: length(skip))
+    {:noreply, resolve(socket)}
+  end
 
   def handle_event("try_another", _params, socket), do: {:noreply, socket}
 

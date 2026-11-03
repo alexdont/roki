@@ -13,6 +13,8 @@ config :swoosh, :api_client, false
 
 # Print only warnings and errors during test
 config :logger, level: :warning
+# The watch trace (Roki.Watch.Trace) writes nowhere in tests.
+config :roki, watch_trace: nil
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
