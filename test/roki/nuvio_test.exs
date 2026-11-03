@@ -234,25 +234,78 @@ defmodule Roki.NuvioTest do
       {:ok, user: user}
     end
 
-    test "a provider is enabled only when it is acknowledged", %{user: user} do
-      assert Settings.enabled_ids(user.uuid) == []
-      refute Settings.configured?(user.uuid)
-
-      {:ok, user} = Settings.set_enabled(user, "vidlink", true, false)
-      assert Settings.enabled_ids(user.uuid) == []
-      refute Settings.configured?(user.uuid)
-
-      {:ok, user} = Settings.set_enabled(user, "vidlink", true, true)
-      assert Settings.enabled_ids(user.uuid) == ["vidlink"]
+    test "every account starts with the default providers on", %{user: user} do
+      assert Settings.enabled_ids(user.uuid) == Settings.defaults()
+      assert "moviebox" in Settings.defaults()
       assert Settings.configured?(user.uuid)
 
       # The third collection is visible to the rest of the app without touching the other two.
       assert %{torrent: false, pengu: false, nuvio: true} = Roki.Sources.available(user.uuid)
     end
 
+    test "a provider is toggled on or off, defaults included", %{user: user} do
+      [first | rest] = Settings.defaults()
+
+      {:ok, user} = Settings.set_enabled(user, "purstream", true)
+      assert Settings.enabled_ids(user.uuid) == ["purstream" | Settings.defaults()]
+
+      {:ok, user} = Settings.set_enabled(user, first, false)
+      assert Settings.enabled_ids(user.uuid) == ["purstream" | rest]
+
+      {:ok, user} = Settings.set_enabled(user, "purstream", false)
+      assert Settings.enabled_ids(user.uuid) == rest
+
+      {:ok, _user} = Settings.set_enabled(user, first, true)
+      assert Settings.enabled_ids(user.uuid) == Settings.defaults()
+    end
+
+    test "switching every provider off leaves the collection unavailable", %{user: user} do
+      user =
+        Enum.reduce(Settings.defaults(), user, fn id, user ->
+          {:ok, user} = Settings.set_enabled(user, id, false)
+          user
+        end)
+
+      assert Settings.enabled_ids(user.uuid) == []
+      refute Settings.configured?(user.uuid)
+      assert %{nuvio: false} = Roki.Sources.available(user.uuid)
+    end
+
+    test "settings saved before the defaults keep their choices and gain the defaults", %{
+      user: user
+    } do
+      fields =
+        Map.put(user.custom_fields || %{}, "nuvio", %{
+          "enabled" => ["vidlink", "purstream"],
+          "accepted" => %{"vidlink" => true}
+        })
+
+      {:ok, _} = PhoenixKit.Users.Auth.update_user_custom_fields(user, fields)
+      assert Settings.enabled_ids(user.uuid) == ["vidlink", "purstream" | Settings.defaults()]
+    end
+
     test "the Nuvio collection can be the active source when it is the only one available" do
       assert Roki.Sources.current(nil, %{torrent: false, pengu: false, nuvio: true}) == :nuvio
       assert Roki.Sources.current(nil, %{torrent: true, pengu: false, nuvio: true}) == :torrent
+    end
+
+    test "an account that chose nothing starts on Nuvio rather than PenguPlay, after debrid" do
+      all = %{torrent: true, pengu: true, nuvio: true}
+      assert Roki.Sources.current(nil, all) == :torrent
+      assert Roki.Sources.current(nil, %{all | torrent: false}) == :nuvio
+      assert Roki.Sources.current(nil, %{all | torrent: false, nuvio: false}) == :pengu
+      # An explicit choice, or a link that names one, still wins.
+      assert Roki.Sources.pick(:pengu, %{all | torrent: false}) == :pengu
+    end
+
+    test "a saved Play from of PenguPlay is kept", %{user: user} do
+      dir = Roki.Laev.dir(user.uuid)
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf(dir) end)
+      :ok = Roki.Laev.put_web_setting(user.uuid, "play_from", "pengu")
+
+      assert Roki.Sources.current(user.uuid, %{torrent: false, pengu: true, nuvio: true}) ==
+               :pengu
     end
 
     test "provider option descriptions are normalised for the settings form" do

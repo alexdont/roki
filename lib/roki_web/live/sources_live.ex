@@ -93,19 +93,12 @@ defmodule RokiWeb.SourcesLive do
   # the account's "Play from" setting — but a kind nothing is connected for gives way to the other
   # one when that works.
   defp initial_source(uuid, params, avail) do
-    wanted =
-      cond do
-        params["src"] == "pengu" -> :pengu
-        params["src"] == "nuvio" -> :nuvio
-        params["src"] == "torrent" -> :torrent
-        uuid && Roki.Laev.web_settings(uuid)["play_from"] == "nuvio" -> :nuvio
-        uuid && Roki.Laev.web_settings(uuid)["play_from"] == "pengu" -> :pengu
-        true -> :torrent
-      end
-
-    if Map.get(avail, wanted, false),
-      do: wanted,
-      else: Enum.find([:torrent, :pengu, :nuvio], wanted, &Map.get(avail, &1, false))
+    case params["src"] do
+      "pengu" -> Roki.Sources.pick(:pengu, avail)
+      "nuvio" -> Roki.Sources.pick(:nuvio, avail)
+      "torrent" -> Roki.Sources.pick(:torrent, avail)
+      _ -> Roki.Sources.current(uuid, avail)
+    end
   end
 
   # Where an account adds what is missing: its Settings page.
@@ -1020,8 +1013,7 @@ defmodule RokiWeb.SourcesLive do
           </h3>
           <p class="text-sm text-base-content/70">
             Nuvio providers are discovered from the All-in-One-Nuvio manifest and run in an
-            isolated Node process. Choose the ones you may use, and acknowledge that you will use
-            them only for content you are authorised to access.
+            isolated Node process. Switch on the ones you want to use; nothing is on by default.
           </p>
           <a href={@settings <> "#nuvio"} class="btn btn-sm btn-primary">
             Choose Nuvio providers

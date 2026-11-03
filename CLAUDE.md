@@ -446,3 +446,8 @@ stays on the sources page with a message and the list.
 ## Video conversions (ffmpeg)
 - A non-h264 release is re-encoded on the server by laev (`libx264`, software). A 4K one never keeps up and takes every core, so `Watch.start` refuses a heavy release above 1080p (`:too_heavy`) and caps concurrent encoders (`:busy`).
 - laev keeps a conversion running for two hours whatever happens to the page. `Roki.Watch.Reaper` stops the ones the stream controller has not served in ten minutes, and `ready_or_stop` stops one that did not get going.
+
+## Nuvio (third source collection)
+- `Roki.Nuvio` + `lib/roki/nuvio/*`; the full story is `dev_docs/nuvio-compatibility.md`. Providers are third-party JS from a GitHub manifest, statically checked (`Validator`) and run in a locked-down Node process (`Sandbox`); streams play through the signed relay / `/nuvio/hls`.
+- **On by default for every account:** `Roki.Nuvio.Settings.defaults/0` (playimdb, vidrock, movix, moviebox — the last carries Russian audio), picked by a live probe. Settings keeps the account's own `enabled` and the defaults it switched off as `disabled`. With no "Play from" saved, the source is the first available of torrent → Nuvio → PenguPlay (`Roki.Sources.pick/2`, used by `current/2` and the sources page): debrid users stay on torrents, everyone else starts on Nuvio, even with a lent PenguPlay link. A saved choice or a `?src=` link wins. Re-probe before changing the defaults: a provider returning links is not enough, the link must serve media (`4khdhub`/`uhdmovies` return HTML pages).
+- Tests run with `config :roki, nuvio_offline: true` (snapshot manifest, no provider source, no GitHub). Live probe: `NUVIO_LIVE=1 mix test test/roki/nuvio_live_test.exs --include external`.

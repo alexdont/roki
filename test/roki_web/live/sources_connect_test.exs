@@ -1,7 +1,8 @@
 defmodule RokiWeb.SourcesConnectTest do
   @moduledoc """
   An account with nothing connected is told what to connect (and where to get it), instead of a
-  page that says it is starting and never does.
+  page that says it is starting and never does. Every account has Nuvio's default providers on,
+  so "nothing connected" here is an account that switched them all off.
   """
   use RokiWeb.ConnCase
 
@@ -14,6 +15,12 @@ defmodule RokiWeb.SourcesConnectTest do
         "password" => "a-long-enough-password-123",
         "username" => "nosource"
       })
+
+    user =
+      Enum.reduce(Roki.Nuvio.Settings.defaults(), user, fn id, user ->
+        {:ok, user} = Roki.Nuvio.Settings.set_enabled(user, id, false)
+        user
+      end)
 
     token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
     {:ok, conn: Plug.Test.init_test_session(conn, %{user_token: token}), user: user}
@@ -63,5 +70,15 @@ defmodule RokiWeb.SourcesConnectTest do
     view |> form("form[phx-submit=setup_debrid]") |> render_submit()
     html = render_async(view)
     assert html =~ "Paste a Real-Debrid token or a TorBox key first."
+  end
+
+  test "with Nuvio's defaults on, Play has somewhere to go without visiting Settings", %{
+    conn: conn,
+    user: user
+  } do
+    {:ok, _} = Roki.Nuvio.Settings.set_enabled(user, "playimdb", true)
+
+    {:ok, _view, html} = live(conn, "/sources/movie/603")
+    refute html =~ "Connect a source to start watching"
   end
 end

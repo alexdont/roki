@@ -6,7 +6,7 @@ Roki has three source collections that are configured independently:
 |---|---|---|
 | Original | a Real-Debrid or TorBox account | `Roki.Laev`, `Roki.Watch.Resolver` |
 | PenguPlay | a PenguPlay addon install link | `Roki.Pengu` |
-| Nuvio | a set of providers enabled and acknowledged per account | `Roki.Nuvio` |
+| Nuvio | a set of providers, four on by default, switched per account | `Roki.Nuvio` |
 
 None of them replaces another. `Roki.Sources` reports all three and the sources page, account
 menu, and `play_from` setting can choose any one that is configured.
@@ -67,9 +67,12 @@ has no options. Saved options are passed to the provider as `globalThis.SCRAPER_
 
 A provider runs only if all of these are true:
 
-1. the account enabled it **and** ticked the authorisation acknowledgement;
-2. the account has not exceeded the collection's per-search provider limit (12 enabled
-   providers, most recently enabled first);
+1. it is on for the account: one of the defaults below that the account has not switched
+   off, or one the account switched on in Settings (a toggle per provider);
+2. it is among the first 18 that are on (`Roki.Nuvio.max_providers/0`): the account's own,
+   most recently switched on first, then the defaults. They run six at a time with 45 s
+   each, so a search is at most three rounds. Settings shows how many are on and marks the
+   ones past the limit "not asked";
 3. the downloaded source passed `Roki.Nuvio.Validator`:
    - UTF-8, under 2 MB, exports `getStreams`;
    - every `require` is a **literal** and only names `cheerio`,
@@ -116,6 +119,34 @@ signed playback URLs (they would be visible in browser history and logs); a prov
 stream requires one of those will be listed but will not play. The verified providers above
 need only `Referer`, `Origin` and `User-Agent`.
 
+## Default providers
+
+Every account has these on without visiting Settings (`Roki.Nuvio.Settings.defaults/0`), so
+an account with no debrid key or PenguPlay link can still press Play. They were chosen by a
+live probe on 2026-11-02 against The Matrix, Oppenheimer, Breaking Bad 1x1 and The Last of
+Us 2x1. Each found all four titles in under ten seconds, and a ranged GET of the stream
+returned real media (an HLS playlist or an MP4), not a web page:
+
+| Provider | What it gives |
+|---|---|
+| `playimdb` | English original audio, 1080p HLS, three mirrors |
+| `vidrock` | 720p–1080p HLS from two servers |
+| `movix` | dual-audio (English/French) HLS |
+| `moviebox` | MP4 in several audio languages, **Russian** among them, plus Hindi and the original |
+
+`moviebox` is the Russian option. The two manifest entries that list `ru` do not work:
+`goated` returned nothing for any title and has no options, and `gramcinema` needs a cookie
+token.
+
+Settings stores the account's own choices in `enabled` and the defaults it switched off in
+`disabled`, so a default added later reaches every account, including ones that saved
+settings before. An account that switches every provider off has no Nuvio collection, and
+the sources page offers to connect one.
+
+An account that has not chosen a "Play from" collection uses the first one available in the
+order torrent → Nuvio → PenguPlay (`Roki.Sources.pick/2`). Debrid accounts stay on torrents;
+any other account starts on Nuvio, even when it has a PenguPlay link lent to it.
+
 ## Verified providers
 
 Probed against The Matrix (TMDB 603, movie) and Breaking Bad S1E1 (TMDB 1396, tv) on
@@ -133,13 +164,15 @@ pass the current validator; 13 are blocked for the capabilities listed below.
 | `purstream` | 1 | 1 | HLS with Referer/User-Agent |
 | `vidrock` | 2 | 1 | file URL |
 | `netmirror` | 4 | 3 | works but takes ~41 s; within the 45 s budget |
-| `4khdhub` | 16 | 8 | Cheerio; HubCloud links |
+| `4khdhub` | 16 | 8 | Cheerio; HubCloud links (**HTML pages, not media**, on 2026-11-02) |
 | `moviesdrive` | 6 | 6 | Cheerio |
 | `reanime` | 4 | 2 | Cheerio |
-| `uhdmovies` | 5 | 3 | Cheerio |
+| `uhdmovies` | 5 | 3 | Cheerio (**HTML pages, not media**, on 2026-11-02) |
 | `moviebox` | 6 | 6 | CryptoJS |
 
-`Roki.NuvioLiveTest` uses the first eight as an external test:
+`Roki.NuvioLiveTest` uses the first eight as an external test (the ordinary suite runs with
+`config :roki, nuvio_offline: true`: the committed manifest snapshot, no provider source
+fetched, nothing sent to GitHub):
 
 ```bash
 NUVIO_LIVE=1 mix test test/roki/nuvio_live_test.exs --include external
@@ -186,7 +219,8 @@ enabled by default and cannot be enabled around the validator.
 ## Content authorisation and licensing
 
 The manifest is a catalogue, not a licence. A provider being listed does not mean it is
-authorised for every title or in every jurisdiction. Roki therefore requires an explicit
-acknowledgement per provider and never turns a provider on by default. Roki does not host
+authorised for every title or in every jurisdiction. Roki never turns a provider on by
+default: each one is switched on by the account, and the Settings section carries a notice
+saying so. Roki does not host
 media, does not decrypt DRM, and does not bypass access controls. Whether a provider is
 lawful for a given title remains the account holder's responsibility.

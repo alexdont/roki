@@ -33,7 +33,15 @@ defmodule Roki.Nuvio.Registry do
     end)
   end
 
+  # `config :roki, nuvio_offline: true` (the test suite) reads the committed snapshot and
+  # fetches no provider source, so nothing reaches GitHub.
+  defp offline?, do: Application.get_env(:roki, :nuvio_offline, false)
+
   defp fetch_manifest(url) do
+    if offline?(), do: snapshot(url, "offline"), else: fetch_live_manifest(url)
+  end
+
+  defp fetch_live_manifest(url) do
     case Req.get(url, receive_timeout: 20_000, retry: false, redirect: true) do
       {:ok, %{status: 200, body: body}} ->
         case decode_body(body) do
@@ -143,6 +151,10 @@ defmodule Roki.Nuvio.Registry do
   end
 
   defp fetch_source(%Provider{} = provider) do
+    if offline?(), do: {:error, :offline}, else: fetch_live_source(provider)
+  end
+
+  defp fetch_live_source(%Provider{} = provider) do
     case Req.get(provider.source_url,
            receive_timeout: 20_000,
            retry: false,

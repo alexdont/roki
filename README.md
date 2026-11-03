@@ -16,8 +16,8 @@ you use — and every account brings its own.
 - **Three independent source collections, one player.** The original collection is torrent
   releases through a debrid account. PenguPlay adds plain https streams from a Stremio-style
   addon link. Nuvio adds providers discovered from the
-  [All-in-One-Nuvio](https://github.com/NuvioPlugin/All-in-One-Nuvio) manifest, each enabled and
-  acknowledged in Settings and run one call at a time in an isolated Node sandbox. A switch on
+  [All-in-One-Nuvio](https://github.com/NuvioPlugin/All-in-One-Nuvio) manifest, each switched on
+  individually in Settings and run one call at a time in an isolated Node sandbox. A switch on
   the sources page and in the account menu picks which collection Play uses; Play then finds the
   best stream by itself and falls back to the next if one fails to start. Configuring one
   collection never configures or disables another.

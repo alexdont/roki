@@ -5,8 +5,8 @@ defmodule Roki.Nuvio do
   Roki already plays (`Roki.Pengu` uses the same fields).
 
   Providers are **not** interchangeable, and the manifest is not an endorsement. A provider
-  runs only when the account enabled it, acknowledged that it will use it only for media it
-  may access, and its source passed `Roki.Nuvio.Validator`. Results from one provider are
+  runs only when it is on for the account (`Roki.Nuvio.Settings.defaults/0` are, until
+  switched off) and its source passed `Roki.Nuvio.Validator`. Results from one provider are
   reported under that provider, with its own error or timeout, so a broken site never hides
   the other collections.
 
@@ -22,37 +22,64 @@ defmodule Roki.Nuvio do
 
   @ttl 600
   @timeout 45_000
-  @max_providers 12
+  # Providers asked per search. They run six at a time, each allowed up to @timeout, so 18
+  # is at most three rounds.
+  @max_providers 18
   @max_streams 40
   @qualities %{"1080P" => 0, "720P" => 1, "1440P" => 2, "480P" => 3, "360P" => 4, "4K" => 5}
   @format_chars ~r/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{206F}\x{FEFF}]/u
 
   # ── what the account may search ────────────────────────────────────
 
-  @doc "The account's enabled and acknowledged providers, with the rest of the catalog."
-  def catalog(uuid) do
-    settings = Settings.get(uuid)
+  @doc "How many providers one search asks at most."
+  def max_providers, do: @max_providers
 
+  @doc """
+  Every provider in the manifest, each marked with whether the account has it on
+  (`enabled`), whether it is a default, and whether a search asks it (`asked`: on, and
+  within the first `max_providers/0` in the order `eligible_providers/2` uses).
+  """
+  def catalog(uuid) do
     case Registry.providers() do
       {:ok, providers} ->
-        {:ok,
-         Enum.map(providers, fn provider ->
-           %{
-             provider: provider,
-             enabled: provider.id in settings["enabled"],
-             accepted: settings["accepted"][provider.id] == true
-           }
-         end)}
+        entries =
+          Enum.map(providers, fn provider ->
+            %{
+              provider: provider,
+              enabled: false,
+              asked: false,
+              default: provider.id in Settings.defaults()
+            }
+          end)
+
+        {:ok, mark(entries, Settings.enabled_ids(uuid))}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
+  @doc "Set `enabled` and `asked` on catalog entries from the account's on-list, in order."
+  def mark(entries, on_ids) do
+    present = MapSet.new(for %{provider: %{enabled: true} = p} <- entries, do: p.id)
+
+    asked =
+      on_ids
+      |> Enum.filter(&MapSet.member?(present, &1))
+      |> Enum.take(@max_providers)
+      |> MapSet.new()
+
+    on = MapSet.new(on_ids)
+
+    Enum.map(entries, fn %{provider: p} = e ->
+      %{e | enabled: MapSet.member?(on, p.id), asked: MapSet.member?(asked, p.id)}
+    end)
+  end
+
   @doc "Whether Nuvio can be offered to this account at all."
   def configured?(uuid), do: Settings.configured?(uuid)
 
-  @doc "The providers a search will actually run, in manifest order."
+  @doc "The providers a search will actually run: the account's on-list order, at most `max_providers/0`."
   def eligible_providers(uuid, type) do
     ids = Settings.enabled_ids(uuid)
 

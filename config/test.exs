@@ -25,6 +25,9 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
+# Nuvio reads its committed manifest snapshot and fetches no provider source (no GitHub).
+config :roki, nuvio_offline: true
+
 # The suite registers a throwaway user per test; PhoenixKits
 
 # The suite registers a throwaway user per test; PhoenixKit's registration rate limit

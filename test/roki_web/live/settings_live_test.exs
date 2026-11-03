@@ -63,17 +63,101 @@ defmodule RokiWeb.SettingsLiveTest do
     assert html =~ "RokiWeb.MangaSettings.ReaderSettings"
   end
 
-  test "the Nuvio collection has its own section and does not reach GitHub until asked", %{
-    conn: conn
-  } do
-    {:ok, view, html} = live(conn, "/settingstest/settings")
+  test "the Nuvio section lists the providers with the defaults already on", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    html = render_async(view, 5_000)
 
-    assert html =~ ~s(id="nuvio")
-    assert html =~ "Load providers from the manifest"
-    assert html =~ "authorised to watch"
-    refute html =~ "providers in the manifest"
-    # The section is independent of PenguPlay and of the debrid keys.
     assert has_element?(view, "#nuvio")
+    assert html =~ "providers in the manifest"
+    refute html =~ "I am authorised to use this provider"
+
+    for id <- Roki.Nuvio.Settings.defaults() do
+      assert has_element?(view, ~s(#nuvio-#{id} input[role="switch"][checked]))
+    end
+  end
+
+  test "a Nuvio provider is switched on and off with one toggle", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    render_async(view, 5_000)
+    switch = ~s(#nuvio-purstream input[role="switch"])
+
+    assert has_element?(view, "#nuvio-purstream input[role=switch]:not([checked])")
+
+    view |> element(switch) |> render_click()
+    assert has_element?(view, switch <> "[checked]")
+    assert "purstream" in Roki.Nuvio.Settings.enabled_ids(user.uuid)
+
+    view |> element(switch) |> render_click()
+    refute has_element?(view, switch <> "[checked]")
+    refute "purstream" in Roki.Nuvio.Settings.enabled_ids(user.uuid)
+
+    # A default switches off the same way, and stays off.
+    view |> element(~s(#nuvio-movix input[role="switch"])) |> render_click()
+    refute "movix" in Roki.Nuvio.Settings.enabled_ids(user.uuid)
+  end
+
+  test "the count says how many are on, and providers past the limit are marked not asked", %{
+    conn: conn,
+    user: user
+  } do
+    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    render_async(view, 5_000)
+    assert render(element(view, "#nuvio-count")) =~ "4 on"
+    assert render(element(view, "#nuvio-count")) =~ "up to 18 are asked per search"
+
+    # Switch on enough eligible providers to pass the limit. The oldest in the order (the
+    # defaults come after the account's own) drop out first.
+    {:ok, providers} = Roki.Nuvio.Registry.providers()
+
+    extra =
+      providers
+      |> Enum.filter(& &1.enabled)
+      |> Enum.map(& &1.id)
+      |> Kernel.--(Roki.Nuvio.Settings.defaults())
+      |> Enum.take(16)
+
+    Enum.reduce(extra, user, fn id, user ->
+      {:ok, user} = Roki.Nuvio.Settings.set_enabled(user, id, true)
+      user
+    end)
+
+    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    render_async(view, 5_000)
+    count = render(element(view, "#nuvio-count"))
+    assert count =~ "20 on"
+    assert count =~ "only the first 18 are asked per search"
+
+    # 16 own + 4 defaults: the last two defaults in order are past the limit.
+    [_, _, third, fourth] = Roki.Nuvio.Settings.defaults()
+
+    for id <- [third, fourth] do
+      assert has_element?(view, "#nuvio-#{id} .badge", "not asked")
+    end
+
+    refute has_element?(view, "#nuvio-#{hd(extra)} .badge", "not asked")
+  end
+
+  test "Reset to defaults puts back exactly the default Nuvio providers", %{
+    conn: conn,
+    user: user
+  } do
+    {:ok, user} = Roki.Nuvio.Settings.set_enabled(user, "purstream", true)
+    {:ok, user} = Roki.Nuvio.Settings.set_enabled(user, "movix", false)
+    {:ok, _user} = Roki.Nuvio.Settings.set_options(user, "purstream", %{"lang" => "fr"})
+
+    {:ok, view, _html} = live(conn, "/settingstest/settings")
+    render_async(view, 5_000)
+    reset = ~s(#nuvio button[phx-click="nuvio_reset"])
+    refute has_element?(view, reset <> "[disabled]")
+
+    html = view |> element(reset) |> render_click()
+    assert html =~ "Back to the default providers."
+    assert Roki.Nuvio.Settings.enabled_ids(user.uuid) == Roki.Nuvio.Settings.defaults()
+    assert has_element?(view, ~s(#nuvio-movix input[role="switch"][checked]))
+    refute has_element?(view, ~s(#nuvio-purstream input[role="switch"][checked]))
+    assert has_element?(view, reset <> "[disabled]")
+    # Options are not sources; they stay.
+    assert Roki.Nuvio.Settings.options(user.uuid, "purstream") == %{"lang" => "fr"}
   end
 
   test "the reader's old settings address leads here", %{conn: conn} do

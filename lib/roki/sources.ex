@@ -5,7 +5,7 @@ defmodule Roki.Sources do
     * `:torrent` — the original source system: releases your Real-Debrid or TorBox account streams;
     * `:pengu` — plain https streams from a PenguPlay addon link;
     * `:nuvio` — providers discovered from the All-in-One-Nuvio manifest and run in the
-      Nuvio sandbox, only when the account enabled and acknowledged them.
+      Nuvio sandbox, only when the account enabled them.
 
   The sources page and the account menu both draw their switches from this — a kind that is not
   there is greyed out and points to Settings. Each kind is configured on its own: a debrid key,
@@ -40,12 +40,14 @@ defmodule Roki.Sources do
   def forget(uuid) when is_binary(uuid), do: TTLCache.delete({:sources_avail, uuid})
   def forget(_), do: :ok
 
-  @kinds [:torrent, :pengu, :nuvio]
+  # The order a kind is fallen back to when the wanted one has nothing connected. Nuvio comes
+  # before PenguPlay: every account has Nuvio's default providers on, so a new account (no
+  # debrid, perhaps a lent PenguPlay link) starts on Nuvio unless it chooses otherwise.
+  @kinds [:torrent, :nuvio, :pengu]
 
   @doc """
   The kind to show as the account's choice: its "Play from" setting, unless nothing is connected
-  for that and another kind is. Old behaviour (torrent first, then PenguPlay) is kept when the
-  new key is absent from a caller's map.
+  for that and another kind is (see `pick/2`).
   """
   def current(uuid, avail) do
     wanted =
@@ -55,6 +57,11 @@ defmodule Roki.Sources do
         _ -> :torrent
       end
 
+    pick(wanted, avail)
+  end
+
+  @doc "`wanted` when it is available, else the first available kind (torrent, Nuvio, PenguPlay)."
+  def pick(wanted, avail) do
     if available_kind?(avail, wanted),
       do: wanted,
       else: Enum.find(@kinds, wanted, &available_kind?(avail, &1))

@@ -20,6 +20,9 @@ defmodule Roki.NuvioLiveTest do
   alias Roki.Nuvio
 
   setup do
+    Application.put_env(:roki, :nuvio_offline, false)
+    on_exit(fn -> Application.put_env(:roki, :nuvio_offline, true) end)
+
     if System.get_env("NUVIO_LIVE") != "1" do
       :ok
     else
@@ -33,8 +36,7 @@ defmodule Roki.NuvioLiveTest do
       {:ok, providers} = Roki.Nuvio.Registry.providers()
 
       # Only providers that are self-contained and pass the static validator; the same gate
-      # the runtime applies. Acknowledgement is part of the fixture because it is part of
-      # the product's policy.
+      # the runtime applies.
       enabled =
         providers
         |> Enum.filter(&(&1.id in @known_operational))
@@ -43,7 +45,6 @@ defmodule Roki.NuvioLiveTest do
 
       settings = %{
         "enabled" => enabled,
-        "accepted" => Map.new(enabled, &{&1, true}),
         "options" => %{}
       }
 

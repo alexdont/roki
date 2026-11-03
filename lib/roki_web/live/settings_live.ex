@@ -138,11 +138,11 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:debrid_busy, false)
           |> assign_reading()
 
-        # The manifest is fetched only when this account already uses Nuvio, or when the
-        # section's "Load providers" button is pressed. Merely opening Settings does not
-        # reach GitHub.
+        # The manifest is fetched only when this account has a provider on (the defaults
+        # are, until switched off), or when the section's "Load providers" button is
+        # pressed. It is cached for an hour.
         socket =
-          if connected?(socket) and Roki.Nuvio.Settings.get(uuid)["enabled"] != [] do
+          if connected?(socket) and Roki.Nuvio.Settings.enabled_ids(uuid) != [] do
             start_async(socket, :nuvio, fn -> Roki.Nuvio.catalog(uuid) end)
           else
             update(socket, :nuvio, &%{&1 | loading: false})
@@ -260,40 +260,26 @@ defmodule RokiWeb.SettingsLive do
      |> start_async(:debrid_save, fn -> Roki.Laev.save_debrid(uuid, keys) end)}
   end
 
-  def handle_event(
-        "nuvio_save_provider",
-        %{"nuvio" => %{"provider" => provider_id} = params},
-        socket
-      ) do
-    enabled? = params["enabled"] == "true"
-    accepted? = params["accepted"] == "true"
+  def handle_event("nuvio_toggle", %{"provider" => provider_id}, socket) do
+    entry = Enum.find(socket.assigns.nuvio.catalog, &(&1.provider.id == provider_id))
+    enabled? = not (entry && entry.enabled)
+    user = PhoenixKit.Users.Auth.get_user(socket.assigns.uuid)
 
-    cond do
-      enabled? and not accepted? ->
+    case entry && Roki.Nuvio.Settings.set_enabled(user, provider_id, enabled?) do
+      {:ok, _user} ->
+        catalog =
+          Roki.Nuvio.mark(
+            socket.assigns.nuvio.catalog,
+            Roki.Nuvio.Settings.enabled_ids(socket.assigns.uuid)
+          )
+
         {:noreply,
-         assign(
-           socket,
-           :nuvio_msg,
-           {:error, "Tick the acknowledgement before enabling a provider."}
-         )}
+         socket
+         |> update(:nuvio, &%{&1 | catalog: catalog})
+         |> assign(:nuvio_msg, nil)}
 
-      true ->
-        user = PhoenixKit.Users.Auth.get_user(socket.assigns.uuid)
-
-        case Roki.Nuvio.Settings.set_enabled(user, provider_id, enabled?, accepted?) do
-          {:ok, _user} ->
-            uuid = socket.assigns.uuid
-
-            socket =
-              socket
-              |> assign(:nuvio_msg, {:ok, "Saved #{provider_id}."})
-              |> start_async(:nuvio, fn -> Roki.Nuvio.catalog(uuid) end)
-
-            {:noreply, socket}
-
-          _ ->
-            {:noreply, assign(socket, :nuvio_msg, {:error, "Could not save that provider."})}
-        end
+      _ ->
+        {:noreply, assign(socket, :nuvio_msg, {:error, "Could not save that provider."})}
     end
   end
 
@@ -328,6 +314,27 @@ defmodule RokiWeb.SettingsLive do
        :nuvio,
        fn -> Roki.Nuvio.catalog(uuid) end
      )}
+  end
+
+  def handle_event("nuvio_reset", _params, socket) do
+    user = PhoenixKit.Users.Auth.get_user(socket.assigns.uuid)
+
+    case Roki.Nuvio.Settings.reset_providers(user) do
+      {:ok, _user} ->
+        catalog =
+          Roki.Nuvio.mark(
+            socket.assigns.nuvio.catalog,
+            Roki.Nuvio.Settings.enabled_ids(socket.assigns.uuid)
+          )
+
+        {:noreply,
+         socket
+         |> update(:nuvio, &%{&1 | catalog: catalog})
+         |> assign(:nuvio_msg, {:ok, "Back to the default providers."})}
+
+      _ ->
+        {:noreply, assign(socket, :nuvio_msg, {:error, "Could not reset the providers."})}
+    end
   end
 
   def handle_event("nuvio_refresh", _params, socket) do
@@ -741,6 +748,8 @@ defmodule RokiWeb.SettingsLive do
 
   # ── view ───────────────────────────────────────────────────────────
 
+  defp nuvio_on_count(catalog), do: Enum.count(catalog, & &1.enabled)
+
   @impl true
   def render(assigns) do
     by_group =
@@ -919,9 +928,21 @@ defmodule RokiWeb.SettingsLive do
         <section id="nuvio" class="space-y-3 scroll-mt-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-xl font-semibold">Nuvio</h2>
-            <button type="button" phx-click="nuvio_refresh" class="btn btn-xs rounded-full">
-              Refresh manifest
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <button
+                :if={@nuvio.catalog != []}
+                type="button"
+                phx-click="nuvio_reset"
+                data-confirm="Switch Nuvio back to the default providers? Your choices here are undone; each provider's options are kept."
+                disabled={Enum.all?(@nuvio.catalog, &(&1.enabled == &1.default))}
+                class="btn btn-xs rounded-full"
+              >
+                Reset to defaults
+              </button>
+              <button type="button" phx-click="nuvio_refresh" class="btn btn-xs rounded-full">
+                Refresh manifest
+              </button>
+            </div>
           </div>
           <p class="text-sm text-base-content/60">
             A third collection, discovered from the
@@ -941,11 +962,15 @@ defmodule RokiWeb.SettingsLive do
           <p :if={@nuvio.loading} class="flex items-center gap-2 text-sm text-base-content/60">
             <span class="loading loading-spinner loading-xs"></span> Reading the manifest…
           </p>
-          <p :if={not @nuvio.loading and @nuvio.catalog != []} class="text-sm text-base-content/60">
-            {length(@nuvio.catalog)} providers in the manifest. Enabled: {Enum.count(
-              @nuvio.catalog,
-              & &1.enabled
-            )}.
+          <p
+            :if={not @nuvio.loading and @nuvio.catalog != []}
+            id="nuvio-count"
+            class="text-sm text-base-content/60"
+          >
+            {length(@nuvio.catalog)} providers in the manifest. {nuvio_on_count(@nuvio.catalog)} on
+            — {if nuvio_on_count(@nuvio.catalog) > Roki.Nuvio.max_providers(),
+              do: "only the first #{Roki.Nuvio.max_providers()} are asked per search",
+              else: "up to #{Roki.Nuvio.max_providers()} are asked per search"}.
           </p>
           <button
             :if={not @nuvio.loading and @nuvio.catalog == []}
@@ -961,135 +986,135 @@ defmodule RokiWeb.SettingsLive do
           </p>
 
           <div class="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
-            <details
+            <div
               :for={entry <- @nuvio.catalog}
-              class="rounded-xl border border-base-300 bg-base-100/70 p-3"
+              id={"nuvio-#{entry.provider.id}"}
+              class={[
+                "flex items-start gap-3 rounded-xl border border-base-300 bg-base-100/70 p-3",
+                (entry.enabled and not entry.asked) && "opacity-60"
+              ]}
             >
-              <summary class="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
-                <span class="font-semibold">{entry.provider.name}</span>
-                <span class="text-xs text-base-content/50">{entry.provider.id}</span>
-                <span :if={entry.enabled} class="badge badge-success badge-sm">enabled</span>
-                <span :if={entry.provider.has_settings} class="badge badge-ghost badge-sm">options</span>
-                <span :if={entry.provider.limited} class="badge badge-warning badge-sm">limited</span>
-                <span class="text-xs text-base-content/40">
-                  {Enum.join(entry.provider.formats, " · ")}
-                </span>
-              </summary>
+              <details class="min-w-0 flex-1">
+                <summary class="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                  <span class="font-semibold">{entry.provider.name}</span>
+                  <span class="text-xs text-base-content/50">{entry.provider.id}</span>
+                  <span
+                    :if={entry.enabled and not entry.asked}
+                    class="badge badge-warning badge-sm"
+                    title={"Only the first #{Roki.Nuvio.max_providers()} providers that are on are asked; the newest you switched on come first, then the defaults."}
+                  >
+                    not asked
+                  </span>
+                  <span :if={entry.default} class="badge badge-primary badge-sm badge-outline">
+                    default
+                  </span>
+                  <span :if={entry.provider.has_settings} class="badge badge-ghost badge-sm">options</span>
+                  <span :if={entry.provider.limited} class="badge badge-warning badge-sm">limited</span>
+                  <span class="text-xs text-base-content/40">
+                    {Enum.join(entry.provider.formats, " · ")}
+                  </span>
+                </summary>
 
-              <p class="mt-2 text-sm text-base-content/60">{entry.provider.description}</p>
+                <p class="mt-2 text-sm text-base-content/60">{entry.provider.description}</p>
 
-              <form
-                phx-submit="nuvio_save_provider"
-                class="mt-3 flex flex-wrap items-center gap-3 text-sm"
-              >
-                <input type="hidden" name="nuvio[provider]" value={entry.provider.id} />
-                <label class="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    name="nuvio[enabled]"
-                    value="true"
-                    checked={entry.enabled}
-                    class="checkbox checkbox-sm"
-                  /> Enabled
-                </label>
-                <label class="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    name="nuvio[accepted]"
-                    value="true"
-                    checked={entry.accepted}
-                    class="checkbox checkbox-sm"
-                  /> I am authorised to use this provider for this content
-                </label>
-                <button class="btn btn-xs btn-primary">Save</button>
-                <button
-                  :if={entry.provider.has_settings}
-                  type="button"
-                  phx-click="nuvio_options"
-                  phx-value-provider={entry.provider.id}
-                  class="btn btn-xs btn-ghost"
-                >
-                  Options
-                </button>
-              </form>
+                <div :if={entry.provider.has_settings} class="mt-3 text-sm">
+                  <button
+                    type="button"
+                    phx-click="nuvio_options"
+                    phx-value-provider={entry.provider.id}
+                    class="btn btn-xs btn-ghost"
+                  >
+                    Options
+                  </button>
+                </div>
 
-              <%= if fields = @nuvio.schemas[entry.provider.id] do %>
-                <form
-                  phx-submit="nuvio_save_options"
-                  class="mt-3 space-y-2 border-t border-base-300 pt-3"
-                >
-                  <input type="hidden" name="provider" value={entry.provider.id} />
-                  <p :if={fields == []} class="text-xs text-base-content/50">
-                    This provider has no options.
-                  </p>
-                  <%= for field <- fields do %>
-                    <div
-                      :if={field.type == :header}
-                      class="pt-1 text-xs font-semibold uppercase tracking-wide text-base-content/50"
-                    >
-                      {field.label}
-                    </div>
-                    <label :if={field.type != :header} class="block space-y-1 text-sm">
-                      <span class="font-medium">{field.label}</span>
-                      <span :if={field.description} class="block text-xs text-base-content/50">
-                        {field.description}
-                      </span>
-                      <%= case field.type do %>
-                        <% :select -> %>
-                          <select
-                            name={"options[#{field.key}]"}
-                            class="select select-bordered select-sm w-full"
-                          >
-                            <option
-                              :for={option <- field.options}
-                              value={option.value}
-                              selected={
-                                option.value ==
-                                  (Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
-                                     field.default)
-                              }
+                <%= if fields = @nuvio.schemas[entry.provider.id] do %>
+                  <form
+                    phx-submit="nuvio_save_options"
+                    class="mt-3 space-y-2 border-t border-base-300 pt-3"
+                  >
+                    <input type="hidden" name="provider" value={entry.provider.id} />
+                    <p :if={fields == []} class="text-xs text-base-content/50">
+                      This provider has no options.
+                    </p>
+                    <%= for field <- fields do %>
+                      <div
+                        :if={field.type == :header}
+                        class="pt-1 text-xs font-semibold uppercase tracking-wide text-base-content/50"
+                      >
+                        {field.label}
+                      </div>
+                      <label :if={field.type != :header} class="block space-y-1 text-sm">
+                        <span class="font-medium">{field.label}</span>
+                        <span :if={field.description} class="block text-xs text-base-content/50">
+                          {field.description}
+                        </span>
+                        <%= case field.type do %>
+                          <% :select -> %>
+                            <select
+                              name={"options[#{field.key}]"}
+                              class="select select-bordered select-sm w-full"
                             >
-                              {option.label}
-                            </option>
-                          </select>
-                        <% :toggle -> %>
-                          <input
-                            type="checkbox"
-                            name={"options[#{field.key}]"}
-                            value="true"
-                            checked={
-                              to_string(
-                                Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
-                                  field.default
-                              ) in ["true", "1"]
-                            }
-                            class="toggle toggle-sm"
-                          />
-                        <% _ -> %>
-                          <input
-                            type={if field.secret, do: "password", else: "text"}
-                            name={"options[#{field.key}]"}
-                            value={
-                              if field.secret,
-                                do: "",
-                                else:
-                                  to_string(
-                                    Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
-                                      field.default || ""
-                                  )
-                            }
-                            placeholder={field.placeholder}
-                            autocomplete="off"
-                            spellcheck="false"
-                            class="input input-bordered input-sm w-full"
-                          />
-                      <% end %>
-                    </label>
-                  <% end %>
-                  <button class="btn btn-xs btn-primary">Save options</button>
-                </form>
-              <% end %>
-            </details>
+                              <option
+                                :for={option <- field.options}
+                                value={option.value}
+                                selected={
+                                  option.value ==
+                                    (Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
+                                       field.default)
+                                }
+                              >
+                                {option.label}
+                              </option>
+                            </select>
+                          <% :toggle -> %>
+                            <input
+                              type="checkbox"
+                              name={"options[#{field.key}]"}
+                              value="true"
+                              checked={
+                                to_string(
+                                  Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
+                                    field.default
+                                ) in ["true", "1"]
+                              }
+                              class="toggle toggle-sm"
+                            />
+                          <% _ -> %>
+                            <input
+                              type={if field.secret, do: "password", else: "text"}
+                              name={"options[#{field.key}]"}
+                              value={
+                                if field.secret,
+                                  do: "",
+                                  else:
+                                    to_string(
+                                      Roki.Nuvio.Settings.options(@uuid, entry.provider.id)[field.key] ||
+                                        field.default || ""
+                                    )
+                              }
+                              placeholder={field.placeholder}
+                              autocomplete="off"
+                              spellcheck="false"
+                              class="input input-bordered input-sm w-full"
+                            />
+                        <% end %>
+                      </label>
+                    <% end %>
+                    <button class="btn btn-xs btn-primary">Save options</button>
+                  </form>
+                <% end %>
+              </details>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={entry.enabled}
+                phx-click="nuvio_toggle"
+                phx-value-provider={entry.provider.id}
+                aria-label={"Use #{entry.provider.name}"}
+                class="toggle toggle-success toggle-sm mt-0.5 shrink-0"
+              />
+            </div>
           </div>
         </section>
 

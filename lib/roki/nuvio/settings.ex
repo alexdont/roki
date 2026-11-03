@@ -4,15 +4,18 @@ defmodule Roki.Nuvio.Settings do
   PenguPlay link is kept.
 
       %{
-        "enabled"  => ["vidlink", "purstream"],
-        "accepted" => %{"vidlink" => true},
+        "enabled"  => ["purstream"],            # switched on by the account
+        "disabled" => ["movix"],                # defaults the account switched off
         "options"  => %{"vidlink" => %{"someOption" => "value"}}
       }
 
-  `accepted` is the account's explicit statement that it will use a provider only for
-  media it is authorised to access. A provider without it is never searched, even when it
-  is enabled in the source list. Options are provider-defined (`onSettings`), read inside
-  the sandbox and never from the manifest's claims.
+  Every account starts with `defaults/0` on, so Nuvio plays without a visit to Settings;
+  `enabled_ids/1` is the account's own choices first, then the defaults it has not switched
+  off. Defaults are kept apart from `enabled` so a default added later reaches every account.
+  Options are
+  provider-defined (`onSettings`), read inside the sandbox and never from the manifest's
+  claims. (An older `accepted` map, from when each provider needed a separate
+  acknowledgement, is dropped on the next save.)
   """
 
   alias Roki.Nuvio.{Provider, Registry, Sandbox}
@@ -20,6 +23,16 @@ defmodule Roki.Nuvio.Settings do
 
   @field "nuvio"
   @ttl 15
+
+  # On for every account until it switches one off. Picked by a live probe on 2026-11-02
+  # (The Matrix, Oppenheimer, Breaking Bad 1x1, The Last of Us 2x1: every title found, the
+  # streams answered with real media, under ten seconds): playimdb (English original audio,
+  # HLS), vidrock (HLS, two servers), movix (dual-audio HLS), moviebox (MP4 in several audio
+  # languages, Russian among them). See dev_docs/nuvio-compatibility.md.
+  @defaults ~w(playimdb vidrock movix moviebox)
+
+  @doc "The providers every account has on unless it switched them off."
+  def defaults, do: @defaults
 
   @doc "The account's Nuvio settings, defaults filled in."
   def get(uuid) when is_binary(uuid) do
@@ -33,20 +46,11 @@ defmodule Roki.Nuvio.Settings do
 
   def get(_), do: normalize(nil)
 
-  defp normalize(nil), do: %{"enabled" => [], "accepted" => %{}, "options" => %{}}
+  defp normalize(nil), do: %{"enabled" => [], "disabled" => [], "options" => %{}}
 
   defp normalize(%{} = raw) do
-    enabled =
-      raw["enabled"]
-      |> List.wrap()
-      |> Enum.filter(&(is_binary(&1) and Regex.match?(~r/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, &1)))
-      |> Enum.uniq()
-
-    accepted =
-      case raw["accepted"] do
-        %{} = map -> Map.new(map, fn {k, v} -> {k, v == true} end)
-        _ -> %{}
-      end
+    enabled = ids(raw["enabled"])
+    disabled = ids(raw["disabled"])
 
     options =
       case raw["options"] do
@@ -57,10 +61,17 @@ defmodule Roki.Nuvio.Settings do
           %{}
       end
 
-    %{"enabled" => enabled, "accepted" => accepted, "options" => options}
+    %{"enabled" => enabled, "disabled" => disabled, "options" => options}
   end
 
   defp normalize(_), do: normalize(nil)
+
+  defp ids(list) do
+    list
+    |> List.wrap()
+    |> Enum.filter(&(is_binary(&1) and Regex.match?(~r/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, &1)))
+    |> Enum.uniq()
+  end
 
   defp stringify(map) do
     map
@@ -74,15 +85,18 @@ defmodule Roki.Nuvio.Settings do
     |> Map.new()
   end
 
-  @doc "The enabled provider ids that the account has also acknowledged."
-  def enabled_ids(uuid) do
-    settings = get(uuid)
+  @doc """
+  The provider ids the account has on: its own, most recently enabled first, then the
+  defaults it has not switched off.
+  """
+  def enabled_ids(uuid), do: active(get(uuid))
 
-    settings["enabled"]
-    |> Enum.filter(&(settings["accepted"][&1] == true))
+  @doc false
+  def active(settings) do
+    Enum.uniq(settings["enabled"] ++ (@defaults -- settings["disabled"]))
   end
 
-  @doc "Whether at least one provider is enabled and acknowledged."
+  @doc "Whether at least one provider is enabled."
   def configured?(uuid) when is_binary(uuid) do
     case TTLCache.fetch({:nuvio_configured, uuid}, @ttl, fn ->
            {:ok, enabled_ids(uuid) != []}
@@ -112,17 +126,33 @@ defmodule Roki.Nuvio.Settings do
     end
   end
 
-  @doc "Turn one provider on or off, keeping its acknowledgement and options."
-  def set_enabled(user, provider_id, enabled?, accepted?) do
+  @doc "Turn one provider on or off, keeping its options."
+  def set_enabled(user, provider_id, enabled?) do
     settings = get(user.uuid)
 
-    enabled =
-      if enabled?,
-        do: Enum.uniq([provider_id | settings["enabled"]]),
-        else: List.delete(settings["enabled"], provider_id)
+    {enabled, disabled} =
+      cond do
+        enabled? and provider_id in @defaults ->
+          {settings["enabled"], List.delete(settings["disabled"], provider_id)}
 
-    accepted = Map.put(settings["accepted"], provider_id, accepted? == true)
-    save(user, %{settings | "enabled" => enabled, "accepted" => accepted})
+        enabled? ->
+          {Enum.uniq([provider_id | settings["enabled"]]), settings["disabled"]}
+
+        provider_id in @defaults ->
+          {List.delete(settings["enabled"], provider_id),
+           Enum.uniq([provider_id | settings["disabled"]])}
+
+        true ->
+          {List.delete(settings["enabled"], provider_id), settings["disabled"]}
+      end
+
+    save(user, %{settings | "enabled" => enabled, "disabled" => disabled})
+  end
+
+  @doc "Back to `defaults/0` and nothing else; each provider's options are kept."
+  def reset_providers(user) do
+    settings = get(user.uuid)
+    save(user, %{settings | "enabled" => [], "disabled" => []})
   end
 
   @doc "Set one provider's options from a form map."
@@ -219,7 +249,7 @@ defmodule Roki.Nuvio.Settings do
   defp text(v) when is_binary(v), do: v
   defp text(_), do: nil
 
-  @doc "The acknowledgement every provider requires in the interface."
+  @doc "The notice shown above the provider list."
   def authorization_notice do
     "Roki does not grant access to anything. Enable a provider only for media you are " <>
       "authorised to watch, and only where using that provider is lawful for you. Roki does " <>
