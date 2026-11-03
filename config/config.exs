@@ -255,7 +255,10 @@ config :roki, Oban,
        {"0 * * * *", PhoenixKit.Notifications.DigestWorker, args: %{cadence: "hourly"}},
        {"0 */12 * * *", PhoenixKit.Notifications.DigestWorker, args: %{cadence: "12h"}},
        {"0 6 * * *", PhoenixKit.Notifications.DigestWorker, args: %{cadence: "daily"}},
-       {"0 6 * * 1", PhoenixKit.Notifications.DigestWorker, args: %{cadence: "weekly"}}
+       {"0 6 * * 1", PhoenixKit.Notifications.DigestWorker, args: %{cadence: "weekly"}},
+       {"35 4 * * *", PhoenixKit.API.Idempotency.PruneWorker},
+       {"*/5 * * * *", PhoenixKit.API.Confirm.ExpiryWorker},
+       {"40 4 * * *", PhoenixKit.API.Confirm.PruneWorker}
      ]}
   ]
 

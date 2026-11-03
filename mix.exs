@@ -42,10 +42,10 @@ defmodule Roki.MixProject do
   defp deps do
     [
       {:finch, "~> 0.18"},
-      # Pinned at 2.63 rather than 2.0: the manga reader's viewer packages below want
-      # fresco 0.14 and etcher 0.22, and PhoenixKit itself depends on both — 2.54 holds them
-      # at 0.13 and 0.18, so the two sets cannot resolve together below 2.63.
-      {:phoenix_kit, "~> 2.63"},
+      # Pinned at 2.65 rather than 2.0: PhoenixKit depends on fresco and etcher itself and pins
+      # them tightly (2.63 held fresco at 0.14; 2.64+ allows the 0.15 the reader uses). 2.65 is
+      # also the required stop before 3.0, which only upgrades a database already at V225.
+      {:phoenix_kit, "~> 2.65"},
       {:phoenix_kit_user_connections, "~> 0.1"},
       {:phoenix_kit_comments, "~> 0.1"},
       # Terminal cinema as a library: per-user watchlist, stats, settings, playback.
@@ -69,9 +69,9 @@ defmodule Roki.MixProject do
       # dev_docs/manga-migration-plan.md.
       {:manga, "~> 0.1.4"},
       {:manhwa, "~> 0.1.9"},
-      {:fresco, "~> 0.14.0"},
+      {:fresco, "~> 0.15.0"},
       {:fresco_strip, "~> 0.3.0"},
-      {:etcher, "~> 0.22.0"},
+      {:etcher, "~> 0.23.0"},
       {:chapter, "~> 0.1"},
       {:dims, "~> 0.1"},
       # The reader's own site scrapers come across with it: they parse HTML (floki) and need
