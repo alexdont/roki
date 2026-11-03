@@ -54,170 +54,11 @@ defmodule RokiWeb.MangaController do
     user && (user.custom_fields || %{})["reader_ui_v2"] != false
   end
 
-  def home(conn, params) do
-    # XHR fetches to "/manga" are the home JSON API — never redirect
-    # those, only full page loads.
-    if reader_v2?(conn.assigns[:phoenix_kit_current_user]) &&
-         get_req_header(conn, "x-requested-with") != ["XMLHttpRequest"] do
-      qs = if conn.query_string != "", do: "?" <> conn.query_string, else: ""
-      redirect(conn, to: "/manga/home2" <> qs)
-    else
-      do_home(conn, params, :home)
-    end
-  end
-
-  # Parallel test route for the redesigned home page (cinematic resume
-  # hero, cover-dominant cards, FLIP grid animations). Same data, same
-  # JSON branch — only the template differs.
-  def home2(conn, params), do: do_home(conn, params, :home2)
-
-  defp do_home(conn, params, template) do
-    user = conn.assigns[:phoenix_kit_current_user]
-    categories = Library.list_categories(user.uuid)
-
-    # Two URL params control the saved-manga set, mirroring the JS
-    # chip cycle: `?category=N` filters TO that category (active),
-    # `?exclude=N` filters everything BUT that category (excluded).
-    # Active wins if both are sent — the click flow never produces
-    # that combination, but a hand-crafted URL would.
-    {filter_opt, active_category, excluded_category} =
-      case params["category"] do
-        id when is_binary(id) and id != "" ->
-          case Integer.parse(id) do
-            {int_id, ""} -> {[category_id: int_id], int_id, nil}
-            _ -> {[], nil, nil}
-          end
-
-        _ ->
-          case params["exclude"] do
-            id when is_binary(id) and id != "" ->
-              case Integer.parse(id) do
-                {int_id, ""} -> {[exclude_category_id: int_id], nil, int_id}
-                _ -> {[], nil, nil}
-              end
-
-            _ ->
-              {[], nil, nil}
-          end
-      end
-
-    saved_manga = Library.list_saved_manga(user.uuid, filter_opt)
-
-    case get_req_header(conn, "x-requested-with") do
-      ["XMLHttpRequest"] ->
-        comment_counts = Library.count_annotations_grouped(user.uuid)
-        pairs = Enum.map(saved_manga, &{&1.source, &1.slug})
-        cover_paths = Library.list_cover_file_uuids(pairs)
-        publication_statuses = Library.list_publication_statuses(pairs)
-
-        manga_json =
-          Enum.map(saved_manga, fn m ->
-            %{
-              source: m.source,
-              slug: m.slug,
-              title: m.title,
-              last_chapter: m.last_chapter,
-              max_chapter: m.max_chapter,
-              total_chapters: m.total_chapters,
-              last_chapter_number: m.last_chapter_number,
-              cover_url: MangaHTML.cover_image_src(m, cover_paths),
-              source_label: Roki.Manga.Sources.label(m.source),
-              comment_count: Map.get(comment_counts, {m.source, m.slug}, 0),
-              inserted_at: m.inserted_at && NaiveDateTime.to_iso8601(m.inserted_at),
-              updated_at: m.updated_at && NaiveDateTime.to_iso8601(m.updated_at),
-              newest_chapter_at: m.newest_chapter_at && DateTime.to_iso8601(m.newest_chapter_at),
-              completed: m.completed || false,
-              # "paged" or "scroll" — mirrors `MangaHTML.tierlist_kind/1`
-              # so the home page's Manga/Manhwa filter chips can route
-              # by the user's preferred reading mode for this title.
-              kind: MangaHTML.tierlist_kind(m),
-              publication_status: MangaHTML.publication_status(m, publication_statuses),
-              # Drives the `.btn-progress` fill on the Continue button —
-              # nil when the data can't form a percent, integer 0-100
-              # otherwise.
-              percent_read: Library.chapter_progress_percent(m),
-              # Drives the `.chapter-progress` fill on the "Ch. N"
-              # badge — how far into the current chapter the user has
-              # read.
-              chapter_percent:
-                MangaHTML.chapter_read_percent(
-                  m.last_page,
-                  m.last_page_fraction,
-                  m.last_chapter_total_pages
-                )
-            }
-          end)
-
-        json(conn, %{ok: true, manga: manga_json})
-
-      _ ->
-        if saved_manga == [] && active_category == nil && categories == [] do
-          redirect(conn, to: ~p"/manga/explore")
-        else
-          # Chip count badges always reflect the FULL library, even when
-          # the grid itself is category-filtered by the URL params.
-          all_manga =
-            if filter_opt == [], do: saved_manga, else: Library.list_saved_manga(user.uuid)
-
-          chip_counts = MangaHTML.chip_counts(all_manga)
-          category_counts = Library.count_manga_per_category(user.uuid)
-
-          resume_manga =
-            if active_category do
-              Enum.find(all_manga, &(&1.last_chapter && !&1.completed))
-            else
-              Enum.find(saved_manga, &(&1.last_chapter && !&1.completed))
-            end
-
-          comment_counts = Library.count_annotations_grouped(user.uuid)
-          pairs = Enum.map(saved_manga, &{&1.source, &1.slug})
-
-          pairs =
-            if resume_manga &&
-                 !Enum.any?(pairs, fn {s, sl} ->
-                   s == resume_manga.source && sl == resume_manga.slug
-                 end) do
-              [{resume_manga.source, resume_manga.slug} | pairs]
-            else
-              pairs
-            end
-
-          cover_paths = Library.list_cover_file_uuids(pairs)
-          publication_statuses = Library.list_publication_statuses(pairs)
-
-          referer = get_req_header(conn, "referer") |> List.first()
-          referer_host = if referer, do: URI.parse(referer).host
-          is_internal = referer_host == conn.host
-          custom = user.custom_fields || %{}
-          auto_resume = !is_internal && custom["auto_resume"] == true
-          auto_resume_timer = custom["auto_resume_timer"] || 5
-
-          auto_resume_art_url =
-            case custom["auto_resume_art"] do
-              uuid when is_binary(uuid) and uuid != "" ->
-                PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "original")
-
-              _ ->
-                nil
-            end
-
-          render(conn, template,
-            saved_manga: saved_manga,
-            resume_manga: resume_manga,
-            comment_counts: comment_counts,
-            cover_paths: cover_paths,
-            publication_statuses: publication_statuses,
-            categories: categories,
-            active_category: active_category,
-            excluded_category: excluded_category,
-            chip_counts: chip_counts,
-            category_counts: category_counts,
-            auto_resume: auto_resume,
-            auto_resume_timer: auto_resume_timer,
-            auto_resume_art_url: auto_resume_art_url
-          )
-        end
-    end
+  # The saved-manga page was `home/2` (and its redesign `home2/2`) here; it is
+  # `RokiWeb.MangaShelfLive` at /manga now. Its test address keeps working.
+  def home2(conn, _params) do
+    qs = if conn.query_string != "", do: "?" <> conn.query_string, else: ""
+    redirect(conn, to: "/manga" <> qs)
   end
 
   def history(conn, params) do
@@ -1546,17 +1387,13 @@ defmodule RokiWeb.MangaController do
   end
 
   @doc """
-  Bulk-refresh every saved manga the user has caught up to. Each
-  title goes through the same per-manga scrape + persist + notify
-  path as the explicit refresh button, so any newly-discovered
-  chapters fire `notify_new_chapters` and surface in the bell
-  exactly the way a single refresh would. Errors on individual
-  titles are counted but never abort the loop — one dead source
-  shouldn't stall the rest.
+  Refreshes the chapter list of every caught-up title the account has saved, one after another
+  (each a scrape of its source, through the same scrape + persist + notify path as a single
+  refresh, so new chapters reach the bell), notifying for new chapters as a single refresh does.
+  A title that fails is counted and the rest carry on. Returns
+  `%{total, refreshed, with_new, errors, new_chapters}`. Used by the saved-manga page's Sync.
   """
-  def sync_caught_up(conn, _params) do
-    user = conn.assigns[:phoenix_kit_current_user]
-
+  def sync_caught_up(user) do
     manga_list = Library.list_caught_up_saved_manga(user.uuid)
 
     stats =
@@ -1578,18 +1415,17 @@ defmodule RokiWeb.MangaController do
         end
       end)
 
-    json(conn, %{
-      ok: true,
+    %{
       total: length(manga_list),
       refreshed: stats.refreshed,
       with_new: stats.with_new,
       errors: stats.errors,
       new_chapters: stats.new_total
-    })
+    }
   end
 
   # Per-manga refresh path shared by the single-manga `refresh/2`
-  # endpoint and the bulk `sync_caught_up/2`. Scrapes the source,
+  # endpoint and the bulk `sync_caught_up/1`. Scrapes the source,
   # upserts the metadata, updates the user's saved row, and fires
   # `notify_new_chapters` for any positive delta. Returns
   # `{:ok, %{title, delta}}` on success, `{:error, reason}` otherwise.

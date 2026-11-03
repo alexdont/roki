@@ -1046,3 +1046,18 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 @media (prefers-reduced-motion: reduce) {
   [data-mood].is-active .mood-backdrop { animation: none; }
 }
+
+/* The saved-manga shelf (MangaShelfLive): covers per row chosen per device class (--cols-m below
+   1024px, --cols-d above), the gap narrowing as the row fills so seven across is not mostly gutter. */
+.manga-shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols-m, 2), minmax(0, 1fr));
+  gap: calc(1.3rem - 0.13rem * var(--cols-m, 2));
+}
+@media (min-width: 1024px) {
+  .manga-shelf-grid {
+    grid-template-columns: repeat(var(--cols-d, 5), minmax(0, 1fr));
+    gap: calc(1.3rem - 0.13rem * var(--cols-d, 5));
+  }
+}
+

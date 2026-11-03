@@ -1,5 +1,7 @@
 <div class="max-w-6xl mx-auto px-4 py-8">
-  <h2 class="text-lg font-semibold mb-4">Search</h2>
+  <RokiWeb.Layouts.manga_title back="/manga/explore" back_label="Explore">
+    Search
+  </RokiWeb.Layouts.manga_title>
 
   <form method="get" action="/manga/search" class="flex gap-2 mb-6">
     <%= if @mode == :single do %>

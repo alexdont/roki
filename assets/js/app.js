@@ -153,6 +153,24 @@ const storedGrid = () => {
   try { return localStorage.getItem("roki:grid") } catch { return null }
 }
 
+// The saved-manga page's choices (`MangaShelfLive`), kept on this device under the keys the page
+// has always used: the sort, the read/unread filter, the series status, the chip last chosen,
+// the built-in chips' order and visibility (edited on /manga/categories), and covers per row
+// on a phone and on a wide screen. Sent on connect so the first live render is already right.
+const storedMangaPrefs = () => {
+  const get = (k) => { try { return localStorage.getItem(k) } catch { return null } }
+  const json = (k) => { try { return JSON.parse(get(k) || "null") } catch { return null } }
+  return {
+    sort: get("manga_sort"),
+    filter: get("manga_filter"),
+    status: get("manga_publication_status"),
+    chip: json("manga_chip_state"),
+    chips: json("reader:builtin_chips"),
+    cols_m: get("manga_grid_cols_mobile"),
+    cols_d: get("manga_grid_cols_desktop"),
+  }
+}
+
 // What this device decodes on its own, so the server can leave such video as it is instead of
 // re-encoding it. Asked of the media engine, not guessed from the browser's name: Chrome says
 // yes to HEVC only on a machine with a hardware decoder.
@@ -212,10 +230,17 @@ const liveSocket = new LiveSocket("/live", Socket, {
     platform,
     player: storedPlayer() || defaultPlayer(),
     grid: storedGrid(),
+    manga: storedMangaPrefs(),
     place: placeParam(),
     caps: deviceCaps(),
   }),
   hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, ShelfRow, GridCards, EuDate, TrailerSheet, HeroTrailer},
+})
+
+// Whether this page was reached by moving around inside the site without a reload: the manga
+// shelf's auto-resume only acts on a page opened from outside (a bookmark, the home screen).
+window.addEventListener("phx:page-loading-start", (e) => {
+  if (e.detail && e.detail.kind === "redirect") window.__rokiLiveNavigated = true
 })
 
 // A panel that appears below the fold on a phone (the player hand-off) scrolls itself into view.

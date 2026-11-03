@@ -485,24 +485,13 @@ defmodule RokiWeb.Layouts do
 
   The chapter reader itself is deliberately NOT wrapped: it is a full-screen canvas.
   """
-  # The manga pages' own navigation. The header above carries what spans the whole site
-  # (Movies, Shows, Anime, Manga, search, notifications, the account menu), so this row
-  # carries only what exists for manga and nothing else — which is why these pages no
-  # longer need a menu of their own. Settings, Stats, History, Comments, Tierlist and Grid are
-  # missing on purpose: they are this site's own pages now, under /:username, and they are in
-  # the account menu above.
-  @manga_nav [
-    {"Explore", "/manga/explore"},
-    {"Categories", "/manga/categories"}
-  ]
-
   def manga(assigns) do
     path =
       (assigns[:conn] && assigns.conn.request_path) || assigns[:current_path] || "/manga"
 
     # Map.merge, not assign/2: a controller renders this layout with a plain assigns map,
     # which Phoenix.Component.assign/2 refuses.
-    assigns = Map.merge(assigns, %{path: path, nav: @manga_nav})
+    assigns = Map.merge(assigns, %{path: path})
 
     ~H"""
     <.app
@@ -513,17 +502,34 @@ defmodule RokiWeb.Layouts do
       current_path={@path}
       flush
     >
-      <nav data-no-reload class="mx-auto flex max-w-6xl flex-wrap gap-2 px-4 pt-6">
-        <a
-          :for={{label, href} <- @nav}
-          href={href}
-          class={["btn btn-sm", (@path == href && "btn-primary") || "btn-ghost"]}
-        >
-          {label}
-        </a>
-      </nav>
       {@inner_content}
     </.app>
+    """
+  end
+
+  @doc """
+  A page title on the manga pages with a way back beside it (`← Saved`, `← Explore`). These pages
+  used to share a row of links under the header; it took a line of the screen on every page, so
+  each page now carries only the way back that makes sense from it.
+  """
+  attr :back, :string, required: true, doc: "where the arrow leads"
+  attr :back_label, :string, required: true
+  attr :class, :any, default: "mb-4"
+  slot :inner_block, required: true
+
+  def manga_title(assigns) do
+    ~H"""
+    <div class={["flex items-center gap-2", @class]}>
+      <a
+        href={@back}
+        class="btn btn-ghost btn-sm -ml-2 gap-1 rounded-full px-2 text-base-content/60"
+        aria-label={"Back to #{@back_label}"}
+      >
+        <.icon name="hero-arrow-left" class="h-4 w-4" />
+        <span class="hidden sm:inline">{@back_label}</span>
+      </a>
+      <h2 class="text-lg font-semibold">{render_slot(@inner_block)}</h2>
+    </div>
     """
   end
 

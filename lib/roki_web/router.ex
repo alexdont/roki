@@ -59,9 +59,8 @@ defmodule RokiWeb.Router do
   scope "/manga", RokiWeb do
     pipe_through [:browser, :require_auth]
 
-    get "/", MangaController, :home
-    # Parallel test route for the redesigned home (hero + cover-dominant
-    # cards + animated reordering). Swap into "/" once it's proven out.
+    # The saved-manga page is `MangaShelfLive` at /manga now (the :site live session below);
+    # its test address from before still leads there.
     get "/home2", MangaController, :home2
     # Persisted old/new UI switch — when on, "/" and "/..."
     # redirect to their v2 counterparts.
@@ -99,7 +98,6 @@ defmodule RokiWeb.Router do
     post "/trackers/mal/disconnect", TrackerController, :disconnect
     get "/kotatsu/:name/manga", KotatsuController, :manga
     get "/kotatsu/:name/read", KotatsuController, :read
-    post "/sync_caught_up", MangaController, :sync_caught_up
     post "/categories", MangaController, :create_category
     put "/categories/reorder", MangaController, :reorder_categories
     put "/categories/:id", MangaController, :rename_category
@@ -321,6 +319,8 @@ defmodule RokiWeb.Router do
       live "/study", StudyLive, :index
       live "/lists", ListsLive, :index
       live "/lists/:slug", ListLive, :show
+      # The saved manga: the account's own shelf of what it reads (signed in only).
+      live "/manga", MangaShelfLive, :index
       live "/:username/home", UserHomeLive, :index
       live "/:username/stats", StatsLive, :index
       live "/:username/calendar", CalendarLive, :index
