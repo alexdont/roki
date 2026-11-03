@@ -1051,16 +1051,27 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
    `--depth` on the carousel (0 → 1 over its whole height). Registered, so they can glide. */
 @property --tuck { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --depth { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --rest { syntax: "<number>"; inherits: true; initial-value: 1; }
 
 /* The row of moods does not travel: it sinks a few pixels and dissolves from its bottom edge up,
-   blurring as it goes. A short glide between scroll steps (a mouse wheel moves in notches). */
+   blurring as it goes. A short glide between scroll steps (a mouse wheel moves in notches).
+   `--rest`: with the pointer off the carousel the row waits faint and blurred, only a hint that it
+   is there; over the carousel (or a key inside it) it comes into focus, and blurs out again on
+   leaving. A device that cannot hover always has it in focus. The scroll's dissolve adds to either. */
 .mood-tabs {
+  --rest: 1;
   --edge: calc(var(--tuck, 0) * 140% - 40%);
   transform: translate3d(0, calc(var(--tuck, 0) * 0.5rem), 0);
-  filter: blur(calc(var(--tuck, 0) * 5px));
+  filter: blur(calc(var(--tuck, 0) * 5px + var(--rest) * 3.5px));
+  opacity: calc(1 - var(--rest) * 0.55);
   -webkit-mask-image: linear-gradient(to top, transparent var(--edge), #000 calc(var(--edge) + 40%));
   mask-image: linear-gradient(to top, transparent var(--edge), #000 calc(var(--edge) + 40%));
-  transition: --tuck 0.2s ease-out;
+  transition: --tuck 0.2s ease-out, --rest 0.5s ease;
+}
+#mood-picker:hover .mood-tabs,
+#mood-picker:focus-within .mood-tabs { --rest: 0; }
+@media (hover: none) {
+  .mood-tabs { --rest: 0; }
 }
 
 /* Depth as the page scrolls: the posters fall behind (they drift down against the scroll, so they
@@ -1087,6 +1098,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 
 @media (prefers-reduced-motion: reduce) {
   .mood-tabs { transform: none; filter: none; transition: none; }
+  .mood-tabs { opacity: calc(1 - var(--rest) * 0.55); }
   .mood-posters, .mood-words { transform: none; }
   .mood-fan > a { transition: none; }
 }
