@@ -496,8 +496,18 @@ html.study-open .site-header { display: none; }
 /* The player's controls are showing (the pointer moved, or it is paused): the lines step up
    above the timeline, and drop to the bottom edge again when they hide. */
 .study-stage[data-active] .study-overlay { bottom: 3.4rem; }
-/* A seek that has to read from a new place: a spinner in the middle of the picture while it does. */
-.study-stage[data-seeking="true"]::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2.6rem; height: 2.6rem; margin: -1.3rem 0 0 -1.3rem; border: 3px solid rgb(255 255 255 / 0.25); border-top-color: #fff; border-radius: 50%; animation: study-spin 0.8s linear infinite; pointer-events: none; z-index: 4; }
+/* What the player is waiting for (loading.js): from Play to the first frame, a conversion catching
+   up, a read from a new place, a stall. A spinner, a line, what has arrived, and a bar when how
+   much is left is known. */
+.study-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 0.55rem; width: min(22rem, calc(100% - 2rem)); padding: 1rem 1.1rem; border-radius: 0.9rem; background: rgb(15 15 15 / 0.72); color: #fff; text-align: center; backdrop-filter: blur(6px); pointer-events: none; }
+.study-loading[hidden] { display: none; }
+.study-loading-spin { width: 2.2rem; height: 2.2rem; border: 3px solid rgb(255 255 255 / 0.25); border-top-color: #fff; border-radius: 50%; animation: study-spin 0.8s linear infinite; }
+.study-loading-text { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.9rem; line-height: 1.3; }
+.study-loading-text > span { font-size: 0.78rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.study-loading-text > span:empty { display: none; }
+.study-loading-bar { width: 100%; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.2); overflow: hidden; }
+.study-loading-bar[hidden] { display: none; }
+.study-loading-bar > i { display: block; height: 100%; width: 0; background: var(--color-primary); transition: width 0.25s linear; }
 @keyframes study-spin { to { transform: rotate(360deg); } }
 .study-line {
   max-width: 100%;
@@ -985,6 +995,11 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-timeline .study-seek::-webkit-slider-thumb, .study-bar2 .study-volume::-webkit-slider-thumb { width: 0; height: 0; background: transparent; border: 0; box-shadow: none; }
 .study-timeline .study-seek::-moz-range-thumb, .study-bar2 .study-volume::-moz-range-thumb { width: 0; height: 0; background: transparent; border: 0; box-shadow: none; }
 
+/* What is loaded ahead of where you are (`--b`, set by transport.js) is a lighter band between the
+   played part and what is still to load. A stop before the one ahead of it is moved up to it, so
+   nothing shows when `--b` is behind `--p`. */
+.study-timeline .study-seek { background: linear-gradient(90deg, var(--color-primary) var(--p, 0%), rgb(255 255 255 / 0.45) var(--p, 0%), rgb(255 255 255 / 0.45) var(--b, 0%), rgb(255 255 255 / 0.2) var(--b, 0%)); }
+
 /* The bar runs nearly edge to edge: a small margin, not a wide one. */
 .study-controls { padding-left: 0.4rem; padding-right: 0.4rem; }
 
@@ -1020,31 +1035,60 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .study-timeline [data-role=cur] { left: 0; }
 .study-timeline [data-role=dur] { right: 0; left: auto; }
 
-/* The mood picker on the home page and the mood pages: the name of a mood in its own typeface,
-   lit from behind in the mood's colour; the backdrop of the shown slide drifting slowly. */
-.mood-title {
-  color: #fff;
-  text-shadow:
-    0 2px 2px rgb(0 0 0 / 0.45),
-    0 0 28px var(--mood, transparent),
-    0 0 72px color-mix(in oklab, var(--mood, transparent) 55%, transparent);
+/* A poster's watched marks (PosterComponents.poster): the page often draws the posters first and
+   learns what you have watched a moment later. The grey and the dimming then ease in instead of
+   snapping, and the badges that arrive with them (saved, part watched) fade in. The picture's own
+   hover zoom keeps its quick pace. */
+.poster-card { transition: opacity 0.7s ease; }
+.poster-card img { transition-property: transform, scale, filter; transition-duration: 0.15s, 0.15s, 0.7s; transition-timing-function: ease; }
+.poster-card [data-saved-mark], .poster-card [data-partial-mark] { transition: opacity 0.5s ease; }
+@starting-style {
+  .poster-card [data-saved-mark], .poster-card [data-partial-mark] { opacity: 0; }
 }
 
-@keyframes mood-drift {
-  from { transform: scale(1.04) translate3d(0, 0, 0); }
-  to { transform: scale(1.14) translate3d(-1.5%, -1%, 0); }
+/* The home page's mood carousel (FeaturedLive.mood_picker, MoodCarousel hook). Two numbers the hook
+   keeps from the scroll: `--tuck` on the row of moods (0 → 1 over about half the carousel) and
+   `--depth` on the carousel (0 → 1 over its whole height). Registered, so they can glide. */
+@property --tuck { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --depth { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+/* The row of moods does not travel: it sinks a few pixels and dissolves from its bottom edge up,
+   blurring as it goes. A short glide between scroll steps (a mouse wheel moves in notches). */
+.mood-tabs {
+  --edge: calc(var(--tuck, 0) * 140% - 40%);
+  transform: translate3d(0, calc(var(--tuck, 0) * 0.5rem), 0);
+  filter: blur(calc(var(--tuck, 0) * 5px));
+  -webkit-mask-image: linear-gradient(to top, transparent var(--edge), #000 calc(var(--edge) + 40%));
+  mask-image: linear-gradient(to top, transparent var(--edge), #000 calc(var(--edge) + 40%));
+  transition: --tuck 0.2s ease-out;
 }
 
-[data-mood].is-active .mood-backdrop {
-  animation: mood-drift 14s ease-out forwards;
+/* Depth as the page scrolls: the posters fall behind (they drift down against the scroll, so they
+   rise more slowly than the page) and shrink a touch, the words drift a little less; both fade. */
+.mood-posters {
+  transform: translate3d(0, calc(var(--depth, 0) * 5rem), 0) scale(calc(1 - var(--depth, 0) * 0.06));
+  opacity: calc(1 - var(--depth, 0) * 1.1);
+}
+.mood-words {
+  transform: translate3d(0, calc(var(--depth, 0) * 4rem), 0);
+  opacity: calc(1 - var(--depth, 0) * 0.9);
 }
 
-.mood-grain {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+/* The posters: fanned on the shown slide, gathered behind the first and lowered on the others, so
+   each turn deals them out again, the side ones a beat after the first. */
+.mood-fan > a {
+  transition: translate 0.9s cubic-bezier(0.2, 0.8, 0.2, 1), rotate 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
+    scale 0.9s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.6s ease-out;
 }
+.mood-fan > a:nth-child(2) { translate: -45% 0; rotate: -6deg; scale: 0.9; opacity: 0.8; transition-delay: 0.12s; }
+.mood-fan > a:nth-child(3) { translate: 45% 0; rotate: 6deg; scale: 0.9; opacity: 0.8; transition-delay: 0.12s; }
+[data-mood]:not(.is-active) .mood-fan > a { translate: 0 1.5rem; rotate: 0deg; scale: 0.94; opacity: 0; transition-delay: 0s; }
+.mood-fan > a:hover { scale: 1.04; opacity: 1; transition-delay: 0s; }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-mood].is-active .mood-backdrop { animation: none; }
+  .mood-tabs { transform: none; filter: none; transition: none; }
+  .mood-posters, .mood-words { transform: none; }
+  .mood-fan > a { transition: none; }
 }
 
 /* The saved-manga shelf (MangaShelfLive): covers per row chosen per device class (--cols-m below

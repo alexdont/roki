@@ -63,22 +63,23 @@ defmodule RokiWeb.MoodLiveTest do
 
   test "the home page offers every mood and the popular grid", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/home")
-    assert html =~ "What are you feeling like today?"
+    assert html =~ "What are you in the mood for?"
     for m <- Roki.Mood.all(), do: assert(html =~ ~s(href="/mood/#{m.slug}"))
     assert html =~ ~s(data-mood="scared")
   end
 
-  test "a mood page's top carries the mood's number and name in its own typeface, with no pictograph",
-       %{
-         conn: conn
-       } do
+  test "a mood page's top carries the mood's number and name, in the site's face, with no pictograph",
+       %{conn: conn} do
     {:ok, view, _html} = live(conn, "/mood/scared")
     band = view |> element("section.z-20") |> render()
+    scared = Roki.Mood.get("scared")
 
-    # The typeface's name has quotes in it, which the page's HTML escapes.
-    font = Phoenix.HTML.html_escape("font-family: #{Roki.Mood.get("scared").font}")
-    assert band =~ Phoenix.HTML.safe_to_string(font)
     assert band =~ ~r/>\s*#{Roki.Mood.number("scared")}\s*</
+    assert has_element?(view, "section.z-20 h1", scared.label)
+    # Its colour is in the line above the name; the name is not in a typeface of its own any more.
+    assert band =~ "color: hsl(#{scared.hue} 90% 62%)"
+    refute band =~ "mood-title"
+    refute band =~ Phoenix.HTML.safe_to_string(Phoenix.HTML.html_escape(scared.font))
 
     # Nothing in the band is a pictograph. (The posters below it carry a plain "★" for a rating,
     # which is type, not a picture.)

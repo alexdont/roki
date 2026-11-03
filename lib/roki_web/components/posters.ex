@@ -95,6 +95,7 @@ defmodule RokiWeb.PosterComponents do
         <%!-- Started but not finished: how much of it you have watched, top left. --%>
         <span
           :if={@item[:partial] && !@watched?}
+          data-partial-mark
           class="absolute left-1.5 top-1.5 rounded-md bg-success/90 px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none text-success-content shadow-sm"
         >
           ✓ {@item[:partial]}

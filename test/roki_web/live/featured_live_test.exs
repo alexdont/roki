@@ -98,30 +98,28 @@ defmodule RokiWeb.FeaturedLiveTest do
   describe "the mood picker" do
     @emoji ~r/[\x{1F000}-\x{1FAFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{FE0F}]/u
 
-    test "has no emoji in it: the moods are their names, their colours and their numbers", %{
-      conn: conn
-    } do
+    test "has no emoji in it: the moods are their names and their colours", %{conn: conn} do
       {:ok, view, _} = live(conn, "/home")
       picker = view |> element("#mood-picker") |> render()
 
       refute picker =~ @emoji
-      # Every mood is in it, numbered the way a programme numbers its films.
+
       for mood <- Roki.Mood.all() do
         assert picker =~ mood.label
-        assert picker =~ ">#{Roki.Mood.number(mood)}<"
+        assert has_element?(view, ~s(#mood-picker [data-mood-chip="#{mood.slug}"]))
       end
     end
 
-    test "the title is set in the mood's own typeface, with a rule in its colour under it", %{
-      conn: conn
-    } do
+    test "the first mood is the one shown, its tab selected", %{conn: conn} do
       {:ok, view, _} = live(conn, "/home")
-      scared = Roki.Mood.get("scared")
+      [first | _] = Roki.Mood.all()
 
-      # The typeface's name has quotes in it, which the page's HTML escapes.
-      font = Phoenix.HTML.html_escape("font-family: #{scared.font}")
-      assert render(view) =~ Phoenix.HTML.safe_to_string(font)
-      assert render(view) =~ "background: hsl(#{scared.hue} 90% 62%)"
+      assert has_element?(
+               view,
+               ~s(#mood-picker [data-mood-chip="#{first.slug}"][aria-selected="true"])
+             )
+
+      assert has_element?(view, ~s(#mood-picker [data-mood="#{first.slug}"] h1), first.label)
     end
   end
 

@@ -54,6 +54,15 @@ export const MoodCarousel = {
     this.onVisibility = () => { this.visible = !document.hidden; this.visible ? this.arm() : this.freeze() }
     document.addEventListener("visibilitychange", this.onVisibility)
 
+    // The row of moods slides down out of the picture as the page is scrolled from the top, following
+    // the scroll itself (one frame at a time), and comes back up with it.
+    this.onScroll = () => {
+      if (this.scrollFrame) return
+      this.scrollFrame = requestAnimationFrame(() => { this.scrollFrame = null; this.tuck() })
+    }
+    window.addEventListener("scroll", this.onScroll, {passive: true})
+    this.tuck()
+
     this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
     this.show(0)
     this.arm()
@@ -66,11 +75,30 @@ export const MoodCarousel = {
     this.chips = [...this.el.querySelectorAll("[data-mood-chip]")]
     this.order = this.slides.map((s) => s.dataset.mood)
     this.show(Math.min(this.index, this.slides.length - 1))
+    // A patch drops the style the hook set on the row.
+    this.tuck()
   },
 
   destroyed() {
     clearTimeout(this.timer)
+    cancelAnimationFrame(this.scrollFrame)
+    window.removeEventListener("scroll", this.onScroll)
     document.removeEventListener("visibilitychange", this.onVisibility)
+  },
+
+  // Two numbers from the scroll, for app.css: how far the row of moods has dissolved (`--tuck`, 0 at
+  // the top of the page, 1 once about half the carousel is scrolled past) and how far the carousel
+  // itself has gone by (`--depth`, over its whole height) for the posters and words to drift. Both
+  // linear, at the pace of the scroll.
+  tuck() {
+    const h = this.el.offsetHeight || 1
+    const y = Math.max(0, window.scrollY)
+    this.el.style.setProperty("--depth", Math.min(1, y / h).toFixed(3))
+    const row = this.el.querySelector("[data-mood-tabs]")
+    if (!row) return
+    const x = Math.min(1, y / Math.max(220, h * 0.5))
+    row.style.setProperty("--tuck", x.toFixed(3))
+    row.style.pointerEvents = x > 0.6 ? "none" : ""
   },
 
   // A device that cannot hover — a phone or a tablet, whatever the width of its screen.

@@ -14,6 +14,7 @@
 import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
 import {bindSkip} from "./skip.js"
+import {bindLoading} from "./loading.js"
 import {startLocalPlayer} from "./local_player.js"
 
 // Among tracks of one language: a full one first, SDH/CC next, "forced" (signs only) last.
@@ -224,6 +225,9 @@ export const StudySidebar = {
 
     this.el.study = this // for tests and the console
 
+    // What is being waited for, over the picture (loading.js).
+    this.loader = bindLoading(this.stage, this.video, this)
+
     this.bindVideo()
     this.bindList()
     this.bindSource()
@@ -243,6 +247,12 @@ export const StudySidebar = {
   },
 
   destroyed() {
+    // A player that is gone must not report on the one that replaced it: its start check would
+    // find its own detached video at 0:00 and say the stream "did not start", 25 s after a
+    // fallback to another provider, and end the film that was playing fine.
+    this.gone = true
+    clearTimeout(this.startTimer)
+    if (this.loader) this.loader.stop()
     document.documentElement.classList.remove("study-open")
     if (this.video) for (const el of this.video.querySelectorAll("track[data-ours]")) URL.revokeObjectURL(el.src)
     if (this.local) { const l = this.local; this.local = null; l.stop() }
@@ -1546,7 +1556,9 @@ export const StudySidebar = {
     this.calibrated = !this.base
     clearInterval(this.seekTimer)
     clearInterval(this.pictureTimer)
+    this.catchup = null
     this.failedSent = false
+    this.loader.begin({startup: p.startup || null, local: !!p.local, from: p.resume > 0 ? p.resume : 0})
     if (this.hls) { this.hls.destroy(); this.hls = null }
     if (this.local) { const l = this.local; this.local = null; l.stop() }
     this.clearMain()
@@ -1559,7 +1571,7 @@ export const StudySidebar = {
     clearTimeout(this.startTimer)
     if (p.startup) {
       this.startTimer = setTimeout(() => {
-        if (this.playerUrl === p.url && !this.failedSent && v.readyState < 3 && v.currentTime < 0.5) this.playerFailed("did not start")
+        if (!this.gone && this.playerUrl === p.url && !this.failedSent && v.readyState < 3 && v.currentTime < 0.5) this.playerFailed("did not start")
       }, p.startup)
     }
 
@@ -1573,6 +1585,8 @@ export const StudySidebar = {
         this.local = await startLocalPlayer(v, p.url, {
           resume: p.resume,
           audioLang: p.audio_lang,
+          onPhase: (name) => { if (this.playerUrl === p.url) this.loader.phase(name) },
+          onRead: (n) => { if (this.playerUrl === p.url) this.loader.read(n) },
           onLog: (line) => console.info(line),
           onFail: (why) => { if (this.playerUrl === p.url) this.pushEvent("player_failed", {why, local: true, ua: navigator.userAgent.slice(0, 160)}) },
           onReady: (ctl) => { if (this.playerUrl !== p.url) { ctl.stop(); return }; this.ready = true; this.refreshAudio() },
@@ -1599,7 +1613,12 @@ export const StudySidebar = {
       }
 
       const hls = (this.hls = new Hls({
-        maxBufferLength: 60,
+        // Three minutes loaded ahead (shown as the lighter band on the timeline). The byte cap goes
+        // with it: hls.js stops at 60 MB by default, about 90 s of 1080p. What is behind you is
+        // kept for a minute and a half, so memory does not grow with the film.
+        maxBufferLength: 180,
+        maxBufferSize: 200 * 1000 * 1000,
+        backBufferLength: 90,
         // A growing playlist is still a film, not a broadcast: a finite duration, a seek bar,
         // and (when coming back to it) a start where you left off instead of the live edge.
         liveDurationInfinity: false,
@@ -1607,6 +1626,10 @@ export const StudySidebar = {
         // The subtitle renditions are for players that draw their own; this page draws them.
         subtitleDisplay: false,
       }))
+      // The loading overlay: the playlist read, then each part's bytes as they arrive.
+      hls.on(Hls.Events.MANIFEST_PARSED, () => this.loader.phase("first"))
+      hls.on(Hls.Events.FRAG_LOADING, (_e, d) => this.loader.partStart(d && d.frag && d.frag.stats))
+      hls.on(Hls.Events.FRAG_LOADED, (_e, d) => this.loader.partDone(d && d.frag && d.frag.stats))
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.refreshAudio())
       hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => this.refreshAudio())
       // A stream the browser cannot decode must not be a silent black screen: one try at
@@ -1622,12 +1645,14 @@ export const StudySidebar = {
       hls.loadSource(p.url)
       hls.attachMedia(v)
     } else {
+      this.loader.phase("first")
       v.src = p.url
       v.load()
     }
 
     if (p.resume > 0) this.seekWhenReachable(p.resume)
-    v.play().catch(() => {}) // may be refused without a gesture; the controls are right there
+    // May be refused without a gesture; the controls are right there.
+    v.play().catch(() => { if (this.playerUrl === p.url) this.loader.playRefused() })
     this.watchPicture()
   },
 
@@ -1670,10 +1695,15 @@ export const StudySidebar = {
       if (reach >= rel - 1) {
         v.currentTime = Math.max(0, rel)
         this.ready = true
+        this.catchup = null
         clearInterval(this.seekTimer)
       } else if (++tries > 240) {
         this.ready = true
+        this.catchup = null
         clearInterval(this.seekTimer)
+      } else if (Number.isFinite(rel) && reach > 0) {
+        // The conversion has not reached it yet: the overlay shows how far it has got (loading.js).
+        this.catchup = {target: t, reach: reach + this.shift}
       }
     }, 500)
   },

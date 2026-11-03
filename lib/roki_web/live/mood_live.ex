@@ -234,53 +234,42 @@ defmodule RokiWeb.MoodLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/mood/#{@mood.slug}"}
     >
-      <%!-- The top, as on the home page: the mood's picture across the window under the floating
-            header, its name in its own typeface, and the ways to narrow as glass pills. The picture is
-            the backdrop of the first title (the mood's colour until it arrives). --%>
-      <section class="relative z-20 flex min-h-[clamp(24rem,60svh,36rem)] flex-col justify-end text-white">
-        <div
-          class="absolute inset-0 -z-10 overflow-hidden"
-          style={"background: radial-gradient(120% 140% at 0% 0%, hsl(#{@hue} 80% 36%) 0%, hsl(#{@hue} 60% 20%) 45%, hsl(#{@hue + 40} 50% 10%) 100%)"}
-        >
+      <%!-- The top, as on the home page's carousel: the mood's picture blurred into a dark field of
+            its colour under the floating header, the name in the site's own face with the mood's
+            colour in the line above it, and the ways to narrow as glass pills. The picture is the
+            backdrop of the first title. Dark in both themes. --%>
+      <section class="relative z-20 flex min-h-[clamp(20rem,46svh,28rem)] flex-col justify-end text-white">
+        <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-950">
           <img
             :if={@lead}
-            src={Roki.Images.local(@lead.backdrop)}
+            src={Roki.Images.local(String.replace(@lead.backdrop, "/w1280/", "/w780/"))}
             alt=""
-            class="mood-backdrop absolute inset-0 h-full w-full object-cover"
+            class="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-lg"
           />
-          <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true">
-          </div>
           <div
             class="absolute inset-0"
-            style={"background: linear-gradient(90deg, hsl(#{@hue} 60% 7% / 0.92) 0%, hsl(#{@hue} 60% 7% / 0.62) 32%, hsl(#{@hue} 60% 7% / 0.08) 66%, transparent 100%), linear-gradient(0deg, hsl(#{@hue} 60% 6% / 0.82) 0%, transparent 38%), linear-gradient(180deg, hsl(#{@hue} 60% 6% / 0.7) 0%, transparent 22%)"}
+            style={"background: radial-gradient(ellipse at 75% 30%, transparent 0%, hsl(#{@hue} 25% 6%) 78%), linear-gradient(0deg, hsl(#{@hue} 25% 5%) 0%, transparent 45%), linear-gradient(180deg, rgb(0 0 0 / 0.55) 0%, transparent 22%)"}
           >
           </div>
         </div>
 
         <div class="flex flex-col gap-6 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
-          <div class="max-w-xl space-y-3 sm:max-w-3xl lg:max-w-4xl lg:space-y-4">
-            <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
+          <div class="max-w-xl sm:max-w-3xl lg:max-w-4xl">
+            <p
+              class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em]"
+              style={"color: hsl(#{@hue} 90% 62%)"}
+            >
               <%= if @mood[:season] do %>
-                <.icon name="hero-calendar-days" class="h-4 w-4 text-white" /> In season now
+                <.icon name="hero-calendar-days" class="h-4 w-4" /> In season now
               <% else %>
-                <span class="font-mono tabular-nums text-white">{Roki.Mood.number(@mood)}</span>
-                <span class="hidden h-px w-8 bg-white/40 sm:block" aria-hidden="true"></span>
-                Tonight I want to
+                <span class="tabular-nums">{Roki.Mood.number(@mood)}</span>
+                <span aria-hidden="true">·</span> Tonight I want to
               <% end %>
             </p>
-            <h1
-              class="mood-title text-5xl leading-[0.95] tracking-tight sm:text-7xl lg:text-8xl"
-              style={"font-family: #{@mood.font}; --mood: hsl(#{@hue} 90% 62%)"}
-            >
+            <h1 class="mt-3 text-5xl font-bold leading-none tracking-tight sm:text-6xl lg:text-7xl">
               {@mood.label}
             </h1>
-            <div
-              class="h-1 w-14 rounded-full"
-              style={"background: hsl(#{@hue} 90% 62%)"}
-              aria-hidden="true"
-            >
-            </div>
-            <p class="text-base text-white/80 sm:text-lg">{@mood.tagline}</p>
+            <p class="mt-4 max-w-lg text-base text-white/70 sm:text-lg">{@mood.tagline}</p>
           </div>
 
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center">

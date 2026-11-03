@@ -55,7 +55,8 @@ const AHEAD = 60, BEHIND = 30
  * Start playing `url` in `video`. Returns a controller: `seek(t)`, `audioTracks`, `setAudio(i)`,
  * `subtitleTracks` (each with `read()` giving its WebVTT so far), `stop()`.
  * `opts`: `resume` (seconds), `audioLang` (ISO 639-2 preferred), `onFail(why)`, `onReady(info)`,
- * `onLog(line)`.
+ * `onLog(line)`, `onPhase(name)` ("first": the length and tracks are known, the video is being
+ * read), `onRead(bytes)` (each read of the file, for the loading overlay).
  */
 export async function startLocalPlayer(video, url, opts = {}) {
   const {MB, Dolby} = await loadLibs()
@@ -66,10 +67,27 @@ export async function startLocalPlayer(video, url, opts = {}) {
   const source = new MB.UrlSource(url, {maxCacheSize: 96 * 1024 * 1024})
   // Every window the reader fetches is shown to the scanner (it only follows the structure and
   // keeps the subtitle blocks; nothing is read twice).
+  // The parts of the file read so far, merged: a read returns its cached window again and again, and
+  // only what was not seen before counts towards the loading overlay's bytes.
+  let seen = []
+  const fresh = (from, n) => {
+    const to = from + n
+    let added = n
+    for (const [a, b] of seen) added -= Math.max(0, Math.min(b, to) - Math.max(a, from))
+    const merged = []
+    let cur = [from, to]
+    for (const r of seen) {
+      if (r[1] < cur[0] || r[0] > cur[1]) merged.push(r)
+      else cur = [Math.min(r[0], cur[0]), Math.max(r[1], cur[1])]
+    }
+    merged.push(cur)
+    seen = merged
+    return Math.max(0, added)
+  }
   const originalRead = source._read.bind(source)
   source._read = (start, end, minPos, maxPos) => {
     const r = originalRead(start, end, minPos, maxPos)
-    const see = (res) => { try { if (res && res.bytes && Number.isFinite(res.offset)) scanner.feed(res.offset, res.bytes) } catch (e) { console.warn("subtitle scanner", e) }; return res }
+    const see = (res) => { if (res && res.bytes && opts.onRead && Number.isFinite(res.offset)) opts.onRead(fresh(res.offset, res.bytes.byteLength)); try { if (res && res.bytes && Number.isFinite(res.offset)) scanner.feed(res.offset, res.bytes) } catch (e) { console.warn("subtitle scanner", e) }; return res }
     return r && typeof r.then === "function" ? r.then(see) : see(r)
   }
   const input = new MB.Input({source, formats: MB.ALL_FORMATS})
@@ -250,6 +268,7 @@ export async function startLocalPlayer(video, url, opts = {}) {
 
   const resume = Math.max(0, Number(opts.resume) || 0)
   state.expect = resume
+  if (opts.onPhase) opts.onPhase("first")
   await start(resume)
   if (resume > 0) video.currentTime = resume
   video.play().catch(() => {})

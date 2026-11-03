@@ -452,8 +452,9 @@ defmodule RokiWeb.FeaturedLive do
 
       <.pitch :if={@visitor?} />
 
-      <%!-- Activity has its own wrapper: on a wide screen it runs the whole width, with the same left
-            gutter as the rows above, and its cards scroll out to the edge of the window. --%>
+      <%!-- Activity has its own wrapper: on a wide screen it runs the whole width, with the same
+            gutters as the rows above. Its cards stay inside the gutters on both sides (bordered cards
+            running off the edge of the window looked cut off). --%>
       <div :if={@uuid} class="mx-auto max-w-6xl px-4 pt-4 sm:px-6 lg:max-w-none lg:px-12 xl:px-16">
         <%!-- What people did lately, as one row to scroll along (or ignore): finished, started, saved,
             rated, put on an earlier day. Narrowed by kind and by whose. A group opens as a list. --%>
@@ -481,7 +482,7 @@ defmodule RokiWeb.FeaturedLive do
               </button>
             </div>
             <div
-              class="-mx-4 flex w-[calc(100%+2rem)] gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:flex-1 sm:px-0 [scrollbar-width:none]"
+              class="flex w-full gap-1.5 overflow-x-auto sm:w-auto sm:flex-1 [scrollbar-width:none]"
               role="group"
               aria-label="Kind of activity"
             >
@@ -524,7 +525,7 @@ defmodule RokiWeb.FeaturedLive do
 
           <ul
             :if={@activity not in [nil, []]}
-            class="-mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:scroll-px-0 sm:px-0 lg:-mx-12 lg:scroll-px-12 lg:px-12 xl:-mx-16 xl:scroll-px-16 xl:px-16"
+            class="flex snap-x gap-2 overflow-x-auto rounded-box pb-2 [scrollbar-width:none]"
           >
             <li :for={{run, i} <- @activity |> Enum.take(30) |> Enum.with_index()} class="contents">
               <.activity_card run={run} i={i} />
@@ -738,9 +739,11 @@ defmodule RokiWeb.FeaturedLive do
 
   attr :moods, :map, required: true
 
-  # "What are you feeling like today?": one mood at a time, turning on a timer, each on the
-  # backdrop of what is popular in it with a strip of those posters; the row of moods under it
-  # — hover one to see it, click it to open it. The turning is the `MoodCarousel` hook's.
+  # "What are you in the mood for?": one mood at a time, turning on a timer. The mood's lead picture
+  # blurred into a field of colour, its three most popular titles fanned on the right (above the
+  # words on a phone), and the moods as named tabs along the bottom, the shown one's line filling as
+  # its turn runs — hover one to see it, click it to open it. The turning is the `MoodCarousel` hook's.
+  # Dark in both themes: the words are white, and the header floats over it.
   @doc false
   def mood_picker(assigns) do
     assigns = assign(assigns, :all, Roki.Mood.all())
@@ -750,30 +753,12 @@ defmodule RokiWeb.FeaturedLive do
       id="mood-picker"
       phx-hook="MoodCarousel"
       data-every="6000"
-      class="relative"
-      aria-label="What are you feeling like today?"
+      class="relative overflow-hidden bg-neutral-950"
+      aria-label="What are you in the mood for?"
     >
-      <button
-        type="button"
-        data-mood-prev
-        aria-label="Previous mood"
-        class="absolute left-0 top-[42%] z-10 flex h-24 w-10 -translate-y-1/2 items-center justify-center text-white/80 drop-shadow-[0_0_3px_rgba(0,0,0,0.9)] transition hover:text-white lg:inset-y-0 lg:h-auto lg:w-12 lg:translate-y-0 lg:bg-gradient-to-r lg:from-black/40 lg:to-transparent lg:hover:from-black/55"
-      >
-        <.icon name="hero-chevron-left" class="h-7 w-7 lg:h-9 lg:w-9" />
-      </button>
-      <button
-        type="button"
-        data-mood-next
-        aria-label="Next mood"
-        class="absolute right-0 top-[42%] z-10 flex h-24 w-10 -translate-y-1/2 items-center justify-center text-white/80 drop-shadow-[0_0_3px_rgba(0,0,0,0.9)] transition hover:text-white lg:inset-y-0 lg:h-auto lg:w-12 lg:translate-y-0 lg:bg-gradient-to-l lg:from-black/40 lg:to-transparent lg:hover:from-black/55"
-      >
-        <.icon name="hero-chevron-right" class="h-7 w-7 lg:h-9 lg:w-9" />
-      </button>
-      <%!-- The slides are stacked in one grid cell, so the box is as tall as the tallest of them:
-            a long title or a tagline that wraps makes every slide taller, and never squeezes the
-            posters or the button, whatever the width of the screen. --%>
-      <div class="relative grid min-h-[clamp(30rem,78svh,46rem)] grid-cols-[minmax(0,1fr)] overflow-hidden bg-base-300 lg:min-h-[clamp(30rem,62svh,44rem)]">
-        <%!-- One slide per mood; the hook shows one. --%>
+      <%!-- The slides share one grid cell, so the box is as tall as the tallest of them: a long
+            tagline makes every slide taller and never squeezes the posters or the button. --%>
+      <div class="relative grid min-h-[clamp(34rem,74svh,46rem)] grid-cols-[minmax(0,1fr)] lg:min-h-[clamp(32rem,66svh,44rem)]">
         <div
           :for={{m, i} <- Enum.with_index(@all)}
           data-mood={m.slug}
@@ -787,80 +772,97 @@ defmodule RokiWeb.FeaturedLive do
           <% lead = List.first(items) %>
           <img
             :if={lead && lead[:backdrop]}
-            src={Roki.Images.local(lead.backdrop)}
+            src={Roki.Images.local(String.replace(lead.backdrop, "/w1280/", "/w780/"))}
             alt=""
             loading={if i == 0, do: "eager", else: "lazy"}
-            class="mood-backdrop absolute inset-0 h-full w-full object-cover"
+            class="absolute inset-0 h-full w-full scale-105 object-cover opacity-50 blur-sm"
           />
-          <div class="mood-grain absolute inset-0 opacity-[0.14] mix-blend-overlay" aria-hidden="true">
-          </div>
-          <%!-- Wide screens: the picture is the point. Dark where the words are, clear on the right,
-                and a fade along the bottom for the posters' edge to sit against. --%>
           <div
             class="absolute inset-0"
-            style={"background: linear-gradient(90deg, hsl(#{m.hue} 60% 7% / 0.92) 0%, hsl(#{m.hue} 60% 7% / 0.62) 32%, hsl(#{m.hue} 60% 7% / 0.08) 66%, transparent 100%), linear-gradient(0deg, hsl(#{m.hue} 60% 6% / 0.82) 0%, transparent 38%), linear-gradient(180deg, hsl(#{m.hue} 60% 6% / 0.4) 0%, transparent 22%)"}
+            style={"background: radial-gradient(ellipse at 75% 40%, transparent 0%, hsl(#{m.hue} 25% 6%) 78%), linear-gradient(0deg, hsl(#{m.hue} 25% 5%) 0%, transparent 35%), linear-gradient(180deg, rgb(0 0 0 / 0.55) 0%, transparent 20%)"}
           >
           </div>
 
-          <div class="relative flex w-full flex-col justify-end gap-6 px-4 pb-20 pt-28 text-white sm:px-6 lg:px-12 lg:pb-20 xl:px-16">
-            <div class="max-w-xl space-y-3 sm:max-w-3xl lg:max-w-4xl lg:space-y-4">
-              <%!-- Numbered the way a programme numbers its films: where a pictogram would stand. --%>
-              <p class="flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-xs sm:tracking-[0.25em]">
-                <span class="font-mono tabular-nums text-white">{Roki.Mood.number(m)}</span>
-                <span class="hidden h-px w-8 bg-white/40 sm:block" aria-hidden="true"></span>
-                What are you feeling like today?
-              </p>
-              <h1
-                class="mood-title text-4xl leading-[0.95] tracking-tight min-[400px]:text-5xl sm:text-7xl lg:text-8xl"
-                style={"font-family: #{m.font}; --mood: hsl(#{m.hue} 90% 62%)"}
+          <div class="relative grid w-full items-center gap-8 px-4 pb-24 pt-24 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-12 lg:pt-28 xl:px-16">
+            <%!-- The posters: above the words on a phone, on the right on a wide screen. --%>
+            <%!-- `mood-fan`: the three fan out from behind the first as the slide comes in (app.css);
+                  `mood-posters`/`mood-words`: they drift at their own pace as the page scrolls. --%>
+            <div class="mood-posters mood-fan relative mx-auto flex h-52 w-72 items-center justify-center sm:h-64 sm:w-96 lg:order-2 lg:h-[24rem] lg:w-[34rem]">
+              <.link
+                :for={
+                  {it, k} <-
+                    items |> Enum.filter(& &1[:poster]) |> Enum.take(3) |> Enum.with_index()
+                }
+                navigate={~p"/title/#{it.type}/#{it.id}"}
+                title={it.title}
+                class={[
+                  "absolute aspect-[2/3] h-full overflow-hidden rounded-2xl bg-white/5 shadow-2xl ring-1 ring-white/10 hover:z-20",
+                  k == 0 && "z-10"
+                ]}
               >
+                <img
+                  src={Roki.Images.local(String.replace(it.poster, "/w500/", "/w342/"))}
+                  alt={it.title}
+                  loading={if i == 0, do: "eager", else: "lazy"}
+                  class="h-full w-full object-cover"
+                />
+              </.link>
+            </div>
+
+            <div class="mood-words text-center text-white lg:order-1 lg:text-left">
+              <p
+                class="text-xs font-semibold uppercase tracking-[0.25em]"
+                style={"color: hsl(#{m.hue} 90% 62%)"}
+              >
+                What are you in the mood for?
+              </p>
+              <h1 class="mt-3 text-5xl font-bold leading-none tracking-tight sm:text-6xl lg:text-7xl">
                 {m.label}
               </h1>
-              <div
-                class="h-1 w-14 rounded-full"
-                style={"background: hsl(#{m.hue} 90% 62%)"}
-                aria-hidden="true"
-              >
-              </div>
-              <p class="text-base text-white/80 sm:text-lg">{m.tagline}</p>
+              <p class="mx-auto mt-4 max-w-lg text-base text-white/70 sm:text-lg lg:mx-0">
+                {m.tagline}
+              </p>
               <.link
                 navigate={~p"/mood/#{m.slug}"}
-                class="btn h-11 rounded-full border-0 bg-white px-5 text-neutral-900 shadow-lg hover:bg-white/90"
+                class="btn mt-6 h-12 rounded-full border-0 bg-white px-7 text-base text-neutral-900 shadow-lg hover:bg-white/90"
               >
-                Show me <.icon name="hero-arrow-right" class="h-4 w-4" />
+                Show me all <.icon name="hero-arrow-right" class="h-5 w-5" />
               </.link>
             </div>
           </div>
         </div>
       </div>
 
-      <%!-- Wide screens: the moods as short bars in the corner of the picture, the shown one filling
-            as its turn runs; hover one for its name and to see it, click to open it. --%>
+      <%!-- The moods as named tabs; the shown one's line fills in its colour as its turn runs. As the
+            page is scrolled down from the top they sink a little and dissolve from their bottom edge
+            up, blurring as they go (`--tuck`, set by the hook), and come back as it returns. --%>
       <div
-        class="absolute inset-x-4 bottom-7 z-10 flex items-center justify-center gap-1 sm:inset-x-6 lg:inset-x-auto lg:bottom-8 lg:right-12 lg:justify-end xl:right-16"
-        role="tablist"
-        aria-label="Moods"
+        data-mood-tabs
+        class="mood-tabs absolute inset-x-0 bottom-4 z-10 px-4 sm:px-6 lg:px-12 xl:px-16"
       >
-        <.link
-          :for={{m, i} <- Enum.with_index(@all)}
-          navigate={~p"/mood/#{m.slug}"}
-          data-mood-chip={m.slug}
-          role="tab"
-          aria-selected={to_string(i == 0)}
-          aria-label={m.label}
-          class="group/bar relative flex h-8 w-6 items-center sm:w-8 lg:h-6 lg:w-9"
+        <div
+          class="flex gap-5 overflow-x-auto border-t border-white/10 [scrollbar-width:none]"
+          role="tablist"
+          aria-label="Moods"
         >
-          <span class="relative block h-[3px] w-full overflow-hidden rounded-full bg-white/30 transition-colors group-hover/bar:bg-white/60 group-aria-selected/bar:bg-white/50">
-            <span
-              data-mood-bar
-              class="absolute inset-0 origin-left scale-x-0 rounded-full bg-white"
-              aria-hidden="true"
-            ></span>
-          </span>
-          <span class="pointer-events-none absolute bottom-full right-0 mb-1 whitespace-nowrap rounded-md bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition group-hover/bar:opacity-100">
+          <.link
+            :for={{m, i} <- Enum.with_index(@all)}
+            navigate={~p"/mood/#{m.slug}"}
+            data-mood-chip={m.slug}
+            role="tab"
+            aria-selected={to_string(i == 0)}
+            class="relative shrink-0 pb-1 pt-3 text-sm font-medium text-white/50 transition hover:text-white aria-selected:text-white"
+          >
+            <span class="absolute inset-x-0 -top-px h-0.5 overflow-hidden" aria-hidden="true">
+              <span
+                data-mood-bar
+                class="absolute inset-0 origin-left scale-x-0"
+                style={"background: hsl(#{m.hue} 90% 62%)"}
+              ></span>
+            </span>
             {m.label}
-          </span>
-        </.link>
+          </.link>
+        </div>
       </div>
     </section>
     """

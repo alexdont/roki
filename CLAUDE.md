@@ -322,7 +322,7 @@ converters, encoding detected) or the demo. **No JS libraries** — plain DOM, n
   know, and it has never heard of .srt/.ass. The extension is checked in `handle_progress` instead.
 - Subtitle files that are neither Unicode nor Latin-1 (e.g. Shift-JIS Japanese) will be read as Latin-1
   and garble; they need a real encoding detector.
-- Tests: `node --test assets/js/study/cues.test.mjs` (logic), `mix test` (conversion + page), and
+- Tests: `node --test assets/js/study/cues.test.mjs assets/js/study/loading.test.mjs` (logic), `mix test` (conversion + page), and
   `NODE_PATH=$(npm root -g) node test/e2e/study.js` (Chromium against the running dev server, 22 checks;
   `ROKI_URL` to point elsewhere, `SHOT=/path.jpg` for a screenshot).
 
@@ -441,6 +441,12 @@ stays on the sources page with a message and the list.
 - The bar's white marks are where the studied track's lines fall (`dialogueSpans` in `cues.js`, drawn on a canvas by `transport.js`); sound/music lines (`[..]`, `(..)`, anything with ♪) don't count. Player setting "Dialogue on timeline" (`roki:study:talk`).
 - Skip button (`assets/js/study/skip.js`, setting `roki:study:skip`): AniSkip times for anime (`Roki.AniSkip`, MAL id + MAL-local episode, cached a day, 60/min site-wide, off in tests via `aniskip_offline`; sent as `skips` in the player data, dropped when measured on a cut of another length), else gaps in the dialogue (`findSkips`): intro = longest 50–150 s gap starting in the first 10 min, credits = a 45–240 s gap in the last quarter with a line after it, or the silence to the end (only from a complete track, never one still read out of the release on this device). Credits to the end become "Next episode" for a series and nothing for a film. Shown 1.5 s after entering the gap (a growing track may still fill it).
 - Fansub lyrics without ♪ (styled ASS karaoke; laev's converter and ffmpeg drop the style) defeat the guess; AniSkip covers those shows when it knows them.
+
+## Home mood carousel
+- `FeaturedLive.mood_picker/1` + `assets/js/mood_carousel.js` (`MoodCarousel`): the mood's lead backdrop blurred (`blur-sm`) into a dark field of its colour (dark in both themes), its top three posters fanned on the right (`.mood-fan`, dealt out again on each turn via `.is-active`), the name in Outfit, the moods as named tabs whose line fills. On scroll the hook sets `--tuck` (tabs sink a little and dissolve from the bottom edge up) and `--depth` (posters and words drift and fade); both are registered `@property` numbers in app.css. The mood pages' top (`MoodLive`) uses the same look.
+
+## Loading overlay
+- `assets/js/study/loading.js` (`bindLoading`, pure `describe` tested in `loading.test.mjs`): over the picture from Play to the first frame — "Connecting" / "Reading the file’s length and tracks" (the device player's `computeDuration`) / "Loading the first seconds" or "Loading from 1:07:32" — with bytes arrived, speed, time left on the hls.js part being fetched (its `frag.stats`), time waited, and "another source in N s" in the last 15 s of `startup`. Also: a conversion catching up to the resume point (`study.catchup`, set by `seekWhenReachable`), a device-player seek ("Loading from …"), a stall over 0.6 s. The device player reports reads through `onRead` (only bytes not seen before) and `onPhase`.
 
 ## Anime source numbering (resolver)
 - A pack named with a range not starting at 1 ("(13-25)") is probed with the TMDB episode number; other releases with the MAL-local one (`numbered_as/2`).

@@ -1103,7 +1103,7 @@ defmodule RokiWeb.TitleLive do
             <.glass_btn
               :if={@linked?}
               click="toggle_saved"
-              icon={if @lib.saved?, do: "hero-bookmark-solid", else: "hero-bookmark"}
+              icon={if @lib.saved?, do: "hero-check", else: "hero-plus"}
               on={@lib.saved?}
               label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
             />

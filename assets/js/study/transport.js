@@ -20,10 +20,26 @@ export function bindTransport(root, video, stage, study) {
   const duration = () => study.total()
 
   const paint = (el, fraction) => el.style.setProperty("--p", `${Math.max(0, Math.min(1, fraction)) * 100}%`)
+  const paint2 = (el, fraction) => el.style.setProperty("--b", `${Math.max(0, Math.min(1, fraction)) * 100}%`)
 
   const showPlaying = () => {
     play.querySelector("[data-icon=play]").classList.toggle("hidden", !video.paused)
     play.querySelector("[data-icon=pause]").classList.toggle("hidden", video.paused)
+  }
+  // How far ahead of where you are the video is already loaded: the end of the buffered range you
+  // are in, on the film's clock (`abs()` adds the shift of a stream begun part-way through), as
+  // `--b` on the bar, which paints it lighter than what is still to load. Nothing when the time is
+  // in no buffered range (a seek still reading) or the length is unknown.
+  const showBuffered = (total = duration()) => {
+    const b = video.buffered
+    const t = video.currentTime
+    let end = 0
+    if (total > 0 && b) {
+      for (let i = 0; i < b.length; i++) {
+        if (b.start(i) <= t + 0.5 && t <= b.end(i) + 0.5) { end = b.end(i) + (study.shift || 0); break }
+      }
+    }
+    paint2(seek, total > 0 ? end / total : 0)
   }
   const showTime = () => {
     const total = duration()
@@ -35,6 +51,7 @@ export function bindTransport(root, video, stage, study) {
       paint(seek, total ? now / total : 0)
     }
     seek.disabled = !total
+    showBuffered(total)
     drawTalk(total)
   }
   const showVolume = () => {
@@ -92,6 +109,8 @@ export function bindTransport(root, video, stage, study) {
   video.addEventListener("dblclick", () => $("[data-role=fullscreen]")?.click())
   for (const ev of ["play", "pause", "ended"]) video.addEventListener(ev, showPlaying)
   for (const ev of ["timeupdate", "durationchange", "loadedmetadata", "seeked"]) video.addEventListener(ev, showTime)
+  // Loading goes on while paused, when no time updates come.
+  video.addEventListener("progress", () => showBuffered())
 
   // Pointing at the timeline shows a thin white mark where a click would land, and the time there.
   const hover = document.createElement("div")
