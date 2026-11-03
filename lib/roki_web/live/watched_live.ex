@@ -855,6 +855,12 @@ defmodule RokiWeb.WatchedLive do
                 <.icon name="hero-bars-3" class="h-5 w-5" />
               </.link>
             </div>
+            <RokiWeb.GridSize.grid_switch
+              :if={@view == :grid}
+              step_on_phone
+              size={@grid_size}
+              class="lg:order-6 lg:h-12 lg:items-center"
+            />
             <%!-- Select mode, for the owner: one button, on and off. --%>
             <button
               :if={@owner?}
@@ -1028,7 +1034,7 @@ defmodule RokiWeb.WatchedLive do
 
         <ul
           :if={@history == nil}
-          class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+          class={["grid gap-4", RokiWeb.GridSize.cols(@grid_size)]}
           aria-busy="true"
         >
           <li :for={_ <- 1..8} class="space-y-1">
@@ -1075,7 +1081,7 @@ defmodule RokiWeb.WatchedLive do
               id={"watched-cards-#{:erlang.phash2(label)}"}
               phx-hook="GridCards"
             >
-              <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+              <ul class={["grid gap-4", RokiWeb.GridSize.cols(@grid_size)]}>
                 <%= for i <- group do %>
                   <RokiWeb.FeaturedLive.grid_card
                     :if={i.type in ["movie", "tv"]}

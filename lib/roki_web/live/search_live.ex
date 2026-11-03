@@ -357,9 +357,12 @@ defmodule RokiWeb.SearchLive do
         </section>
 
         <section :if={@shelf.items != []} class="space-y-3">
-          <h2 class="text-xl font-semibold">
-            Results for “{@q}”
-          </h2>
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-xl font-semibold">
+              Results for “{@q}”
+            </h2>
+            <RokiWeb.GridSize.grid_switch size={@grid_size} default="m" />
+          </div>
           <%!-- The same grid as Movies, Shows and Anime: larger posters, whole rows while there is
               more, and "Load more" under it. --%>
           <%!-- The card that opens over a poster is the one Movies and Shows have (`GridCards`). --%>
@@ -370,7 +373,7 @@ defmodule RokiWeb.SearchLive do
               data-more={to_string(@shelf.more?)}
               data-page={@shelf.page}
               data-restore-y={@place_y}
-              class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+              class={["grid gap-4", RokiWeb.GridSize.cols(@grid_size, "m")]}
             >
               <RokiWeb.FeaturedLive.tile
                 :for={i <- @shelf.items}

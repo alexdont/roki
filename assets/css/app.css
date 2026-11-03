@@ -1056,8 +1056,8 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 /* The row of moods does not travel: it sinks a few pixels and dissolves from its bottom edge up,
    blurring as it goes. A short glide between scroll steps (a mouse wheel moves in notches).
    `--rest`: with the pointer off the carousel the row waits faint and blurred, only a hint that it
-   is there; over the carousel (or a key inside it) it comes into focus, and blurs out again on
-   leaving. A device that cannot hover always has it in focus. The scroll's dissolve adds to either. */
+   is there; over the carousel (or a key inside it, or a touch on it) it comes into focus, and blurs
+   out again on leaving. The scroll's dissolve adds to either. */
 .mood-tabs {
   --rest: 1;
   --edge: calc(var(--tuck, 0) * 140% - 40%);
@@ -1069,9 +1069,13 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   transition: --tuck 0.2s ease-out, --rest 0.5s ease;
 }
 #mood-picker:hover .mood-tabs,
-#mood-picker:focus-within .mood-tabs { --rest: 0; }
+#mood-picker:focus-within .mood-tabs,
+#mood-picker[data-touched] .mood-tabs { --rest: 0; }
+/* A touch screen has no hover: a touch on the carousel (a tap or a swipe) is what brings the row
+   into focus (`data-touched`, set by the MoodCarousel hook), and it blurs out again a few seconds
+   after the last one. A focus left behind by a tap does not hold it there. */
 @media (hover: none) {
-  .mood-tabs { --rest: 0; }
+  #mood-picker:focus-within:not([data-touched]) .mood-tabs { --rest: 1; }
 }
 
 /* Depth as the page scrolls: the posters fall behind (they drift down against the scroll, so they

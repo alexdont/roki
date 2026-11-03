@@ -45,6 +45,8 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
       # The mood picker: what is held already is drawn in the first render, the rest arrives.
       |> assign(:moods, Roki.Mood.hero_peek())
+      # Each mood's animation over the carousel (mood_fx.js); a site-wide switch.
+      |> assign(:mood_fx?, Application.get_env(:roki, :mood_fx, true))
       |> assign(:list_posters, %{})
       |> assign(:lists_shown, @lists_first)
 
@@ -439,16 +441,28 @@ defmodule RokiWeb.FeaturedLive do
     >
       <%!-- Flush: the page lays itself out. On a wide screen the mood carousel and the rows reach
             the edges of the window; everything else keeps the old gutters and width. --%>
-      <.mood_picker moods={@moods} />
+      <%!-- The carousel and the rows share a box so the mood's animation (`MoodFx`, mood_fx.js) can
+            sit over the carousel on one canvas, clicks passing through. Off with
+            `config :roki, mood_fx: false`. --%>
+      <div id="mood-fx" phx-hook={@mood_fx? && "MoodFx"} class="relative">
+        <canvas
+          :if={@mood_fx?}
+          id="mood-fx-canvas"
+          phx-update="ignore"
+          class="pointer-events-none absolute left-0 top-0 z-[25]"
+          aria-hidden="true"
+        ></canvas>
+        <.mood_picker moods={@moods} />
 
-      <.shelf_rows
-        shelves={@shelves}
-        season={@season}
-        seen={@seen}
-        upcoming={@upcoming}
-        cached_titles={@cached_titles}
-        signed_in?={@uuid != nil}
-      />
+        <.shelf_rows
+          shelves={@shelves}
+          season={@season}
+          seen={@seen}
+          upcoming={@upcoming}
+          cached_titles={@cached_titles}
+          signed_in?={@uuid != nil}
+        />
+      </div>
 
       <.pitch :if={@visitor?} />
 
@@ -751,6 +765,7 @@ defmodule RokiWeb.FeaturedLive do
     ~H"""
     <section
       id="mood-picker"
+      data-fx-stage
       phx-hook="MoodCarousel"
       data-every="6000"
       class="relative overflow-hidden bg-neutral-950"

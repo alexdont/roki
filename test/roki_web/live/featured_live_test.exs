@@ -123,6 +123,29 @@ defmodule RokiWeb.FeaturedLiveTest do
     end
   end
 
+  describe "the mood animations" do
+    test "sit over the carousel on their own canvas, clicks passing through", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/home")
+
+      assert has_element?(
+               view,
+               ~s(#mood-fx[phx-hook="MoodFx"] canvas#mood-fx-canvas.pointer-events-none)
+             )
+
+      assert has_element?(view, "#mood-fx #mood-picker")
+    end
+
+    test "are switched off site-wide by config", %{conn: conn} do
+      Application.put_env(:roki, :mood_fx, false)
+      on_exit(fn -> Application.delete_env(:roki, :mood_fx) end)
+
+      {:ok, view, _} = live(conn, "/home")
+      refute has_element?(view, "#mood-fx-canvas")
+      refute has_element?(view, ~s([phx-hook="MoodFx"]))
+      assert has_element?(view, "#mood-picker")
+    end
+  end
+
   describe "the header" do
     test "floats over the picture on the home page, with a search field in it", %{conn: conn} do
       {:ok, view, html} = live(conn, "/home")

@@ -298,7 +298,8 @@ defmodule RokiWeb.Router do
       {PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope},
       {RokiWeb.Cached, :assign_titles},
       {RokiWeb.PlayerMode, :attach},
-      {RokiWeb.SyncPull, :default}
+      {RokiWeb.SyncPull, :default},
+      {RokiWeb.GridSize, :default}
     ] do
     scope "/", RokiWeb do
       pipe_through :browser

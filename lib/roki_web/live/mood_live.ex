@@ -9,8 +9,6 @@ defmodule RokiWeb.MoodLive do
   alias PhoenixKit.Users.Auth.Scope
   alias Roki.Mood
 
-  @grid "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6"
-
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
     case Mood.get(slug) do
@@ -25,6 +23,8 @@ defmodule RokiWeb.MoodLive do
          assign(socket,
            mood: mood,
            page_title: mood.label,
+           # Its animation over the top (mood_fx.js): not for a season, which has none.
+           fx?: Application.get_env(:roki, :mood_fx, true) and not Map.has_key?(mood, :season),
            uuid: uuid,
            client: RokiWeb.Client.key(socket, uuid),
            kind: :all,
@@ -219,7 +219,7 @@ defmodule RokiWeb.MoodLive do
   def render(assigns) do
     assigns =
       assign(assigns,
-        grid: @grid,
+        grid: RokiWeb.GridSize.cols(assigns.grid_size),
         hue: assigns.mood.hue,
         lead: Enum.find(assigns.items, & &1[:backdrop])
       )
@@ -238,116 +238,140 @@ defmodule RokiWeb.MoodLive do
             its colour under the floating header, the name in the site's own face with the mood's
             colour in the line above it, and the ways to narrow as glass pills. The picture is the
             backdrop of the first title. Dark in both themes. --%>
-      <section class="relative z-20 flex min-h-[clamp(20rem,46svh,28rem)] flex-col justify-end text-white">
-        <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-950">
-          <img
-            :if={@lead}
-            src={Roki.Images.local(String.replace(@lead.backdrop, "/w1280/", "/w780/"))}
-            alt=""
-            class="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-lg"
-          />
-          <div
-            class="absolute inset-0"
-            style={"background: radial-gradient(ellipse at 75% 30%, transparent 0%, hsl(#{@hue} 25% 6%) 78%), linear-gradient(0deg, hsl(#{@hue} 25% 5%) 0%, transparent 45%), linear-gradient(180deg, rgb(0 0 0 / 0.55) 0%, transparent 22%)"}
-          >
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-6 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
-          <div class="max-w-xl sm:max-w-3xl lg:max-w-4xl">
-            <p
-              class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em]"
-              style={"color: hsl(#{@hue} 90% 62%)"}
+      <%!-- The mood's animation from the home page goes on over this top (mood_fx.js), a little
+            lighter, thinning out as the page scrolls into the grid. --%>
+      <div
+        id="mood-fx"
+        phx-hook={@fx? && "MoodFx"}
+        data-mood={@mood.slug}
+        data-amount="0.7"
+        class="relative"
+      >
+        <canvas
+          :if={@fx?}
+          id="mood-fx-canvas"
+          phx-update="ignore"
+          class="pointer-events-none absolute left-0 top-0 z-[25]"
+          aria-hidden="true"
+        ></canvas>
+        <section
+          data-fx-stage
+          class="relative z-20 flex min-h-[clamp(20rem,46svh,28rem)] flex-col justify-end text-white"
+        >
+          <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-950">
+            <img
+              :if={@lead}
+              src={Roki.Images.local(String.replace(@lead.backdrop, "/w1280/", "/w780/"))}
+              alt=""
+              class="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-lg"
+            />
+            <div
+              class="absolute inset-0"
+              style={"background: radial-gradient(ellipse at 75% 30%, transparent 0%, hsl(#{@hue} 25% 6%) 78%), linear-gradient(0deg, hsl(#{@hue} 25% 5%) 0%, transparent 45%), linear-gradient(180deg, rgb(0 0 0 / 0.55) 0%, transparent 22%)"}
             >
-              <%= if @mood[:season] do %>
-                <.icon name="hero-calendar-days" class="h-4 w-4" /> In season now
-              <% else %>
-                <span class="tabular-nums">{Roki.Mood.number(@mood)}</span>
-                <span aria-hidden="true">·</span> Tonight I want to
-              <% end %>
-            </p>
-            <h1 class="mt-3 text-5xl font-bold leading-none tracking-tight sm:text-6xl lg:text-7xl">
-              {@mood.label}
-            </h1>
-            <p class="mt-4 max-w-lg text-base text-white/70 sm:text-lg">{@mood.tagline}</p>
+            </div>
           </div>
 
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <%!-- A season is made of keywords, which a search result does not carry, so there is nothing to
-                  keep a search to: the box is only for moods. --%>
-            <form :if={!@mood[:season]} phx-submit="search" class="flex w-full max-w-xl gap-2 lg:w-96">
-              <label class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-white backdrop-blur-md focus-within:border-white/60">
-                <.icon name="hero-magnifying-glass" class="h-5 w-5 shrink-0 opacity-70" />
-                <input
-                  type="search"
-                  name="q"
-                  value={@q}
-                  placeholder={"Search #{String.downcase(@mood.label)}…"}
-                  autocomplete="off"
-                  class="w-full bg-transparent text-white placeholder:text-white/60 focus:outline-none"
-                />
-              </label>
-              <button
-                type="submit"
-                class="btn h-11 min-h-0 rounded-full border-0 bg-white px-5 text-neutral-900 hover:bg-white/90"
+          <div class="flex flex-col gap-6 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
+            <div class="max-w-xl sm:max-w-3xl lg:max-w-4xl">
+              <p
+                class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em]"
+                style={"color: hsl(#{@hue} 90% 62%)"}
               >
-                Find
-              </button>
-            </form>
+                <%= if @mood[:season] do %>
+                  <.icon name="hero-calendar-days" class="h-4 w-4" /> In season now
+                <% else %>
+                  <span class="tabular-nums">{Roki.Mood.number(@mood)}</span>
+                  <span aria-hidden="true">·</span> Tonight I want to
+                <% end %>
+              </p>
+              <h1 class="mt-3 text-5xl font-bold leading-none tracking-tight sm:text-6xl lg:text-7xl">
+                {@mood.label}
+              </h1>
+              <p class="mt-4 max-w-lg text-base text-white/70 sm:text-lg">{@mood.tagline}</p>
+            </div>
 
-            <div class="flex flex-wrap items-center gap-2">
-              <div
-                class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
-                role="group"
-                aria-label="Kind"
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <%!-- A season is made of keywords, which a search result does not carry, so there is nothing to
+                  keep a search to: the box is only for moods. --%>
+              <form
+                :if={!@mood[:season]}
+                phx-submit="search"
+                class="flex w-full max-w-xl gap-2 lg:w-96"
               >
+                <label class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/25 bg-black/30 px-4 text-white backdrop-blur-md focus-within:border-white/60">
+                  <.icon name="hero-magnifying-glass" class="h-5 w-5 shrink-0 opacity-70" />
+                  <input
+                    type="search"
+                    name="q"
+                    value={@q}
+                    placeholder={"Search #{String.downcase(@mood.label)}…"}
+                    autocomplete="off"
+                    class="w-full bg-transparent text-white placeholder:text-white/60 focus:outline-none"
+                  />
+                </label>
                 <button
-                  :for={
-                    {k, label} <- [
-                      all: "Everything",
-                      movies: "Movies",
-                      shows: "Shows",
-                      anime: "Anime"
-                    ]
-                  }
-                  type="button"
-                  phx-click="kind"
-                  phx-value-kind={k}
-                  aria-pressed={to_string(@kind == k)}
-                  class={[
-                    "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
-                    @kind == k && "bg-white text-neutral-900 shadow",
-                    @kind != k && "text-white/80 hover:text-white"
-                  ]}
+                  type="submit"
+                  class="btn h-11 min-h-0 rounded-full border-0 bg-white px-5 text-neutral-900 hover:bg-white/90"
                 >
-                  {label}
+                  Find
                 </button>
-              </div>
-              <div
-                :if={@q == ""}
-                class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
-                role="group"
-                aria-label="Order"
-              >
-                <button
-                  :for={{s, label} <- Mood.sorts()}
-                  type="button"
-                  phx-click="sort"
-                  phx-value-sort={s}
-                  aria-pressed={to_string(@sort == s)}
-                  class={[
-                    "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
-                    @sort == s && "bg-white text-neutral-900 shadow",
-                    @sort != s && "text-white/80 hover:text-white"
-                  ]}
+              </form>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <div
+                  class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
+                  role="group"
+                  aria-label="Kind"
                 >
-                  {label}
-                </button>
+                  <button
+                    :for={
+                      {k, label} <- [
+                        all: "Everything",
+                        movies: "Movies",
+                        shows: "Shows",
+                        anime: "Anime"
+                      ]
+                    }
+                    type="button"
+                    phx-click="kind"
+                    phx-value-kind={k}
+                    aria-pressed={to_string(@kind == k)}
+                    class={[
+                      "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
+                      @kind == k && "bg-white text-neutral-900 shadow",
+                      @kind != k && "text-white/80 hover:text-white"
+                    ]}
+                  >
+                    {label}
+                  </button>
+                </div>
+                <div
+                  :if={@q == ""}
+                  class="inline-flex rounded-full border border-white/25 bg-black/30 p-1 backdrop-blur-md"
+                  role="group"
+                  aria-label="Order"
+                >
+                  <button
+                    :for={{s, label} <- Mood.sorts()}
+                    type="button"
+                    phx-click="sort"
+                    phx-value-sort={s}
+                    aria-pressed={to_string(@sort == s)}
+                    class={[
+                      "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
+                      @sort == s && "bg-white text-neutral-900 shadow",
+                      @sort != s && "text-white/80 hover:text-white"
+                    ]}
+                  >
+                    {label}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <%!-- Below the picture: the page's gutters, and the hover cards' hook round every list. --%>
       <div
@@ -358,6 +382,10 @@ defmodule RokiWeb.MoodLive do
         <p :if={@error} class="alert alert-error text-sm">
           Couldn't reach TMDB just now. Try again in a minute.
         </p>
+
+        <div class="flex justify-end">
+          <RokiWeb.GridSize.grid_switch size={@grid_size} />
+        </div>
 
         <%!-- A search within the mood: its finds, in place of the list. --%>
         <section :if={@q != ""} class="space-y-3">

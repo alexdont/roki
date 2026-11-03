@@ -184,10 +184,14 @@ defmodule RokiWeb.ListLive do
 
         <p :if={@cards_note} class="alert text-sm">{@cards_note}</p>
 
+        <div class="flex justify-end">
+          <RokiWeb.GridSize.grid_switch size={@grid_size} />
+        </div>
+
         <%!-- Watched is the greyed poster; the eye on top of it would only crowd the grid. The card
               that opens over a poster is the one Movies and Shows have (`GridCards`). --%>
         <div id="grid-cards" phx-hook="GridCards">
-          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          <ul class={["grid gap-4", RokiWeb.GridSize.cols(@grid_size)]}>
             <RokiWeb.FeaturedLive.tile
               :for={i <- @items}
               item={i}

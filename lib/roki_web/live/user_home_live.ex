@@ -388,6 +388,7 @@ defmodule RokiWeb.UserHomeLive do
 
       <.shelf
         :if={@state in [:loading, :ready]}
+        grid_size={@grid_size}
         data={@data}
         busy={@busy}
         error={@error}
@@ -600,6 +601,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :manga_totals, :map, default: %{seconds: 0, series: 0, chapters: 0}
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
+  attr :grid_size, :string, default: nil, doc: "the poster size chosen on this device (GridSize)"
 
   # Where Continue goes: playing, for a film or a show; the title's own page for anything else.
   defp continue_href(%{type: type, id: id}) when type in ["movie", "tv"] and is_integer(id),
@@ -609,7 +611,9 @@ defmodule RokiWeb.UserHomeLive do
 
   defp shelf(assigns) do
     assigns =
-      assign(assigns, :watching, assigns.data && List.first(assigns.data.watchlist.behind))
+      assigns
+      |> assign(:watching, assigns.data && List.first(assigns.data.watchlist.behind))
+      |> assign(:cols, RokiWeb.GridSize.cols(assigns.grid_size))
 
     ~H"""
     <div>
@@ -779,10 +783,14 @@ defmodule RokiWeb.UserHomeLive do
       >
         <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
 
+        <div :if={@data} class="-mb-6 flex justify-end">
+          <RokiWeb.GridSize.grid_switch size={@grid_size} />
+        </div>
+
         <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
         <section :if={!@data} class="space-y-3" aria-busy="true">
           <div class="skeleton h-7 w-40 rounded"></div>
-          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          <ul class={["grid gap-4", @cols]}>
             <li :for={_ <- 1..16} class="space-y-1">
               <div class="skeleton aspect-[2/3] w-full rounded-box"></div>
               <div class="skeleton h-5 w-3/4 rounded"></div>
@@ -793,6 +801,7 @@ defmodule RokiWeb.UserHomeLive do
 
         <.poster_row
           :if={@data}
+          cols={@cols}
           title="Watchlist"
           count={length(@data.watchlist.behind)}
           items={@data.watchlist.behind}
@@ -801,6 +810,7 @@ defmodule RokiWeb.UserHomeLive do
         />
         <.fold
           :if={@data}
+          cols={@cols}
           id="saved"
           title="Saved"
           items={@data.saved}
@@ -811,6 +821,7 @@ defmodule RokiWeb.UserHomeLive do
         />
         <.fold
           :if={@data}
+          cols={@cols}
           id="caught_up"
           title="Caught up"
           items={@data.watchlist.caught_up}
@@ -820,6 +831,7 @@ defmodule RokiWeb.UserHomeLive do
         />
         <.fold
           :if={@data}
+          cols={@cols}
           id="on_hold"
           title="On hold"
           items={@data.watchlist.on_hold}
@@ -829,6 +841,7 @@ defmodule RokiWeb.UserHomeLive do
         />
         <.fold
           :if={@data}
+          cols={@cols}
           id="history"
           title="History"
           items={@data.continue}
@@ -838,6 +851,7 @@ defmodule RokiWeb.UserHomeLive do
         />
         <.completed
           :if={@data && @completed != nil}
+          cols={@cols}
           items={@completed}
           shown={@completed_shown}
           open={MapSet.member?(@open, "completed")}
@@ -889,6 +903,8 @@ defmodule RokiWeb.UserHomeLive do
     default: nil,
     doc: "what to say, once opened, while there is nothing in it"
 
+  attr :cols, :string, required: true, doc: "the grid's columns (GridSize)"
+
   defp fold(assigns) do
     assigns = assign(assigns, :shown, MapSet.member?(assigns.open, assigns.id))
 
@@ -913,7 +929,7 @@ defmodule RokiWeb.UserHomeLive do
       <p :if={@shown and @items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
       <ul
         :if={@shown and @items != []}
-        class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+        class={["grid gap-4", @cols]}
       >
         <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={String.to_atom(@id)}>
           <%!-- No badge: everything here is saved. Taking a title off in its hover card clicks this
@@ -942,6 +958,8 @@ defmodule RokiWeb.UserHomeLive do
   attr :open, :boolean, required: true
   attr :ratings, :map, default: %{}
   attr :cached_titles, :any, default: nil
+
+  attr :cols, :string, required: true, doc: "the grid's columns (GridSize)"
 
   defp completed(assigns) do
     page = Enum.take(assigns.items, assigns.shown)
@@ -972,7 +990,7 @@ defmodule RokiWeb.UserHomeLive do
       <div :if={@open and @items != []} class="space-y-6">
         <div :for={group <- @groups} class="space-y-2">
           <h3 class="text-sm font-medium text-base-content/60">{month_label(hd(group))}</h3>
-          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          <ul class={["grid gap-4", @cols]}>
             <RokiWeb.FeaturedLive.tile :for={i <- group} item={i} kind={:completed}>
               <% score = Roki.Profile.score_for(@ratings, i) %>
               <div
@@ -1024,6 +1042,8 @@ defmodule RokiWeb.UserHomeLive do
   attr :items, :list, required: true
   attr :empty, :string, default: nil, doc: "what to say while there is nothing in it"
 
+  attr :cols, :string, required: true, doc: "the grid's columns (GridSize)"
+
   defp poster_row(assigns) do
     ~H"""
     <section class="space-y-3">
@@ -1034,7 +1054,7 @@ defmodule RokiWeb.UserHomeLive do
       <p :if={@items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
       <ul
         :if={@items != []}
-        class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+        class={["grid gap-4", @cols]}
       >
         <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={:watchlist} />
       </ul>

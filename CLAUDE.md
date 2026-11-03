@@ -361,6 +361,8 @@ Header (`RokiWeb.Layouts.app`): logo (= Featured `/home`), then Movies / Shows /
 
 `/movies`, `/shows`, `/anime` (`CategoryLive`, `Roki.Browse`): a larger-poster grid, Popular (= the Featured list) by default or Newest / Oldest / Top rated (TMDB discover, out already, with a vote floor so the oldest/newest/top are not obscure), grid size S/M/L at the top right (kept in `localStorage["roki:grid"]`, sent as the `grid` socket param), "Load more" at the bottom. Featured shows two rows per kind and "See more →".
 
+**Poster size everywhere** (`RokiWeb.GridSize`, on_mount in the `:site` live session): the same small / medium / large choice (3 / 2 / 1 a row on a phone), under the same `roki:grid` key, on Search, a list, the user's home (all its sections), Watched (beside grid/list; one stepping button on a phone) and the mood pages. A page draws its grid with `GridSize.cols(@grid_size, default)` and `<RokiWeb.GridSize.grid_switch size={@grid_size} />`; the default is what the page looked like before (Search medium, the rest small) until the device chooses.
+
 The section grids keep to whole rows while more can be loaded (`assets/js/fill_grid.js`, the `FillGrid` hook): the incomplete last row is hidden until the next page fills it, and shown in full once the list ends.
 
 ### Title page: library actions
@@ -444,6 +446,12 @@ stays on the sources page with a message and the list.
 
 ## Home mood carousel
 - `FeaturedLive.mood_picker/1` + `assets/js/mood_carousel.js` (`MoodCarousel`): the mood's lead backdrop blurred (`blur-sm`) into a dark field of its colour (dark in both themes), its top three posters fanned on the right (`.mood-fan`, dealt out again on each turn via `.is-active`), the name in Outfit, the moods as named tabs whose line fills. On scroll the hook sets `--tuck` (tabs sink a little and dissolve from the bottom edge up) and `--depth` (posters and words drift and fade); both are registered `@property` numbers in app.css. The mood pages' top (`MoodLive`) uses the same look.
+
+## Mood animations (home carousel)
+- `assets/js/mood_fx.js` (`MoodFx` on `#mood-fx` in `FeaturedLive`, one `#mood-fx-canvas` over the carousel, clicks pass through): an effect per mood — rain on glass (cry), red rain (scared), confetti, soft lights (love), heartbeat (thrill), embers and blasts (action), fireflies (escape), fog (mystery), wind and leaves (adventure), bubbles (kid), old film (past), a camera viewfinder (true). Each is `step(dt, amount, active)` + `draw(g, alpha)`; the shown mood fades in, the last one out.
+- Drawn at 30 fps, only while ≥35% of the carousel is on screen and the tab is visible; nothing goes past halfway between the carousel and the first row. Scaled to the device: a ~15 ms drawing test at start + `hardwareConcurrency`/`deviceMemory` (1 / 0.7 / 0.45 / off), then the real frame rate (judged only after 1.5 s of running). Too slow → off, with a note in the corner and "Turn them on anyway" (`localStorage["roki:fx"] = "on"`; `"off"` switches a device off). Off for reduced motion.
+- Also over the top of a mood's page (`MoodLive`, `data-mood` + `data-amount="0.7"`, not for a season). On both pages it thins out with the scroll past the area (`thin` in `loop`) and stops at two thirds; each effect is run a few seconds ahead unseen (`WARM`) so it fades in already under way.
+- Site-wide switch: `config :roki, mood_fx: false`. In the console, `document.querySelector("#mood-fx").fxStats` says what it is doing.
 
 ## Loading overlay
 - `assets/js/study/loading.js` (`bindLoading`, pure `describe` tested in `loading.test.mjs`): over the picture from Play to the first frame — "Connecting" / "Reading the file’s length and tracks" (the device player's `computeDuration`) / "Loading the first seconds" or "Loading from 1:07:32" — with bytes arrived, speed, time left on the hls.js part being fetched (its `frag.stats`), time waited, and "another source in N s" in the last 15 s of `startup`. Also: a conversion catching up to the resume point (`study.catchup`, set by `seekWhenReachable`), a device-player seek ("Loading from …"), a stall over 0.6 s. The device player reports reads through `onRead` (only bytes not seen before) and `onPhase`.

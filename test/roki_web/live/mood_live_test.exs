@@ -86,6 +86,22 @@ defmodule RokiWeb.MoodLiveTest do
     refute band =~ ~r/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}]/u
   end
 
+  test "a mood page carries its mood's animation over the top, a little lighter", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/mood/cry")
+
+    assert has_element?(
+             view,
+             ~s(#mood-fx[phx-hook="MoodFx"][data-mood="cry"][data-amount="0.7"] canvas#mood-fx-canvas)
+           )
+
+    assert has_element?(view, "#mood-fx section[data-fx-stage] h1", "Have a good cry")
+  end
+
+  test "a season's page has no animation", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/mood/halloween")
+    refute has_element?(view, "#mood-fx-canvas")
+  end
+
   test "a season's page says it is in season and has no search box", %{conn: conn} do
     items = [
       %{

@@ -63,6 +63,35 @@ export const MoodCarousel = {
     window.addEventListener("scroll", this.onScroll, {passive: true})
     this.tuck()
 
+    // A touch screen: a touch brings the row of moods into focus (app.css, `data-touched`) until a
+    // few seconds after the last one, and a sideways swipe turns to the next or previous mood.
+    let start = null
+    const touched = () => {
+      this.el.dataset.touched = ""
+      clearTimeout(this.untouch)
+      this.untouch = setTimeout(() => { delete this.el.dataset.touched }, 4000)
+    }
+    this.el.addEventListener("touchstart", (e) => {
+      touched()
+      const t = e.touches[0]
+      // The row of moods scrolls sideways itself: a swipe there moves the row, not the mood.
+      const onRow = e.target.closest && e.target.closest("[data-mood-tabs]")
+      start = t && !onRow ? {x: t.clientX, y: t.clientY} : null
+    }, {passive: true})
+    this.el.addEventListener("touchend", (e) => {
+      touched()
+      const t = e.changedTouches[0]
+      if (!start || !t) return
+      const dx = t.clientX - start.x, dy = t.clientY - start.y
+      start = null
+      // Sideways and far enough to mean it; a scroll of the page is up and down.
+      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+      const n = this.slides.length
+      this.held = false
+      this.show((this.index + (dx < 0 ? 1 : -1) + n) % n)
+      this.arm()
+    }, {passive: true})
+
     this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
     this.show(0)
     this.arm()
@@ -81,6 +110,7 @@ export const MoodCarousel = {
 
   destroyed() {
     clearTimeout(this.timer)
+    clearTimeout(this.untouch)
     cancelAnimationFrame(this.scrollFrame)
     window.removeEventListener("scroll", this.onScroll)
     document.removeEventListener("visibilitychange", this.onVisibility)
