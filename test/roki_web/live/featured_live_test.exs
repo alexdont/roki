@@ -110,16 +110,32 @@ defmodule RokiWeb.FeaturedLiveTest do
       end
     end
 
-    test "the first mood is the one shown, its tab selected", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/")
-      [first | _] = Roki.Mood.all()
+    test "opens on a random mood, the tabs in their own order", %{conn: conn} do
+      {:ok, view, html} = live(conn, "/")
+
+      [start] =
+        Regex.run(~r/id="mood-picker"[^>]*data-start="([^"]+)"/, html, capture: :all_but_first)
+
+      mood = Enum.find(Roki.Mood.all(), &(&1.slug == start))
+      assert mood
 
       assert has_element?(
                view,
-               ~s(#mood-picker [data-mood-chip="#{first.slug}"][aria-selected="true"])
+               ~s(#mood-picker [data-mood-chip="#{start}"][aria-selected="true"])
              )
 
-      assert has_element?(view, ~s(#mood-picker [data-mood="#{first.slug}"] h1), first.label)
+      assert has_element?(view, ~s(#mood-picker [data-mood="#{start}"] h1), mood.label)
+      assert has_element?(view, ~s(#mood-picker [data-mood-chip][aria-selected="true"]))
+
+      tabs = Regex.scan(~r/data-mood-chip="([^"]+)"/, render(view), capture: :all_but_first)
+      assert List.flatten(tabs) == Enum.map(Roki.Mood.all(), & &1.slug)
+    end
+
+    test "connecting keeps the mood the first paint chose", %{conn: conn} do
+      [_, second | _] = Roki.Mood.all()
+      conn = put_connect_params(conn, %{"mood" => second.slug})
+      {:ok, view, _} = live(conn, "/")
+      assert has_element?(view, ~s(#mood-picker[data-start="#{second.slug}"]))
     end
   end
 

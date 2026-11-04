@@ -93,7 +93,9 @@ export const MoodCarousel = {
     }, {passive: true})
 
     this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
-    this.show(0)
+    // The mood the page opened on (chosen at random by the server); the turning goes on in order.
+    this.index = Math.max(0, this.order.indexOf(this.el.dataset.start))
+    this.show(this.index)
     this.arm()
   },
 

@@ -45,12 +45,21 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
       # The mood picker: what is held already is drawn in the first render, the rest arrives.
       |> assign(:moods, Roki.Mood.hero_peek())
+      # Which mood the carousel opens on: a random one, the tabs keep their order. The first paint
+      # picks it and the browser hands it back on connect (`mood` param), so it does not change.
+      |> assign(:mood_start, mood_start(socket))
       # Each mood's animation over the carousel (mood_fx.js); a site-wide switch.
       |> assign(:mood_fx?, Application.get_env(:roki, :mood_fx, true))
       |> assign(:list_posters, %{})
       |> assign(:lists_shown, @lists_first)
 
     {:ok, if(connected?(socket), do: start(socket), else: socket)}
+  end
+
+  defp mood_start(socket) do
+    slugs = Enum.map(Roki.Mood.all(), & &1.slug)
+    held = connected?(socket) && get_connect_params(socket)["mood"]
+    if held in slugs, do: held, else: Enum.random(slugs)
   end
 
   # Who finished what, newest first. Only for people signed in (it names other people); it stays
@@ -452,7 +461,7 @@ defmodule RokiWeb.FeaturedLive do
           class="pointer-events-none absolute left-0 top-0 z-[25]"
           aria-hidden="true"
         ></canvas>
-        <.mood_picker moods={@moods} />
+        <.mood_picker moods={@moods} start={@mood_start} />
 
         <.shelf_rows
           shelves={@shelves}
@@ -753,6 +762,7 @@ defmodule RokiWeb.FeaturedLive do
   end
 
   attr :moods, :map, required: true
+  attr :start, :string, default: nil
 
   # "What are you in the mood for?": one mood at a time, turning on a timer. The mood's lead picture
   # blurred into a field of colour, its three most popular titles fanned on the right (above the
@@ -761,7 +771,9 @@ defmodule RokiWeb.FeaturedLive do
   # Dark in both themes: the words are white, and the header floats over it.
   @doc false
   def mood_picker(assigns) do
-    assigns = assign(assigns, :all, Roki.Mood.all())
+    all = Roki.Mood.all()
+    start = if Enum.any?(all, &(&1.slug == assigns.start)), do: assigns.start, else: hd(all).slug
+    assigns = assign(assigns, all: all, start: start)
 
     ~H"""
     <section
@@ -769,6 +781,7 @@ defmodule RokiWeb.FeaturedLive do
       data-fx-stage
       phx-hook="MoodCarousel"
       data-every="6000"
+      data-start={@start}
       class="relative overflow-hidden bg-neutral-950"
       aria-label="What are you in the mood for?"
     >
@@ -776,13 +789,13 @@ defmodule RokiWeb.FeaturedLive do
             tagline makes every slide taller and never squeezes the posters or the button. --%>
       <div class="relative grid min-h-[clamp(34rem,74svh,46rem)] grid-cols-[minmax(0,1fr)] lg:min-h-[clamp(32rem,66svh,44rem)]">
         <div
-          :for={{m, i} <- Enum.with_index(@all)}
+          :for={m <- @all}
           data-mood={m.slug}
           class={[
             "relative col-start-1 row-start-1 flex transition-opacity duration-700",
-            i != 0 && "pointer-events-none opacity-0"
+            m.slug != @start && "pointer-events-none opacity-0"
           ]}
-          aria-hidden={to_string(i != 0)}
+          aria-hidden={to_string(m.slug != @start)}
         >
           <% items = Map.get(@moods, m.slug, []) %>
           <% lead = List.first(items) %>
@@ -790,7 +803,7 @@ defmodule RokiWeb.FeaturedLive do
             :if={lead && lead[:backdrop]}
             src={Roki.Images.local(String.replace(lead.backdrop, "/w1280/", "/w780/"))}
             alt=""
-            loading={if i == 0, do: "eager", else: "lazy"}
+            loading={if m.slug == @start, do: "eager", else: "lazy"}
             class="absolute inset-0 h-full w-full scale-105 object-cover opacity-50 blur-sm"
           />
           <div
@@ -819,7 +832,7 @@ defmodule RokiWeb.FeaturedLive do
                 <img
                   src={Roki.Images.local(String.replace(it.poster, "/w500/", "/w342/"))}
                   alt={it.title}
-                  loading={if i == 0, do: "eager", else: "lazy"}
+                  loading={if m.slug == @start, do: "eager", else: "lazy"}
                   class="h-full w-full object-cover"
                 />
               </.link>
@@ -862,11 +875,11 @@ defmodule RokiWeb.FeaturedLive do
           aria-label="Moods"
         >
           <.link
-            :for={{m, i} <- Enum.with_index(@all)}
+            :for={m <- @all}
             navigate={~p"/mood/#{m.slug}"}
             data-mood-chip={m.slug}
             role="tab"
-            aria-selected={to_string(i == 0)}
+            aria-selected={to_string(m.slug == @start)}
             class="relative shrink-0 pb-1 pt-3 text-sm font-medium text-white/50 transition hover:text-white aria-selected:text-white"
           >
             <span class="absolute inset-x-0 -top-px h-0.5 overflow-hidden" aria-hidden="true">

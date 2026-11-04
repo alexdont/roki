@@ -276,6 +276,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
     manga: storedMangaPrefs(),
     place: placeParam(),
     caps: deviceCaps(),
+    // The home carousel's first mood, as the first paint chose it, so connecting keeps it.
+    mood: document.getElementById("mood-picker")?.dataset.start,
   }),
   // Marks the page's scripts put on elements (a picture that has arrived, a section shown) survive
   // the server's patches.
