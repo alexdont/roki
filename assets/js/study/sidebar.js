@@ -1676,6 +1676,8 @@ export const StudySidebar = {
       this.showDiag(v)
       try {
         this.local = await startLocalPlayer(v, p.url, {
+          // The release's own identity and size: the same file again is not measured again.
+          fileKey: p.key ? `${p.key}:${p.filesize || ""}` : null,
           resume: p.resume,
           audioLang: p.audio_lang,
           onPhase: (name) => { if (this.playerUrl === p.url) this.loader.phase(name) },

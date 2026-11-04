@@ -147,7 +147,7 @@ defmodule RokiWeb.WatchComponents do
   def starting(assigns) do
     ~H"""
     <div
-      class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+      class="wait-late wait-late-short fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
       id="starting"
     >
       <div class="w-full max-w-sm space-y-4 rounded-3xl bg-base-100 p-6 shadow-2xl">

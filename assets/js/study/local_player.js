@@ -14,6 +14,8 @@
 // and so the download — and what is half a minute behind is let go.
 
 import {SubtitleScanner, toVtt} from "./ebml_subs.js"
+import {lengths} from "./lengths.js"
+import {heads} from "./heads.js"
 
 // Loaded from the site's own files at run time, not bundled: the address is a variable so the
 // bundler leaves the import alone.
@@ -54,7 +56,7 @@ const AHEAD = 60, BEHIND = 30
 /**
  * Start playing `url` in `video`. Returns a controller: `seek(t)`, `audioTracks`, `setAudio(i)`,
  * `subtitleTracks` (each with `read()` giving its WebVTT so far), `stop()`.
- * `opts`: `resume` (seconds), `audioLang` (ISO 639-2 preferred), `onFail(why)`, `onReady(info)`,
+ * `opts`: `fileKey` (what identifies the file: its length and the reads of its head are kept on this device), `resume` (seconds), `audioLang` (ISO 639-2 preferred), `onFail(why)`, `onReady(info)`,
  * `onLog(line)`, `onPhase(name)` ("first": the length and tracks are known, the video is being
  * read), `onRead(bytes)` (each read of the file, for the loading overlay).
  */
@@ -85,18 +87,50 @@ export async function startLocalPlayer(video, url, opts = {}) {
     return Math.max(0, added)
   }
   const originalRead = source._read.bind(source)
+  // Until the tracks are known, every read is the file's head: served from this device when it was
+  // kept from a time before, kept when it had to be fetched. After that, the file itself.
+  // The very first read always goes to the host: the reader learns the file's size from that
+  // response, and asks for it right after (an MKV's index is at the end) — served from the device
+  // instead, it has no size and gives up ("reading file size too early").
+  let heading = true, primed = false, headReads = 0, headHits = 0
+  const key = opts.fileKey || null
+  heads.touch(key)
   source._read = (start, end, minPos, maxPos) => {
-    const r = originalRead(start, end, minPos, maxPos)
     const see = (res) => { if (res && res.bytes && opts.onRead && Number.isFinite(res.offset)) opts.onRead(fresh(res.offset, res.bytes.byteLength)); try { if (res && res.bytes && Number.isFinite(res.offset)) scanner.feed(res.offset, res.bytes) } catch (e) { console.warn("subtitle scanner", e) }; return res }
-    return r && typeof r.then === "function" ? r.then(see) : see(r)
+    if (!heading || !key || !primed) {
+      const first = !primed && heading && key
+      primed = true
+      if (first) headReads++
+      const r = originalRead(start, end, minPos, maxPos)
+      const keep = (res) => { if (first && res && res.bytes && Number.isFinite(res.offset)) heads.put(key, start, end, res); return see(res) }
+      return r && typeof r.then === "function" ? r.then(keep) : keep(r)
+    }
+    headReads++
+    return heads.get(key, start, end).then((kept) => {
+      // As the reader's own sources return a read: the bytes, where they begin, and a view on them.
+      if (kept) { headHits++; return see({offset: kept.offset, bytes: kept.bytes, view: new DataView(kept.bytes.buffer, kept.bytes.byteOffset, kept.bytes.byteLength)}) }
+      return Promise.resolve(originalRead(start, end, minPos, maxPos)).then((res) => {
+        if (res && res.bytes && Number.isFinite(res.offset) && heading) heads.put(key, start, end, res)
+        return see(res)
+      })
+    })
   }
   const input = new MB.Input({source, formats: MB.ALL_FORMATS})
-  const duration = await input.computeDuration()
+  const t0 = performance.now()
+  // The length: kept from the last time this file was opened here, else worked out (and kept).
+  let duration = lengths.get(key)
+  if (!duration) {
+    duration = await input.computeDuration()
+    lengths.set(key, duration)
+  }
   const tracks = await input.getTracks()
+  log(`tracks read in ${Math.round(performance.now() - t0)} ms: ${headReads} reads, ${headHits} from this device`)
   const videoTrack = await pickVideo(tracks)
   if (!videoTrack) { fail("no video track this browser can take"); return null }
   const videoCodec = await videoTrack.getCodecParameterString()
   const encoder = await encoderFor(MB)
+  heading = false
+  log(`head read in ${Math.round(performance.now() - t0)} ms: ${headReads} reads, ${headHits} from this device`)
 
   // Audio: every track with how it would be carried; the preferred language first.
   const audios = []

@@ -70,6 +70,7 @@ defmodule RokiWeb.WatchLive do
           failed: nil,
           failed_reason: nil,
           skip: [],
+          played: nil,
           heavy_ok: false,
           fallback?: false,
           decode_prompt: nil,
@@ -193,6 +194,10 @@ defmodule RokiWeb.WatchLive do
                  heavy_ok,
                  caps
                ),
+             # What is known not to play (kept with the entry, whatever search found it again) is
+             # left out like what failed in this visit — even when the address names it.
+             skip = known_bad(uuid, res, skip),
+             hash = if(hash in skip, do: nil, else: hash),
              res = without(parent, token, uuid, heavy_ok, caps, res, skip),
              {res, pair} <-
                locate(
@@ -335,6 +340,12 @@ defmodule RokiWeb.WatchLive do
     do: "That Nuvio source is no longer listed. Go back and search again."
 
   defp nuvio_failure(reason), do: Roki.Nuvio.message(reason)
+
+  # What failed in this visit and what is known not to play (kept with the entry).
+  defp known_bad(uuid, %{key: key}, skip) when not is_nil(key),
+    do: Enum.uniq(skip ++ SourceCache.bad(uuid, key))
+
+  defp known_bad(_uuid, _res, skip), do: skip
 
   # What did not work before is left out; when that is all that was checked, look at more.
   defp without(_parent, _token, _uuid, _heavy_ok, _caps, res, []), do: res
@@ -748,8 +759,6 @@ defmodule RokiWeb.WatchLive do
 
     data = Map.merge(data, media_info(socket.assigns))
 
-    if res.key, do: SourceCache.mark_good(uuid, res.key, source.hash)
-
     Process.send_after(self(), :warm_next, 45_000)
 
     socket =
@@ -937,6 +946,8 @@ defmodule RokiWeb.WatchLive do
     %{uuid: uuid, ctx: ctx} = socket.assigns
 
     if uuid && ctx && is_number(position) do
+      socket = mark_playing(socket, position)
+
       case Watch.record_progress(uuid, ctx, position, duration || 0, params["paused"] == true,
              watched: params["watched"]
            ) do
@@ -1086,7 +1097,7 @@ defmodule RokiWeb.WatchLive do
          }
        )}
     else
-      {:noreply, socket}
+      {:noreply, next_after_browser_failure(socket, source)}
     end
   end
 
@@ -1291,6 +1302,45 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
+  # The browser is playing it (a position past the start reached it): only now is it the release to
+  # go straight to next time. Started on the server is not played — a conversion can run and the
+  # browser still not show it.
+  defp mark_playing(
+         %{assigns: %{current: {source, _}, key: key, uuid: uuid, played: played}} = socket,
+         position
+       )
+       when position > 0 and is_binary(key) and played != source.hash do
+    SourceCache.mark_good(uuid, key, source.hash)
+    assign(socket, :played, source.hash)
+  end
+
+  defp mark_playing(socket, _position), do: socket
+
+  # The browser could not play a release the server had started: it is remembered as bad (so a
+  # reload does not try it again), and the next best is looked for, up to four in a row.
+  defp next_after_browser_failure(socket, source) do
+    %{uuid: uuid, key: key, skip: skip} = socket.assigns
+    if key, do: SourceCache.mark_bad(uuid, key, source.hash)
+    skip = Enum.uniq([source.hash | skip])
+
+    Trace.log({self(), socket.assigns.token}, "set aside after the browser failed",
+      release: Trace.release(source),
+      skip: length(skip)
+    )
+
+    if length(skip) <= 4 do
+      socket
+      |> assign(
+        hash: nil,
+        skip: skip,
+        status: "That release didn't play in this browser — trying another…"
+      )
+      |> resolve()
+    else
+      assign(socket, skip: skip)
+    end
+  end
+
   defp next_episode(%{type: "tv", title: title, season: season, episode: episode, episodes: eps})
        when is_integer(episode) and title != nil do
     nexts = if is_list(eps), do: Enum.filter(eps, &(&1.number > episode and &1.aired?)), else: []
@@ -1465,7 +1515,7 @@ defmodule RokiWeb.WatchLive do
             (@linked? or @pengu != nil) and @player == nil and @failed == nil and @title_error == nil and
               @decode_prompt == nil
           }
-          class="space-y-3 rounded-box bg-base-200 p-6 text-sm"
+          class="wait-late space-y-3 rounded-box bg-base-200 p-6 text-sm"
           aria-busy="true"
         >
           <div class="flex items-center gap-3">

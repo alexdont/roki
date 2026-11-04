@@ -5,8 +5,10 @@ defmodule Roki.Watch.SourceCache do
   account), on disk beside their laev state so it survives a restart and goes when they
   disconnect.
 
-  An entry is `%{at:, playable: [{source, stream}], rest: [source], good: hash | nil}`:
-  `good` is the release that last actually started, which the next Play goes straight to.
+  An entry is `%{at:, playable: [{source, stream}], rest: [source], good: hash | nil, bad: [hash]}`:
+  `good` is the release that last actually played (the browser said so), which the next Play goes
+  straight to; `bad` are the releases that would not start or play, which stay out of the entry —
+  and out of every later search's results — for as long as the entry lives.
   Entries older than the user's setting (`Roki.Laev.web_settings/1` → `sources_cache`, 12 hours
   by default, 0 = off) are not served and are deleted when seen.
   """
@@ -53,8 +55,31 @@ defmodule Roki.Watch.SourceCache do
     if light? and full?(old) do
       :ok
     else
-      write(uuid, key, merge(uuid, old, playable, rest, light?))
+      bad = bad_of(old)
+      entry = merge(uuid, old, playable, rest, light?)
+      write(uuid, key, drop_bad(Map.put(entry, :bad, bad)))
     end
+  end
+
+  defp bad_of(%{} = entry), do: Map.get(entry, :bad, [])
+  defp bad_of(_), do: []
+
+  # What is known not to play stays out: a search that finds it again (it was found playable — the
+  # debrid has it — it is the starting that failed) does not bring it back.
+  defp drop_bad(%{bad: []} = entry), do: entry
+
+  defp drop_bad(%{bad: bad} = entry) do
+    %{
+      entry
+      | playable: Enum.reject(entry.playable, fn {source, _} -> source.hash in bad end),
+        rest: Enum.reject(entry.rest, &(Map.get(&1, :hash) in bad)),
+        good: if(entry[:good] in bad, do: nil, else: entry[:good])
+    }
+  end
+
+  @doc "The releases known not to play for this film or episode (hashes); `[]` when none or unknown."
+  def bad(uuid, key) do
+    bad_of(get(uuid, key, 1_000_000))
   end
 
   # A save adds to what is kept rather than replacing it. Several searches write the same entry —
@@ -110,23 +135,24 @@ defmodule Roki.Watch.SourceCache do
   end
 
   @doc """
-  A release that would not start: it is no longer the one to go straight to, and it is taken out of
-  the kept list, so the next Play (or the sources page) does not offer it first and fail the same way.
+  A release that would not start or play: it is no longer the one to go straight to, it is taken
+  out of the kept list, and it is remembered as bad — later searches that find it again leave it
+  out (`put/5`), the watch page skips it even when its address names it — so the next Play (or the
+  sources page) does not offer it first and fail the same way.
   """
-  def mark_bad(uuid, key, hash) do
+  def mark_bad(uuid, key, hash) when is_binary(hash) do
     with {:ok, bin} <- File.read(path(uuid, key)),
          %{} = entry <- :erlang.binary_to_term(bin, [:safe]) do
-      write(uuid, key, %{
-        entry
-        | playable: Enum.reject(entry.playable, fn {source, _} -> source.hash == hash end),
-          good: if(entry.good == hash, do: nil, else: entry.good)
-      })
+      bad = Enum.uniq([hash | bad_of(entry)]) |> Enum.take(60)
+      write(uuid, key, drop_bad(Map.put(entry, :bad, bad)))
     end
 
     :ok
   rescue
     _ -> :ok
   end
+
+  def mark_bad(_uuid, _key, _hash), do: :ok
 
   def delete(uuid, key), do: File.rm(path(uuid, key)) && :ok
 

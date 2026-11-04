@@ -118,4 +118,50 @@ defmodule Roki.Watch.SourceCacheTest do
     assert SourceCache.hours(%{}) == 12
     Roki.Study.bind(%{})
   end
+
+  describe "a release that would not play" do
+    test "is remembered as bad and is left out, even when a later search finds it again" do
+      SourceCache.put(@uuid, @key, [pair("a"), pair("b")], [%{name: "u", hash: "c"}])
+      SourceCache.mark_good(@uuid, @key, "a")
+      SourceCache.mark_bad(@uuid, @key, "a")
+
+      entry = SourceCache.get(@uuid, @key, 12)
+      assert [{%{hash: "b"}, _}] = entry.playable
+      assert entry.good == nil
+      assert SourceCache.bad(@uuid, @key) == ["a"]
+
+      # The background search (or the sources page) finds it playable again: it stays out.
+      SourceCache.put(@uuid, @key, [pair("a"), pair("b")], [
+        %{name: "u", hash: "a"},
+        %{name: "v", hash: "c"}
+      ])
+
+      entry = SourceCache.get(@uuid, @key, 12)
+      assert Enum.map(entry.playable, fn {s, _} -> s.hash end) == ["b"]
+      assert Enum.map(entry.rest, & &1.hash) == ["c"]
+      assert entry.bad == ["a"]
+    end
+
+    test "stays out when the list is replaced by one of the other kind" do
+      SourceCache.put(@uuid, @key, [pair("a"), pair("b")], [], true)
+      SourceCache.mark_bad(@uuid, @key, "b")
+      SourceCache.put(@uuid, @key, [pair("b"), pair("c")], [], false)
+      entry = SourceCache.get(@uuid, @key, 12)
+      assert Enum.map(entry.playable, fn {s, _} -> s.hash end) == ["c"]
+      assert SourceCache.bad(@uuid, @key) == ["b"]
+    end
+
+    test "nothing known is nothing bad" do
+      assert SourceCache.bad(@uuid, {"movie", 9, nil, nil}) == []
+      assert SourceCache.mark_bad(@uuid, {"movie", 9, nil, nil}, "x") == :ok
+    end
+
+    test "is forgotten with the entry" do
+      SourceCache.put(@uuid, @key, [pair("a")], [])
+      SourceCache.mark_bad(@uuid, @key, "a")
+      SourceCache.delete(@uuid, @key)
+      SourceCache.put(@uuid, @key, [pair("a")], [])
+      assert [{%{hash: "a"}, _}] = SourceCache.get(@uuid, @key, 12).playable
+    end
+  end
 end

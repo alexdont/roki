@@ -1207,6 +1207,15 @@ html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data
    faded in (as pictures do here) would be seen blurred under the moving picture. */
 html[data-vt] [data-hero] > img { opacity: 1 !important; filter: none !important; transition: none !important; }
 
+/* A wait that is usually over at once (a reload that plays from what is already known): its card
+   is there from the first paint but only shows if the wait lasts — a flash of "getting the video
+   ready" before a video that starts in a moment says nothing true. It still takes its space (and a
+   pop-up still blocks clicks) while it is not yet visible. */
+.wait-late { animation: wait-late-in 0.3s ease 1.6s both; }
+.wait-late-short { animation-delay: 0.45s; }
+@keyframes wait-late-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wait-late { animation-duration: 0.01s; } }
+
 /* The page held still (`data-still`, polish.js): a copy of it over everything while the next page
    loads underneath. Nothing in it is to be touched, and nothing in it moves again. */
 [data-still] { position: fixed; inset: 0; z-index: 2147483000; overflow: hidden; touch-action: none; overscroll-behavior: contain; }
