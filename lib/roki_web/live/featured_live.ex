@@ -619,7 +619,7 @@ defmodule RokiWeb.FeaturedLive do
         </div>
         <.link
           navigate={~p"/lists"}
-          class="flex items-center gap-0.5 text-sm font-medium text-base-content/60 transition hover:text-base-content lg:opacity-0 lg:group-hover/row:opacity-100 lg:focus-visible:opacity-100"
+          class="pointer-events-none flex items-center gap-0.5 text-sm font-medium text-base-content/60 opacity-0 transition hover:text-base-content group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-data-[touched]/row:pointer-events-auto group-data-[touched]/row:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
         >
           See All {@total} <.icon name="hero-chevron-right-micro" class="h-4 w-4" />
         </.link>
@@ -977,7 +977,7 @@ defmodule RokiWeb.FeaturedLive do
         <h2 class="text-2xl font-semibold tracking-tight">{@title}</h2>
         <.link
           navigate={@href}
-          class="flex items-center gap-0.5 text-sm font-medium text-base-content/60 opacity-0 transition hover:text-base-content group-hover/row:opacity-100 focus-visible:opacity-100"
+          class="pointer-events-none flex items-center gap-0.5 text-sm font-medium text-base-content/60 opacity-0 transition hover:text-base-content group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-data-[touched]/row:pointer-events-auto group-data-[touched]/row:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
         >
           See All <.icon name="hero-chevron-right-micro" class="h-4 w-4" />
         </.link>

@@ -73,9 +73,27 @@ const setWatched = (li, watched) => {
 }
 
 export const ShelfRow = {
+// On a touch screen there is no hovering to bring a row's "See All" up: it appears on the row that
+// has been touched (a tap, or the start of a swipe) and goes from it when another row is touched,
+// or anywhere else on the page is. `data-touched` on the row, for the link's CSS. One row at a time.
+let touched = null
+let touchBound = false
+const untouch = () => { touched?.removeAttribute("data-touched"); touched = null }
+
   mounted() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
     this.el.querySelector("[data-row-prev]")?.addEventListener("click", () => this.step(-1))
+    if (!touchBound) {
+      touchBound = true
+      document.addEventListener("touchstart", (e) => {
+        if (touched && !(e.target.closest && e.target.closest("[data-touched]"))) untouch()
+      }, {passive: true})
+    }
+    this.el.addEventListener("touchstart", () => {
+      if (touched && touched !== this.el) untouch()
+      touched = this.el
+      this.el.setAttribute("data-touched", "")
+    }, {passive: true})
     this.el.querySelector("[data-row-next]")?.addEventListener("click", () => this.next())
     this.sync = () => {
       const s = this.scroller
@@ -106,6 +124,8 @@ export const ShelfRow = {
   // The page re-renders as posters arrive: the attributes set here are the first to go.
   updated() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
+    // A patch drops attributes the server did not send, this one with them.
+    if (touched === this.el) this.el.setAttribute("data-touched", "")
     this.restorePlace()
     this.asked = false
     this.sync()
@@ -154,6 +174,7 @@ export const ShelfRow = {
   },
 
   ask(then) {
+    if (touched === this.el) touched = null
     this.asked = true
     this.pushEvent("row_more", {kind: this.el.dataset.kind}, () => {
       // The reply comes with the new tiles; let them be laid out before moving over them.
