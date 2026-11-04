@@ -217,7 +217,7 @@ html.study-open .site-header { display: none; }
      because this rule outranks that one, and a transition list replaces, not adds: without it
      the dimming snapped on at once. */
   transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 0.45s ease;
+    filter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) var(--dim-delay, 0s);
 }
 
 @media (hover: hover) and (min-width: 1024px) {
@@ -241,8 +241,10 @@ html.study-open .site-header { display: none; }
 }
 
 /* While a card is open the row does not snap: widening its slot changes what the nearest snap point
-   is, and the browser would nudge the row a few pixels once the card is open. */
-[data-card-row]:has(> [data-card][data-open]) {
+   is, and the browser would nudge the row a few pixels once the card is open. Nor for a moment
+   after it closes (`data-settling`, shelf_row.js): snapping put back while the card was still
+   shrinking lurched the whole row sideways and back. */
+[data-card-row]:has(> [data-card][data-open]), [data-card-row][data-settling] {
   scroll-snap-type: none;
 }
 
@@ -1170,25 +1172,16 @@ html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data
 [data-reveal]:not([data-shown]) { opacity: 0; transform: translate3d(0, 18px, 0); }
 [data-reveal][data-shown]:not([data-instant]) { transition: opacity 0.6s ease, transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
 
-/* A row fades out at the side where there is more to scroll, so a poster is never seen cut off
-   (wide screens; on a phone the row runs off the edge, which says the same). */
-@media (min-width: 1024px) {
-  [data-row-scroller] {
-    --fade-l: 0px;
-    --fade-r: 0px;
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
-    mask-image: linear-gradient(to right, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
-  }
-  [data-start="false"] [data-row-scroller] { --fade-l: 56px; }
-  [data-end="false"] [data-row-scroller] { --fade-r: 56px; }
-  /* No fade under an opened card, which must be seen whole. */
-  [data-row-scroller]:has(> [data-open]) { -webkit-mask-image: none; mask-image: none; }
-}
 
 /* When a poster opens into its card (the pointer has come to rest on it, `data-open`), the others
    step back, fading down as it widens and back up as it closes. */
 @media (hover: hover) and (min-width: 1024px) {
-  [data-card-row] > li, ul.grid > [data-grid-card] { transition: filter 0.45s ease; }
+  /* The others dim exactly while a poster is widened, at the pace of the widening: down as it opens,
+     back up as it closes, and not at all when nothing is open (on a chevron, say). The dimming
+     sweeps in from the sides of the row towards the card, and lifts the same way (`--dim-delay` per
+     poster, set by shelf_row.js `sweep`). */
+  [data-card-row] > li, ul.grid > [data-grid-card] { transition: filter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) var(--dim-delay, 0s); }
+
   [data-card-row]:has(> [data-open]) > li:not([data-open]),
   ul.grid:has(> [data-grid-card][data-open]) > [data-grid-card]:not([data-open]) { filter: brightness(0.6) saturate(0.85); }
 }
@@ -1215,6 +1208,7 @@ html[data-vt] [data-hero] > img { opacity: 1 !important; filter: none !important
 /* Inside the moving frame the picture it started as stays whole and the picture it becomes comes in
    over it — not the two fading through each other, which dims the middle of the move. */
 ::view-transition-old(roki-art), ::view-transition-new(roki-art) { mix-blend-mode: normal; height: 100%; object-fit: cover; }
+/* The poster stays whole and the page's art comes in over it. */
 ::view-transition-old(roki-art) { animation: none; }
 ::view-transition-new(roki-art) { animation: roki-over-shade 0.3s ease-out both; }
 

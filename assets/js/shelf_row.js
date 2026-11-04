@@ -1,6 +1,7 @@
 // A row of posters that scrolls sideways (the home page, on a wide screen).
 //
-// The chevrons are the row's own: they show on hover (CSS) and this keeps `data-start` /
+// The chevrons are the row's own: they show on hover (CSS, at one steady level — a level that
+// followed the pointer made the shade swell and fade as it moved along the row) and this keeps `data-start` /
 // `data-end` true to where the row is scrolled, so the left one only shows once there is something
 // to go back to and the right one goes when there is nothing further.
 //
@@ -72,7 +73,6 @@ const setWatched = (li, watched) => {
   li.querySelector("a.poster-card img")?.classList.toggle("grayscale", !!watched)
 }
 
-export const ShelfRow = {
 // On a touch screen there is no hovering to bring a row's "See All" up: it appears on the row that
 // has been touched (a tap, or the start of a swipe) and goes from it when another row is touched,
 // or anywhere else on the page is. `data-touched` on the row, for the link's CSS. One row at a time.
@@ -80,9 +80,9 @@ let touched = null
 let touchBound = false
 const untouch = () => { touched?.removeAttribute("data-touched"); touched = null }
 
+export const ShelfRow = {
   mounted() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
-    this.el.querySelector("[data-row-prev]")?.addEventListener("click", () => this.step(-1))
     if (!touchBound) {
       touchBound = true
       document.addEventListener("touchstart", (e) => {
@@ -94,6 +94,7 @@ const untouch = () => { touched?.removeAttribute("data-touched"); touched = null
       touched = this.el
       this.el.setAttribute("data-touched", "")
     }, {passive: true})
+    this.el.querySelector("[data-row-prev]")?.addEventListener("click", () => this.step(-1))
     this.el.querySelector("[data-row-next]")?.addEventListener("click", () => this.next())
     this.sync = () => {
       const s = this.scroller
@@ -118,7 +119,6 @@ const untouch = () => { touched?.removeAttribute("data-touched"); touched = null
     this.restorePlace()
     this.sync()
     this.cards()
-    if (matchMedia("(hover: hover) and (min-width: 1024px)").matches && this.scroller && !this.grid) this.watchNear()
   },
 
   // The page re-renders as posters arrive: the attributes set here are the first to go.
@@ -130,24 +130,6 @@ const untouch = () => { touched?.removeAttribute("data-touched"); touched = null
     this.asked = false
     this.sync()
     this.keepOpen()
-  },
-
-  // The chevrons are faintly there while the pointer is in the row, and darker the nearer it gets
-  // to the side they are on (`--near-l` / `--near-r`, 0 to 1, read by the strips' opacity): so there
-  // is something to see before reaching for it, and it is plain by the time the pointer is there.
-  watchNear() {
-    const REACH = 280
-    const set = (l, r) => {
-      this.el.style.setProperty("--near-l", l.toFixed(3))
-      this.el.style.setProperty("--near-r", r.toFixed(3))
-    }
-    this.el.addEventListener("mousemove", (e) => {
-      const box = this.scroller.getBoundingClientRect()
-      const l = this.el.dataset.start === "false" ? 1 - (e.clientX - box.left) / REACH : 0
-      const r = this.el.dataset.end === "false" ? 1 - (box.right - e.clientX) / REACH : 0
-      set(Math.min(1, Math.max(0, l)), Math.min(1, Math.max(0, r)))
-    })
-    this.el.addEventListener("mouseleave", () => set(0, 0))
   },
 
   restorePlace() {
@@ -174,7 +156,6 @@ const untouch = () => { touched?.removeAttribute("data-touched"); touched = null
   },
 
   ask(then) {
-    if (touched === this.el) touched = null
     this.asked = true
     this.pushEvent("row_more", {kind: this.el.dataset.kind}, () => {
       // The reply comes with the new tiles; let them be laid out before moving over them.
@@ -193,6 +174,8 @@ const untouch = () => { touched?.removeAttribute("data-touched"); touched = null
   },
 
   destroyed() {
+    if (touched === this.el) touched = null
+    clearTimeout(this.settleTimer)
     clearTimeout(this.saveTimer)
     window.removeEventListener("resize", this.sync)
     this.close()
@@ -220,7 +203,7 @@ export const cardMethods = {
     // again; leaving the poster closes it (or cancels the wait).
     this.scroller.addEventListener("mousemove", (e) => {
       const li = e.target.closest?.("[data-card]")
-      if (!li || li.hasAttribute("data-no-card")) { this.leave(); return }
+      if (!li || li.hasAttribute("data-no-card") || this.atEdge(e.clientX)) { this.leave(); return }
       if (li === this.hot) return
       const moved = !this.at || Math.hypot(e.clientX - this.at.x, e.clientY - this.at.y) > STILL_PX
       if (li !== this.cand || moved) {
@@ -240,6 +223,16 @@ export const cardMethods = {
       const seen = e.target.closest?.("[data-card-watched]")
       if (seen) { e.preventDefault(); this.toggle(seen.closest("[data-card]"), "watched") }
     })
+  },
+
+  // In the strip along a side where a chevron is shown (and a little beyond it), going for the
+  // chevron: a card opening here, and the other posters stepping back for it, only to close again
+  // as the pointer reaches the chevron, was a flicker. Nothing opens there.
+  atEdge(x) {
+    const box = this.scroller.getBoundingClientRect()
+    const REACH = 96
+    return (this.el.dataset.start === "false" && x - box.left < REACH) ||
+      (this.el.dataset.end === "false" && box.right - x < REACH)
   },
 
   // A page patch (posters arriving, a season's picture swapped in) redraws the tile and drops what
@@ -276,10 +269,33 @@ export const cardMethods = {
       li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
     }
     if (!this.grid) this.slideFor(li)
+    this.sweep(li)
     li.dataset.open = "true"
     this.timers = []
     this.nudge(li)
     this.show(li, Date.now())
+  },
+
+  // The dimming of the others sweeps in from the sides of the row towards the card, not out from
+  // the card: each poster waits in proportion to how near the card it is (`--dim-delay`, read by the
+  // filter transition in app.css). Lifting goes the same way, sides first — the posters at the
+  // sides, under the chevrons' shade, are always the first to settle, so nothing is still changing
+  // there by the time the pointer reaches a chevron. The delays stay on the posters for the lift.
+  sweep(li) {
+    const SWEEP = 0.22 // s, from the farthest poster to the nearest
+    const sel = this.grid ? "[data-grid-card]" : ":scope > [data-card]"
+    const r = li.getBoundingClientRect()
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2
+    // Only what is on the screen counts: the row goes on well past its sides, and measured against
+    // those the posters at the sides would wait nearly as long as the card's neighbours.
+    const cards = [...this.scroller.querySelectorAll(sel)].filter((c) => c !== li).map((c) => {
+      const b = c.getBoundingClientRect()
+      const seen = b.right > 0 && b.left < innerWidth && b.bottom > 0 && b.top < innerHeight
+      return {c, seen, d: Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy)}
+    })
+    const far = Math.max(1, ...cards.filter((x) => x.seen).map((x) => x.d))
+    for (const {c, seen, d} of cards) c.style.setProperty("--dim-delay", seen ? `${((1 - Math.min(1, d / far)) * SWEEP).toFixed(3)}s` : "0s")
+    li.style.removeProperty("--dim-delay")
   },
 
   // How far the row slides left as a card opens in it. Usually the card grows evenly to both sides
@@ -388,7 +404,15 @@ export const cardMethods = {
     const li = this.hot
     this.hot = null
     if (li) delete li.dataset.open
-    if (li && !this.grid) this.scroller.style.removeProperty("--slide")
+    if (li && !this.grid) {
+      this.scroller.style.removeProperty("--slide")
+      // Snapping comes back only once the row has settled (`data-settling`, app.css): put back
+      // while the card was still shrinking, the row re-snapped to a point that moved as the layout
+      // did — the whole row lurched sideways and back, right as the pointer reached a chevron.
+      this.scroller.setAttribute("data-settling", "")
+      clearTimeout(this.settleTimer)
+      this.settleTimer = setTimeout(() => { if (!this.hot) this.scroller.removeAttribute("data-settling") }, 450)
+    }
     ;(this.nudged || []).forEach((c) => { delete c.dataset.nudge; c.style.removeProperty("--nudge") })
     this.nudged = []
     const slot = li?.querySelector("[data-card-trailer]")
