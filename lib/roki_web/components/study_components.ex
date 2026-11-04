@@ -142,6 +142,20 @@ defmodule RokiWeb.StudyComponents do
               >
                 <.icon name="hero-arrow-path" class="h-5 w-5" />
               </button>
+              <%!-- A prompt for an AI chat that explains this line: word by word, the grammar, what is
+                    slang or formal, what is an idiom (never translated literally), and the meaning.
+                    Beside the replay button, in study mode; the card for a word has its own. --%>
+              <button
+                type="button"
+                data-role="copy-line"
+                hidden
+                class="study-copyline btn btn-sm btn-circle"
+                title="Copy a prompt that explains this line (for an AI chat)"
+                aria-label="Copy a prompt that explains this line"
+              >
+                <span data-copy-idle><.icon name="hero-clipboard-document" class="h-5 w-5" /></span>
+                <span data-copy-done hidden><.icon name="hero-check" class="h-5 w-5 text-success" /></span>
+              </button>
             </div>
 
             <div :if={@immersive?} class="study-controls">

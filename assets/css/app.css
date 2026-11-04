@@ -495,6 +495,8 @@ html.study-open .site-header { display: none; }
 .study-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .study-replay { position: absolute; left: 0.75rem; bottom: 3.6rem; z-index: 3; opacity: 0.9; }
 .study-replay[hidden] { display: none; }
+.study-copyline { position: absolute; left: 3.6rem; bottom: 3.6rem; z-index: 3; opacity: 0.9; }
+.study-copyline[hidden] { display: none; }
 /* Skip intro / credits / to the next episode: bottom right, above the bar, while it applies. */
 .study-skip { position: absolute; right: 1rem; bottom: 3.6rem; z-index: 4; gap: 0.4rem; border: 1px solid rgb(255 255 255 / 0.35); background: rgb(20 20 20 / 0.78); color: #fff; font-weight: 600; backdrop-filter: blur(6px); }
 .study-skip:hover { background: rgb(255 255 255 / 0.92); color: #000; }
@@ -584,6 +586,12 @@ html.study-open .site-header { display: none; }
 .study-tip ol { margin: 0.15rem 0 0; padding-left: 1.1rem; list-style: decimal; }
 .study-tip .tip-entry + .tip-entry { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent); }
 .study-tip .tip-note { opacity: 0.6; }
+.study-tip .tip-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent); }
+.study-tip .tip-copy { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.55rem; border-radius: 0.5rem; border: 1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent); font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+.study-tip .tip-copy-icon { display: inline-flex; }
+.study-tip .tip-copy-icon[hidden] { display: none; }
+.study-tip .tip-copy:hover { background: color-mix(in oklab, var(--color-base-content) 8%, transparent); }
+.study-tip .tip-copy[data-done] { color: var(--color-success); border-color: var(--color-success); }
 
 /* The bar under the picture: two menus, the list, theater, fullscreen. */
 .study-bar { position: relative; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
@@ -972,7 +980,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
     padding-bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
   }
   .study-immersive #study-ui .study-stage .study-overlay, .study-immersive #study-ui .study-stage[data-active] .study-overlay { bottom: calc(6.2rem + env(safe-area-inset-bottom, 0px)); }
-  .study-immersive #study-ui .study-replay { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); }
+  .study-immersive #study-ui .study-replay, .study-immersive #study-ui .study-copyline { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); }
   .study-immersive #study-ui .study-skip { bottom: calc(7.1rem + env(safe-area-inset-bottom, 0px)); right: calc(0.75rem + env(safe-area-inset-right, 0px)); }
 }
 

@@ -16,6 +16,7 @@ import {bindTransport} from "./transport.js"
 import {bindSkip} from "./skip.js"
 import {bindLoading} from "./loading.js"
 import {startLocalPlayer} from "./local_player.js"
+import {wordPrompt, sentencePrompt} from "./prompt.js"
 
 // Among tracks of one language: a full one first, SDH/CC next, "forced" (signs only) last.
 const subRank = (t) => (t.forced || /\bforced\b/i.test(t.label || "") ? 2 : t.sdh || /\b(sdh|cc|hearing)\b/i.test(t.label || "") ? 1 : 0)
@@ -146,6 +147,26 @@ function fillLine(el, text, lang) {
     } else {
       el.appendChild(document.createTextNode(part.t))
     }
+  }
+}
+
+// Text to the clipboard: the modern way, else a hidden field selected and copied (a page not on
+// https, an older browser).
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const ta = document.createElement("textarea")
+    ta.value = text
+    ta.setAttribute("readonly", "")
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0"
+    document.body.appendChild(ta)
+    ta.select()
+    let ok = false
+    try { ok = document.execCommand("copy") } catch {}
+    ta.remove()
+    return ok
   }
 }
 
@@ -516,6 +537,8 @@ export const StudySidebar = {
     this.overlayKey = key
     if (!this.hovering) this.hideTip()
     this.overlay.textContent = ""
+    // What the line button copies a prompt for: the line on screen, or the last one if none is.
+    if (this.p.url && !this.offVideo.has(this.p.want) && live.length) this.lastLine = live.map((i) => this.p.cues[i].text).join(" ")
     // The card was for a word that has just been taken off the screen.
     if (this.tipFor && !this.tipFor.isConnected) this.dismissTip()
     if (!this.p.url) return
@@ -665,6 +688,40 @@ export const StudySidebar = {
     if (this.tipFor === word && word.isConnected) this.fillTip(word, text, result)
   },
 
+  // The language the answer is asked for in: the learner's own — the language of the translation
+  // track they have on, else their browser's.
+  answerLang() {
+    const t = this.extras && this.extras[0]
+    return (t && t.lang) || (navigator.language || "en").split("-")[0]
+  },
+
+  // The title of what is playing (the page's), without the site's name.
+  playingTitle() {
+    return document.title.replace(/\s*[·|–-]\s*Roki\s*$/i, "").trim()
+  },
+
+  // A prompt for the line now on screen (the last shown, between lines).
+  linePrompt() {
+    const sentence = this.lastLine || ""
+    if (!sentence.trim()) return null
+    return sentencePrompt({sentence, lang: this.p.lang, answerLang: this.answerLang(), title: this.playingTitle()})
+  },
+
+  // Copies `text` and says so on `btn` (its label, or its icon) for a moment.
+  async copyWithNotice(btn, text) {
+    if (!text) return
+    const ok = await copyText(text)
+    if (!ok || !btn) return
+    clearTimeout(btn._copyTimer)
+    btn.dataset.done = ""
+    const idle = btn.querySelector("[data-copy-idle]"), done = btn.querySelector("[data-copy-done]")
+    if (idle && done) { idle.hidden = true; done.hidden = false }
+    btn._copyTimer = setTimeout(() => {
+      delete btn.dataset.done
+      if (idle && done) { idle.hidden = false; done.hidden = true }
+    }, 1600)
+  },
+
   // Which track's language a word on screen belongs to: the line (or list row text) it is in.
   langOf(word) {
     const holder = word.closest("[data-lang]")
@@ -718,6 +775,35 @@ export const StudySidebar = {
         for (const m of (e.meanings || []).slice(0, 3)) add(list, "li", null, m)
       }
     }
+    // Prompts for an AI chat, copied: one for this word as used in its line, one for the whole line.
+    const sentence = (word.closest("[data-lang]") || word).textContent
+    const actions = add(tip, "div", "tip-actions")
+    // Each is a copy icon and its word: "word", "line". (The icon is an inline SVG, so it is
+    // there without the page's icon classes, and the check that replaces it for a moment too.)
+    const COPY = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="9" height="9" rx="1.8"/><path d="M13 7V5.2C13 4.54 12.46 4 11.8 4H5.2C4.54 4 4 4.54 4 5.2v6.6C4 12.46 4.54 13 5.2 13H7"/></svg>'
+    const CHECK = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>'
+    const mk = (cls, label, title, build) => {
+      const b = add(actions, "button", `tip-copy ${cls}`)
+      b.type = "button"
+      b.title = title
+      b.setAttribute("aria-label", title)
+      const idle = add(b, "span", "tip-copy-icon")
+      idle.dataset.copyIdle = ""
+      idle.innerHTML = COPY
+      const done = add(b, "span", "tip-copy-icon")
+      done.dataset.copyDone = ""
+      done.hidden = true
+      done.innerHTML = CHECK
+      add(b, "span", "tip-copy-text", label)
+      b.addEventListener("click", (e) => {
+        e.stopPropagation()
+        this.copyWithNotice(b, build())
+      })
+    }
+    mk("tip-copy-word", "word", "Copy a prompt that explains this word in its line (for an AI chat)", () =>
+      wordPrompt({word: word.textContent, lemma: word.dataset.lemma, sentence, lang: this.langOf(word), answerLang: this.answerLang(), title: this.playingTitle()}))
+    mk("tip-copy-line", "line", "Copy a prompt that explains the whole line (for an AI chat)", () =>
+      sentencePrompt({sentence, lang: this.langOf(word), answerLang: this.answerLang(), title: this.playingTitle()}))
     tip.hidden = false
     this.placeTip(word)
   },
@@ -1068,6 +1154,7 @@ export const StudySidebar = {
     // Pause after each line, with a replay of it (the round button on the picture).
     const study = $("[data-role=study]")
     const replay = $("[data-role=replay]")
+    const copyLine = $("[data-role=copy-line]")
     const quick = $("[data-role=study-quick]")
     const setStudy = (on) => {
       this.study = on
@@ -1075,6 +1162,7 @@ export const StudySidebar = {
       quick.classList.toggle("btn-primary", on)
       quick.setAttribute("aria-pressed", String(on))
       replay.hidden = !on
+      if (copyLine) copyLine.hidden = !on
       store.set("study", on ? "1" : "0")
       this.pausedAt = -1
       this.watching = -1
@@ -1082,6 +1170,7 @@ export const StudySidebar = {
     study.addEventListener("change", () => setStudy(study.checked))
     quick.addEventListener("click", () => setStudy(!this.study))
     replay.addEventListener("click", () => this.replay())
+    if (copyLine) copyLine.addEventListener("click", () => this.copyWithNotice(copyLine, this.linePrompt()))
     setStudy(this.study)
 
     // Peek: the other tracks blurred until you click them.
