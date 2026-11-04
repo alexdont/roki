@@ -1202,7 +1202,7 @@ html[data-vt] [data-hero] > img { opacity: 1 !important; filter: none !important
    loads underneath. Nothing in it is to be touched, and nothing in it moves again. */
 [data-still] { position: fixed; inset: 0; z-index: 2147483000; overflow: hidden; touch-action: none; overscroll-behavior: contain; }
 [data-still] > * { pointer-events: none; }
-[data-still] * { animation: none !important; transition: none !important; }
+[data-still] * { animation: none !important; transition: none !important; scroll-snap-type: none !important; scroll-behavior: auto !important; }
 
 /* A poster growing into its title page. The picture (`roki-art`) moves and scales from the poster
    to the page's art; the new page is seen through a frame that starts as the poster (polish.js sets

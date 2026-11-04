@@ -145,6 +145,7 @@ function still(...els) {
   const bg = [document.body, root].map((el) => getComputedStyle(el).backgroundColor)
     .find((c) => c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)")
   if (bg) box.style.background = bg
+  const scrolled = []
   const twins = new Map(els.map((el) => [el, null]))
   const seen = (r) => r.bottom >= -1 && r.top <= innerHeight + 1 && r.right >= -1 && r.left <= innerWidth + 1
   const boxLike = (el) => {
@@ -181,6 +182,16 @@ function still(...els) {
       c.style.overflow = "hidden"
       return c
     }
+    // As it is on the screen this instant: a poster lifted by the hover a tap brings, a picture
+    // zoomed — the copy is not hovered, and would settle them back (the poster seen to move a
+    // little at the tap).
+    const cs = getComputedStyle(el)
+    for (const prop of ["transform", "translate", "scale", "rotate"]) {
+      if (cs[prop] && cs[prop] !== "none") c.style[prop] = cs[prop]
+    }
+    // A row scrolled sideways (a list scrolled down): a copy starts at its beginning, so where it
+    // is is kept to set once the copy is in place.
+    if (el.scrollLeft || el.scrollTop) scrolled.push([c, el.scrollLeft, el.scrollTop])
     if (el.tagName === "CANVAS") { try { c.getContext("2d").drawImage(el, 0, 0) } catch (_) { /* a blank one, then */ } }
     for (const n of el.childNodes) {
       if (n.nodeType === 3) c.appendChild(n.cloneNode())
@@ -197,6 +208,7 @@ function still(...els) {
   document.body.appendChild(box)
   // Scrolled as the page is: sticky things sit where they sat.
   box.scrollTop = scrollY
+  for (const [c, left, top] of scrolled) { c.scrollLeft = left; c.scrollTop = top }
   box.scrollLeft = scrollX
   return {twins: els.map((el) => twins.get(el)), remove: () => box.remove()}
 }
