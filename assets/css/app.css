@@ -532,6 +532,13 @@ html.study-open .site-header { display: none; }
 .study-loading-bar > i { display: block; height: 100%; width: 0; background: var(--color-primary); transition: width 0.25s linear; }
 @keyframes study-spin { to { transform: rotate(360deg); } }
 .study-line {
+  /* Selectable in every mode, a word or a whole line to copy: the line takes the pointer (only
+     the line itself — the box is as big as its words — so the picture around it still gets every
+     click), and the cursor says so. */
+  pointer-events: auto;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
   max-width: 100%;
   padding: 0.1em 0.5em;
   border-radius: 0.35em;
@@ -547,6 +554,7 @@ html.study-open .site-header { display: none; }
 .study-overlay .study-trans { font-size: calc(clamp(0.8rem, 2.2cqw, 1.7rem) * var(--cap-scale, 1)); pointer-events: auto; }
 .study-ui[data-peek="true"] .study-trans:not([data-revealed]) { filter: blur(0.35em); cursor: pointer; }
 .study-word { pointer-events: auto; cursor: help; border-radius: 0.2em; }
+.study-line ::selection, .study-line::selection { background: rgb(250 204 21 / 0.55); color: #000; text-shadow: none; }
 .study-word:hover, .study-word[data-on] { background: rgb(250 204 21 / 0.4); }
 
 /* The card for a word. Fixed to the window; while fullscreen it lives in the picture. */

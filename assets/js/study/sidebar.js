@@ -509,6 +509,10 @@ export const StudySidebar = {
       ? `${hid}|${this.p.url}|${this.extras.map((e) => e.url).join(",")}|${tokenizer ? 1 : 0}|${live.join(",")}|${extraLive.map((l) => l.join(",")).join(";")}`
       : "off"
     if (key === this.overlayKey) return
+    // Text in the lines is selected (to copy): the lines stay as they are, whatever the cues do,
+    // until the selection is let go — rebuilt now, they would take the selection with them.
+    const sel = window.getSelection && window.getSelection()
+    if (sel && !sel.isCollapsed && sel.anchorNode && this.overlay.contains(sel.anchorNode)) return
     this.overlayKey = key
     if (!this.hovering) this.hideTip()
     this.overlay.textContent = ""
