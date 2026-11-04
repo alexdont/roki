@@ -126,7 +126,8 @@ defmodule Roki.Mood do
       movie: [12],
       tv: [10759],
       tv_kw: [],
-      hue: 150,
+      # A sky blue: the cherry-blossom petals its wind carries clashed with the green it had.
+      hue: 205,
       movie_not: [27, 53],
       tv_not_kw: [315_058]
     },
