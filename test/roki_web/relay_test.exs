@@ -17,6 +17,16 @@ defmodule RokiWeb.RelayTest do
     refute Relay.allowed?("http://real-debrid.com/plain")
   end
 
+  test "TorBox's newer host, tb-cdn.st, is read directly and is a host the relay knows" do
+    st = "https://wormhole-001.weur.tb-cdn.st/dld/6c1aeab9?token=abc"
+    assert Relay.direct?(st)
+    assert Relay.allowed?(st)
+    assert Relay.url_for(st) == st
+    # Only a host that is theirs: a look-alike is neither.
+    refute Relay.direct?("https://tb-cdn.st.evil.example/x")
+    refute Relay.allowed?("https://tb-cdn.st.evil.example/x")
+  end
+
   test "the relay answers nobody who is not signed in, no host it does not know, and no unsigned link",
        %{conn: conn} do
     rd = "https://132-4.download.real-debrid.com/d/X/file.mkv"

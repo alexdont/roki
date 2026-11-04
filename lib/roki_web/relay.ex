@@ -22,7 +22,10 @@ defmodule RokiWeb.Relay do
 
   # `pengu.uk` is PenguPlay's own address: its file links answer with a redirect to wherever the
   # file lives (often a host that sends no CORS headers), which this follows server-side.
-  @hosts ~w(real-debrid.com tb-cdn.io torbox.app pengu.uk)
+  # TorBox serves its files from `tb-cdn.io` and, since a change of theirs, from `tb-cdn.st` too: a
+  # host missing here made the relay refuse ("not a debrid host") and the device player give up and
+  # hand over to the server on every play.
+  @hosts ~w(real-debrid.com tb-cdn.io tb-cdn.st torbox.app pengu.uk)
   @salt "release relay"
   @nuvio_salt "nuvio release relay"
   @max_age 24 * 3600
@@ -32,7 +35,8 @@ defmodule RokiWeb.Relay do
   def direct?(url) do
     case URI.parse(url) do
       %URI{host: host} when is_binary(host) ->
-        String.ends_with?(host, ".tb-cdn.io") or String.ends_with?(host, "torbox.app")
+        String.ends_with?(host, ".tb-cdn.io") or String.ends_with?(host, ".tb-cdn.st") or
+          String.ends_with?(host, "torbox.app")
 
       _ ->
         false
