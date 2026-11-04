@@ -1274,7 +1274,7 @@ function viewfinder(fx) {
     step(dt, _amount, active) {
       if (!active) return
       t += dt
-      shutter *= Math.pow(0.002, dt)
+      shutter *= Math.pow(0.0003, dt)
       if (pokes(fx, true).length) shutter = 1
       const h = fx.carBottom - fx.carTop
       const area = fx.W >= 1024
@@ -1293,7 +1293,8 @@ function viewfinder(fx) {
     },
     draw(g, alpha) {
       if (!focus) return
-      if (shutter > 0.01) { g.globalAlpha = alpha * shutter * 0.85; g.fillStyle = "#fff"; g.fillRect(0, fx.carTop, fx.W, fx.carBottom - fx.carTop) }
+      // The shutter: a soft, brief lift of the picture, gone in a blink — not a flashbang.
+      if (shutter > 0.01) { g.globalAlpha = alpha * shutter * 0.28; g.fillStyle = "#fff"; g.fillRect(0, fx.carTop, fx.W, fx.carBottom - fx.carTop) }
       const gut = fx.W < 640 ? 16 : fx.W < 1024 ? 24 : fx.W < 1280 ? 48 : 64
       const L = gut, R = fx.W - gut, T = fx.carTop + 76, B = fx.carBottom - 64
       const c = 26
@@ -1483,6 +1484,8 @@ export const MoodFx = {
     // the pointer is on posters, not in the weather.
     if (y > this.H) { P.on = false; P.speed = 0; return }
     if (e.type === "pointerdown") {
+      // A press on a control — a mood's tab, a button, a link — is for the control, not the weather.
+      if (e.target.closest && e.target.closest("a, button, [role=tab]")) return
       this.pokes.push({x, y, age: 0, fresh: true})
       if (touch) { P.on = true; P.x = x; P.y = y; P.t = now; P.speed = 0 }
       return
