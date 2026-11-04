@@ -1193,10 +1193,58 @@ html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data
   ul.grid:has(> [data-grid-card][data-open]) > [data-grid-card]:not([data-open]) { filter: brightness(0.6) saturate(0.85); }
 }
 
-/* A poster growing into its title page: the picture moves and scales, the rest of the page
-   crossfades, quickly. */
-::view-transition-group(roki-art) { animation-duration: 0.45s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* While a poster is opening into its page (or closing back), the page's art is there at once,
+   however new its element is: the page's first patch can put a fresh one in mid-move, and one that
+   faded in (as pictures do here) would be seen blurred under the moving picture. */
+html[data-vt] [data-hero] > img { opacity: 1 !important; filter: none !important; transition: none !important; }
+
+/* The page held still (`data-still`, polish.js): a copy of it over everything while the next page
+   loads underneath. Nothing in it is to be touched, and nothing in it moves again. */
+[data-still] { position: fixed; inset: 0; z-index: 2147483000; overflow: hidden; touch-action: none; overscroll-behavior: contain; }
+[data-still] > * { pointer-events: none; }
+[data-still] * { animation: none !important; transition: none !important; }
+
+/* A poster growing into its title page. The picture (`roki-art`) moves and scales from the poster
+   to the page's art; the new page is seen through a frame that starts as the poster (polish.js sets
+   `data-vt` and `--vt-from`, the poster's place as a clip) and opens to the whole
+   screen at the same pace, over the old page held still — nothing of the new page shows outside
+   it, so the description and the boxes below come out from the poster too. Back runs it in
+   reverse. The frame itself is animated from polish.js; here the pages are only held still. */
+::view-transition-group(roki-art) { animation-duration: 0.5s; animation-timing-function: cubic-bezier(0.3, 0.75, 0.2, 1); }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.25s; }
+/* Inside the moving frame the picture it started as stays whole and the picture it becomes comes in
+   over it — not the two fading through each other, which dims the middle of the move. */
+::view-transition-old(roki-art), ::view-transition-new(roki-art) { mix-blend-mode: normal; height: 100%; object-fit: cover; }
+::view-transition-old(roki-art) { animation: none; }
+::view-transition-new(roki-art) { animation: roki-over-shade 0.3s ease-out both; }
+
+html[data-vt]::view-transition-old(root), html[data-vt]::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
+/* Where the frame starts, for the first frame before the script's animation takes over. */
+html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
+
+
+/* The shading and words over the art (`roki-art-over-N`): drawn above it the whole way, so they
+   never jump in front of it. 0 and 1 are the shading, darkening with the picture as it grows; 2 and
+   3 the ⋯ button and the words, which come up into place once the picture has nearly arrived.
+   Going back they are gone before it shrinks. */
+::view-transition-group(roki-art-over-0), ::view-transition-group(roki-art-over-1),
+::view-transition-group(roki-art-over-2), ::view-transition-group(roki-art-over-3) { animation-duration: 0.75s; }
+::view-transition-new(roki-art-over-0), ::view-transition-new(roki-art-over-1) {
+  animation: roki-over-shade 0.5s ease-in-out both;
+}
+::view-transition-new(roki-art-over-2), ::view-transition-new(roki-art-over-3) {
+  animation: roki-over-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.35s both;
+}
+::view-transition-old(roki-art-over-0), ::view-transition-old(roki-art-over-1),
+::view-transition-old(roki-art-over-2), ::view-transition-old(roki-art-over-3) {
+  animation: roki-over-out 0.15s ease-out both;
+}
+@keyframes roki-over-in { from { opacity: 0; transform: translateY(14px); } }
+@keyframes roki-over-shade { from { opacity: 0; } }
+@keyframes roki-over-out { to { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { opacity: 1 !important; transform: none !important; }
