@@ -272,7 +272,10 @@ function transitions() {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || reduced()) return
     const a = e.target.closest && e.target.closest("a[href^='/title/']")
     if (!a || !a.hasAttribute("data-phx-link")) return
-    const img = a.querySelector("img") || a.closest("[data-card], li")?.querySelector("img")
+    // The picture that travels: the card's wide one when its card is open (what is seen; the
+    // poster is behind it), else the poster.
+    const open = a.closest("[data-card][data-open]")
+    const img = (open && open.querySelector("[data-card-img][data-loaded]")) || a.querySelector("img") || a.closest("[data-card], li")?.querySelector("img")
     if (!img || !img.hasAttribute("data-loaded")) return
     const path = new URL(a.href).pathname
     const from = insetOf(img)

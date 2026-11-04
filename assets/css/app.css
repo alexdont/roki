@@ -1233,6 +1233,9 @@ html[data-vt] [data-hero] > img { opacity: 1 !important; filter: none !important
 /* Inside the moving frame the picture it started as stays whole and the picture it becomes comes in
    over it — not the two fading through each other, which dims the middle of the move. */
 ::view-transition-old(roki-art), ::view-transition-new(roki-art) { mix-blend-mode: normal; height: 100%; object-fit: cover; }
+/* Clipped to the box they are moving in: a tall poster scaled to cover a wide box spilled out below
+   it (its bottom seen under the hero on a wide screen, until the move was over). */
+::view-transition-image-pair(roki-art) { overflow: hidden; }
 /* The poster stays whole and the page's art comes in over it. */
 ::view-transition-old(roki-art) { animation: none; }
 ::view-transition-new(roki-art) { animation: roki-over-shade 0.3s ease-out both; }

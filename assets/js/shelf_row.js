@@ -212,7 +212,11 @@ export const cardMethods = {
       const li = e.target.closest?.("[data-card]")
       if (!li || li.hasAttribute("data-no-card") || this.atEdge(e.clientX)) { this.leave(); return }
       if (li === this.hot) return
-      const moved = !this.at || Math.hypot(e.clientX - this.at.x, e.clientY - this.at.y) > STILL_PX
+      // The first move seen only says where the pointer is: a page that opens under a pointer that
+      // has not moved (the browser reports a move when content changes under it) must not open a
+      // card at once — the title page did, the moment it appeared, under the poster just clicked.
+      if (!this.at) { this.at = {x: e.clientX, y: e.clientY}; return }
+      const moved = Math.hypot(e.clientX - this.at.x, e.clientY - this.at.y) > STILL_PX
       if (li !== this.cand || moved) {
         this.at = {x: e.clientX, y: e.clientY}
         this.cand = li
