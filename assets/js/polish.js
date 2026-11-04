@@ -6,8 +6,8 @@
 //   * The header over a picture settles as the page scrolls (`--hdr`, 0 → 1 over the first
 //     ~120 px), and slides away while scrolling down, back on any scroll up (`data-hdr-hidden`).
 //   * Opening a poster grows its picture into the title page's artwork and opens the page out
-//     from it (a view transition, run once the page is ready, the old one held still meanwhile),
-//     and going back shrinks it into its poster again.
+//     from it (a view transition, run once the page is ready, the old one held still meanwhile).
+//     Going back has none: the browser's own is left alone.
 //
 // LiveView's patches keep only the attributes the server sends, so `keep` (LiveSocket's
 // `dom.onBeforeElUpdated`) carries `data-loaded` and `data-shown` over: nothing fades twice.
@@ -98,7 +98,6 @@ function header() {
 // goes, the art is named. Nothing in between is ever drawn.
 
 const NAME = "roki-art"
-let lastKey = null
 // The opening or return under way: a new one, or Back, cancels it (its copy of the page goes).
 let pending = null
 const cancelPending = () => { if (pending) { pending.cancel(); pending = null } }
@@ -281,7 +280,6 @@ function transitions() {
     unname()
     const held = still(img)
     const [poster] = held.twins
-    lastKey = path
     let stop = false
     pending = {cancel: () => { stop = true; held.remove() }}
     ;(async () => {
@@ -308,40 +306,10 @@ function transitions() {
       }, (plan) => reveal_("::view-transition-new(root)", plan.from, FULL, 500))
     })()
   }, true)
-  // Back from a title page to where it was opened: the artwork shrinks into its poster again, and
-  // the title page closes into it the same way it opened.
-  addEventListener("popstate", () => {
-    cancelPending()
-    if (reduced() || !lastKey || !location.pathname.match(/^\/($|movies|shows|anime|search|mood|lists|u\/)/)) return
-    const hero = live("[data-hero]")
-    const art = hero && hero.querySelector(":scope > img")
-    if (!art) return
-    const key = lastKey
-    unname()
-    const held = still(art, hero)
-    const [oldArt, oldHero] = held.twins
-    let stop = false
-    pending = {cancel: () => { stop = true; held.remove() }}
-    ;(async () => {
-      const find = () => live(`a[href="${key}"] img, a[href^="${key}?"] img`)
-      const link = await until(() => !stop && !live("[data-hero]") && find(), 2500)
-      if (stop) return
-      // LiveView puts the scroll back a frame later: put it back now, from where it keeps it, so
-      // the poster is found where it will be.
-      const y = history.state && history.state.scroll
-      if (link && typeof y === "number") scrollTo(0, y)
-      const r = link && link.getBoundingClientRect()
-      pending = null
-      if (!link || !oldArt || r.bottom <= 0 || r.top >= innerHeight) { held.remove(); return }
-      named(oldArt)
-      nameOver(oldHero)
-      run(() => {
-        held.remove()
-        named(link)
-        return {dir: "back", to: insetOf(link)}
-      }, (plan) => reveal_("::view-transition-old(root)", FULL, plan.to, 450))
-    })()
-  }, true)
+  // Going back is left to the browser: its own swipe or button already animates it, and waiting for
+  // the page to come back so as to animate it a second time made it slow. Only an opening still
+  // under way is let go of, so its held copy of the page does not stay over the page going back to.
+  addEventListener("popstate", () => { cancelPending() }, true)
 }
 
 export function polish() {
