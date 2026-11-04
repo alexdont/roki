@@ -83,16 +83,23 @@ const untouch = () => { touched?.removeAttribute("data-touched"); touched = null
 export const ShelfRow = {
   mounted() {
     this.scroller = this.el.querySelector("[data-row-scroller]")
+    // Set a moment after the tap is over, never at the touch: on an iPhone a page that changes
+    // while the finger is down counts as a hover, and that tap's click is withheld until a second
+    // tap — a poster in a row not yet touched needed two taps to open.
+    const later = (fn) => setTimeout(fn, 160)
     if (!touchBound) {
       touchBound = true
-      document.addEventListener("touchstart", (e) => {
-        if (touched && !(e.target.closest && e.target.closest("[data-touched]"))) untouch()
+      document.addEventListener("touchend", (e) => {
+        if (touched && !(e.target.closest && e.target.closest("[data-touched]"))) later(untouch)
       }, {passive: true})
     }
-    this.el.addEventListener("touchstart", () => {
-      if (touched && touched !== this.el) untouch()
-      touched = this.el
-      this.el.setAttribute("data-touched", "")
+    this.el.addEventListener("touchend", () => {
+      const el = this.el
+      later(() => {
+        if (touched && touched !== el) untouch()
+        touched = el
+        el.setAttribute("data-touched", "")
+      })
     }, {passive: true})
     this.el.querySelector("[data-row-prev]")?.addEventListener("click", () => this.step(-1))
     this.el.querySelector("[data-row-next]")?.addEventListener("click", () => this.next())
