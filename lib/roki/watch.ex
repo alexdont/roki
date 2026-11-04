@@ -1263,9 +1263,9 @@ defmodule Roki.Watch do
       on_timeout: :kill_task
     )
     |> Enum.reduce(%{}, fn
-      {:ok, {item, {:ok, %{date: date}}}}, acc when is_binary(date) ->
+      {:ok, {item, {:ok, %{date: date} = found}}}, acc when is_binary(date) ->
         with {:ok, d} <- Date.from_iso8601(date),
-             :gt <- Date.compare(d, today) do
+             true <- not_out?(d, found[:status], today) do
           Map.put(acc, {item.type, item.id}, d)
         else
           _ -> acc
@@ -1274,6 +1274,18 @@ defmodule Roki.Watch do
       _other, acc ->
         acc
     end)
+  end
+
+  # A date after today is not out yet. A title still in production or post-production whose date is
+  # today's is not either: TMDB lists the day it is planned for, and its own status says it is not
+  # released.
+  @doc false
+  def not_out?(%Date{} = d, status, %Date{} = today) do
+    case Date.compare(d, today) do
+      :gt -> true
+      :eq -> status in ["Planned", "In Production", "Post Production", "Rumored"]
+      :lt -> false
+    end
   end
 
   @doc "Whether playing this release means re-encoding it here (its video is not h264)."

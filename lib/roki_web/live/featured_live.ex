@@ -212,10 +212,15 @@ defmodule RokiWeb.FeaturedLive do
     fresh = Enum.reject(items, &MapSet.member?(known, &1.id))
     uuid = socket.assigns.uuid
 
+    # Every title not asked about yet, not only the new ones (what was drawn from the cache first is
+    # not new, and would never get its "not out yet" mark).
+    asked = Map.keys(socket.assigns.upcoming)
+    unasked = Enum.reject(items, &({&1[:type], &1.id} in asked))
+
     {:noreply,
      socket
      |> assign(:seen, MapSet.union(socket.assigns.seen, seen))
-     |> start_async({:dates, kind, page}, fn -> Roki.Watch.upcoming(uuid, fresh) end)
+     |> start_async({:dates, kind, page}, fn -> Roki.Watch.upcoming(uuid, unasked) end)
      |> put_shelf(kind, %{
        shelf
        | items: shelf.items ++ fresh,

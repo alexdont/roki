@@ -324,9 +324,14 @@ defmodule RokiWeb.CategoryLive do
       )
 
     # What is not out yet is marked, as on Featured; the other orders only list what is out.
+    # Every title of the page that has not been asked about yet — not only the new ones: what was
+    # drawn from the cache before this arrived is not new, and without its date never got its mark.
+    asked = Map.keys(socket.assigns.upcoming)
+    unasked = Enum.reject(items, &({&1.type, &1.id} in asked))
+
     socket =
       if socket.assigns.sort == :popular or upcoming_season?(socket.assigns.season),
-        do: start_async(socket, {:dates, n}, fn -> Roki.Watch.upcoming(uuid, fresh) end),
+        do: start_async(socket, {:dates, n}, fn -> Roki.Watch.upcoming(uuid, unasked) end),
         else: socket
 
     {:noreply, maybe_hero(socket)}
