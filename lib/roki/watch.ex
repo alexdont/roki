@@ -1356,9 +1356,19 @@ defmodule Roki.Watch do
     end)
     |> tap(fn _ ->
       Roki.Activity.record(uuid, ctx)
-      Roki.Profile.forget_history(uuid)
+      finished_now(uuid)
       mirror_ctx(uuid, ctx)
     end)
+  end
+
+  # A film or an episode just finished: the profile's finished list is copied again at once, and
+  # the episode and hour figures are measured again at the next look. Those are laev's statistics,
+  # kept ten minutes and refreshed behind the page — so a profile looked at after an episode showed
+  # the old figures once more, and the new ones only the time after. (Films went up at once, from
+  # the list; Episodes and Hours did not.)
+  defp finished_now(uuid) do
+    Roki.Stats.forget(uuid)
+    Roki.Profile.forget_history(uuid)
   end
 
   # An episode marked by playing or by "mark watched", carried to the people the show is linked with.
@@ -2213,7 +2223,7 @@ defmodule Roki.Watch do
       if new? do
         scrobble(uuid, [ctx])
         Roki.Activity.record(uuid, ctx)
-        Roki.Profile.forget_history(uuid)
+        finished_now(uuid)
         mirror_ctx(uuid, ctx)
       end
     end)
@@ -2239,7 +2249,7 @@ defmodule Roki.Watch do
     if new? do
       scrobble(uuid, [ctx])
       Roki.Activity.record(uuid, ctx)
-      Roki.Profile.forget_history(uuid)
+      finished_now(uuid)
       mirror_ctx(uuid, ctx)
     end
 
