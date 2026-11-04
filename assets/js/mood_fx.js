@@ -10,12 +10,24 @@
 //
 // Each mood is an effect: `step(dt, amount, active)` and `draw(g, alpha)`; the one shown fades in,
 // the one before fades out.
+//
+// The pointer is part of the weather (`fx.pointer`, `fx.pokes`): bubbles pop on it, the wind goes
+// round it, rain is wiped away under it, fog parts for it, fireflies scatter from it, confetti and
+// embers are stirred by it, lights lean to it, the heart quickens for it, the film is scratched by
+// it, the camera follows it; a press (a tap, a click) is a poke — a burst, a blast, a thump, a
+// shutter. Only the mood shown answers, and only while the pointer is over the area.
 
 const rand = (a, b) => a + Math.random() * (b - a)
 const pick = (xs) => xs[Math.floor(Math.random() * xs.length)]
 const FPS = 30
 // A bell curve around `at`, `w` wide: the shape of one beat.
 const gauss = (p, at, w) => Math.exp(-(((p - at) / w) * ((p - at) / w)))
+// How near the pointer a point is: 1 on it, 0 at `R` or beyond (or with no pointer about).
+const near = (P, x, y, R) => { if (!P.on) return 0; const d = Math.hypot(x - P.x, y - P.y); return d < R ? 1 - d / R : 0 }
+// The way from the pointer to a point, as a unit vector (straight up when they coincide).
+const away = (P, x, y) => { const dx = x - P.x, dy = y - P.y, d = Math.hypot(dx, dy); return d < 0.01 ? [0, -1] : [dx / d, dy / d] }
+// The pokes (presses) made since the last frame, for the mood shown.
+const pokes = (fx, active) => (active ? fx.pokes.filter((k) => k.fresh) : [])
 
 // ── pictures drawn once and stamped ────────────────────────────────────
 
@@ -106,6 +118,20 @@ const fogSprite = () => sprite(256, (g) => {
   }
 })
 
+// A puff of fog: soft lumps gathered round the middle, nothing near the edge of the picture.
+const puffSprite = () => sprite(256, (g) => {
+  for (let i = 0; i < 7; i++) {
+    const r = rand(62, 92), a = rand(0, Math.PI * 2), d = rand(0, 34)
+    const x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d * 0.8
+    const grad = g.createRadialGradient(x, y, 0, x, y, r)
+    grad.addColorStop(0, "rgba(225,220,240,0.1)")
+    grad.addColorStop(0.55, "rgba(225,220,240,0.05)")
+    grad.addColorStop(1, "rgba(225,220,240,0)")
+    g.fillStyle = grad
+    g.fillRect(0, 0, 256, 256)
+  }
+})
+
 // Film grain: specks light and dark.
 const grainSprite = () => sprite(128, (g) => {
   const img = g.createImageData(128, 128)
@@ -173,7 +199,11 @@ const lump = (sh, t) => {
 
 function rain(fx, m) {
   const img = fx.sprites[m.sprite]
-  let streaks = [], drops = [], bits = [], ghosts = [], acc = 0
+  let streaks = [], drops = [], bits = [], ghosts = [], acc = 0, wipes = [], lastWipe = null
+  // What the wipe gathers: the water (or blood) of the drops it goes through collects under the
+  // finger as one growing bead that rides along with it, and runs down as a drop when let go.
+  let gather = null, stillFor = 0, strokeId = 0
+  const LIFE = 1.1 // s: how long the film the finger leaves lasts before it has dried
   const max = () => Math.round((fx.phone ? 130 : 340) * Math.min(1, fx.amount() / 1.5))
   // Each drop its own shape, kept for its life: tail length, how full it stays before narrowing,
   // how wide its neck, a lean to one side, an uneven edge, a slightly squashed head.
@@ -194,6 +224,8 @@ function rain(fx, m) {
 
   return {
     busy: () => streaks.length + drops.length + bits.length + ghosts.length > 0,
+    // For the console (`fxStats.effects.cry`): what the wipe holds.
+    stats: () => ({drops: drops.length, tailPoints: wipes.length, strokes: new Set(wipes.map((w) => w.s)).size, bead: gather ? Math.round(gather.r * 10) / 10 : 0}),
     step(dt, amount, active) {
       if (active) {
         acc += m.rate * (fx.W / 1000) * (amount / 1.5) * dt
@@ -209,6 +241,91 @@ function rain(fx, m) {
       }
       for (const s of streaks) { s.y += s.v * dt; s.x += s.vx * dt; if (s.y >= s.hitY) { s.done = true; impact(s, active) } }
       streaks = streaks.filter((s) => !s.done)
+
+      // Wiping: the pointer moving over the glass clears a finger's width under its path — still
+      // drops gone, a runner gone with what was left of it, wet trails cut off above the wipe —
+      // and gathers their water: the bead under the finger grows with every drop it takes, and
+      // leaks a little behind it once it is big. Let go (the finger stops, or lifts), it runs down
+      // the glass as one drop with all it gathered. A faint smear is left, drying. New rain lands.
+      const P = fx.pointer
+      const wiping = active && P.on && P.speed > 40
+      if (wiping) {
+        // The finger's width is what it is; what it leaves is thick where it moved slowly and thin
+        // where it went fast (`k`, the share of the width the film has at that point).
+        const r = 12, k = Math.max(0.28, Math.min(1, 1 - (P.speed - 140) / 1300))
+        // A stroke after a pause is a new one, drawn as its own shape, never joined to the last
+        // (which is left to dry). By time, never by distance: a fast hand is far from its last
+        // point every frame, and that is one stroke.
+        const fresh = !lastWipe || P.t - lastWipe.t > 0.3
+        if (fresh) strokeId++
+        const from = fresh ? {x: P.x, y: P.y} : lastWipe
+        // The way the hand went this frame: through every move it made, not a line from the last
+        // frame's place to this one's (a fast circle would be a dozen straight chords).
+        const way = [from, ...P.path.filter((q) => Math.hypot(q.x - from.x, q.y - from.y) > 0.5), {x: P.x, y: P.y}]
+        const inside = (w, p) => Math.hypot(p.x - w.x, p.y - w.y) < w.r
+        const cut = (pts, w) => { let i = pts.length - 1; while (i >= 0 && !inside(w, pts[i])) i--; return i < 0 ? pts : pts.slice(i + 1) }
+        if (!gather) gather = {x: P.x, y: P.y, vol: 0, trail: [], shape: makeShape(), wob: rand(0, 6)}
+        stillFor = 0
+        const sp = Math.max(1, P.speed), fwx = P.vx / sp, fwy = P.vy / sp
+        const laid = []
+        for (let v = 1; v < way.length; v++) {
+          const a = way[v - 1], c = way[v]
+          const dist = Math.hypot(c.x - a.x, c.y - a.y), steps = Math.max(1, Math.ceil(dist / 6))
+          for (let i = 1; i <= steps; i++) laid.push({x: a.x + ((c.x - a.x) * i) / steps, y: a.y + ((c.y - a.y) * i) / steps, r, k, life: LIFE, s: strokeId})
+        }
+        for (const w of laid) {
+          wipes.push(w)
+          for (const d of drops) {
+            if (d.dead) continue
+            if (Math.hypot(d.x - w.x, d.y - w.y) < w.r + d.r * 0.5) {
+              if (d.sliding && d.trail.length > 1) ghosts.push({pts: d.trail, r: d.r, life: 0.7})
+              gather.vol += d.r * d.r
+              d.dead = true
+              continue
+            }
+            if (d.trail.length) d.trail = cut(d.trail, w)
+          }
+          for (const t of ghosts) t.pts = cut(t.pts, w)
+          // A finger does not take everything with it: specks of water are left in the band behind
+          // it, here and there, and now and then a bead big enough to see.
+          if (Math.random() < 0.2 && drops.length < max() * 1.3) {
+            const back = r + 3, side = rand(-0.7, 0.7) * r
+            drops.push(drop(w.x - fwx * back - fwy * side, w.y - fwy * back + fwx * side, Math.random() < 0.15 ? rand(1.6, 2.4) : rand(0.7, 1.4), rand(4, 9)))
+          }
+        }
+        ghosts = ghosts.filter((t) => t.pts.length > 1)
+        // The bead rides just behind the finger, on the side it came from.
+        const R = gather.r = Math.min(14, Math.sqrt(gather.vol) * 0.95)
+        gather.x = P.x - (P.vx / sp) * R * 0.6
+        gather.y = P.y - (P.vy / sp) * R * 0.6
+        if (R > 6 && Math.random() < dt * (R - 5) * 1.2 && drops.length < max() * 1.3) {
+          drops.push(drop(gather.x + rand(-2, 2), gather.y + rand(-2, 2), rand(1, 2.2), rand(...m.still)))
+          gather.vol = Math.max(0, gather.vol - 3)
+        }
+        lastWipe = {x: P.x, y: P.y, t: P.t}
+      } else {
+        lastWipe = null
+        if (gather) stillFor += dt
+        // Let go: what was gathered becomes a drop, running from where the finger left it.
+        if (gather && (stillFor > 0.2 || !P.on || !active)) {
+          const R = Math.min(13, Math.sqrt(gather.vol) * 0.95)
+          if (R >= 1.2) {
+            const d = drop(gather.x, gather.y, R, rand(...m.still) + 6)
+            d.sliding = R > 3.2
+            // Its tail grows as it runs: the sideways track of the wipe is the smear's to fade.
+            d.trail = []
+            d.shape = gather.shape
+            drops.push(d)
+          }
+          gather = null
+        }
+      }
+      // The film the finger leaves lasts LIFE seconds wherever it was laid: the tail is what the
+      // last second of movement left, long after a fast sweep, short after a slow one, and dries
+      // from its far end in once the finger has stopped.
+      for (const w of wipes) w.life -= dt
+      wipes = wipes.filter((w) => w.life > 0)
+      drops = drops.filter((d) => !d.dead)
 
       const n = drops.length
       for (let i = 0; i < n; i++) {
@@ -290,6 +407,66 @@ function rain(fx, m) {
         if (x != null) g.lineTo(x, y)
         g.stroke()
       }
+      // The smear behind the finger: the film it leaves, thickest right behind the fingertip
+      // (and where the hand moved slowly), thinning and lightening back along the way it came as
+      // it dries, to nothing — one soft shape, filled once (so a tail that turns or crosses itself
+      // is one even tone), its depth a gradient from the tip to the end.
+      const smearOf = (pts, withTip) => {
+        const n = pts.length
+        const tip = withTip && gather && gather.r > 1.2 ? gather : pts[n - 1]
+        // From the tip back along the path: each point's full width (the finger's, less where it
+        // moved fast) and how fresh it is (1 just laid, 0 dried).
+        let seq = [tip], wid = [pts[n - 1].r * pts[n - 1].k], fresh = [1]
+        for (let i = n - 1; i >= 0; i--) { seq.push(pts[i]); wid.push(pts[i].r * pts[i].k); fresh.push(pts[i].life / LIFE) }
+        if (seq.length < 3) return
+        // The path is straight chords between where the hand was each frame, which shows as corners
+        // at speed: rounded off (each corner cut twice, four points for one), so the shape bends
+        // smoothly; the widths and freshness go along with the points.
+        for (let pass = 0; pass < 2; pass++) {
+          const s2 = [seq[0]], w2 = [wid[0]], f2 = [fresh[0]]
+          for (let i = 0; i < seq.length - 1; i++) {
+            const a = seq[i], c = seq[i + 1]
+            s2.push({x: a.x * 0.75 + c.x * 0.25, y: a.y * 0.75 + c.y * 0.25}, {x: a.x * 0.25 + c.x * 0.75, y: a.y * 0.25 + c.y * 0.75})
+            w2.push(wid[i] * 0.75 + wid[i + 1] * 0.25, wid[i] * 0.25 + wid[i + 1] * 0.75)
+            f2.push(fresh[i] * 0.75 + fresh[i + 1] * 0.25, fresh[i] * 0.25 + fresh[i + 1] * 0.75)
+          }
+          s2.push(seq[seq.length - 1]); w2.push(wid[wid.length - 1]); f2.push(fresh[fresh.length - 1])
+          seq = s2; wid = w2; fresh = f2
+        }
+        const norms = []
+        for (let i = 0; i < seq.length; i++) {
+          const a = seq[Math.max(0, i - 1)], c = seq[Math.min(seq.length - 1, i + 1)]
+          let nx = -(c.y - a.y), ny = c.x - a.x
+          const nn = Math.hypot(nx, ny) || 1
+          norms.push([nx / nn, ny / nn])
+        }
+        // Three layers, each one continuous shape at one alpha — so a pixel is covered at most
+        // once by each, however the path turns or crosses itself, and there is no seam anywhere.
+        // The film's depth along the tail comes from the layers dying out at different rates as the
+        // film dries: the dense core first, the soft outer layer last, down to nothing.
+        const [cr, cg, cb, top] = m.sprite === "blood" ? [120, 0, 8, 0.5] : [215, 228, 250, 0.17]
+        for (const [scale, a, dry] of [[1, 0.45, 0.7], [0.66, 0.55, 1.3], [0.36, 0.7, 2.2]]) {
+          g.beginPath()
+          let started = false
+          const w = (i) => wid[i] * scale * Math.pow(fresh[i], dry)
+          for (let i = 0; i < seq.length; i++) { const [nx, ny] = norms[i], q = seq[i], k = w(i); started ? g.lineTo(q.x + nx * k, q.y + ny * k) : g.moveTo(q.x + nx * k, q.y + ny * k); started = true }
+          for (let i = seq.length - 1; i >= 0; i--) { const [nx, ny] = norms[i], q = seq[i], k = w(i); g.lineTo(q.x - nx * k, q.y - ny * k) }
+          g.closePath()
+          g.globalAlpha = alpha * a
+          g.fillStyle = `rgba(${cr},${cg},${cb},${top})`
+          g.fill()
+        }
+      }
+      // Each stroke its own shape, newest last; the newest carries the bead at its tip.
+      for (let i = wipes.length; i > 0; ) {
+        const id = wipes[i - 1].s
+        let j = i
+        while (j > 0 && wipes[j - 1].s === id) j--
+        if (i - j > 1) smearOf(wipes.slice(j, i), id === strokeId)
+        i = j
+      }
+      // Back to the trails' own faint colour: what follows draws with whatever is set.
+      g.strokeStyle = m.trail
       for (const t of ghosts) line(t.pts, t.r, Math.min(1, t.life / 1.6))
 
       // The tapered body of a running drop: from its head up along the last stretch of its path,
@@ -396,6 +573,8 @@ function rain(fx, m) {
         g.fill()
       }
       for (const d of drops) if (d.trail.length > 1) line(d.trail, d.r, Math.min(1, d.life / 1.5), d.x, d.y)
+      // The bead gathered under the finger.
+      if (gather && gather.r > 1.2) blob(gather, alpha)
       // A running drop is a drop, not a bead on a line: the water gathers at the bottom under its own
       // weight and tapers up along the way it came into a thin neck, which the wet trail goes on from.
       for (const d of drops) if (d.sliding) body(d, alpha * Math.max(0, Math.min(1, d.life / 1.5)))
@@ -420,7 +599,7 @@ function rain(fx, m) {
 function confetti(fx) {
   const COLORS = ["#ffd23f", "#ff6b6b", "#4ecdc4", "#ff9f1c", "#a78bfa", "#f472b6", "#7dd3fc"]
   let bits = [], acc = 0
-  const piece = (x, y) => ({x, y, vy: rand(28, 48), w: rand(5, 9), h: rand(3, 5), c: pick(COLORS), rot: rand(0, 6), vr: rand(1.2, 3.2), sway: rand(0, 6), amp: rand(10, 22), life: 1})
+  const piece = (x, y) => ({x, y, vy: rand(28, 48), w: rand(5, 9), h: rand(3, 5), c: pick(COLORS), rot: rand(0, 6), vr: rand(1.2, 3.2), sway: rand(0, 6), amp: rand(10, 22), life: 1, px: 0, py: 0})
   return {
     busy: () => bits.length > 0,
     step(dt, amount, active) {
@@ -429,14 +608,24 @@ function confetti(fx) {
         acc += 16 * (fx.W / 1000) * (amount / 1.5) * dt
         while (acc >= 1 && bits.length < cap) { acc -= 1; bits.push(piece(rand(0, fx.W), rand(-30, -5))) }
       }
+      // The pointer stirs the paper near it (blown away from it, spinning); a poke is a burst.
+      const P = fx.pointer
+      for (const k of pokes(fx, active)) for (let i = 0; i < 26 && bits.length < cap + 60; i++) {
+        const a = rand(0, Math.PI * 2), v = rand(140, 420), b = piece(k.x, k.y)
+        b.px = Math.cos(a) * v; b.py = Math.sin(a) * v - 160; b.vr = rand(4, 9)
+        bits.push(b)
+      }
       for (const b of bits) {
+        const n = active ? near(P, b.x, b.y, 110) : 0
+        if (n) { const [ax, ay] = away(P, b.x, b.y); b.px += ax * n * 1100 * dt; b.py += ay * n * 800 * dt; b.rot += n * 9 * dt }
+        b.px *= Math.pow(0.07, dt); b.py *= Math.pow(0.07, dt)
         b.sway += dt * 1.3
-        b.x += Math.cos(b.sway) * b.amp * dt
-        b.y += b.vy * dt
+        b.x += Math.cos(b.sway) * b.amp * dt + b.px * dt
+        b.y += (b.vy + b.py) * dt
         b.rot += b.vr * dt
         if (b.y > fx.rowBottom - 40) b.life -= dt * 1.5
       }
-      bits = bits.filter((b) => b.life > 0 && b.y < fx.rowBottom)
+      bits = bits.filter((b) => b.life > 0 && b.y < fx.rowBottom && b.y > fx.carTop - 60)
     },
     draw(g, alpha) {
       for (const b of bits) {
@@ -463,11 +652,20 @@ function bokeh(fx) {
         while (acc >= 1 && lights.length < cap) {
           acc -= 1
           const life = rand(11, 17)
-          lights.push({x: rand(0, fx.W), y: rand(fx.carBottom - 160, fx.rowTop + 30), r: rand(8, 30), vy: -rand(7, 16), sway: rand(0, 6), amp: rand(8, 22), img: pick(imgs), life, max: life, a: rand(0.55, 1)})
+          lights.push({x: rand(0, fx.W), y: rand(fx.carBottom - 160, fx.rowTop + 30), r: rand(8, 30), vy: -rand(7, 16), sway: rand(0, 6), amp: rand(8, 22), img: pick(imgs), life, max: life, a: rand(0.55, 1), boost: 0})
         }
         if (sparks.length < cap / 3 && Math.random() < dt * 2) sparks.push({x: rand(0, fx.W), y: rand(fx.carTop + 60, fx.carBottom), r: rand(1.5, 3), life: 2.4, max: 2.4})
       }
-      for (const l of lights) { l.y += l.vy * dt; l.sway += dt * 0.35; l.life -= dt }
+      // The lights near the pointer lean towards it and glow up; sparkles follow its way.
+      const P = fx.pointer
+      if (active && P.on && P.speed > 60 && Math.random() < dt * 14) sparks.push({x: P.x + rand(-26, 26), y: P.y + rand(-26, 26), r: rand(1.5, 3), life: 1.4, max: 1.4})
+      for (const k of pokes(fx, active)) for (let i = 0; i < 8; i++) sparks.push({x: k.x + rand(-40, 40), y: k.y + rand(-40, 40), r: rand(2, 3.5), life: 1.8, max: 1.8})
+      for (const l of lights) {
+        const n = active ? near(P, l.x + Math.sin(l.sway) * l.amp, l.y, 160) : 0
+        l.boost += ((n ? Math.min(1, n * 1.4) : 0) - l.boost) * Math.min(1, dt * 2.5)
+        if (n) { l.x += (P.x - Math.sin(l.sway) * l.amp - l.x) * n * dt * 0.9; l.y += (P.y - l.y) * n * dt * 0.9 }
+        l.y += l.vy * dt; l.sway += dt * 0.35; l.life -= dt
+      }
       lights = lights.filter((l) => l.life > 0 && l.y > fx.carTop - 40)
       for (const s of sparks) s.life -= dt
       sparks = sparks.filter((s) => s.life > 0)
@@ -476,9 +674,9 @@ function bokeh(fx) {
       g.globalCompositeOperation = "lighter"
       for (const l of lights) {
         const t = 1 - l.life / l.max
-        g.globalAlpha = alpha * l.a * Math.sin(Math.PI * t)
-        const x = l.x + Math.sin(l.sway) * l.amp
-        g.drawImage(l.img, x - l.r, l.y - l.r, l.r * 2, l.r * 2)
+        g.globalAlpha = Math.min(1, alpha * l.a * Math.sin(Math.PI * t) * (1 + l.boost * 0.9))
+        const x = l.x + Math.sin(l.sway) * l.amp, r = l.r * (1 + l.boost * 0.3)
+        g.drawImage(l.img, x - r, l.y - r, r * 2, r * 2)
       }
       for (const s of sparks) {
         g.globalAlpha = alpha * Math.sin(Math.PI * (s.life / s.max))
@@ -492,7 +690,7 @@ function bokeh(fx) {
 // Feel the thrill: a heartbeat. The edges of the carousel darken red on each beat, and a heart
 // trace runs across it; the heart speeds up as you stay, then calms and starts again.
 function heartbeat(fx) {
-  let t = 0, phase = 0, head = 0
+  let t = 0, phase = 0, head = 0, excite = 0, thump = 0
   const step = 4
   let trace = []
   const beat = (p) => gauss(p, 0.05, 0.045) + 0.55 * gauss(p, 0.24, 0.05)
@@ -506,7 +704,12 @@ function heartbeat(fx) {
     step(dt, _amount, active) {
       if (!active) return
       t += dt
-      const bpm = 68 + 52 * Math.min(1, (t % 30) / 22)
+      // The pointer resting over it: the heart picks up over a few seconds, and settles when it
+      // goes. A poke is a thump — a beat at once, the edges flushing with it.
+      excite += ((fx.pointer.on ? 1 : 0) - excite) * Math.min(1, dt * 0.45)
+      if (pokes(fx, true).length) { phase = 0; thump = 1 }
+      thump *= Math.pow(0.03, dt)
+      const bpm = 68 + 52 * Math.min(1, (t % 30) / 22) + 45 * excite
       const n = Math.ceil(fx.W / step)
       if (trace.length !== n) { trace = new Array(n).fill(0); head = 0 }
       const speed = Math.max(260, fx.W / 3.2)
@@ -525,7 +728,7 @@ function heartbeat(fx) {
       const R = Math.hypot(fx.W, h) / 2
       const v = g.createRadialGradient(cx, cy, R * 0.45, cx, cy, R)
       v.addColorStop(0, "rgba(150,0,25,0)")
-      v.addColorStop(1, `rgba(150,0,25,${0.12 + 0.38 * pulse})`)
+      v.addColorStop(1, `rgba(150,0,25,${Math.min(0.85, 0.12 + 0.38 * pulse + 0.4 * thump)})`)
       g.globalAlpha = alpha
       g.fillStyle = v
       g.fillRect(0, top, fx.W, h)
@@ -568,6 +771,14 @@ function heartbeat(fx) {
 // and a spray of sparks, some of which fall onto the first row.
 function embers(fx) {
   let list = [], sparks = [], flashes = [], acc = 0, next = 1.2
+  const blast = (x, y, amount) => {
+    flashes.push({x, y, life: 0.45})
+    const n = Math.round(rand(35, 55) * (amount / 1.5) * (fx.phone ? 0.5 : 1))
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(180, 520)
+      sparks.push({x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, life: rand(0.6, 1.4)})
+    }
+  }
   return {
     busy: () => list.length + sparks.length + flashes.length > 0,
     step(dt, amount, active) {
@@ -580,16 +791,17 @@ function embers(fx) {
         }
         if ((next -= dt) <= 0) {
           next = rand(3.5, 6.5)
-          const x = rand(fx.W * 0.1, fx.W * 0.9), y = rand(fx.carTop + (fx.carBottom - fx.carTop) * 0.35, fx.carBottom - 60)
-          flashes.push({x, y, life: 0.45})
-          const n = Math.round(rand(35, 55) * (amount / 1.5) * (fx.phone ? 0.5 : 1))
-          for (let i = 0; i < n; i++) {
-            const a = rand(0, Math.PI * 2), s = rand(180, 520)
-            sparks.push({x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, life: rand(0.6, 1.4)})
-          }
+          blast(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + (fx.carBottom - fx.carTop) * 0.35, fx.carBottom - 60), amount)
         }
       }
-      for (const e of list) { e.vx += rand(-40, 40) * dt; e.x += e.vx * dt; e.y += e.vy * dt; e.fl += dt * 12; e.life -= dt }
+      // A poke sets one off where it lands; the pointer stirs the embers near it up and away.
+      for (const k of pokes(fx, active)) blast(k.x, k.y, amount)
+      const P = fx.pointer
+      for (const e of list) {
+        const n = active ? near(P, e.x, e.y, 100) : 0
+        if (n) { const [ax] = away(P, e.x, e.y); e.vx += ax * n * 420 * dt; e.vy -= n * 380 * dt }
+        e.vx += rand(-40, 40) * dt; e.x += e.vx * dt; e.y += e.vy * dt; e.fl += dt * 12; e.life -= dt
+      }
       list = list.filter((e) => e.life > 0)
       for (const s of sparks) { s.vy += 420 * dt; s.vx *= Math.pow(0.4, dt); s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt }
       sparks = sparks.filter((s) => s.life > 0 && s.y < fx.rowBottom)
@@ -624,14 +836,26 @@ function embers(fx) {
 // up gently, stays lit a while, and fades out again for a while, in its own time.
 function fireflies(fx) {
   let flies = []
-  const fly = () => ({x: rand(0, fx.W), y: rand(fx.carTop + 70, fx.rowBottom - 30), a: rand(0, Math.PI * 2), turn: 0, v: rand(6, 14), p: rand(0, 1), period: rand(6, 11), r: rand(5, 9)})
+  const fly = () => ({x: rand(0, fx.W), y: rand(fx.carTop + 70, fx.rowBottom - 30), a: rand(0, Math.PI * 2), turn: 0, v: rand(6, 14), p: rand(0, 1), period: rand(6, 11), r: rand(5, 9), boost: 1})
   return {
     busy: () => false,
     step(dt, amount, active) {
       const want = Math.round((fx.phone ? 16 : 36) * Math.min(1.2, amount / 1.5))
       if (active) while (flies.length < want) flies.push(fly())
       if (flies.length > want) flies.length = want
+      const P = fx.pointer
       for (const f of flies) {
+        // Shy of the pointer: one it comes near turns away and darts off, then settles back into
+        // its slow roaming. A poke startles every one within reach.
+        let n = active ? near(P, f.x, f.y, 130) : 0
+        for (const k of pokes(fx, active)) { const d = Math.hypot(f.x - k.x, f.y - k.y); if (d < 260) n = Math.max(n, 1 - d / 260) }
+        if (n) {
+          const want = Math.atan2(f.y - P.y, f.x - P.x)
+          let diff = want - f.a; diff = Math.atan2(Math.sin(diff), Math.cos(diff))
+          f.a += diff * Math.min(1, dt * 7 * n)
+          f.boost = Math.max(f.boost, 1 + n * 6)
+        }
+        f.boost += (1 - f.boost) * Math.min(1, dt * 1.2)
         // The heading wanders a little at a time, so the path is a slow curve, not a jitter.
         f.turn += rand(-1, 1) * dt * 0.9
         f.turn *= Math.pow(0.5, dt)
@@ -639,8 +863,8 @@ function fireflies(fx) {
         // Kept over the carousel: past an edge, it turns back the long way round.
         if (f.y < fx.carTop + 60) f.a += (Math.PI / 2 - f.a) * dt * 0.6
         if (f.y > fx.rowBottom - 25) f.a += (-Math.PI / 2 - f.a) * dt * 0.6
-        f.x += Math.cos(f.a) * f.v * dt
-        f.y += Math.sin(f.a) * f.v * dt
+        f.x += Math.cos(f.a) * f.v * f.boost * dt
+        f.y += Math.sin(f.a) * f.v * f.boost * dt
         if (f.x < -30) f.x = fx.W + 30
         if (f.x > fx.W + 30) f.x = -30
         f.p = (f.p + dt / f.period) % 1
@@ -663,82 +887,203 @@ function fireflies(fx) {
 }
 
 // Solve a mystery: fog drifting slowly across the lower part of the carousel and on over the first
-// row, a few motes of dust in it.
+// row, a few motes of dust in it. Many soft puffs, each with a place of its own it drifts with: a
+// hand through it pushes them aside, drags them a little along with it and sets them curling in
+// eddies behind it (one way on one side of its path, the other way on the other), and thins the
+// fog where it is; once the hand has gone the puffs drift back and the fog closes. A poke is a
+// gust: a ring of fog thrown outward, swirling.
 function fog(fx) {
-  let banks = [], motes = []
+  let puffs = [], motes = []
+  const make = (i) => {
+    const size = rand(240, 420)
+    return {
+      hx: rand(-size * 0.5, fx.W + size * 0.5), hy: rand(fx.carTop + (fx.carBottom - fx.carTop) * 0.3, fx.rowTop + 10),
+      ox: 0, oy: 0, vx: 0, vy: 0, x: 0, y: 0, size, a: rand(0.3, 0.55), rot: rand(0, Math.PI * 2),
+      spin: rand(-0.05, 0.05), vr: 0, thin: 0, wind: rand(4, 12) * (Math.random() < 0.5 ? 1 : -1),
+      img: pick(fx.sprites.puffs), age: -i * 0.07,
+    }
+  }
   return {
     busy: () => false,
+    stats: () => ({puffs: puffs.length, stirred: puffs.filter((p) => Math.hypot(p.vx, p.vy) > 5).length, thinned: puffs.filter((p) => p.thin > 0.1).length}),
     step(dt, amount, active) {
-      const want = Math.round((fx.phone ? 6 : 12) * Math.min(1, amount / 1.5))
-      banks = banks.filter((b) => !(b.out !== undefined && b.out <= 0))
-      const kept = banks.filter((b) => !b.out).length
-      if (active && kept < want) {
-        for (let i = kept; i < want; i++) {
-          const w = rand(380, 760)
-          // Each bank comes in on its own, a little after the one before, over a few seconds.
-          banks.push({x: rand(-w, fx.W), y: rand(fx.carTop + (fx.carBottom - fx.carTop) * 0.35, fx.rowTop - 30), w, h: w * rand(0.42, 0.6), v: rand(5, 13) * (Math.random() < 0.5 ? 1 : -1), a: rand(0.55, 1), img: pick(fx.sprites.fogs), age: -i * rand(0.5, 0.9)})
+      const want = Math.round((fx.phone ? 32 : 70) * Math.min(1, amount / 1.5))
+      puffs = puffs.filter((p) => !(p.out !== undefined && p.out <= 0))
+      const kept = puffs.filter((p) => !p.out).length
+      if (active && kept < want) for (let i = kept; i < want; i++) puffs.push(make(i - kept))
+      puffs.forEach((p, i) => { if (i >= want && !p.out) p.out = 3 })
+      const P = fx.pointer
+      const on = active && P.on
+      const ks = pokes(fx, active)
+      for (const p of puffs) {
+        if (p.out) p.out -= dt
+        p.age += dt
+        // Its own place drifts with the wind, round and round.
+        p.hx += p.wind * dt
+        if (p.hx > fx.W + p.size) p.hx = -p.size
+        if (p.hx < -p.size) p.hx = fx.W + p.size
+        // The hand: pushed out of its way, carried a little with it, curled round it, thinned.
+        if (on) {
+          const dx = p.x - P.x, dy = p.y - P.y, d = Math.hypot(dx, dy), R = 140 + p.size * 0.3
+          if (d < R) {
+            const n = 1 - d / R, n2 = n * n
+            const [ax, ay] = away(P, p.x, p.y)
+            const side = Math.sign(ax * P.vy - ay * P.vx) || (p.spin < 0 ? -1 : 1)
+            const drag = Math.min(1, P.speed / 600)
+            p.vx += (ax * 380 + P.vx * 0.3 - ay * side * 240 * drag) * n2 * dt
+            p.vy += (ay * 380 + P.vy * 0.3 + ax * side * 240 * drag) * n2 * dt
+            p.vr += side * n2 * (0.6 + drag) * dt
+            p.thin = Math.max(p.thin, n2 * 0.9)
+          }
         }
+        for (const k of ks) {
+          const d = Math.hypot(p.x - k.x, p.y - k.y)
+          if (d > 320) continue
+          const n = 1 - d / 320
+          const [ax, ay] = away(k, p.x, p.y)
+          const side = p.spin < 0 ? -1 : 1
+          p.vx += (ax * 900 - ay * side * 300) * n * n
+          p.vy += (ay * 900 + ax * side * 300) * n * n
+          p.vr += side * n * 1.5
+          p.thin = Math.max(p.thin, n * 0.7)
+        }
+        // The stir dies down, the puff drifts back to its place, the fog closes and thickens again.
+        p.vx *= Math.pow(0.2, dt)
+        p.vy *= Math.pow(0.2, dt)
+        p.vr *= Math.pow(0.25, dt)
+        p.ox += p.vx * dt - p.ox * Math.min(1, dt * 0.3)
+        p.oy += p.vy * dt - p.oy * Math.min(1, dt * 0.3)
+        p.x = p.hx + p.ox
+        p.y = p.hy + p.oy
+        p.rot += (p.spin + p.vr) * dt
+        p.thin -= p.thin * Math.min(1, dt * 0.5)
       }
-      // Fewer wanted (the device asked for less): the extra ones fade out, they do not vanish.
-      banks.forEach((b, i) => { if (i >= want && !b.out) b.out = 3 })
-      for (const b of banks) {
-        if (b.out) b.out -= dt
-        b.age += dt
-        b.x += b.v * dt
-        if (b.v > 0 && b.x > fx.W + 40) b.x = -b.w - 40
-        if (b.v < 0 && b.x < -b.w - 40) b.x = fx.W + 40
+      if (active && motes.length < want / 3) motes.push({x: rand(0, fx.W), y: rand(fx.carTop + 80, fx.rowTop - 20), vx: rand(-4, 4), vy: rand(-3, 3), life: rand(6, 10), max: 10})
+      for (const mo of motes) {
+        const n = active ? near(P, mo.x, mo.y, 150) : 0
+        if (n) { const [ax, ay] = away(P, mo.x, mo.y); mo.x += ax * n * 120 * dt; mo.y += ay * n * 120 * dt }
+        mo.x += mo.vx * dt; mo.y += mo.vy * dt; mo.life -= dt
       }
-      if (active && motes.length < want * 3) motes.push({x: rand(0, fx.W), y: rand(fx.carTop + 80, fx.rowTop - 20), vx: rand(-4, 4), vy: rand(-3, 3), life: rand(6, 10), max: 10})
-      for (const m of motes) { m.x += m.vx * dt; m.y += m.vy * dt; m.life -= dt }
-      motes = motes.filter((m) => m.life > 0)
+      motes = motes.filter((mo) => mo.life > 0)
     },
     draw(g, alpha) {
-      for (const b of banks) {
-        const fade = Math.max(0, Math.min(1, b.age / 4, b.out ? b.out / 3 : 1))
+      for (const p of puffs) {
+        const fade = Math.max(0, Math.min(1, p.age / 3.5, p.out ? p.out / 3 : 1))
         if (fade <= 0) continue
-        g.globalAlpha = alpha * b.a * fade * fade
-        g.drawImage(b.img, b.x, b.y - b.h / 2, b.w, b.h)
+        // Thinned fog spreads as it thins: a little larger, much fainter.
+        const sz = p.size * (1 + p.thin * 0.3)
+        g.globalAlpha = alpha * p.a * fade * fade * (1 - p.thin)
+        g.save()
+        g.translate(p.x, p.y)
+        g.rotate(p.rot)
+        g.drawImage(p.img, -sz / 2, -sz / 2, sz, sz)
+        g.restore()
       }
       g.fillStyle = "rgba(230,225,245,0.8)"
-      for (const m of motes) {
-        g.globalAlpha = alpha * Math.sin(Math.PI * (m.life / m.max)) * 0.6
-        g.fillRect(m.x, m.y, 1.4, 1.4)
+      for (const mo of motes) {
+        g.globalAlpha = alpha * Math.sin(Math.PI * (mo.life / mo.max)) * 0.6
+        g.fillRect(mo.x, mo.y, 1.4, 1.4)
       }
     },
   }
 }
 
-// Go on an adventure: wind. Dust and a few leaves carried across in gusts, and streaks of wind
-// sweeping through.
+// Go on an adventure: wind. Dust and a few cherry-blossom petals carried across in gusts, and
+// streaks of wind sweeping through. Something stands where the pointer is, and the wind goes round it as round a
+// post: what it carries slows as it nears, bends out along a smooth lens-shaped path to either
+// side, and streams on and closes again behind. The post comes and goes gently (its strength
+// eases in and out over a moment) and glides after the pointer, so nothing ever snaps.
 function wind(fx) {
-  const LEAVES = ["#7c9a3c", "#a3b545", "#c58b2b", "#b5651d", "#5f8a3a"]
+  // Petals: pinks from near-white to blush, each a little deeper at its base.
+  const PETALS = [["#ffe6ee", "#ffc3d8"], ["#ffd6e4", "#ffb0cc"], ["#fff0f5", "#ffcce0"], ["#ffc9dc", "#f79fc0"], ["#ffdce8", "#ffb8d2"]]
   let t = 0, dust = [], leaves = [], gusts = [], next = 0.4
+  const post = {x: 0, y: 0, k: 0}
+  const R = 64
+  // How far from the post's centre line the wind runs at `dx` along it: a lens 1.7 posts long and a
+  // post tall, so the bend starts well before the post and closes well after.
+  const lens = (dx) => { const u = dx / (R * 1.7); return u * u >= 1 ? 0 : R * Math.sqrt(1 - u * u) }
+  // Where a point in the flow is carried to, sideways, by the post (0 when clear of it).
+  const bend = (x, y, side) => {
+    if (post.k < 0.01) return 0
+    const dx = x - post.x, dy = y - post.y, edge = lens(dx) + 10
+    if (edge <= 10 || Math.abs(dy) >= edge) return 0
+    const sg = Math.abs(dy) > 3 ? Math.sign(dy) : side
+    return sg * (edge - Math.abs(dy)) * post.k * (1 + 0.06 * Math.sin(t * 6 + dx * 0.05))
+  }
+  // A streak of wind meeting the post goes round it on one side, whole: the side is the one its
+  // line lies on (or its own, head on), and every point of it within the lens is drawn onto that
+  // side's arc — the pull coming in from nothing at the lens's tips, and weaker for a streak that
+  // passes further from the post — so it bends out, round, and back without a kink anywhere.
+  // Gently: a streak is air, not a leaf. Each streak carries a sideways offset of its own, with
+  // momentum: the pointer pushes it away — on whichever side of the pointer the streak is at the
+  // moment, so the pointer never passes through it but drives it ahead — and once the pointer is
+  // gone a soft spring brings it back to its line. The push is a smooth bump along the streak's
+  // length, centred where the push happened (`bx`, which follows the pointer only while it is
+  // pushing), so moving the mouse off leaves the bump to settle where it is, never snapping.
+  const PUSH = 900, D = 96
+  const bump = (u) => (u * u >= 1 ? 0 : (1 - u * u) ** 2)
+  const pushGust = (w, dt) => {
+    let p = 0
+    if (post.k > 0.01) {
+      const left = w.x - w.l, right = w.x
+      const along = post.x < left ? 1 - Math.min(1, (left - post.x) / 70) : post.x > right ? 1 - Math.min(1, (post.x - right) / 70) : 1
+      const gap = w.y + w.off - post.y
+      const ny = Math.max(0, 1 - Math.abs(gap) / D)
+      p = post.k * along * ny
+      if (p > 0) {
+        const sg = Math.sign(gap) || w.side
+        w.voff += sg * PUSH * p * dt
+        w.bx += (post.x - w.bx) * Math.min(1, dt * 10)
+      }
+    }
+    // The spring home, softly damped: back in about a second, with no snap.
+    w.voff += (-w.off * 9 - w.voff * 5) * dt
+    w.off += w.voff * dt
+    if (p <= 0 && Math.abs(w.off) < 0.2 && Math.abs(w.voff) < 1) { w.off = 0; w.voff = 0 }
+  }
+  const bendGust = (w, x, y0) => (w.off === 0 ? y0 : y0 + w.off * bump((x - w.bx) / (R * 2.5)))
+  // How much slower the wind is here: still in the lee and at the face of the post, full elsewhere.
+  const slow = (x, y) => { if (post.k < 0.01) return 1; const d = Math.hypot(x - post.x, y - post.y); return 1 - 0.8 * post.k * Math.max(0, 1 - d / (R * 1.3)) }
   return {
     busy: () => false,
+    stats: () => ({post: Math.round(post.k * 100) / 100, dust: dust.length, leaves: leaves.length, gusts: gusts.map((w) => ({x: Math.round(w.x), y: Math.round(w.y), l: Math.round(w.l), off: Math.round(w.off * 10) / 10}))}),
     step(dt, amount, active) {
       t += dt
+      const P = fx.pointer
+      const on = active && P.on
+      // The post eases in where the pointer is and out when it goes, and glides after it.
+      if (on) { post.x += (P.x - post.x) * Math.min(1, dt * 14); post.y += (P.y - post.y) * Math.min(1, dt * 14) }
+      post.k += ((on ? 1 : 0) - post.k) * Math.min(1, dt * (on ? 5 : 3))
       const blow = 22 + 75 * Math.max(0, Math.sin(t * 0.3)) ** 2
       const wantDust = Math.round((fx.phone ? 40 : 110) * Math.min(1, amount / 1.5))
       const wantLeaves = Math.round((fx.phone ? 7 : 16) * Math.min(1, amount / 1.5))
       if (active) {
-        while (dust.length < wantDust) dust.push({x: rand(0, fx.W), y: rand(fx.carTop + 60, fx.rowBottom - 20), k: rand(0.5, 1.2), ph: rand(0, 6), r: rand(1.2, 2.6)})
-        while (leaves.length < wantLeaves) leaves.push({x: rand(-fx.W * 0.5, 0), y: rand(fx.carTop + 80, fx.rowTop - 40), k: rand(0.7, 1.3), rot: rand(0, 6), vr: rand(1.5, 4), ph: rand(0, 6), c: pick(LEAVES), s: rand(8, 14)})
-        if ((next -= dt) <= 0) { next = rand(1.2, 2.6); gusts.push({x: -200, y: rand(fx.carTop + 90, fx.rowTop - 30), A: rand(6, 18), l: rand(160, 280), ph: rand(0, 6), v: rand(320, 520)}) }
+        while (dust.length < wantDust) dust.push({x: rand(0, fx.W), y: rand(fx.carTop + 60, fx.rowBottom - 20), k: rand(0.5, 1.2), ph: rand(0, 6), r: rand(1.2, 2.6), side: Math.random() < 0.5 ? -1 : 1, sway: 0})
+        while (leaves.length < wantLeaves) leaves.push({x: rand(-fx.W * 0.5, 0), y: rand(fx.carTop + 80, fx.rowTop - 40), k: rand(0.7, 1.3), rot: rand(0, 6), vr: rand(1.5, 4), ph: rand(0, 6), c: pick(PETALS), s: rand(6, 11), side: Math.random() < 0.5 ? -1 : 1, sway: 0, tw: rand(0, 6), tws: rand(1.6, 3.2)})
+        if ((next -= dt) <= 0) { next = rand(1.2, 2.6); gusts.push({x: -200, y: rand(fx.carTop + 90, fx.rowTop - 30), A: rand(6, 18), l: rand(160, 280), ph: rand(0, 6), v: rand(320, 520), side: Math.random() < 0.5 ? -1 : 1, off: 0, voff: 0, bx: 0}) }
+      }
+      // What the wind carries is eased sideways towards the path round the post (`sway`, the
+      // sideways drift it has picked up, which dies away once it is past), and slowed at its face.
+      const carry = (p, speed) => {
+        const want = bend(p.x, p.y, p.side)
+        p.sway += (want * 3 - p.sway) * Math.min(1, dt * 4)
+        p.y += p.sway * dt
+        p.x += speed * slow(p.x, p.y) * dt
       }
       for (const d of dust) {
-        d.x += blow * d.k * dt
+        carry(d, blow * d.k)
         d.y += Math.sin(t * 1 + d.ph) * 5 * dt
         if (d.x > fx.W + 10) d.x = -10
       }
       dust = dust.slice(0, wantDust)
       for (const l of leaves) {
-        l.x += blow * l.k * 1.2 * dt
+        carry(l, blow * l.k * 1.2)
         l.y += (Math.sin(t * 0.8 + l.ph) * 22 + 6) * dt
-        l.rot += l.vr * dt * (blow / 160)
-        if (l.x > fx.W + 30 || l.y > fx.rowBottom) { l.x = rand(-200, -30); l.y = rand(fx.carTop + 80, fx.rowTop - 40) }
+        l.rot += l.vr * dt * (blow / 160) * (1 + Math.abs(l.sway) / 60)
+        if (l.x > fx.W + 30 || l.y > fx.rowBottom) { l.x = rand(-200, -30); l.y = rand(fx.carTop + 80, fx.rowTop - 40); l.sway = 0 }
       }
       leaves = leaves.slice(0, wantLeaves)
-      for (const w of gusts) w.x += w.v * dt
+      for (const w of gusts) { w.x += w.v * dt; pushGust(w, dt) }
       gusts = gusts.filter((w) => w.x - w.l < fx.W + 50)
     },
     draw(g, alpha) {
@@ -746,29 +1091,47 @@ function wind(fx) {
       g.globalAlpha = alpha * 0.75
       for (const d of dust) g.fillRect(d.x, d.y, d.r, d.r)
       g.lineCap = "round"
+      g.lineJoin = "round"
       g.strokeStyle = "rgba(255,255,255,1)"
       g.lineWidth = 1.6
       for (const w of gusts) {
         g.beginPath()
-        for (let i = 0; i <= 20; i++) {
-          const x = w.x - w.l + (w.l * i) / 20
-          const y = w.y + Math.sin(x / 70 + w.ph) * w.A
+        // The streak, point by point, each carried round the post by the path the wind takes there.
+        for (let i = 0; i <= 28; i++) {
+          const x = w.x - w.l + (w.l * i) / 28
+          const y0 = w.y + Math.sin(x / 70 + w.ph) * w.A
+          const y = bendGust(w, x, y0)
           i ? g.lineTo(x, y) : g.moveTo(x, y)
         }
         g.globalAlpha = alpha * 0.35
         g.stroke()
       }
+      // A petal: the cherry blossom's, rounded, with the small notch at its tip, turning over as
+      // it tumbles (its width narrowing as it turns edge-on), a lighter heart, a faint vein.
       for (const l of leaves) {
+        const s = l.s
         g.save()
-        g.globalAlpha = alpha * 0.9
+        g.globalAlpha = alpha * 0.92
         g.translate(l.x, l.y)
         g.rotate(l.rot)
-        g.scale(1, Math.abs(Math.cos(l.rot * 0.7)) * 0.8 + 0.2)
-        g.fillStyle = l.c
-        g.beginPath(); g.ellipse(0, 0, l.s, l.s * 0.45, 0, 0, Math.PI * 2); g.fill()
-        g.strokeStyle = "rgba(0,0,0,0.25)"
-        g.lineWidth = 1
-        g.beginPath(); g.moveTo(-l.s, 0); g.lineTo(l.s, 0); g.stroke()
+        g.scale(Math.abs(Math.cos(l.rot * 0.7 + l.tw)) * 0.75 + 0.25, 1)
+        g.beginPath()
+        g.moveTo(0, s * 0.95)
+        g.bezierCurveTo(-s * 1.15, s * 0.35, -s * 0.95, -s * 0.9, -s * 0.28, -s * 0.95)
+        g.quadraticCurveTo(0, -s * 0.6, s * 0.28, -s * 0.95)
+        g.bezierCurveTo(s * 0.95, -s * 0.9, s * 1.15, s * 0.35, 0, s * 0.95)
+        g.closePath()
+        const grad = g.createRadialGradient(0, -s * 0.2, s * 0.1, 0, s * 0.3, s * 1.3)
+        grad.addColorStop(0, l.c[0])
+        grad.addColorStop(1, l.c[1])
+        g.fillStyle = grad
+        g.fill()
+        g.strokeStyle = "rgba(255,255,255,0.35)"
+        g.lineWidth = 0.6
+        g.stroke()
+        g.strokeStyle = "rgba(220,110,150,0.35)"
+        g.lineWidth = 0.7
+        g.beginPath(); g.moveTo(0, s * 0.85); g.quadraticCurveTo(s * 0.08, 0, 0, -s * 0.55); g.stroke()
         g.restore()
       }
     },
@@ -777,11 +1140,25 @@ function wind(fx) {
 
 // Feel like a kid: soap bubbles floating up from the first row, wobbling, and popping.
 function bubbles(fx) {
-  let list = [], pops = [], acc = 0
+  let list = [], pops = [], drips = [], acc = 0
+  const pop = (b) => {
+    b.gone = true
+    pops.push({x: b.x, y: b.y, r: b.r, life: 0.35})
+    for (let i = 0; i < 7; i++) { const a = rand(0, Math.PI * 2), v = rand(40, 140); drips.push({x: b.x + Math.cos(a) * b.r * 0.8, y: b.y + Math.sin(a) * b.r * 0.8, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: rand(0.3, 0.6)}) }
+  }
   return {
-    busy: () => list.length + pops.length > 0,
+    busy: () => list.length + pops.length + drips.length > 0,
     step(dt, amount, active) {
       const cap = (fx.phone ? 8 : 20) * Math.min(1, amount / 1.5)
+      // A bubble the pointer touches pops — a ring, and a few drops of soap flung out. A poke pops
+      // the ones within reach of it.
+      const P = fx.pointer, ks = pokes(fx, active)
+      for (const b of list) {
+        if (b.gone || b.age < 0.3) continue
+        if ((active && P.on && Math.hypot(b.x - P.x, b.y - P.y) < b.r + 4) || ks.some((k) => Math.hypot(b.x - k.x, b.y - k.y) < b.r + 40)) pop(b)
+      }
+      for (const d of drips) { d.vy += 500 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.life -= dt }
+      drips = drips.filter((d) => d.life > 0)
       if (active) {
         acc += 1.4 * (fx.W / 1000) * (amount / 1.5) * dt
         while (acc >= 1 && list.length < cap) { acc -= 1; list.push({x: rand(0, fx.W), y: rand(fx.carBottom - 120, fx.rowTop + 30), r: rand(10, 32), vy: -rand(7, 18), ph: rand(0, 6), life: rand(10, 18), age: 0}) }
@@ -811,6 +1188,8 @@ function bubbles(fx) {
         g.globalAlpha = alpha * (1 - k)
         g.beginPath(); g.arc(p.x, p.y, p.r * (1 + 0.5 * k), 0, Math.PI * 2); g.stroke()
       }
+      g.fillStyle = "rgba(255,255,255,0.85)"
+      for (const d of drips) { g.globalAlpha = alpha * Math.min(1, d.life * 3); g.beginPath(); g.arc(d.x, d.y, 1.4, 0, Math.PI * 2); g.fill() }
     },
   }
 }
@@ -819,7 +1198,7 @@ function bubbles(fx) {
 // that come and go, darker at the corners.
 function film(fx) {
   // The film's own pace: grain and flicker change about twelve times a second, not every frame.
-  let scratches = [], hairs = [], flick = 0, flickTo = 0, tick = 0, ox = 0, oy = 0, grain = null
+  let scratches = [], hairs = [], flick = 0, flickTo = 0, tick = 0, ox = 0, oy = 0, grain = null, slip = 0
   return {
     busy: () => false,
     step(dt, _amount, active) {
@@ -832,6 +1211,11 @@ function film(fx) {
         grain = pick(fx.sprites.grains)
       }
       flick += (flickTo - flick) * Math.min(1, dt * 6)
+      // A pointer dragged fast across it scratches the print; a poke makes the frame slip.
+      const P = fx.pointer
+      if (active && P.on && P.speed > 320 && Math.random() < dt * 9) scratches.push({x: P.x + rand(-4, 4), life: rand(0.25, 0.55), max: 0.6, w: rand(0.8, 2), dark: Math.random() < 0.5})
+      if (pokes(fx, active).length) { slip = 1; flick = 1 }
+      slip *= Math.pow(0.004, dt)
       if (active && Math.random() < dt * 0.6) scratches.push({x: rand(0, fx.W), life: rand(0.8, 2), max: 2, w: rand(0.6, 1.6), dark: Math.random() < 0.4})
       for (const s of scratches) { s.life -= dt; s.x += rand(-0.6, 0.6) }
       scratches = scratches.filter((s) => s.life > 0)
@@ -846,6 +1230,14 @@ function film(fx) {
       g.fillRect(0, top, fx.W, h)
       g.fillStyle = `rgba(255,235,190,${0.035 * flick})`
       g.fillRect(0, top, fx.W, h)
+      if (slip > 0.02) {
+        // The frame line sliding through: a dark bar down from the top, the picture below it a
+        // touch brighter, as a print jumping in the gate.
+        g.fillStyle = `rgba(10,6,2,${0.9 * slip})`
+        g.fillRect(0, top, fx.W, 34 * slip)
+        g.fillStyle = `rgba(255,240,210,${0.12 * slip})`
+        g.fillRect(0, top + 34 * slip, fx.W, h)
+      }
       const cx = fx.W / 2, cy = top + h / 2, R = Math.hypot(fx.W, h) / 2
       const v = g.createRadialGradient(cx, cy, R * 0.5, cx, cy, R)
       v.addColorStop(0, "rgba(20,10,0,0)")
@@ -876,18 +1268,24 @@ function film(fx) {
 // Something true: a documentary camera's viewfinder over the carousel — corner marks, REC blinking,
 // a running timecode, the exposure, and a focus box that hunts across the posters and locks.
 function viewfinder(fx) {
-  let t = 0, focus = null
+  let t = 0, focus = null, shutter = 0
   return {
     busy: () => false,
     step(dt, _amount, active) {
       if (!active) return
       t += dt
+      shutter *= Math.pow(0.002, dt)
+      if (pokes(fx, true).length) shutter = 1
       const h = fx.carBottom - fx.carTop
       const area = fx.W >= 1024
         ? {x0: fx.W * 0.6, x1: fx.W * 0.9, y0: fx.carTop + h * 0.22, y1: fx.carTop + h * 0.7}
         : {x0: fx.W * 0.25, x1: fx.W * 0.75, y0: fx.carTop + 110, y1: fx.carTop + 300}
       if (!focus) focus = {x: (area.x0 + area.x1) / 2, y: (area.y0 + area.y1) / 2, tx: 0, ty: 0, next: 0, lock: 0}
-      if ((focus.next -= dt) <= 0) { focus.tx = rand(area.x0, area.x1); focus.ty = rand(area.y0, area.y1); focus.next = rand(2.5, 4); focus.lock = 0 }
+      // The pointer over the area is what the camera is on: the box hunts to it and holds; left
+      // alone, it goes back to picking its own subjects.
+      const P = fx.pointer
+      if (P.on) { if (Math.hypot(P.x - focus.tx, P.y - focus.ty) > 6) focus.lock = 0; focus.tx = P.x; focus.ty = P.y; focus.next = 2 }
+      else if ((focus.next -= dt) <= 0) { focus.tx = rand(area.x0, area.x1); focus.ty = rand(area.y0, area.y1); focus.next = rand(2.5, 4); focus.lock = 0 }
       const k = Math.min(1, dt * 3)
       focus.x += (focus.tx - focus.x) * k
       focus.y += (focus.ty - focus.y) * k
@@ -895,6 +1293,7 @@ function viewfinder(fx) {
     },
     draw(g, alpha) {
       if (!focus) return
+      if (shutter > 0.01) { g.globalAlpha = alpha * shutter * 0.85; g.fillStyle = "#fff"; g.fillRect(0, fx.carTop, fx.W, fx.carBottom - fx.carTop) }
       const gut = fx.W < 640 ? 16 : fx.W < 1024 ? 24 : fx.W < 1280 ? 48 : 64
       const L = gut, R = fx.W - gut, T = fx.carTop + 76, B = fx.carBottom - 64
       const c = 26
@@ -1020,9 +1419,20 @@ export const MoodFx = {
       rose: bokehSprite(255, 95, 150), blush: bokehSprite(255, 160, 200), warm: bokehSprite(255, 205, 150),
       white: glowSprite(255, 255, 255, 0), fire: glowSprite(255, 140, 40, 100), ember: glowSprite(255, 120, 30, 120),
       firefly: glowSprite(200, 255, 110, 60), bubble: bubbleSprite(),
-      fogs: [fogSprite(), fogSprite(), fogSprite()], grains: [grainSprite(), grainSprite(), grainSprite()],
+      fogs: [fogSprite(), fogSprite(), fogSprite()], puffs: [puffSprite(), puffSprite(), puffSprite()], grains: [grainSprite(), grainSprite(), grainSprite()],
     }
     this.running = [] // {slug, fx, fade}
+    // What the effects feel of the pointer: where it is over the area (in the canvas's own
+    // coordinates), whether it is on it, how fast it moves; and the pokes — presses, taps.
+    // `path`: every move since the last frame, so an effect can follow the hand's real curve
+    // rather than a straight line between where it was at one frame and the next.
+    this.pointer = {on: false, x: 0, y: 0, vx: 0, vy: 0, speed: 0, t: 0, path: []}
+    this.pokes = []
+    // Live, for the console and tuning: what each running effect holds this instant (`fxStats` is
+    // a snapshot taken twice a second).
+    this.el.fxNow = () => Object.fromEntries(this.running.map((r) => [r.slug, r.fx.stats ? r.fx.stats() : null]))
+    this.onPointer = (e) => this.pointerEvent(e)
+    for (const ev of ["pointermove", "pointerdown", "pointerup", "pointercancel", "pointerleave"]) this.el.addEventListener(ev, this.onPointer, {passive: true})
     this.ticks = []
     this.work = []
     this.slow = 0
@@ -1056,7 +1466,37 @@ export const MoodFx = {
     this.ro.disconnect()
     this.io.disconnect()
     document.removeEventListener("visibilitychange", this.onVis)
+    for (const ev of ["pointermove", "pointerdown", "pointerup", "pointercancel", "pointerleave"]) this.el.removeEventListener(ev, this.onPointer)
     if (this.note) this.note.remove()
+  },
+
+  // A mouse is on the area while it is over it; a finger while it is down. Its speed is from the
+  // last two moves (and falls to nothing in the loop once the moves stop). A press is a poke,
+  // `fresh` for the frame after it.
+  pointerEvent(e) {
+    const P = this.pointer, now = performance.now() / 1000
+    const base = this.el.getBoundingClientRect()
+    const x = e.clientX - base.left, y = e.clientY - base.top
+    const touch = e.pointerType === "touch"
+    if (e.type === "pointerleave" || e.type === "pointercancel" || (e.type === "pointerup" && touch)) { P.on = false; P.speed = 0; return }
+    // Only over the animated area: on the home page the hook's box goes on down the rows, where
+    // the pointer is on posters, not in the weather.
+    if (y > this.H) { P.on = false; P.speed = 0; return }
+    if (e.type === "pointerdown") {
+      this.pokes.push({x, y, age: 0, fresh: true})
+      if (touch) { P.on = true; P.x = x; P.y = y; P.t = now; P.speed = 0 }
+      return
+    }
+    if (e.type !== "pointermove" || (touch && !P.on)) return
+    if (P.on) {
+      const dtp = Math.max(0.004, now - P.t)
+      P.vx += ((x - P.x) / dtp - P.vx) * 0.5
+      P.vy += ((y - P.y) / dtp - P.vy) * 0.5
+      P.speed = Math.hypot(P.vx, P.vy)
+    }
+    P.on = true; P.x = x; P.y = y; P.t = now
+    if (P.path.length < 64) P.path.push({x, y})
+    this.wake()
   },
 
   layout() {
@@ -1128,11 +1568,16 @@ export const MoodFx = {
     const want = this.enabled() ? this.target() : null
     if (want && !this.running.some((r) => r.slug === want)) this.running.push({slug: want, fx: warmed(this, EFFECTS[want](this), want), fade: 0})
     const amount = this.amount()
+    // A pointer that has stopped moving has no speed, whatever its last move was.
+    if (now / 1000 - this.pointer.t > 0.07) { this.pointer.vx = this.pointer.vy = 0; this.pointer.speed = 0 }
     for (const r of this.running) {
       const active = r.slug === want
       r.fade += ((active ? 1 : 0) - r.fade) * Math.min(1, dt * 3)
       r.fx.step(dt, amount, active)
     }
+    for (const k of this.pokes) { k.fresh = false; k.age += dt }
+    this.pokes = this.pokes.filter((k) => k.age < 2)
+    this.pointer.path.length = 0
     // The mood that went fades out; once faded it is dropped, whatever it still held.
     this.running = this.running.filter((r) => r.slug === want || r.fade > 0.02)
 
@@ -1185,7 +1630,7 @@ export const MoodFx = {
       }
     }
     // For the console: what it is doing and why.
-    this.el.fxStats = {fps: this.raf ? fps : 0, ms: avg, effect: this.running.map((r) => r.slug), onScreen: this.onScreen, device: this.device, quality: this.quality, choice: this.choice}
+    this.el.fxStats = {fps: this.raf ? fps : 0, ms: avg, effect: this.running.map((r) => r.slug), onScreen: this.onScreen, device: this.device, quality: this.quality, choice: this.choice, pointer: this.pointer, effects: Object.fromEntries(this.running.map((r) => [r.slug, r.fx.stats ? r.fx.stats() : null]))}
   },
 
   // The note in the corner: once a session, when an animation would have played.
