@@ -681,18 +681,6 @@ defmodule RokiWeb.TitleLive do
           </div>
 
           <div :if={@title && @live_action == :show} class="space-y-8">
-            <.rate_sheet
-              :if={@linked?}
-              title={@title}
-              rating={@rating}
-              error={@rating_error}
-              label={rate_label(@sections, @rate_mal)}
-            />
-
-            <.link_sheet :if={@linked? and @title.type == "tv" and @uuid} uuid={@uuid} title={@title} />
-            <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
-            <.reviews_sheet title={@title} reviews={@reviews} />
-
             <.cinema_hero
               mal={@rate_mal}
               link_state={@link_state}
@@ -712,9 +700,34 @@ defmodule RokiWeb.TitleLive do
               cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
             />
 
-            <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
+            <%!-- The sheets (fixed, over the page) live in one container that is always there
+                  (`contents`: no box of its own, so no gap is added to the page's spacing). One
+                  that appears later (the trailer's, once its address is known; the study's) then
+                  joins this container and shifts nothing: put in among the page's own sections,
+                  it made the patch rebuild everything after it — their pictures fading in again,
+                  their hooks starting over. --%>
+            <div id="title-sheets" class="contents">
+              <.rate_sheet
+                :if={@linked?}
+                title={@title}
+                rating={@rating}
+                error={@rating_error}
+                label={rate_label(@sections, @rate_mal)}
+              />
 
-            <div class="px-4 sm:px-6 lg:px-12 xl:px-16">
+              <.link_sheet
+                :if={@linked? and @title.type == "tv" and @uuid}
+                uuid={@uuid}
+                title={@title}
+              />
+              <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
+              <.reviews_sheet title={@title} reviews={@reviews} />
+              <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
+            </div>
+
+            <%!-- Ids on these three: without one, a section arriving above them makes the patch
+                  rebuild them (see the sheets' container above). --%>
+            <div id="title-access" class="px-4 sm:px-6 lg:px-12 xl:px-16">
               <.access_notice uuid={@uuid} linked?={@linked?} />
             </div>
 
@@ -722,7 +735,11 @@ defmodule RokiWeb.TitleLive do
             <.cast_row cast={@credits.cast} />
 
             <%!-- The comments come right after the cast: they matter more than more like this. --%>
-            <div :if={@title.type in ["movie", "tv"]} class="px-4 sm:px-6 lg:px-12 xl:px-16">
+            <div
+              :if={@title.type in ["movie", "tv"]}
+              id="title-comments-wrap"
+              class="px-4 sm:px-6 lg:px-12 xl:px-16"
+            >
               <div>
                 <.title_comments
                   id="title-comments"
@@ -740,7 +757,7 @@ defmodule RokiWeb.TitleLive do
               signed_in?={@uuid != nil}
             />
 
-            <div class="h-12" aria-hidden="true"></div>
+            <div id="title-end" class="h-12" aria-hidden="true"></div>
           </div>
 
           <div :if={@title && @live_action == :episodes}>
