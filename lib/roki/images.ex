@@ -120,6 +120,28 @@ defmodule Roki.Images do
 
   def local(other), do: other
 
+  @doc """
+  A poster's `srcset`: the library's small (300 px) and medium (800 px) copies, so the browser
+  takes the small one for a poster drawn at 160 px on a plain screen and the medium one on a
+  dense one or in a wide grid. The pages asked for 342 px, and the smallest copy at least that
+  wide is the 800 px one: a home page of posters was 21 MB. Nil for a picture that is not TMDB's
+  (a MyAnimeList one comes in one size).
+  """
+  def srcset(@tmdb <> _ = url) do
+    case Regex.replace(~r"/w\d+/", url, "/w300/") do
+      ^url ->
+        nil
+
+      small ->
+        local(small) <> " 300w, " <> local(String.replace(small, "/w300/", "/w780/")) <> " 800w"
+    end
+  end
+
+  def srcset(_url), do: nil
+
+  @doc "The `sizes` that go with `srcset/1`: the drawn width where the browser knows it, else a guess."
+  def poster_sizes(fallback \\ "(min-width: 1024px) 14rem, 33vw"), do: "auto, " <> fallback
+
   # The key of a picture the site keeps copies of: the picture, whatever size was asked for —
   # `image.tmdb.org/abc.jpg` for any `image.tmdb.org/t/p/<size>/abc.jpg`.
   @doc false

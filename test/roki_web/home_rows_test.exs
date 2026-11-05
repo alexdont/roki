@@ -90,13 +90,18 @@ defmodule RokiWeb.HomeRowsTest do
     } do
       assert html =~ ~s(data-key="movie/1")
       assert html =~ ~s(data-key="tv/3")
-      # The player is made by the hook, and the page must never touch it again.
-      assert html =~ ~r/data-card-trailer[^>]*phx-update="ignore"/
-      assert html =~ ~s(href="/sources/movie/1?auto=1")
-      assert html =~ ~s(aria-label="More about Title 1")
-      assert html =~ "data-card-overview"
+      # The card is one template for the page (the layout); each poster carries what fills it.
+      assert html =~ ~s(data-title="Title 1")
+      assert html =~ ~s(data-play-href="/sources/movie/1?auto=1")
       # A show's Play is its page, where "continue" is worked out.
       refute html =~ "/sources/tv/3"
+
+      card = render_component(&RokiWeb.PosterComponents.card_template/1, %{})
+      assert card =~ ~r/<template[^>]*id="card-template"/
+      # The player is made by the hook, and the page must never touch it again.
+      assert card =~ ~r/data-card-trailer[^>]*phx-update="ignore"/
+      assert card =~ "data-card-overview"
+      assert card =~ "data-card-more"
     end
 
     test "save is a button for someone signed in and a way to log in for a visitor" do
@@ -112,12 +117,13 @@ defmodule RokiWeb.HomeRowsTest do
         )
       end
 
-      assert render.(true) =~ "data-card-save"
-      refute render.(false) =~ "data-card-save"
-      # Save for later and mark watched are both on the card, for anyone signed in.
-      assert render.(true) =~ "data-card-watched"
-      refute render.(false) =~ "data-card-watched"
-      assert render.(false) =~ ~s(href="/phoenix_kit/users/log-in")
+      # The one card carries both; the poster says which the hook shows.
+      assert render.(true) =~ ~s(data-signed="true")
+      assert render.(false) =~ ~s(data-signed="false")
+      card = render_component(&RokiWeb.PosterComponents.card_template/1, %{})
+      assert card =~ ~r/data-signed-only[^>]*data-card-save/s
+      assert card =~ ~r/data-signed-only[^>]*data-card-watched/s
+      assert card =~ ~r/data-guest-only[^>]*href="\/phoenix_kit\/users\/log-in"/s
     end
 
     test "the rows keep the old hover card off their posters, and the card that opens is no taller",
@@ -125,9 +131,10 @@ defmodule RokiWeb.HomeRowsTest do
            html: html
          } do
       assert html =~ "data-card-row"
-      # The card that opens is exactly as tall as the poster: no gap grows under a row.
-      assert html =~ ~r/data-card-panel[^>]*\binset-0\b/
+      # The card that opens is exactly as tall as the poster (the hook places it `inset-0` in a
+      # row): no gap grows under a row.
       refute html =~ "-bottom-16"
+      refute html =~ "data-card-panel"
     end
   end
 

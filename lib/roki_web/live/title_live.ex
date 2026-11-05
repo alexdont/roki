@@ -977,7 +977,10 @@ defmodule RokiWeb.TitleLive do
           <img
             :if={@title.poster}
             src={Roki.Images.local(@title.poster)}
+            srcset={Roki.Images.srcset(@title.poster)}
+            sizes="7.5rem"
             alt={@title.title}
+            decoding="async"
             class="hidden h-44 w-auto shrink-0 rounded-xl shadow-2xl ring-1 ring-white/15 sm:block"
           />
           <div class="min-w-0 flex-1 space-y-3">
@@ -1438,8 +1441,11 @@ defmodule RokiWeb.TitleLive do
         <img
           :if={@title.poster}
           src={Roki.Images.local(@title.poster)}
+          srcset={Roki.Images.srcset(@title.poster)}
+          sizes="12rem"
           alt={@title.title}
           loading="lazy"
+          decoding="async"
           class="hidden aspect-[2/3] w-40 shrink-0 self-start rounded-2xl bg-base-300 object-cover shadow-xl ring-1 ring-black/10 xl:block xl:w-48"
         />
         <div class="min-w-0 flex-1 space-y-6">
@@ -1743,8 +1749,11 @@ defmodule RokiWeb.TitleLive do
             <img
               :if={p.photo}
               src={Roki.Images.local(p.photo)}
+              srcset={Roki.Images.srcset(p.photo)}
+              sizes="8rem"
               alt=""
               loading="lazy"
+              decoding="async"
               class="h-full w-full object-cover transition duration-300 group-hover/face:scale-105"
             />
             <span :if={!p.photo} class="text-2xl font-semibold text-base-content/40">

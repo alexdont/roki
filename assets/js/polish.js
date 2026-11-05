@@ -27,6 +27,10 @@ export function keep(from, to) {
     to.setAttribute("data-shown", "")
     if (from.hasAttribute("data-instant")) to.setAttribute("data-instant", "")
   }
+  // The header's `--hdr` (how far it has crossed to the frosted bar) is the scroll's, not the server's.
+  if (from.classList && from.classList.contains("site-header") && from.style.getPropertyValue("--hdr")) {
+    to.style.setProperty("--hdr", from.style.getPropertyValue("--hdr"))
+  }
 }
 
 function pictures() {
@@ -67,15 +71,20 @@ function reveal() {
 // ── the header ─────────────────────────────────────────────────────────
 
 function header() {
-  let last = scrollY, frame = null
+  let last = scrollY, frame = null, lastHdr = null
   const update = () => {
     frame = null
     const y = Math.max(0, scrollY)
-    root.style.setProperty("--hdr", Math.min(1, y / 120).toFixed(3))
+    const head = document.querySelector(".site-header")
+    // On the header itself, not on <html>: a custom property changed on the root has the browser
+    // look at the whole document's style again, and the carousel's scroll handler, reading a
+    // size right after, waited for that every frame (5 ms of a 16 ms frame). Only the header
+    // reads it. `keep` carries it over a patch of the header.
+    const hdr = Math.min(1, y / 120).toFixed(3)
+    if (head && (hdr !== lastHdr || !head.style.getPropertyValue("--hdr"))) { head.style.setProperty("--hdr", hdr); lastHdr = hdr }
     root.toggleAttribute("data-scrolled", y > 60)
     // Away while going down a good way into the page; back on the first move up. Never while
     // something in it is open or has the focus.
-    const head = document.querySelector(".site-header")
     const busy = head && (head.matches(":focus-within") || head.querySelector("[open], .dropdown:focus-within, #search-pop:not(.hidden)"))
     if (y < 300 || y < last - 4 || busy) root.removeAttribute("data-hdr-hidden")
     else if (y > last + 4) root.setAttribute("data-hdr-hidden", "")

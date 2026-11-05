@@ -449,6 +449,8 @@ defmodule RokiWeb.Layouts do
     </main>
 
     <.flash_group flash={@flash} />
+    <%!-- The card that opens over a poster, once for the page (the hooks clone it). --%>
+    <RokiWeb.PosterComponents.card_template />
     """
   end
 

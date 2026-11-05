@@ -395,8 +395,11 @@ defmodule RokiWeb.FeaturedLive do
     <img
       :if={@poster}
       src={Roki.Images.local(@poster)}
+      srcset={Roki.Images.srcset(@poster)}
+      sizes={Roki.Images.poster_sizes("4rem")}
       alt=""
       loading="lazy"
+      decoding="async"
       class={["rounded-md bg-base-300 object-cover", @class]}
     />
     <div :if={!@poster} class={["rounded-md bg-base-300", @class]}></div>
@@ -721,15 +724,18 @@ defmodule RokiWeb.FeaturedLive do
           <img
             :for={{url, i} <- Enum.with_index(@posters)}
             src={Roki.Images.local(url)}
+            srcset={Roki.Images.srcset(url)}
+            sizes={Roki.Images.poster_sizes()}
             alt=""
             loading="lazy"
+            decoding="async"
             class="aspect-[2/3] h-[calc(var(--card-w)*0.92)] rounded-md object-cover shadow-xl ring-1 ring-white/25 transition duration-300 group-hover/tile:-translate-y-1"
             style={"transform: rotate(#{Enum.at([-7, 0, 7], i, 0)}deg); z-index: #{3 - i}"}
           />
         </div>
 
         <div class="relative">
-          <p class="line-clamp-2 text-xl font-semibold leading-tight tracking-tight drop-shadow">
+          <p class="line-clamp-2 text-xl font-semibold leading-tight tracking-tight text-shadow-sm">
             {@list.name}
           </p>
           <p class="mt-0.5 text-xs text-white/65">
@@ -842,6 +848,8 @@ defmodule RokiWeb.FeaturedLive do
               >
                 <img
                   src={Roki.Images.local(String.replace(it.poster, "/w500/", "/w342/"))}
+                  srcset={Roki.Images.srcset(it.poster)}
+                  sizes={Roki.Images.poster_sizes()}
                   alt={it.title}
                   loading={if m.slug == @start, do: "eager", else: "lazy"}
                   class="h-full w-full object-cover"
@@ -1046,148 +1054,9 @@ defmodule RokiWeb.FeaturedLive do
     """
   end
 
-  # A list can hold one show once for each of its seasons (or anime entries): their cards need
-  # ids of their own.
-  defp entry_suffix(item) do
-    case item[:mal_id] || item[:season] do
-      nil -> ""
-      n -> "-#{n}"
-    end
-  end
-
-  attr :item, :map, required: true
-  attr :key, :string, required: true
-  attr :kind, :atom, required: true
-  attr :picture, :string, default: nil
-  attr :title_href, :string, default: nil
-  attr :play_href, :string, default: nil
-  attr :signed_in?, :boolean, default: false
-  attr :class, :any, default: nil
-  attr :inner_class, :any, default: "w-full", doc: "the content's width — the card's final width"
-
-  # What opens over a poster: the wide picture (the trailer, after a moment), Play, save and more,
-  # and the facts. Where it sits is the caller's (`class`): over the whole slot in a row, over the
-  # middle of the cell in a grid. What it shows beyond the poster comes from `/card/:type/:id`.
-  #
-  # The content is laid out at the card's final width (`inner_class`) from the first frame, and the
-  # panel clips it while the slot is still widening: laid out at the live width, the overview came
-  # and went as the width crossed its mark mid-way, and the row of buttons jumped with it.
-  @doc false
-  def card_panel(assigns) do
-    ~H"""
-    <div
-      data-card-panel
-      class={[
-        "pointer-events-none absolute z-30 overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 ",
-        @class
-      ]}
-    >
-      <div class={["@container flex h-full flex-col", @inner_class]}>
-        <.link
-          navigate={@title_href}
-          class="relative block min-h-[7rem] flex-1 overflow-hidden bg-neutral-800"
-        >
-          <img
-            :if={@picture}
-            data-card-img
-            src={@picture}
-            alt=""
-            class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
-          />
-          <div
-            data-card-trailer
-            id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}#{entry_suffix(@item)}"}
-            phx-update="ignore"
-            class="absolute inset-0 opacity-0 transition-opacity duration-500"
-          >
-          </div>
-          <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
-          </div>
-          <p class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight drop-shadow">
-            {@item.title}
-          </p>
-        </.link>
-
-        <div class="flex shrink-0 flex-col justify-start gap-3 p-3">
-          <div class="flex items-center gap-2">
-            <.link
-              navigate={@play_href}
-              class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
-              aria-label={"Play #{@item.title}"}
-              title="Play"
-            >
-              <.icon name="hero-play-solid" class="h-5 w-5" />
-            </.link>
-            <.link
-              :if={!@signed_in?}
-              navigate={~p"/phoenix_kit/users/log-in"}
-              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label="Log in to save"
-              title="Log in to save"
-            >
-              <.icon name="hero-plus" class="h-5 w-5" />
-            </.link>
-            <button
-              :if={@signed_in?}
-              type="button"
-              data-card-save
-              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label="Save for later"
-              title="Save for later"
-            >
-              <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
-              <span data-on class="hidden flex"><.icon name="hero-check" class="h-5 w-5" /></span>
-            </button>
-            <button
-              :if={@signed_in?}
-              type="button"
-              data-card-watched
-              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label={
-                if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
-              }
-              title={
-                if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
-              }
-            >
-              <span data-off class="flex"><.icon name="hero-eye" class="h-5 w-5" /></span>
-              <span data-on class="hidden flex">
-                <.icon name="hero-eye-solid" class="h-5 w-5 text-emerald-400" />
-              </span>
-            </button>
-            <.link
-              navigate={@title_href}
-              class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-              aria-label={"More about #{@item.title}"}
-              title="More info"
-            >
-              <.icon name="hero-chevron-down" class="h-5 w-5" />
-            </.link>
-          </div>
-          <div>
-            <p class="flex items-center gap-2 text-xs text-white/80">
-              <span
-                :if={is_number(@item[:vote]) and @item.vote > 0}
-                class="font-semibold text-emerald-400"
-              >
-                ★ {Float.round(@item.vote * 1.0, 1)}
-              </span>
-              <span :if={@item[:year]}>{@item.year}</span>
-              <span data-card-runtime></span>
-            </p>
-            <%!-- Two lines are kept for the overview before its text arrives, so nothing moves when it does. --%>
-            <p
-              data-card-overview
-              class="mt-1 hidden line-clamp-2 text-xs @[323px]:[display:-webkit-box] @[323px]:min-h-[2lh] leading-snug text-white/75"
-            >
-            </p>
-            <p data-card-genres class="mt-0.5 min-h-4 truncate text-xs text-white/50"></p>
-          </div>
-        </div>
-      </div>
-    </div>
-    """
-  end
+  # The score a poster's card shows, as text; nothing for none.
+  defp card_vote(%{vote: v}) when is_number(v) and v > 0, do: Float.round(v * 1.0, 1)
+  defp card_vote(_item), do: nil
 
   attr :item, :map, required: true
   attr :kind, :atom, required: true
@@ -1256,7 +1125,9 @@ defmodule RokiWeb.FeaturedLive do
             do: ~p"/sources/movie/#{assigns.item.id}?#{[auto: 1]}",
             else: RokiWeb.PosterComponents.href(assigns.item)
           ),
-        picture: assigns.item[:poster] && Roki.Images.local(assigns.item.poster)
+        picture: assigns.item[:poster] && Roki.Images.local(assigns.item.poster),
+        srcset: Roki.Images.srcset(assigns.item[:poster]),
+        vote: card_vote(assigns.item)
       )
 
     ~H"""
@@ -1267,9 +1138,17 @@ defmodule RokiWeb.FeaturedLive do
       data-signed={to_string(@signed_in?)}
       data-no-card={@no_card? && ""}
       data-keep-colour={@keep_colour? && ""}
+      data-title={@item.title}
+      data-year={@item[:year]}
+      data-vote={@vote}
+      data-title-href={@title_href}
+      data-play-href={@play_href}
+      data-picture={@picture}
+      data-srcset={@srcset}
       class="space-y-1"
     >
-      <div class="group/card relative hover:z-20">
+      <%!-- The card opens in this box (`data-card-box`), over the cell's middle. --%>
+      <div data-card-box class="group/card relative hover:z-20">
         <.poster
           item={@item}
           seen={@seen}
@@ -1281,16 +1160,6 @@ defmodule RokiWeb.FeaturedLive do
           mark?={false}
         />
         {render_slot(@overlay)}
-        <.card_panel
-          item={@item}
-          key={@key}
-          kind={@kind}
-          picture={@picture}
-          title_href={@title_href}
-          play_href={@play_href}
-          signed_in?={@signed_in?}
-          class="inset-y-0 left-1/2 w-[170%] [translate:-50%_0] max-lg:hidden"
-        />
       </div>
       {render_slot(@inner_block)}
     </li>
@@ -1322,7 +1191,9 @@ defmodule RokiWeb.FeaturedLive do
             do: ~p"/sources/movie/#{assigns.item.id}?#{[auto: 1]}",
             else: RokiWeb.PosterComponents.href(assigns.item)
           ),
-        picture: assigns.item[:poster] && Roki.Images.local(assigns.item.poster)
+        picture: assigns.item[:poster] && Roki.Images.local(assigns.item.poster),
+        srcset: Roki.Images.srcset(assigns.item[:poster]),
+        vote: card_vote(assigns.item)
       )
 
     ~H"""
@@ -1330,6 +1201,13 @@ defmodule RokiWeb.FeaturedLive do
       data-card
       data-key={@key}
       data-signed={to_string(@signed_in?)}
+      data-title={@item.title}
+      data-year={@item[:year]}
+      data-vote={@vote}
+      data-title-href={@title_href}
+      data-play-href={@play_href}
+      data-picture={@picture}
+      data-srcset={@srcset}
       class="group/card relative h-[calc(var(--card-w)*1.5)] w-[var(--card-w)] shrink-0 snap-start hover:z-20"
     >
       <div class="h-full w-[var(--card-w)]">
@@ -1343,18 +1221,6 @@ defmodule RokiWeb.FeaturedLive do
           mark?={false}
         />
       </div>
-
-      <.card_panel
-        item={@item}
-        key={@key}
-        kind={@kind}
-        picture={@picture}
-        title_href={@title_href}
-        play_href={@play_href}
-        signed_in?={@signed_in?}
-        class="inset-0"
-        inner_class="w-[calc(var(--card-w)*1.7)]"
-      />
     </li>
     """
   end

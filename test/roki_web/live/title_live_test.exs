@@ -13,6 +13,7 @@ defmodule RokiWeb.TitleLiveTest do
     assert html =~ "aria-busy"
     html = view |> render_async() |> then(fn _ -> render_async(view) end)
     assert html =~ "Log in"
-    refute html =~ "Play"
+    # No Play of the title's own (the page's one card template carries a Play of its own).
+    refute html =~ ~s(phx-click="play")
   end
 end

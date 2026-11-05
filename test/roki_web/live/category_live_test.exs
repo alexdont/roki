@@ -29,7 +29,7 @@ defmodule RokiWeb.CategoryLiveTest do
     assert has_element?(view, "#grid-more[phx-hook=InfiniteScroll][data-active=true]")
     # Each title opens into the card the home page's rows have (its own hook, around the grid).
     assert has_element?(view, "#grid-cards[phx-hook=GridCards] #grid[phx-hook=FillGrid]")
-    assert has_element?(view, ~s|#grid [data-card][data-key="movie/1"] [data-card-panel]|)
+    assert has_element?(view, ~s|#grid [data-card][data-key="movie/1"][data-title-href]|)
 
     render_hook(view, "more", %{})
     html = render_async(view, 3000)

@@ -61,6 +61,12 @@ export const MoodCarousel = {
       this.scrollFrame = requestAnimationFrame(() => { this.scrollFrame = null; this.tuck() })
     }
     window.addEventListener("scroll", this.onScroll, {passive: true})
+    // Its height, kept: read on every scroll frame it made the browser lay the page out again
+    // first (the header had just written a style), 5 ms a frame.
+    this.h = this.el.offsetHeight || 1
+    this.ro = new ResizeObserver(() => { this.h = this.el.offsetHeight || 1; this.tuck() })
+    this.ro.observe(this.el)
+    this.row = this.el.querySelector("[data-mood-tabs]")
     this.tuck()
 
     // A touch screen: a touch brings the row of moods into focus (app.css, `data-touched`) until a
@@ -105,6 +111,7 @@ export const MoodCarousel = {
     this.slides = [...this.el.querySelectorAll("[data-mood]")]
     this.chips = [...this.el.querySelectorAll("[data-mood-chip]")]
     this.order = this.slides.map((s) => s.dataset.mood)
+    this.row = this.el.querySelector("[data-mood-tabs]")
     this.show(Math.min(this.index, this.slides.length - 1))
     // A patch drops the style the hook set on the row.
     this.tuck()
@@ -114,6 +121,7 @@ export const MoodCarousel = {
     clearTimeout(this.timer)
     clearTimeout(this.untouch)
     cancelAnimationFrame(this.scrollFrame)
+    this.ro?.disconnect()
     window.removeEventListener("scroll", this.onScroll)
     document.removeEventListener("visibilitychange", this.onVisibility)
   },
@@ -123,10 +131,10 @@ export const MoodCarousel = {
   // itself has gone by (`--depth`, over its whole height) for the posters and words to drift. Both
   // linear, at the pace of the scroll.
   tuck() {
-    const h = this.el.offsetHeight || 1
+    const h = this.h || 1
     const y = Math.max(0, window.scrollY)
     this.el.style.setProperty("--depth", Math.min(1, y / h).toFixed(3))
-    const row = this.el.querySelector("[data-mood-tabs]")
+    const row = this.row
     if (!row) return
     const x = Math.min(1, y / Math.max(220, h * 0.5))
     row.style.setProperty("--tuck", x.toFixed(3))

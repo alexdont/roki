@@ -84,9 +84,12 @@ defmodule RokiWeb.PosterComponents do
         <img
           :if={@item.poster}
           src={Roki.Images.local(@item.poster)}
+          srcset={Roki.Images.srcset(@item.poster)}
+          sizes={Roki.Images.poster_sizes()}
           alt={@item.title}
           title={if !@title?, do: @item.title}
           loading="lazy"
+          decoding="async"
           class={[
             "h-full w-full object-cover transition group-hover:scale-105",
             @watched? && "grayscale"
@@ -149,7 +152,7 @@ defmodule RokiWeb.PosterComponents do
         </span>
         <span
           :if={@score_tl?}
-          class="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[0.7rem] font-semibold leading-none text-white shadow-sm backdrop-blur-sm"
+          class="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-1 text-[0.7rem] font-semibold leading-none text-white shadow-sm"
         >
           <span class="text-amber-300" aria-hidden="true">★</span>{rating(@item)}
         </span>
@@ -313,4 +316,138 @@ defmodule RokiWeb.PosterComponents do
   def subtitle(%{type: "movie"}), do: "Film"
   def subtitle(%{type: "tv"}), do: "Series"
   def subtitle(_), do: ""
+
+  @doc """
+  The card that opens over a poster (the `ShelfRow` and `GridCards` hooks), once for the whole
+  page, as a `<template>` in the layout. A hook clones it, places it for a row or a grid, fills
+  it for the poster under the pointer from that poster's `li` (`data-title`, `data-year`,
+  `data-vote`, `data-title-href`, `data-play-href`, `data-picture`, `data-srcset`,
+  `data-signed`) and puts it into that `li`, where the CSS for an open card finds it. Every
+  poster once carried a hidden card of its own: eighty of them were more than half of the home
+  page's elements. What a card shows beyond the poster comes from `/card/:type/:id`.
+  """
+  def card_template(assigns) do
+    ~H"""
+    <template id="card-template">
+      <div
+        data-card-panel
+        class="pointer-events-none absolute z-30 overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200"
+      >
+        <%!-- Laid out at the card's final width (the hook sets it for a row) from the first frame,
+             clipped while the slot widens: at the live width the overview came and went mid-way
+             and the row of buttons jumped with it. --%>
+        <div data-card-inner class="@container flex h-full flex-col">
+          <a
+            data-card-title-link
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            href="#"
+            class="relative block min-h-[7rem] flex-1 overflow-hidden bg-neutral-800"
+          >
+            <img
+              data-card-img
+              alt=""
+              decoding="async"
+              class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
+            />
+            <div
+              data-card-trailer
+              id="card-trailer"
+              phx-update="ignore"
+              class="absolute inset-0 opacity-0 transition-opacity duration-500"
+            >
+            </div>
+            <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
+            </div>
+            <p
+              data-card-title
+              class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight text-shadow-sm"
+            >
+            </p>
+          </a>
+
+          <div class="flex shrink-0 flex-col justify-start gap-3 p-3">
+            <div class="flex items-center gap-2">
+              <a
+                data-card-play
+                data-phx-link="redirect"
+                data-phx-link-state="push"
+                href="#"
+                class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
+                title="Play"
+              >
+                <RokiWeb.CoreComponents.icon name="hero-play-solid" class="h-5 w-5" />
+              </a>
+              <a
+                data-guest-only
+                data-phx-link="redirect"
+                data-phx-link-state="push"
+                href={~p"/phoenix_kit/users/log-in"}
+                class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+                aria-label="Log in to save"
+                title="Log in to save"
+              >
+                <RokiWeb.CoreComponents.icon name="hero-plus" class="h-5 w-5" />
+              </a>
+              <button
+                data-signed-only
+                type="button"
+                data-card-save
+                class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+                aria-label="Save for later"
+                title="Save for later"
+              >
+                <span data-off class="flex">
+                  <RokiWeb.CoreComponents.icon name="hero-plus" class="h-5 w-5" />
+                </span>
+                <span data-on class="hidden flex">
+                  <RokiWeb.CoreComponents.icon name="hero-check" class="h-5 w-5" />
+                </span>
+              </button>
+              <button
+                data-signed-only
+                type="button"
+                data-card-watched
+                class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+                aria-label="Mark as watched"
+                title="Mark as watched"
+              >
+                <span data-off class="flex">
+                  <RokiWeb.CoreComponents.icon name="hero-eye" class="h-5 w-5" />
+                </span>
+                <span data-on class="hidden flex">
+                  <RokiWeb.CoreComponents.icon name="hero-eye-solid" class="h-5 w-5 text-emerald-400" />
+                </span>
+              </button>
+              <a
+                data-card-more
+                data-phx-link="redirect"
+                data-phx-link-state="push"
+                href="#"
+                class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+                title="More info"
+              >
+                <RokiWeb.CoreComponents.icon name="hero-chevron-down" class="h-5 w-5" />
+              </a>
+            </div>
+            <div>
+              <p class="flex items-center gap-2 text-xs text-white/80">
+                <span data-card-vote class="font-semibold text-emerald-400"></span>
+                <span data-card-year></span>
+                <span data-card-runtime></span>
+              </p>
+              <%!-- Two lines are kept for the overview before its text arrives, so nothing moves when it does. --%>
+              <p
+                data-card-overview
+                class="mt-1 hidden line-clamp-2 text-xs @[323px]:[display:-webkit-box] @[323px]:min-h-[2lh] leading-snug text-white/75"
+              >
+              </p>
+              <p data-card-genres class="mt-0.5 min-h-4 truncate text-xs text-white/50"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    """
+  end
 end

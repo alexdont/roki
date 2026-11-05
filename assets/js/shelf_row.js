@@ -236,6 +236,8 @@ export const ShelfRow = {
     window.removeEventListener("resize", this.sync)
     if (this.onHide) document.removeEventListener("visibilitychange", this.onHide)
     this.close()
+    clearTimeout(this.panelTimer)
+    this.panelEl?.remove()
   },
 
   step(dir) {
@@ -306,10 +308,68 @@ export const cardMethods = {
 
   // A page patch (posters arriving, a season's picture swapped in) redraws the tile and drops what
   // was set on it here; the card is still the one the pointer is on, so it is opened again as it was.
+  // The card, one for this row or grid: the page's template (`card_template` in posters.ex)
+  // cloned on first use and placed — over the whole slot in a row, over the middle of the cell in
+  // a grid. It lives in whichever poster is open; every poster once carried one of its own,
+  // hidden, which was more than half of the home page's elements.
+  panel() {
+    if (this.panelEl) return this.panelEl
+    const tpl = document.getElementById("card-template")
+    if (!tpl) return null
+    const el = tpl.content.firstElementChild.cloneNode(true)
+    const inner = el.querySelector("[data-card-inner]")
+    if (this.grid) el.classList.add("inset-y-0", "left-1/2", "w-[170%]", "[translate:-50%_0]", "max-lg:hidden")
+    else { el.classList.add("inset-0"); inner?.classList.add("w-[calc(var(--card-w)*1.7)]") }
+    const slot = el.querySelector("[data-card-trailer]")
+    if (slot) slot.id = `card-trailer-${this.el.id || "cards"}`
+    return (this.panelEl = el)
+  },
+
+  // The card filled for this poster (from its data attributes) and put into it.
+  mount(li) {
+    const p = this.panel()
+    if (!p) return
+    clearTimeout(this.panelTimer)
+    const d = li.dataset
+    const set = (sel, text) => { const el = p.querySelector(sel); if (el) el.textContent = text || "" }
+    set("[data-card-title]", d.title)
+    set("[data-card-vote]", d.vote ? `★ ${d.vote}` : "")
+    set("[data-card-year]", d.year)
+    set("[data-card-runtime]", ""); set("[data-card-overview]", ""); set("[data-card-genres]", "")
+    for (const a of p.querySelectorAll("[data-card-title-link], [data-card-more]")) a.href = d.titleHref || "#"
+    const play = p.querySelector("[data-card-play]")
+    if (play) { play.href = d.playHref || d.titleHref || "#"; play.setAttribute("aria-label", `Play ${d.title || ""}`) }
+    p.querySelector("[data-card-more]")?.setAttribute("aria-label", `More about ${d.title || ""}`)
+    const signed = d.signed === "true"
+    for (const el of p.querySelectorAll("[data-signed-only]")) el.style.display = signed ? "" : "none"
+    for (const el of p.querySelectorAll("[data-guest-only]")) el.style.display = signed ? "none" : ""
+    const watched = p.querySelector("[data-card-watched]")
+    if (watched) { const l = (d.key || "").startsWith("tv/") ? "Mark as completed" : "Mark as watched"; watched.setAttribute("aria-label", l); watched.title = l }
+    const img = p.querySelector("[data-card-img]")
+    if (img) {
+      delete img.dataset.loaded
+      img.classList.add("blur-sm", "scale-110")
+      if (d.srcset) { img.srcset = d.srcset; img.sizes = "(min-width: 1024px) 24rem, 100vw" }
+      else { img.removeAttribute("srcset"); img.removeAttribute("sizes") }
+      if (d.picture) img.src = d.picture; else img.removeAttribute("src")
+    }
+    // Into the poster's box where it has one (a grid cell's inner box is what is `relative`),
+    // else the poster itself.
+    this.panelHost = li.querySelector("[data-card-box]") || li
+    this.panelHost.appendChild(p)
+    // Laid out once before the poster is marked open, so the card fades in from nothing instead
+    // of appearing at once (a transition needs a starting style to run from).
+    void p.offsetWidth
+    setSaved(li, false)
+    setWatched(li, false)
+  },
+
   keepOpen() {
     const li = this.hot
     if (!li) return
     if (!li.isConnected) { this.hot = null; return }
+    // A patch of the poster drops the card (the server never sent it): back in.
+    if (this.panelEl && !li.contains(this.panelEl)) (li.querySelector("[data-card-box]") || li).appendChild(this.panelEl)
     if (li.dataset.open === "true") return
     li.dataset.open = "true"
     if (this.grid) {
@@ -339,6 +399,7 @@ export const cardMethods = {
     }
     if (!this.grid) this.slideFor(li)
     this.sweep(li)
+    this.mount(li)
     li.dataset.open = "true"
     this.timers = []
     this.nudge(li)
@@ -449,7 +510,9 @@ export const cardMethods = {
     if (info.backdrop) {
       const img = li.querySelector("[data-card-img]")
       const next = new Image()
-      next.onload = () => { if (img) { img.src = info.backdrop; img.classList.remove("blur-sm", "scale-110") } }
+      // The placeholder is the poster with a srcset; the wide picture replaces both, or the
+      // browser would keep drawing the poster from the set.
+      next.onload = () => { if (img) { img.removeAttribute("srcset"); img.removeAttribute("sizes"); img.src = info.backdrop; img.classList.remove("blur-sm", "scale-110") } }
       next.src = info.backdrop
     }
   },
@@ -494,6 +557,12 @@ export const cardMethods = {
     if (slot) {
       slot.textContent = ""
       slot.classList.replace("opacity-100", "opacity-0")
+    }
+    // The card leaves the poster once it has faded (0.2 s); opening another takes it at once.
+    const p = this.panelEl
+    if (p && li) {
+      clearTimeout(this.panelTimer)
+      this.panelTimer = setTimeout(() => { if (this.hot !== li && li.contains(p)) p.remove() }, 300)
     }
   },
 

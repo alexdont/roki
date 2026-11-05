@@ -134,18 +134,36 @@ html { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--color-b
 
 body {
   background-color: var(--color-base-100);
+  min-height: 100svh;
+  /* Its own stacking context, so the two layers below sit between its background and its content
+     (the root paints a background of its own, so they would otherwise be under the body's). */
+  isolation: isolate;
+}
+
+/* The colour washes behind every page, on a fixed layer of their own (`::before`), and the grain
+   over them (`::after`). Not `background-attachment: fixed` and not a blend mode: a fixed
+   background is repainted on every frame of a scroll, and a blended layer has the whole viewport
+   read back and blended on every frame — together they were more than half of what a scroll of
+   the home page cost. Two fixed layers are drawn once and only moved. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+body::before {
+  z-index: -2;
   background-image:
     radial-gradient(60rem 40rem at 85% -10%, color-mix(in oklab, var(--color-primary) 14%, transparent), transparent 60%),
     radial-gradient(50rem 36rem at -10% 30%, color-mix(in oklab, var(--color-accent) 10%, transparent), transparent 60%),
     radial-gradient(40rem 30rem at 50% 110%, color-mix(in oklab, var(--color-primary) 8%, transparent), transparent 60%);
-  background-attachment: fixed;
-  min-height: 100svh;
 }
 
 /* The light page gets the dark one's depth: colour that fades in and out of the paper. The same
    three washes, but strong enough to read on white, and a cool one low on the left so it is not all
    warm. The dark theme keeps the quiet version above. */
-[data-theme=light] body {
+[data-theme=light] body::before {
   background-image:
     radial-gradient(64rem 44rem at 88% -12%, color-mix(in oklab, var(--color-primary) 34%, transparent), transparent 62%),
     radial-gradient(54rem 40rem at -12% 28%, color-mix(in oklab, var(--color-accent) 24%, transparent), transparent 62%),
@@ -153,18 +171,14 @@ body {
     radial-gradient(46rem 32rem at 12% 112%, color-mix(in oklab, oklch(72% 0.14 215) 20%, transparent), transparent 62%);
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
+body::after {
   z-index: -1;
-  pointer-events: none;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
+  /* Plain grain reads a shade stronger than the blended grain did: a little less of it. */
+  opacity: 0.04;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
-[data-theme=dark] body::before { opacity: 0.08; }
+[data-theme=dark] body::after { opacity: 0.03; }
 /* Off while the full-screen player is up (`mounted()` in assets/js/study/sidebar.js): the player
    covers both, and iOS composites inline video more willingly without blend modes and backdrop
    filters on the page. */
@@ -174,21 +188,19 @@ body::before {
 .site-header { padding-top: env(safe-area-inset-top, 0px); }
 
 /* The manga reader is a page you scroll for minutes at a time, often thousands of pixels of
-   one image. A fixed background and a blended noise layer over the whole viewport are
-   recomposited on every frame of that, which is what makes it feel heavier here than in the
-   reader it came from — that app has neither. Off while a reader is open. */
-body:has(#fresco-strip-shell), body:has(#fresco-reader), body:has(#fresco-strip-reader) {
-  background-image: none;
-  background-attachment: scroll;
-}
-
+   one image: the washes and the grain are off while a reader is open, as in the app it came
+   from, which has neither. */
 body:has(#fresco-strip-shell)::before,
 body:has(#fresco-reader)::before,
-body:has(#fresco-strip-reader)::before {
+body:has(#fresco-strip-reader)::before,
+body:has(#fresco-strip-shell)::after,
+body:has(#fresco-reader)::after,
+body:has(#fresco-strip-reader)::after {
   display: none;
 }
 
-html.study-open body::before { display: none; }
+html.study-open body::before,
+html.study-open body::after { display: none; }
 html.study-open .site-header { display: none; }
 
 /* The manga reader's menus open with `z-[1]`, which was enough in the app they came from but
@@ -1131,8 +1143,10 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
   --rest: 1;
   --edge: calc(var(--tuck, 0) * 140% - 40%);
   transform: translate3d(0, calc(var(--tuck, 0) * 0.5rem), 0);
-  filter: blur(calc(var(--tuck, 0) * 5px + var(--rest) * 3.5px));
-  opacity: calc(1 - var(--rest) * 0.55);
+  /* The blur is the pointer's (`--rest`), fixed between hovers; it no longer follows the scroll
+     too — a blur radius changed on every scroll frame had the row drawn again on every one. */
+  filter: blur(calc(var(--rest) * 3.5px));
+  opacity: calc((1 - var(--rest) * 0.55) * (1 - var(--tuck, 0) * 0.5));
   -webkit-mask-image: linear-gradient(to top, transparent var(--edge), #000 calc(var(--edge) + 40%));
   mask-image: linear-gradient(to top, transparent var(--edge), #000 calc(var(--edge) + 40%));
   transition: --tuck 0.2s ease-out, --rest 0.5s ease;

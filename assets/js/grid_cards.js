@@ -18,6 +18,8 @@ export const GridCards = {
   destroyed() {
     if (this.onHide) document.removeEventListener("visibilitychange", this.onHide)
     this.close()
+    clearTimeout(this.panelTimer)
+    this.panelEl?.remove()
   },
 
   ...cardMethods,
