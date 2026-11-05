@@ -90,7 +90,9 @@ defmodule RokiWeb.TitleLive do
     end
   end
 
-  defp stored_title(:show, type, id) do
+  # The episodes page too: its header from the copy; the seasons and episodes need the account's
+  # laev scope and come with the connected load (the list draws its own placeholder meanwhile).
+  defp stored_title(action, type, id) when action in [:show, :episodes] do
     case Roki.Titles.get(type, id) do
       {:ok, title, _fresh?} -> title
       _ -> nil
@@ -714,17 +716,13 @@ defmodule RokiWeb.TitleLive do
 
   @impl true
   def render(assigns) do
-    # The show page runs edge to edge, its placeholder too (so a reload does not open as another
-    # page); the episodes page once its title is in. An error has the padded column.
+    # The title and episodes pages run edge to edge, their placeholders too (so a reload does not
+    # open as another page). An error has the padded column.
     assigns =
       assign(
         assigns,
         :full?,
-        case assigns.live_action do
-          :show -> assigns.title_error == nil
-          :episodes -> assigns.title != nil
-          _ -> false
-        end
+        assigns.live_action in [:show, :episodes] and assigns.title_error == nil
       )
 
     ~H"""
@@ -750,7 +748,11 @@ defmodule RokiWeb.TitleLive do
 
           <%!-- While the title loads: the hero's shape — its height, the name and the line under it,
                 the Start pill — so what appears settles into place instead of replacing a page. --%>
-          <div :if={@title == nil and @title_error == nil} class="space-y-8" aria-busy="true">
+          <div
+            :if={@title == nil and @title_error == nil and @live_action == :show}
+            class="space-y-8"
+            aria-busy="true"
+          >
             <div class="relative flex min-h-[clamp(34rem,86svh,54rem)] flex-col justify-end overflow-hidden bg-neutral-900 lg:min-h-[clamp(34rem,80svh,54rem)]">
               <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30">
               </div>
@@ -773,6 +775,35 @@ defmodule RokiWeb.TitleLive do
             </div>
             <div class="px-4 sm:px-6 lg:px-12 xl:px-16">
               <div class="skeleton h-56 w-full rounded-3xl"></div>
+            </div>
+          </div>
+
+          <%!-- The episodes page's shape: its shorter header with the back pill and the name, then
+                the season picker and a few episode rows. --%>
+          <div
+            :if={@title == nil and @title_error == nil and @live_action == :episodes}
+            aria-busy="true"
+          >
+            <div class="relative flex min-h-[clamp(18rem,40svh,26rem)] flex-col justify-end overflow-hidden bg-neutral-900">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/40">
+              </div>
+              <div class="relative flex items-end gap-5 px-4 pb-8 pt-28 sm:px-6 lg:px-12 xl:px-16">
+                <div class="hidden h-44 w-[7.3rem] shrink-0 animate-pulse rounded-xl bg-white/10 sm:block">
+                </div>
+                <div class="min-w-0 flex-1 space-y-3">
+                  <div class="h-9 w-36 animate-pulse rounded-full bg-white/10"></div>
+                  <div class="h-3 w-16 animate-pulse rounded bg-white/15"></div>
+                  <div class="h-10 w-2/3 max-w-md animate-pulse rounded-lg bg-white/15 sm:h-12 xl:h-14">
+                  </div>
+                  <div class="h-4 w-48 animate-pulse rounded bg-white/10"></div>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-6 px-4 pb-12 pt-6 sm:px-6 lg:px-12 xl:px-16">
+              <div class="skeleton h-12 w-full max-w-sm rounded-full"></div>
+              <div class="space-y-2">
+                <div :for={_ <- 1..4} class="skeleton h-20 w-full rounded-2xl"></div>
+              </div>
             </div>
           </div>
 

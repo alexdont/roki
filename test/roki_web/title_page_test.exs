@@ -232,5 +232,21 @@ defmodule RokiWeb.TitlePageTest do
       assert html =~ "animate-pulse"
       assert html =~ "site-header--overlay"
     end
+
+    test "the episodes page's first paint is its header, from the kept copy", %{conn: conn} do
+      html = conn |> get("/title/tv/209867/episodes") |> html_response(200)
+      assert html =~ "Back to the title"
+      assert html =~ "Frieren"
+      assert html =~ "site-header--overlay"
+    end
+
+    test "the episodes page's first paint is a header-shaped placeholder without a copy",
+         %{conn: conn} do
+      html = conn |> get("/title/tv/424242424/episodes") |> html_response(200)
+      refute html =~ "Back to the title"
+      assert html =~ ~s(aria-busy="true")
+      assert html =~ "animate-pulse"
+      assert html =~ "site-header--overlay"
+    end
   end
 end

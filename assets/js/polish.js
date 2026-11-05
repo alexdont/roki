@@ -309,6 +309,18 @@ function transitions() {
       }, (plan) => reveal_("::view-transition-new(root)", plan.from, FULL, 500))
     })()
   }, true)
+  // Scrolling while it opens goes nowhere. The transition's picture of the new page is live, and
+  // the art, the shading and the words are drawn where they were taken — so a wheel turned during
+  // the half second scrolled the page away under the growing art, and the page then appeared
+  // scrolled with the art snapped back to its place. The wheel, a finger and the keys are refused
+  // while it runs, and anything else that scrolls (a scrollbar dragged) is put back at the top.
+  const scrolling = (e) => { if (root.dataset.vt) e.preventDefault() }
+  addEventListener("wheel", scrolling, {passive: false, capture: true})
+  addEventListener("touchmove", scrolling, {passive: false, capture: true})
+  addEventListener("keydown", (e) => {
+    if (root.dataset.vt && ["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(e.key)) e.preventDefault()
+  }, true)
+  addEventListener("scroll", () => { if (root.dataset.vt === "open" && scrollY) scrollTo(0, 0) }, {passive: true, capture: true})
   // Going back is left to the browser: its own swipe or button already animates it, and waiting for
   // the page to come back so as to animate it a second time made it slow. Only an opening still
   // under way is let go of, so its held copy of the page does not stay over the page going back to.
