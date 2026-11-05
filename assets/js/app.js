@@ -93,6 +93,26 @@ import {SubtitleScanner} from "./study/ebml_subs.js"
 // versions are the ones the reader ends up using — the same ones it was built against.
 import "../../deps/fresco/priv/static/fresco.js"
 import "../../deps/fresco_strip/priv/static/fresco_strip.js"
+
+// The paged manga reader's board starts plain: fresco's dot grid is a drawing aid, and under a
+// manga page it reads as noise. Etcher keeps the choice (its "Hide background dots" button;
+// `etcher:prefs` in localStorage, the grid on by default, applied once it has mounted): this
+// site's default is off, seeded once where the person has not chosen, and told to fresco the
+// moment the viewer is ready so the dots never show first. The chapter page is the manga
+// package's own, which loads this script; no fresco or etcher release was needed.
+const dotsOff = (() => {
+  try {
+    const key = "etcher:prefs"
+    const prefs = JSON.parse(localStorage.getItem(key) || "{}")
+    if (!("grid" in prefs)) { prefs.grid = false; localStorage.setItem(key, JSON.stringify(prefs)) }
+    return prefs.grid === false
+  } catch { return true }
+})()
+if (dotsOff) {
+  window.Fresco?.onViewerReady?.("fresco-reader", (handle) => {
+    if (typeof handle.setGridVisible === "function") handle.setGridVisible(false)
+  })
+}
 import "../../deps/etcher/priv/static/etcher.js"
 // The paged manga reader's panel zoom ("Smart panels" in Reading settings), which reads the
 // meta the root layout writes. Its heavy lifting runs in /assets/js/panel_worker.js.

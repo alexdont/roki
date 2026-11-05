@@ -286,10 +286,10 @@ defmodule Roki.Profile do
     base = DateTime.new!(date, ~T[12:00:00], "Etc/UTC")
     total = length(parsed)
 
-    {:ok, dated} =
+    {:ok, {dated, dated_keys}} =
       Repo.transaction(fn ->
-        for {{type, id}, i} <- Enum.with_index(parsed), reduce: 0 do
-          count ->
+        for {{type, id}, i} <- Enum.with_index(parsed), reduce: {0, []} do
+          {count, keys} ->
             at = DateTime.add(base, total - i, :second)
 
             %{num_rows: n} =
@@ -308,12 +308,17 @@ defmodule Roki.Profile do
                 [bin, type, id, at]
               )
 
-              count + 1
+              {count + 1, [{type, id, at} | keys]}
             else
-              count
+              {count, keys}
             end
         end
       end)
+
+    # Laev is told too (0.1.48, `Laev.Position.set_watched_on/2`: a claimed date, kept apart from
+    # what it measured), so the terminal app and laev's own stats put the title on that day, and
+    # a later sync brings the same date back here rather than none.
+    tell_laev_dates(uuid, dated_keys)
 
     # The activity feed: a finish recorded a moment ago for these was a marking, and is now a
     # backdating — it must not read as if they had just watched it.
@@ -337,6 +342,23 @@ defmodule Roki.Profile do
 
     {:ok, dated}
   end
+
+  defp tell_laev_dates(uuid, keys) when keys != [] do
+    if Roki.Laev.connected?(uuid) do
+      Roki.Laev.run(uuid, fn ->
+        for {type, id, at} <- keys do
+          ctx = if type == "mal", do: %{mal_id: id}, else: %{type: type, tmdb_id: id}
+          Laev.Position.set_watched_on(ctx, DateTime.to_unix(at))
+        end
+      end)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp tell_laev_dates(_uuid, _keys), do: :ok
 
   @doc """
   Take titles off the watched list: the marks go (in laev, so the terminal app and the other

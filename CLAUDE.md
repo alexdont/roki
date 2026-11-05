@@ -214,8 +214,7 @@ the app is serving. `forksight-dev` hit exactly this.
 
 ## Laev (optional per-user connection)
 
-`laev` (hex, 0.1.40) is a dependency; it declares Elixir `~> 1.20` but compiles on this
-image's 1.19.6 with only a warning. `Roki.Laev` runs everything inside a per-user
+`laev` (hex, 0.1.49 since 2026-11-05; 0.1.47 relaxed its Elixir requirement to 1.19, so it compiles here without the warning) is a dependency. `Roki.Laev` runs everything inside a per-user
 `Laev.Scope` rooted at `<home>/laev-users/<user uuid>` (`/root/laev-users` = `data/roki-ee/root/`
 on the host). An account starts **not connected**; the home page (`RokiWeb.HomeLive`) lets a user
 paste their own laev key, which laev saves in that directory (`config`, mode 600) — there is no
@@ -288,6 +287,8 @@ They follow the kind chips, not the range tabs. Kind colours are the page's (fil
 anime secondary, manga success); `--color-secondary` was made a magenta in both themes because the grey it
 was failed the colour-vision check against the other three (the dataviz validator; dark passes only with
 the gaps and legend as the second channel).
+
+**Watch dates go both ways with laev** (laev 0.1.48). A date set on the site (`Roki.Profile.set_watched_at/3`, the history page's backdating) is kept in `roki_watch_dates` and told to laev as a *claimed* date (`Laev.Position.set_watched_on/2`, a film by TMDB id, an anime by MAL id), so the terminal app and laev's own stats put the title on that day. Coming back, `Laev.Shelf.completed/0` dates every finished title by a session, else laev's play history, else a claimed date (one from `laev tmdb import-imdb`, say), and the watched-list rebuild (`replace_watched/2`) takes `at`/`dated?` from it, with the site's own dates laid over last. Laev's `forget` leaves the claimed date, so a title taken off the list and marked again comes back with its old date.
 
 **Day logs can be corrupt.** Synced `watched/*.log` files can have entries fused onto one line
 (`2026-10-22 12026-10-22 2`); laev's own `Laev.Days` parser reads that as 12,026 s and reported 245,000 h.
@@ -511,7 +512,7 @@ stays on the sources page with a message and the list.
 ## Clean manga addresses
 - `/manga/<name>` (a title's page), `/manga/<name>/<chapter>`, `/manga/<name>/<chapter>/<page>` — `Roki.Manga.Address` (table `manga_addresses`: name → `source`, `slug`, made from the title the first time an entry is seen and never changed). One title on several sources shares a name; `resolve/2` takes the reader's own saved copy first, else the most recently used. Reserved: the fixed /manga pages, source names, bare numbers (they get `-manga`).
 - The clean forms share routes with the old `/manga/<source>/<slug>[/<chapter>]`: `MangaController.index`/`show` tell them apart by whether the first segment is a source (`Sources.valid?`). `/manga/:name` is the last route under /manga. Links inside the site still use the old forms; the page shows the clean address (`clean_url`/`clean_base` assigns → `roki-clean-url`/`roki-clean-base` meta in the root layout → `history.replaceState` in app.js).
-- Chapters open in the packaged reader at `/manga/v3/...` (a dep; it writes its own addresses from `data-settings-base`, which its requests use too): `show` passes the clean name as `?n=` (and the page), and app.js wraps `history.pushState/replaceState` on that page to write the clean form.
+- Chapters open in the packaged reader at `/manga/v3/...` (a dep; it writes its own addresses from `data-settings-base`, which its requests use too; its paged page loads this app's app.js, which is how the fresco board starts plain: Etcher owns the dot grid as a per-browser preference (`etcher:prefs` in localStorage, `grid`, its "Hide background dots" button; on by default, applied after it mounts, so a bare `setGridVisible(false)` is undone), and app.js seeds `grid: false` where nobody has chosen and tells fresco on `onViewerReady` — no fresco or etcher release needed; a host default for the grid, as Etcher has for connectors and snapping, would be the proper fix upstream): `show` passes the clean name as `?n=` (and the page), and app.js wraps `history.pushState/replaceState` on that page to write the clean form.
 
 ## Nuvio (third source collection)
 - `Roki.Nuvio` + `lib/roki/nuvio/*`; the full story is `dev_docs/nuvio-compatibility.md`. Providers are third-party JS from a GitHub manifest, statically checked (`Validator`) and run in a locked-down Node process (`Sandbox`); streams play through the signed relay / `/nuvio/hls`.
