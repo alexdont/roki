@@ -20,9 +20,11 @@ defmodule RokiWeb.CategoryLive do
 
   # Columns by size; `m` is the default and already larger than the Featured shelves.
   @grids %{
-    "s" => "grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8",
-    "m" => "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6",
-    "l" => "grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+    "s" =>
+      "grid-cols-3 sm:grid-cols-5 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8",
+    "m" =>
+      "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
+    "l" => "grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 2xl:grid-cols-4"
   }
 
   @impl true

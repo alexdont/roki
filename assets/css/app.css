@@ -235,7 +235,7 @@ html.study-open .site-header { display: none; }
     filter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) var(--dim-delay, 0s);
 }
 
-@media (hover: hover) and (min-width: 1024px) {
+@media (hover: hover) {
   [data-card-row]:has(> [data-card][data-open]) > [data-card] {
     transform: translateX(calc(var(--slide, calc(var(--card-w) * 0.35)) * -1));
   }
@@ -452,7 +452,7 @@ html.study-open .site-header { display: none; }
    read off the picture by shelf_row.js; neutral when it cannot be). Once the card opens they move
    to the card, so they outline the whole widened slot in a row and the wide card in a grid — the
    card's own 1 px hairline is kept under them. Only where cards open: a mouse on a wide screen. */
-@media (hover: hover) and (min-width: 1024px) {
+@media (hover: hover) {
   [data-card]:is(:hover, :has(:focus-visible)):not([data-open]) .poster-card > .relative {
     outline-color: var(--color-base-content);
     transition-duration: 0.12s, 0.2s;
@@ -1236,7 +1236,7 @@ html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data
 
 /* When a poster opens into its card (the pointer has come to rest on it, `data-open`), the others
    step back, fading down as it widens and back up as it closes. */
-@media (hover: hover) and (min-width: 1024px) {
+@media (hover: hover) {
   /* The others dim exactly while a poster is widened, at the pace of the widening: down as it opens,
      back up as it closes, and not at all when nothing is open (on a chevron, say). The dimming
      spreads out from the card to the sides of the row, and lifts the same way (`--dim-delay` per

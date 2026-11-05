@@ -254,7 +254,10 @@ export const cardMethods = {
 
   cards() {
     // A pointer that hovers, on a screen with room for a card that opens.
-    if (!this.scroller || !matchMedia("(hover: hover) and (min-width: 1024px)").matches) return
+    // Any width: only a pointer that hovers decides. Checked on each move (not once here), so a
+    // window resized, or a device changed, never leaves the hooks half on.
+    if (!this.scroller) return
+    const hovers = matchMedia("(hover: hover)")
     this.hot = null
     // The tab hidden (another tab, the window minimised): the card closes, and its trailer with
     // it — nothing plays unseen. The pointer resting on the poster opens it again on return.
@@ -266,7 +269,7 @@ export const cardMethods = {
     // again; leaving the poster closes it (or cancels the wait).
     this.scroller.addEventListener("mousemove", (e) => {
       const li = e.target.closest?.("[data-card]")
-      if (!li || li.hasAttribute("data-no-card") || this.atEdge(e.clientX)) { this.leave(); return }
+      if (!hovers.matches || !li || li.hasAttribute("data-no-card") || this.atEdge(e.clientX)) { this.leave(); return }
       if (li === this.hot) return
       // The first move seen only says where the pointer is: a page that opens under a pointer that
       // has not moved (the browser reports a move when content changes under it) must not open a
@@ -318,7 +321,7 @@ export const cardMethods = {
     if (!tpl) return null
     const el = tpl.content.firstElementChild.cloneNode(true)
     const inner = el.querySelector("[data-card-inner]")
-    if (this.grid) el.classList.add("inset-y-0", "left-1/2", "w-[170%]", "[translate:-50%_0]", "max-lg:hidden")
+    if (this.grid) el.classList.add("inset-y-0", "left-1/2", "w-[170%]", "[translate:-50%_0]")
     else { el.classList.add("inset-0"); inner?.classList.add("w-[calc(var(--card-w)*1.7)]") }
     const slot = el.querySelector("[data-card-trailer]")
     if (slot) slot.id = `card-trailer-${this.el.id || "cards"}`

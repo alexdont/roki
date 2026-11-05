@@ -47,7 +47,7 @@ defmodule RokiWeb.CategoryLiveTest do
 
     render_click(element(view, ~s(button[aria-label="Large posters"])))
     assert_push_event(view, "roki:grid", %{size: "l"})
-    assert render(view) =~ "lg:grid-cols-4"
+    assert render(view) =~ "2xl:grid-cols-4"
   end
 
   test "the order is read from the address, never turned into an atom from the input" do
