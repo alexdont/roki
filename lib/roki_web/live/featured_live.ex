@@ -1013,12 +1013,14 @@ defmodule RokiWeb.FeaturedLive do
           />
         </button>
 
-        <%!-- Room above and below the cards for a card that opens taller than the poster: the padding
-              is taken back with negative margins, so the row takes the space it always did. --%>
+        <%!-- Room above and below the cards for the ring and the glow around the one under the
+              pointer: a sideways scroller clips up and down too, at its own padding, and the glow
+              was cut off square at the row's foot. The padding is taken back with negative margins,
+              so the row takes the space it always did and the glow runs on under the next section. --%>
         <ul
           data-row-scroller
           data-card-row
-          class="-mt-3 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-4 pt-4 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
+          class="-mb-12 -mt-7 flex snap-x scroll-px-4 gap-4 overflow-x-auto scroll-smooth px-4 pb-16 pt-8 sm:scroll-px-6 sm:px-6 lg:scroll-px-12 lg:px-12 [--card-w:clamp(9rem,11.2vw,14rem)] [scrollbar-width:none] xl:scroll-px-16 xl:px-16"
         >
           <.shelf_card
             :for={i <- @shelf.items}
