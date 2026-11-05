@@ -39,9 +39,18 @@ defmodule RokiWeb.MangaShelfLiveTest do
     end
   end
 
+  # The banner carries on with the title read most recently (the newest `updated_at`); the two
+  # that have been read are saved in the same second, so the one not to be in the banner is
+  # dated back, or the pick was a coin toss.
   defp library!(user) do
     save!(user, "reading-one", "Reading One", last_chapter: "3", total_chapters: 50)
-    save!(user, "caught-one", "Caught One", last_chapter: "20", total_chapters: 20)
+
+    save!(user, "caught-one", "Caught One",
+      last_chapter: "20",
+      total_chapters: 20,
+      updated_at: ~N[2026-01-01 00:00:00]
+    )
+
     save!(user, "fresh-one", "Fresh One", [])
   end
 

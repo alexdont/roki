@@ -80,7 +80,10 @@ defmodule RokiWeb.PersonLive do
 
   @impl true
   def render(assigns) do
-    assigns = assign(assigns, :shown, shown(assigns.cards, assigns.kind))
+    shown = shown(assigns.cards, assigns.kind)
+    # Where you know them from: the ones of these you have watched, with the part they played.
+    known = Enum.filter(shown, &MapSet.member?(assigns.seen, {&1.type, &1.id}))
+    assigns = assign(assigns, shown: shown, known: known)
 
     ~H"""
     <Layouts.app
@@ -147,6 +150,37 @@ defmodule RokiWeb.PersonLive do
             do: " as a film",
             else: if(@kind == "tv", do: " as a show", else: "")}.
         </p>
+
+        <section :if={@known != []} class="space-y-3" aria-label="You know them from">
+          <div>
+            <h2 class="text-xl font-semibold">You know them from</h2>
+            <p class="text-sm text-base-content/60">
+              What you have watched with {@person.name} in it, and who they were.
+            </p>
+          </div>
+          <%!-- Not greyed as watched here: these are the ones you know. The card that opens over a
+               poster is the same as below. --%>
+          <div id="grid-known-cards" phx-hook="GridCards">
+            <ul id="grid-known" class={["grid gap-4", RokiWeb.GridSize.cols(@grid_size, "m")]}>
+              <RokiWeb.FeaturedLive.tile
+                :for={i <- @known}
+                item={i}
+                kind={:search}
+                cached_titles={@cached_titles}
+                signed_in?={@uuid != nil}
+              >
+                <p class="mt-1 truncate text-sm font-medium" title={i.title}>{i.title}</p>
+                <p
+                  :if={i[:character]}
+                  class="truncate text-xs text-base-content/60"
+                  title={i.character}
+                >
+                  as {i.character}
+                </p>
+              </RokiWeb.FeaturedLive.tile>
+            </ul>
+          </div>
+        </section>
 
         <section :if={@shown != []} class="space-y-3">
           <div class="flex items-center justify-between gap-3">

@@ -610,7 +610,7 @@ defmodule RokiWeb.FeaturedLive do
       class="group/row pb-10 pt-2"
       aria-label="Lists"
     >
-      <div class="mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
+      <div class="relative z-10 mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
         <div>
           <h2 class="text-2xl font-semibold tracking-tight">Lists</h2>
           <p class="hidden text-sm text-base-content/60 sm:block">
@@ -979,7 +979,9 @@ defmodule RokiWeb.FeaturedLive do
       class="group/row"
       aria-label={@title}
     >
-      <div class="mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
+      <%!-- Above the scroller: the scroller's top padding (room for the glow) reaches up over this
+           row, and it would take the clicks meant for See All. --%>
+      <div class="relative z-10 mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
         <h2 class="text-2xl font-semibold tracking-tight">{@title}</h2>
         <.link
           navigate={@href}

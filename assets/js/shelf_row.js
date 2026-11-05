@@ -234,6 +234,7 @@ export const ShelfRow = {
     clearTimeout(this.settleTimer)
     clearTimeout(this.saveTimer)
     window.removeEventListener("resize", this.sync)
+    if (this.onHide) document.removeEventListener("visibilitychange", this.onHide)
     this.close()
   },
 
@@ -253,6 +254,10 @@ export const cardMethods = {
     // A pointer that hovers, on a screen with room for a card that opens.
     if (!this.scroller || !matchMedia("(hover: hover) and (min-width: 1024px)").matches) return
     this.hot = null
+    // The tab hidden (another tab, the window minimised): the card closes, and its trailer with
+    // it — nothing plays unseen. The pointer resting on the poster opens it again on return.
+    this.onHide = () => { if (document.hidden) this.leave() }
+    document.addEventListener("visibilitychange", this.onHide)
 
     // A poster opens only when the pointer has come to rest on it: one passed over on the way to a
     // chevron, or across the row, opens nothing. Every move more than a few pixels starts the wait
