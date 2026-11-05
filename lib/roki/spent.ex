@@ -403,9 +403,21 @@ defmodule Roki.Spent do
   half that stops being one.
   """
   def days(watched, reading_activity, arcs \\ %{}, logged \\ %{}) do
+    watched |> days_by_kind(reading_activity, arcs, logged) |> flatten()
+  end
+
+  @doc """
+  `days/4` kept apart by kind: `%{~D[2026-10-29] => %{movie: 3600, manga: 600}}`, so the charts
+  can stack what the heatmap only sums. Everything `days/4` says about placing holds here; a
+  logged title's kind is its entry's, and one the list does not know yet (played today, not
+  measured) goes by its key.
+  """
+  def days_by_kind(watched, reading_activity, arcs \\ %{}, logged \\ %{}) do
+    kinds = Map.new(watched, &{&1[:key], &1.kind})
+
     known =
-      for {_key, by_day} <- logged, {date, seconds} <- by_day, reduce: %{} do
-        acc -> add(acc, date, seconds)
+      for {key, by_day} <- logged, {date, seconds} <- by_day, reduce: %{} do
+        acc -> add(acc, date, Map.get(kinds, key, kind_of_key(key)), seconds)
       end
 
     left = Map.new(logged, fn {key, by_day} -> {key, Enum.sum(Map.values(by_day))} end)
@@ -420,7 +432,7 @@ defmodule Roki.Spent do
 
         acc =
           if is_integer(e.at) and rest > 0 do
-            add(acc, e.at |> DateTime.from_unix!() |> DateTime.to_date(), rest)
+            add(acc, e.at |> DateTime.from_unix!() |> DateTime.to_date(), e.kind, rest)
           else
             acc
           end
@@ -430,15 +442,135 @@ defmodule Roki.Spent do
 
     read_days =
       for {date, rows} <- reading_activity || %{}, into: %{} do
-        {date, rows |> Enum.map(&(&1.seconds || 0)) |> Enum.sum()}
+        {date, %{manga: rows |> Enum.map(&(&1.seconds || 0)) |> Enum.sum()}}
       end
 
-    known
-    |> Map.merge(lumped, fn _date, a, b -> a + b end)
-    |> Map.merge(read_days, fn _date, a, b -> a + b end)
+    Enum.reduce([lumped, read_days], known, &merge_days/2)
   end
 
-  defp add(acc, date, seconds), do: Map.update(acc, date, seconds, &(&1 + seconds))
+  @doc "`days_by_kind/4` summed back to seconds per day."
+  def flatten(days_by_kind),
+    do: Map.new(days_by_kind, fn {date, by_kind} -> {date, Enum.sum(Map.values(by_kind))} end)
+
+  defp merge_days(a, b),
+    do: Map.merge(a, b, fn _date, x, y -> Map.merge(x, y, fn _kind, p, q -> p + q end) end)
+
+  defp add(acc, date, kind, seconds) do
+    Map.update(
+      acc,
+      date,
+      %{kind => seconds},
+      &Map.update(&1, kind, seconds, fn s -> s + seconds end)
+    )
+  end
+
+  defp kind_of_key({"movie", _id}), do: :movie
+  defp kind_of_key({"mal", _id}), do: :anime
+  defp kind_of_key({"tv", _id}), do: :tv
+  defp kind_of_key(_key), do: :manga
+
+  # ── the charts ─────────────────────────────────────────────────────
+
+  @doc "The kinds the filter leaves in, in the page's order."
+  def kinds_in(only, hidden) do
+    for {id, _} <- @kinds, only == [] or id in only, id not in hidden, do: id
+  end
+
+  @doc """
+  The last `n` months as columns, oldest first: `[%{key:, label:, sub:, by_kind:, total:}]`.
+  Only the `kinds` asked for are counted; a month with nothing is a zero, so the axis never
+  skips one. `sub` carries the year under January and under the first column.
+  """
+  def by_month(days_by_kind, today, kinds, n \\ 12) do
+    months = for i <- (n - 1)..0//-1, do: shift_month({today.year, today.month}, -i)
+    sums = group(days_by_kind, kinds, fn date -> {date.year, date.month} end)
+
+    # The year under January, and under the first column when January is far enough along
+    # that the two do not crowd each other.
+    january = Enum.find_index(months, fn {_y, m} -> m == 1 end) || n
+
+    for {{year, month} = key, i} <- Enum.with_index(months) do
+      sub = if month == 1 or (i == 0 and january >= 3), do: Integer.to_string(year)
+      column(key, month_name(month), sub, sums)
+    end
+  end
+
+  @doc "Every year from the first with anything to this one, as columns; `[]` with nothing."
+  def by_year(days_by_kind, today, kinds) do
+    sums = group(days_by_kind, kinds, & &1.year)
+
+    case Map.keys(sums) do
+      [] ->
+        []
+
+      years ->
+        for y <- Enum.min(years)..today.year//1, do: column(y, Integer.to_string(y), nil, sums)
+    end
+  end
+
+  @doc "Monday to Sunday as columns, over every day."
+  def by_weekday(days_by_kind, kinds) do
+    sums = group(days_by_kind, kinds, &Date.day_of_week/1)
+    for d <- 1..7, do: column(d, weekday_name(d), nil, sums)
+  end
+
+  defp group(days_by_kind, kinds, key_of) do
+    Enum.reduce(days_by_kind, %{}, fn {date, by_kind}, acc ->
+      Map.update(acc, key_of.(date), Map.take(by_kind, kinds), fn have ->
+        Map.merge(have, Map.take(by_kind, kinds), fn _k, p, q -> p + q end)
+      end)
+    end)
+  end
+
+  defp column(key, label, sub, sums) do
+    by_kind = Map.get(sums, key, %{})
+    %{key: key, label: label, sub: sub, by_kind: by_kind, total: Enum.sum(Map.values(by_kind))}
+  end
+
+  defp shift_month({year, month}, by) do
+    n = year * 12 + (month - 1) + by
+    {div(n, 12), rem(n, 12) + 1}
+  end
+
+  defp month_name(m), do: Enum.at(~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec), m - 1)
+  defp weekday_name(d), do: Enum.at(~w(Mon Tue Wed Thu Fri Sat Sun), d - 1)
+
+  @doc """
+  Where an axis ends for this much: the next round number of hours (1, 2, 3, 5, 10, 15, 20, 30,
+  50, 100 …) at or above it, as seconds — so the top tick is a number a reader can hold, and a
+  chart does not rescale on every small change. Half an hour at the least.
+  """
+  def nice_top(seconds) do
+    hours = max(seconds, 1) / 3600
+
+    steps = [
+      0.5,
+      1,
+      2,
+      3,
+      5,
+      10,
+      15,
+      20,
+      30,
+      50,
+      100,
+      150,
+      200,
+      300,
+      500,
+      1000,
+      1500,
+      2000,
+      3000,
+      5000
+    ]
+
+    case Enum.find(steps, &(&1 >= hours)) do
+      nil -> round(Float.ceil(hours / 1000) * 1000 * 3600)
+      step -> round(step * 3600)
+    end
+  end
 
   @doc "Seconds in each of the trailing windows: `[%{id:, label:, seconds:}]`."
   def windows(days, today) do

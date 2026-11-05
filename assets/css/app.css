@@ -44,7 +44,9 @@
   --color-base-content: oklch(95% 0.01 80);
   --color-primary: oklch(70% 0.213 47.604);
   --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(70% 0.03 275);
+  /* Anime's colour (the stats page, the calendar): a magenta, told from films' orange,
+     shows' blue and manga's teal by every kind of eye; the grey it was read as nothing. */
+  --color-secondary: oklch(66% 0.17 350);
   --color-secondary-content: oklch(17% 0.012 275);
   --color-accent: oklch(72% 0.19 330);
   --color-accent-content: oklch(98% 0.01 330);
@@ -80,7 +82,8 @@
   --color-base-content: oklch(22% 0.012 60);
   --color-primary: oklch(70% 0.213 47.604);
   --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
+  /* Anime's colour, see the dark theme. */
+  --color-secondary: oklch(55% 0.2 345);
   --color-secondary-content: oklch(98% 0.002 247.839);
   --color-accent: oklch(60% 0.2 330);
   --color-accent-content: oklch(98% 0.01 330);

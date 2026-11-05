@@ -451,4 +451,118 @@ defmodule Roki.SpentTest do
       assert Spent.total(Spent.of_kinds(entries, [], [])) == 12_600
     end
   end
+
+  describe "the charts" do
+    @d1 ~D[2026-03-02]
+    @d2 ~D[2026-03-09]
+    @d3 ~D[2025-12-25]
+
+    defp by_kind do
+      %{
+        @d1 => %{movie: 3600, manga: 600},
+        @d2 => %{anime: 1800},
+        @d3 => %{tv: 7200, movie: 1800}
+      }
+    end
+
+    test "days by kind sum to the days the heatmap draws" do
+      # 2026-03-02, mid-day.
+      watched = [
+        %{kind: :movie, key: {"movie", 1}, seconds: 3600, at: 1_772_450_000},
+        %{kind: :tv, key: {"tv", 2}, seconds: 1200, at: 1_772_450_000}
+      ]
+
+      logged = %{{"tv", 2} => %{~D[2026-03-01] => 500}}
+      activity = %{~D[2026-03-03] => [%{seconds: 60}, %{seconds: 40}]}
+
+      by_kind = Spent.days_by_kind(watched, activity, %{}, logged)
+
+      assert by_kind[~D[2026-03-01]] == %{tv: 500}
+      assert by_kind[~D[2026-03-03]] == %{manga: 100}
+      # The film whole on its date; the show only what the log did not place.
+      assert by_kind[~D[2026-03-02]] == %{movie: 3600, tv: 700}
+      assert Spent.flatten(by_kind) == Spent.days(watched, activity, %{}, logged)
+    end
+
+    test "a logged title the list has not measured yet goes by its key" do
+      logged = %{{"mal", 9} => %{~D[2026-03-01] => 300}, {"movie", 3} => %{~D[2026-03-01] => 60}}
+
+      assert Spent.days_by_kind([], %{}, %{}, logged)[~D[2026-03-01]] == %{anime: 300, movie: 60}
+    end
+
+    test "the kinds the filter leaves in keep the page's order" do
+      assert Spent.kinds_in([], []) == [:movie, :tv, :anime, :manga]
+      assert Spent.kinds_in([:anime, :movie], []) == [:movie, :anime]
+      assert Spent.kinds_in([], [:tv]) == [:movie, :anime, :manga]
+      assert Spent.kinds_in([:tv], [:tv]) == []
+    end
+
+    test "the last twelve months, oldest first, with the year under January and the first" do
+      months = Spent.by_month(by_kind(), ~D[2026-03-20], Spent.kinds_in([], []))
+
+      assert length(months) == 12
+      assert Enum.map(months, & &1.label) == ~w(Apr May Jun Jul Aug Sep Oct Nov Dec Jan Feb Mar)
+
+      assert Enum.map(months, & &1.sub) == [
+               "2025",
+               nil,
+               nil,
+               nil,
+               nil,
+               nil,
+               nil,
+               nil,
+               nil,
+               "2026",
+               nil,
+               nil
+             ]
+
+      march = List.last(months)
+      assert march.by_kind == %{movie: 3600, manga: 600, anime: 1800}
+      assert march.total == 6000
+      assert Enum.at(months, 8).total == 9000
+      assert Enum.at(months, 0).total == 0
+    end
+
+    test "a kind left out of the filter is left out of the columns" do
+      [march | _] = Enum.reverse(Spent.by_month(by_kind(), ~D[2026-03-20], [:movie, :tv]))
+
+      assert march.by_kind == %{movie: 3600}
+      assert march.total == 3600
+    end
+
+    test "every year from the first to this one, even an empty one between" do
+      years =
+        Spent.by_year(Map.put(by_kind(), ~D[2023-06-01], %{movie: 60}), ~D[2026-03-20], [
+          :movie,
+          :tv,
+          :anime,
+          :manga
+        ])
+
+      assert Enum.map(years, & &1.label) == ~w(2023 2024 2025 2026)
+      assert Enum.map(years, & &1.total) == [60, 0, 9000, 6000]
+      assert Spent.by_year(%{}, ~D[2026-03-20], [:movie]) == []
+    end
+
+    test "the days of the week" do
+      days = Spent.by_weekday(by_kind(), [:movie, :tv, :anime, :manga])
+
+      assert Enum.map(days, & &1.label) == ~w(Mon Tue Wed Thu Fri Sat Sun)
+      # Both March days are Mondays; Christmas 2025 is a Thursday.
+      assert Enum.map(days, & &1.total) == [6000, 0, 0, 9000, 0, 0, 0]
+    end
+
+    test "an axis ends on a round number of hours" do
+      assert Spent.nice_top(0) == 1800
+      assert Spent.nice_top(2000) == 3600
+      assert Spent.nice_top(3600) == 3600
+      assert Spent.nice_top(3601) == 7200
+      assert Spent.nice_top(13 * 3600) == 15 * 3600
+      assert Spent.nice_top(202 * 3600) == 300 * 3600
+      assert Spent.nice_top(2122 * 3600) == 3000 * 3600
+      assert Spent.nice_top(7000 * 3600) == 7000 * 3600
+    end
+  end
 end

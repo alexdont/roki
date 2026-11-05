@@ -86,6 +86,37 @@ defmodule Roki.Stints do
   end
 
   @doc """
+  Seconds watched in each hour of the local day: `%{0 => 0, …, 21 => 5400}`, every hour present.
+
+  A session is spread over the hours it ran through in proportion, the way `by_title/2` spreads
+  one over days — so a film from 21:30 to 23:30 gives half an hour to 21, an hour to 22 and half
+  to 23. A session with no length (the ends coincide) goes whole to the hour it started in.
+  """
+  def by_hour(sessions, offset \\ 0) do
+    empty = Map.new(0..23, &{&1, 0})
+
+    for s <- sessions, {hour, seconds} <- per_hour(s, offset), reduce: empty do
+      acc -> Map.update(acc, hour, seconds, &(&1 + seconds))
+    end
+  end
+
+  defp per_hour(s, offset) do
+    first = div(s.started_at + offset, 3600)
+    last = div(max(s.ended_at, s.started_at) + offset, 3600)
+    elapsed = max(s.ended_at - s.started_at, 1)
+
+    if first == last do
+      [{Integer.mod(first, 24), s.seconds}]
+    else
+      for h <- first..last,
+          {from, to} = {h * 3600 - offset, (h + 1) * 3600 - offset},
+          share = div(s.seconds * max(min(s.ended_at, to) - max(s.started_at, from), 0), elapsed),
+          share > 0,
+          do: {Integer.mod(h, 24), share}
+    end
+  end
+
+  @doc """
   What was watched in the last `days`, longest first: `[%{key:, title:, seconds:, sessions:,
   episodes:, last:}]` — the exact figure for that window, because every second of it has a day.
   """

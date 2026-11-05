@@ -150,4 +150,27 @@ defmodule Roki.StintsTest do
     assert [one] = Stints.sessions(ctx.uuid)
     assert one.seconds == 660
   end
+
+  describe "the hours of the day" do
+    test "a session is spread over the hours it ran through, in local time" do
+      # 21:30 to 23:30 UTC on 2026-03-02, two hours watched of two elapsed.
+      start = DateTime.to_unix(~U[2026-03-02 21:30:00Z])
+      s = %{key: {"movie", 1}, started_at: start, ended_at: start + 7200, seconds: 7200, keys: []}
+
+      hours = Stints.by_hour([s], 0)
+      assert {hours[21], hours[22], hours[23]} == {1800, 3600, 1800}
+      assert hours[20] == 0 and map_size(hours) == 24
+
+      # The same evening seen from two hours east.
+      east = Stints.by_hour([s], 7200)
+      assert {east[23], east[0], east[1]} == {1800, 3600, 1800}
+    end
+
+    test "a session with no length goes whole to the hour it started in" do
+      start = DateTime.to_unix(~U[2026-03-02 09:05:00Z])
+      s = %{key: {"movie", 1}, started_at: start, ended_at: start, seconds: 300, keys: []}
+
+      assert Stints.by_hour([s])[9] == 300
+    end
+  end
 end

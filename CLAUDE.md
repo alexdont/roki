@@ -279,6 +279,16 @@ Only `Roki.Stats.for_user/1` (rate limited, 4/min) should be used. The first mea
 lookups (about a minute for a big library); later ones are instant. The shelf loads stats and the pulse in
 separate async tasks after the shelf itself, so they never delay it.
 
+**Charts at the foot of the stats page** (`RokiWeb.StatsCharts`): hours by month (last twelve), by
+year, by weekday — stacked by kind from `Roki.Spent.days_by_kind/4`, the per-kind form of the heatmap's
+`days/4` — and by hour of the day from the player's sessions (`Roki.Stints.by_hour/2`, shown from ten
+sessions). HTML columns, no chart library: ≤24 px marks, 2 px gaps between stack segments, three hairline
+gridlines, the biggest column labelled, a tooltip per column on hover/focus, and "As a table" under each.
+They follow the kind chips, not the range tabs. Kind colours are the page's (films primary, shows info,
+anime secondary, manga success); `--color-secondary` was made a magenta in both themes because the grey it
+was failed the colour-vision check against the other three (the dataviz validator; dark passes only with
+the gaps and legend as the second channel).
+
 **Day logs can be corrupt.** Synced `watched/*.log` files can have entries fused onto one line
 (`2026-10-22 12026-10-22 2`); laev's own `Laev.Days` parser reads that as 12,026 s and reported 245,000 h.
 `Roki.Stats.day_totals/0` re-parses with a lazy-digit regex that splits them and caps a day at 24 h.

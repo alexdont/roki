@@ -10,7 +10,9 @@ defmodule RokiWeb.StatsLive do
 
   A window means "what you were on, and all the time you have spent on it" — a series read for
   a year counts its year, in the window it was last opened in. The heatmap below places the
-  same entries on the same dates, so the two halves of the page are one thing seen twice.
+  same entries on the same dates, so the two halves of the page are one thing seen twice; the
+  charts under it (`RokiWeb.StatsCharts`) add those same days up by month, year, weekday and
+  hour.
 
   The first measurement looks up a runtime for every film and show — a minute for a
   big library, once; after that it is cached and the page is instant.
@@ -69,6 +71,8 @@ defmodule RokiWeb.StatsLive do
       season_dates: Roki.Profile.season_dates(uuid),
       # Watching that has days of its own, from the sessions the player records as it goes.
       stint_days: Roki.Stints.by_title(uuid, offset(socket)),
+      # The sessions themselves, for the hours of the day they fell in.
+      sessions: Roki.Stints.sessions(uuid),
       offset: offset(socket)
     )
   end
@@ -239,6 +243,16 @@ defmodule RokiWeb.StatsLive do
           streak={@streak}
         />
 
+        <RokiWeb.StatsCharts.charts
+          :if={@state != :loading and @days != %{}}
+          months={@months}
+          years={@years}
+          weekdays={@weekdays}
+          hours={@hours}
+          sessions={length(@sessions)}
+          kinds={@kinds}
+        />
+
         <p :if={@unknown > 0} class="text-sm text-base-content/60">
           {@unknown} finished {if @unknown == 1, do: "entry", else: "entries"} had no runtime on
           TMDB, so {if @unknown == 1, do: "it is", else: "they are"} counted as watched but not
@@ -267,8 +281,12 @@ defmodule RokiWeb.StatsLive do
 
     visible_all = Spent.of_kinds(in_window, assigns.only, assigns.hidden)
 
-    days = Spent.days(watched, assigns.reading_activity, assigns.arc_parts, assigns.stint_days)
+    by_kind =
+      Spent.days_by_kind(watched, assigns.reading_activity, assigns.arc_parts, assigns.stint_days)
+
+    days = Spent.flatten(by_kind)
     today = Date.utc_today()
+    kinds = Spent.kinds_in(assigns.only, assigns.hidden)
 
     assign(assigns,
       total: Spent.total(visible_all),
@@ -279,6 +297,11 @@ defmodule RokiWeb.StatsLive do
       days: days,
       windows: Spent.windows(days, today),
       streak: Spent.streak(days, today),
+      kinds: kinds,
+      months: Spent.by_month(by_kind, today, kinds),
+      years: Spent.by_year(by_kind, today, kinds),
+      weekdays: Spent.by_weekday(by_kind, kinds),
+      hours: Roki.Stints.by_hour(assigns.sessions, assigns.offset),
       unknown: (assigns[:data] && assigns.data.totals.unknown) || 0
     )
   end

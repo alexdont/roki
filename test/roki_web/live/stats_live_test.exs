@@ -146,6 +146,37 @@ defmodule RokiWeb.StatsLiveTest do
     assert html =~ "1h 30m"
   end
 
+  test "the charts add the same days up by month, and the kind filter reaches them", %{
+    conn: conn,
+    user: user
+  } do
+    read!(user, "Solo Leveling", 7200)
+    {:ok, bin} = Ecto.UUID.dump(user.uuid)
+
+    Roki.Repo.query!(
+      "insert into reading_activity (user_id, date, source, slug, title, reading_seconds, chapters_read, inserted_at, updated_at) " <>
+        "values ($1, current_date, 'mangadex', 'solo-leveling', 'Solo Leveling', 5400, 2, now(), now())",
+      [bin]
+    )
+
+    html = open(conn, "/u/statstest/stats")
+
+    assert html =~ "Over time"
+    assert html =~ "By month"
+    assert html =~ "By day of the week"
+    # The month we are in carries the hour and a half, in manga's colour, and the table says so.
+    assert html =~ "bg-success/80"
+    assert html =~ "As a table"
+    assert html =~ "1h 30m"
+    refute html =~ "Nothing in this span."
+    # One session is not enough to say anything about the time of day.
+    refute html =~ "By time of day"
+
+    # Manga left out: the columns are empty and the chart says so.
+    html = open(conn, "/u/statstest/stats?hide=manga")
+    assert html =~ "Nothing in this span."
+  end
+
   test "the reader's old stats address leads here", %{conn: conn} do
     conn = get(conn, "/manga/stats")
     assert redirected_to(conn) == "/u/statstest/stats#reading"
