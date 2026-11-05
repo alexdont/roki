@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hover lab — what a poster does under the pointer</title>
+<!-- The site's own stylesheet: the theme tokens, the rounded corners, the poster look. -->
+<link rel="stylesheet" href="/assets/css/app.css">
+<style>
+  :root { --w: 148px; --gap: 12px; }
+  body { background: var(--color-base-100); color: var(--color-base-content); margin: 0; }
+  main { max-width: 1240px; margin: 0 auto; padding: 1.5rem 1.5rem 6rem; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 .25rem; }
+  .lead { margin: 0 0 1.25rem; opacity: .65; font-size: .9rem; max-width: 70ch; }
+  .controls { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center;
+    padding: .6rem .9rem; margin: 0 0 1.5rem; border-radius: 14px; font-size: .85rem;
+    background: color-mix(in oklab, var(--color-base-200) 85%, transparent); backdrop-filter: blur(12px);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent); }
+  .controls label { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; }
+  .controls select, .controls input[type=range] { font: inherit; }
+  .controls select { background: var(--color-base-100); color: inherit; border: 1px solid color-mix(in oklab, var(--color-base-content) 15%, transparent); border-radius: 8px; padding: .2rem .4rem; }
+
+  section.v { margin: 0 0 2.25rem; }
+  section.v header { display: flex; align-items: baseline; gap: .75rem; margin: 0 0 .6rem; }
+  section.v h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+  section.v h2 small { font-weight: 400; opacity: .5; margin-left: .4rem; }
+  section.v p { margin: 0; font-size: .82rem; opacity: .6; max-width: 80ch; }
+
+  /* ── the row: the home page's shape, a flex row of slots ────────────────────────────── */
+  .row { display: flex; gap: var(--gap); overflow: hidden; padding: 14px 6px; margin: 0 -6px; list-style: none; }
+  .row > li { flex: 0 0 var(--w); width: var(--w); position: relative; outline: none;
+    transition: width .3s cubic-bezier(.2,.8,.2,1), flex-basis .3s cubic-bezier(.2,.8,.2,1), filter .3s cubic-bezier(.2,.8,.2,1); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--w), 1fr)); gap: var(--gap); padding: 14px 6px; margin: 0 -6px; list-style: none; }
+  .grid > li { position: relative; outline: none; transition: filter .3s cubic-bezier(.2,.8,.2,1), translate .3s cubic-bezier(.2,.8,.2,1); }
+
+  /* the poster: a link, the picture in a rounded box, a caption */
+  .pc { display: block; color: inherit; text-decoration: none; }
+  .pc .box { position: relative; aspect-ratio: 2/3; overflow: hidden; border-radius: var(--radius-box, 1rem); background: var(--color-base-300);
+    box-shadow: 0 1px 3px rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
+  .pc img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .cap { margin-top: .35rem; font-size: .75rem; line-height: 1.2; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* the card a slot opens into (the real one widens 1.7 posters and shows title, trailer, Play) */
+  .card-sim { display: flex; width: 100%; }
+  .card-sim .pc { flex: 0 0 var(--w); width: var(--w); }
+  .panel { flex: 1 1 auto; min-width: 0; margin-left: 8px; opacity: 0; pointer-events: none; transition: opacity .2s ease .1s;
+    border-radius: var(--radius-box, 1rem); padding: .7rem .75rem; display: flex; flex-direction: column; justify-content: flex-end; gap: .4rem;
+    background: color-mix(in oklab, var(--color-base-200) 92%, transparent); aspect-ratio: 0.7/1.5; }
+  .panel b { font-size: .8rem; line-height: 1.2; }
+  .panel span { font-size: .7rem; opacity: .6; }
+  .panel .play { align-self: flex-start; font-size: .7rem; font-weight: 600; padding: .3rem .6rem; border-radius: 999px; background: var(--color-primary); color: var(--color-primary-content); }
+  .row > li[data-open] { flex-basis: calc(var(--w) * 1.7); width: calc(var(--w) * 1.7); }
+  li[data-open] .panel { opacity: 1; }
+  .grid > li[data-open] { z-index: 5; }
+  /* a grid cell is as wide as the grid lets it be, so the card is measured from the cell, not --w */
+  .grid .card-sim .pc { flex: 0 0 calc(100% / 1.7); width: auto; }
+  .grid > li:not([data-open]) .card-sim .pc { flex-basis: 100%; }
+  .grid > li[data-open] .cap { visibility: hidden; }
+  .grid > li[data-open] .card-sim { position: absolute; top: 0; left: 50%; translate: -50% 0; width: 170%; }
+  .grid > li[data-open][data-edge=left] .card-sim { left: 0; translate: none; }
+  .grid > li[data-open][data-edge=right] .card-sim { left: auto; right: 0; translate: none; }
+  .grid > li[data-nudge] { translate: var(--nudge) 0; }
+  /* while a card is open the others step back (the site's own rule) */
+  [data-has-open] > li:not([data-open]) { filter: brightness(.6) saturate(.85); }
+
+  /* ── the hover states. `.hot` = pointer on it, keyboard focus on it, or its card open. ────── */
+  li.hot { z-index: 3; }
+  .ring-ink { --ring: var(--color-base-content); }
+  .ring-primary { --ring: var(--color-primary); }
+  .ring-white { --ring: #fff; }
+
+  /* 1 ring: 2px of ink, 3px outside the picture, in at once */
+  .v-ring .box { outline: 2px solid transparent; outline-offset: 3px; transition: outline-color .12s ease; }
+  .v-ring li.hot .box { outline-color: var(--ring); }
+  .v-ring li.hot.leaving .box { transition-duration: .2s; }
+
+  /* 2 ring + a touch brighter */
+  .v-ring-bright .box { outline: 2px solid transparent; outline-offset: 3px; transition: outline-color .12s ease; }
+  .v-ring-bright img { transition: filter .15s ease; }
+  .v-ring-bright li.hot .box { outline-color: var(--ring); }
+  .v-ring-bright li.hot img { filter: brightness(1.08) saturate(1.05); }
+
+  /* 3 ring + a glow in the poster's own colour (--tint, read off the picture by script) */
+  .v-ring-glow .box { outline: 2px solid transparent; outline-offset: 3px; transition: outline-color .12s ease, box-shadow .25s ease; }
+  .v-ring-glow li.hot .box { outline-color: var(--ring);
+    box-shadow: 0 10px 40px -6px color-mix(in oklab, var(--tint, #888) 75%, transparent), 0 0 0 1px color-mix(in oklab, var(--tint, #888) 40%, transparent); }
+
+  /* 4 glow only */
+  .v-glow .box { transition: box-shadow .25s ease; }
+  .v-glow li.hot .box { box-shadow: 0 12px 44px -4px color-mix(in oklab, var(--tint, #888) 85%, transparent), 0 0 0 1px color-mix(in oklab, var(--tint, #888) 45%, transparent); }
+
+  /* 5 lift + shadow + hairline: what the search page and lists do today */
+  .v-lift .box { transition: transform .15s ease, box-shadow .15s ease; }
+  .v-lift li.hot .box { transform: translateY(-3px);
+    box-shadow: 0 18px 36px -14px rgb(0 0 0 / .55), 0 0 0 1px color-mix(in oklab, var(--color-base-content) 12%, transparent); }
+
+  /* 6 scale */
+  .v-scale .box { transition: transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease; }
+  .v-scale li.hot .box { transform: scale(1.045); box-shadow: 0 16px 36px -12px rgb(0 0 0 / .6); }
+
+  /* 7 TV: the remote-control look — a thick white ring, rounder, and a slight grow */
+  .v-tv .box { transition: transform .15s cubic-bezier(.2,.8,.2,1), outline-color .12s ease; outline: 3px solid transparent; outline-offset: 4px; border-radius: calc(var(--radius-box, 1rem) + 2px); }
+  .v-tv li.hot .box { outline-color: var(--ring); transform: scale(1.03); }
+
+  /* 8 tilt + sheen: Apple TV. The picture leans to the pointer and a light crosses it. */
+  .v-tilt .box { transition: transform .15s ease, box-shadow .2s ease; transform-style: preserve-3d; }
+  .v-tilt li { perspective: 600px; }
+  .v-tilt li.hot .box { transform: rotateX(calc(var(--ty, 0) * -6deg)) rotateY(calc(var(--tx, 0) * 7deg)) scale(1.03);
+    box-shadow: calc(var(--tx, 0) * -10px) calc(var(--ty, 0) * -10px + 16px) 34px -12px rgb(0 0 0 / .6); }
+  .v-tilt .box::after { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity .2s ease; pointer-events: none;
+    background: radial-gradient(140px 140px at calc(50% + var(--tx, 0) * 50%) calc(50% + var(--ty, 0) * 50%), rgb(255 255 255 / .28), transparent 70%); }
+  .v-tilt li.hot .box::after { opacity: 1; }
+
+  /* 9 ring + the caption lights: the words go full ink with the ring */
+  .v-ring-cap .box { outline: 2px solid transparent; outline-offset: 3px; transition: outline-color .12s ease; }
+  .v-ring-cap .cap { transition: opacity .15s ease; }
+  .v-ring-cap li.hot .box { outline-color: var(--ring); }
+  .v-ring-cap li.hot .cap { opacity: 1; }
+
+  /* 10 inner ring: a line just inside the picture's edge, like a selected photo */
+  .v-inner .box::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
+    box-shadow: inset 0 0 0 0 var(--ring); transition: box-shadow .15s ease; }
+  .v-inner li.hot .box::before { box-shadow: inset 0 0 0 3px var(--ring); }
+
+  /* 11 underline: a bar under the poster rather than around it */
+  .v-bar .box::after { content: ""; position: absolute; left: 10%; right: 10%; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--ring);
+    transform: scaleX(0); transition: transform .2s cubic-bezier(.2,.8,.2,1); }
+  .v-bar li.hot .box::after { transform: scaleX(1); }
+
+  /* when the card opens, every variant keeps its state: the ring/glow follows the whole slot */
+  li[data-open] .card-sim { border-radius: var(--radius-box, 1rem); }
+  .v-ring li[data-open] .box, .v-ring-bright li[data-open] .box, .v-ring-glow li[data-open] .box, .v-ring-cap li[data-open] .box, .v-tv li[data-open] .box { outline-color: transparent; }
+  .v-ring li[data-open] .card-sim, .v-ring-bright li[data-open] .card-sim, .v-ring-glow li[data-open] .card-sim, .v-ring-cap li[data-open] .card-sim { outline: 2px solid var(--ring); outline-offset: 3px; }
+  .v-tv li[data-open] .card-sim { outline: 3px solid var(--ring); outline-offset: 4px; }
+  .v-tv li[data-open] .box { transform: none; }
+  .v-ring-glow li[data-open] .card-sim { box-shadow: 0 10px 40px -6px color-mix(in oklab, var(--tint, #888) 75%, transparent); }
+  .v-scale li[data-open] .box, .v-lift li[data-open] .box, .v-tilt li[data-open] .box { transform: none; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hover lab</h1>
+  <p class="lead">What a poster could do the moment the pointer is on it, before the card opens. Each row is one idea; the grid at the end has the three to compare in a full page. Tab moves the keyboard focus through a row and gets the same state as the pointer. “Open the card” plays the real behaviour on top: rest the pointer 260 ms and the slot widens into its card, the others step back.</p>
+
+  <div class="controls">
+    <label>Theme <select id="theme"><option value="dark">dark</option><option value="light">light</option></select></label>
+    <label>Ring <select id="ring"><option value="ring-ink">ink (white on dark, near-black on light)</option><option value="ring-primary">primary orange</option><option value="ring-white">always white</option></select></label>
+    <label><input type="checkbox" id="opencard" checked> Open the card after the pointer rests</label>
+    <label>Poster <input type="range" id="size" min="110" max="200" value="148"> <span id="sizev">148px</span></label>
+    <label><input type="checkbox" id="showgrid" checked> Grid at the end</label>
+  </div>
+
+  <div id="variants"></div>
+</main>
+
+<script>
+const POSTERS = [
+  ["/phoenix_kit/file/01a1a237-33ed-72a3-8c72-4c613bfa059c/medium/d9af","Resident Evil"],
+  ["/phoenix_kit/file/01a18221-bf57-7ed3-ae6f-4a291cb4a783/medium/e86a","Verity"],
+  ["/phoenix_kit/file/01a17a99-2ee0-7f74-9124-980f549bf8b4/medium/d0d2","Primetime"],
+  ["/phoenix_kit/file/01a19b21-0531-7fe6-aac3-77063f264f69/medium/1bed","Apocalypse Z: New World"],
+  ["/phoenix_kit/file/01a179c0-b2d7-75e7-9d7e-213e8c9a547b/medium/bf16","Clayface"],
+  ["/phoenix_kit/file/01a179c0-b31a-7f93-bfca-80a213592712/medium/a8e8","The Dog Stars"],
+  ["/phoenix_kit/file/01a179c0-b2f7-7e41-8424-b9c0797722ff/medium/aa07","Wildwood"],
+  ["/phoenix_kit/file/01a17a99-2f30-733d-8015-3aa8ae4ac68e/medium/035a","The Mongoose"],
+  ["/phoenix_kit/file/01a17a99-2dfd-7227-80c9-00c2586638cb/medium/f0e9","Godzilla Minus Zero"],
+  ["/phoenix_kit/file/01a1914a-76ea-745d-81a5-f0a664de0cb1/medium/834d","Collision Course"],
+  ["/phoenix_kit/file/01a1a38b-f48b-743c-a31d-519097264956/medium/b41e","Avengers: Doomsday"],
+  ["/phoenix_kit/file/01a17a99-2e00-707f-a757-87b7db437c19/medium/e7ca","Wild Horse Nine"],
+  ["/phoenix_kit/file/01a18399-082f-792d-8b9d-50458458385b/medium/3b42","VisionQuest"],
+  ["/phoenix_kit/file/01a1a38b-f51a-7c22-ad19-72b44d3d0f75/medium/c8fc","Dead-End Job"],
+  ["/phoenix_kit/file/01a1a733-fc2b-7400-8077-199b90e8ed42/medium/fba7","The Greatest"],
+  ["/phoenix_kit/file/01a179cc-932e-7228-b566-f382397d3f5e/medium/c200","Lupin"],
+  ["/phoenix_kit/file/01a1a0e2-8189-756d-8a7c-2d760d9b3957/medium/96ff","The Remarried Empress"],
+  ["/phoenix_kit/file/01a17edf-b8ed-79c0-aae6-899cd024bf62/medium/4b7a","Nocturne"],
+  ["/phoenix_kit/file/01a17edf-c1d4-768e-a06b-92ff6044e8d1/medium/b829","Dexter: Resurrection"],
+  ["/phoenix_kit/file/01a1a733-fc25-7cf2-9578-ca2cf003fceb/medium/699d","Stick"],
+  ["/phoenix_kit/file/01a179c0-b71f-7f14-b848-a9b5c82312a9/medium/55f2","MobLand"],
+  ["/phoenix_kit/file/01a179cb-f67a-730d-892c-0686306ba912/medium/3609","Dark Matter"],
+  ["/phoenix_kit/file/01a1a733-fc84-7969-8633-197f17d719ac/medium/0c09","The Early Spring"],
+  ["/phoenix_kit/file/01a179c0-b6f6-71c2-b9c9-71a52a777ee5/medium/48d1","Where the Mask Ends"],
+  ["/phoenix_kit/file/01a1a0e2-8175-72f4-8736-0f002a043f90/medium/3b83","Bass X Machina"],
+  ["/phoenix_kit/file/01a19dc5-6f7e-7596-9fc9-91c77fdedc2e/medium/329f","The Gilded Age"],
+]
+
+const VARIANTS = [
+  ["v-none", "0 · Nothing", "today, on the rows and the category grids", "The cursor changes and that is all, until the card opens."],
+  ["v-ring", "1 · Ring", "2 px of ink, 3 px outside the picture", "A position, not a decoration: says “here” without touching the picture. In over 120 ms, out over 200. Carries into the card."],
+  ["v-ring-bright", "2 · Ring + brighter", "the picture lifts 8 % with the ring", "The same ring, and the picture itself answers a little."],
+  ["v-ring-glow", "3 · Ring + glow in its own colour", "a shadow tinted by the poster", "The colour is read off the picture (here by script; on the site it would be worked out once in the image cache). A red poster warms its surroundings, a blue one cools them."],
+  ["v-glow", "4 · Glow only", "the tinted shadow, no line", "Softer than a ring. Does it say “here” clearly enough on a busy grid?"],
+  ["v-lift", "5 · Lift", "3 px up, a shadow and a hairline — what Search and the lists do today", "The site's other pages. Switched off under the cards because the lift came off again under the widening card."],
+  ["v-scale", "6 · Scale", "4.5 % bigger with a shadow", "The usual streaming-site answer. Compare with the ring for how calm a grid stays as the pointer crosses it."],
+  ["v-tv", "7 · TV", "a thick white ring, rounder, and a 3 % grow — the remote-control look", "The one you saw. Louder than 1; reads as a selection."],
+  ["v-tilt", "8 · Tilt + sheen", "the picture leans to the pointer and a light crosses it (Apple TV)", "Beautiful on one tile; move the pointer around on it. Judge it in the grid below too."],
+  ["v-ring-cap", "9 · Ring + the title", "the ring, and the caption goes full ink", "The words under the poster answer with the ring."],
+  ["v-inner", "10 · Inner ring", "a 3 px line just inside the edge, like a selected photo", "Stays inside the picture, so the rows need no extra room. Hides a sliver of the art."],
+  ["v-bar", "11 · Bar", "a short line under the picture", "Smallest of all; a tab-strip feel rather than a selection."],
+]
+
+const GRID_VARIANTS = ["v-ring", "v-ring-glow", "v-tv", "v-scale", "v-tilt"]
+
+const $ = (s, el = document) => el.querySelector(s)
+const root = document.documentElement
+
+function poster([src, title], i) {
+  const li = document.createElement("li")
+  li.tabIndex = 0
+  li.innerHTML = `<div class="card-sim"><a class="pc" href="#" tabindex="-1"><div class="box"><img src="${src}" alt="" loading="lazy"></div></a>
+    <div class="panel"><b>${title}</b><span>2026 · 1h 52m · 7.4</span><span class="play">▶ Play</span></div></div><div class="cap">${title}</div>`
+  li.querySelector("a").addEventListener("click", (e) => e.preventDefault())
+  return li
+}
+
+function build() {
+  const host = $("#variants")
+  host.innerHTML = ""
+  const showGrid = $("#showgrid").checked
+  for (const [cls, name, sub, note] of VARIANTS) {
+    const s = document.createElement("section")
+    s.className = "v " + cls
+    s.innerHTML = `<header><h2>${name}<small>${sub}</small></h2></header><p>${note}</p><ul class="row"></ul>`
+    const ul = s.querySelector("ul")
+    POSTERS.slice(0, 12).forEach((p, i) => ul.appendChild(poster(p, i)))
+    host.appendChild(s)
+    wire(ul, false)
+  }
+  if (showGrid) {
+    const pick = document.createElement("section")
+    pick.className = "v"
+    pick.innerHTML = `<header><h2>In a grid<small>the same ideas on a page of posters — pick one</small></h2></header>
+      <p><label>Idea <select id="gridpick">${GRID_VARIANTS.map((v) => `<option value="${v}">${VARIANTS.find((x) => x[0] === v)[1]}</option>`).join("")}</select></label></p>
+      <ul class="grid"></ul>`
+    host.appendChild(pick)
+    const ul = pick.querySelector("ul")
+    POSTERS.forEach((p, i) => ul.appendChild(poster(p, i)))
+    const sel = pick.querySelector("#gridpick")
+    const apply = () => { pick.className = "v " + sel.value }
+    sel.addEventListener("change", apply); apply()
+    wire(ul, true)
+  }
+  tint()
+}
+
+// The real hook's rule, in small: a pointer that comes to rest on a poster for 260 ms opens it;
+// moving more than a few pixels starts the wait again; leaving closes it. The `.hot` class is the
+// hover/focus state the ideas style; `data-open` the card.
+function wire(ul, grid) {
+  let cand = null, at = null, timer = null, hot = null
+  const STILL = 260, PX = 4
+  const open = (li) => {
+    close()
+    hot = li
+    if (!$("#opencard").checked) return
+    if (grid) {
+      const r = li.getBoundingClientRect(), extra = r.width * 0.35 + 12
+      li.dataset.edge = r.left < extra ? "left" : r.right > innerWidth - extra ? "right" : ""
+      const wide = r.width * 0.7
+      const left = li.dataset.edge === "left" ? 0 : li.dataset.edge === "right" ? wide : wide / 2
+      const right = li.dataset.edge === "right" ? 0 : li.dataset.edge === "left" ? wide : wide / 2
+      for (const c of ul.children) {
+        if (c === li) continue
+        const b = c.getBoundingClientRect()
+        if (Math.abs(b.top - r.top) > 4) continue
+        c.dataset.nudge = ""
+        c.style.setProperty("--nudge", (b.left < r.left ? -left : right) + "px")
+      }
+    }
+    li.dataset.open = "true"
+    ul.dataset.hasOpen = ""
+  }
+  const close = () => {
+    if (!hot) return
+    delete hot.dataset.open
+    delete ul.dataset.hasOpen
+    for (const c of ul.children) { delete c.dataset.nudge; c.style.removeProperty("--nudge") }
+    hot = null
+  }
+  const leave = () => { clearTimeout(timer); cand = null; at = null; close() }
+  ul.addEventListener("mousemove", (e) => {
+    const li = e.target.closest("li")
+    if (!li) { leave(); return }
+    // the tilt reads the pointer's place on the picture
+    const b = li.querySelector(".box").getBoundingClientRect()
+    li.style.setProperty("--tx", (((e.clientX - b.left) / b.width) * 2 - 1).toFixed(3))
+    li.style.setProperty("--ty", (((e.clientY - b.top) / b.height) * 2 - 1).toFixed(3))
+    if (li === hot) return
+    if (!at) { at = {x: e.clientX, y: e.clientY} }
+    const moved = Math.hypot(e.clientX - at.x, e.clientY - at.y) > PX
+    if (li !== cand || moved) {
+      at = {x: e.clientX, y: e.clientY}
+      cand = li
+      clearTimeout(timer)
+      timer = setTimeout(() => { if (cand === li) open(li) }, STILL)
+    }
+  })
+  ul.addEventListener("mouseover", (e) => { const li = e.target.closest("li"); if (li) li.classList.add("hot") })
+  ul.addEventListener("mouseout", (e) => {
+    const li = e.target.closest("li"), to = e.relatedTarget
+    if (li && !li.contains(to)) { li.classList.remove("hot"); li.style.removeProperty("--tx"); li.style.removeProperty("--ty") }
+    if ((hot && !hot.contains(to)) || (cand && !cand.contains(to))) leave()
+  })
+  ul.addEventListener("focusin", (e) => { const li = e.target.closest("li"); if (li) { li.classList.add("hot"); clearTimeout(timer); timer = setTimeout(() => open(li), STILL) } })
+  ul.addEventListener("focusout", (e) => { const li = e.target.closest("li"); if (li) li.classList.remove("hot"); leave() })
+}
+
+// The poster's own colour: the picture averaged on a tiny canvas, pushed a little towards
+// saturation so a muted poster still glows. Same-origin pictures, so the canvas is not tainted.
+function tint() {
+  const cv = document.createElement("canvas"); cv.width = 8; cv.height = 12
+  const g = cv.getContext("2d", {willReadFrequently: true})
+  for (const img of document.querySelectorAll(".box img")) {
+    const li = img.closest("li")
+    const go = () => {
+      try {
+        g.drawImage(img, 0, 0, 8, 12)
+        const d = g.getImageData(0, 0, 8, 12).data
+        let r = 0, b = 0, gg = 0, n = 0
+        for (let i = 0; i < d.length; i += 4) {
+          // the vivid pixels count more than the grey ones, so a dark poster with one red lamp glows red
+          const mx = Math.max(d[i], d[i+1], d[i+2]), mn = Math.min(d[i], d[i+1], d[i+2])
+          const w = 1 + (mx - mn) / 64
+          r += d[i] * w; gg += d[i+1] * w; b += d[i+2] * w; n += w
+        }
+        r /= n * 255; gg /= n * 255; b /= n * 255
+        // keep the hue, lift the rest: a glow is a light, not a shadow. Hue and saturation as HSL.
+        const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), span = mx - mn
+        let h = 0
+        if (span > 0) {
+          h = mx === r ? ((gg - b) / span) % 6 : mx === gg ? (b - r) / span + 2 : (r - gg) / span + 4
+          h = (h * 60 + 360) % 360
+        }
+        const l = (mx + mn) / 2
+        const sat = span === 0 ? 0 : span / (1 - Math.abs(2 * l - 1))
+        li.style.setProperty("--tint", sat < 0.08 ? "hsl(0 0% 70%)" : `hsl(${h.toFixed(0)} ${Math.round(Math.max(sat, 0.6) * 100)}% 58%)`)
+      } catch (e) {}
+    }
+    if (img.complete && img.naturalWidth) go(); else img.addEventListener("load", go, {once: true})
+  }
+}
+
+$("#theme").addEventListener("change", (e) => root.setAttribute("data-theme", e.target.value))
+const ringSel = $("#ring")
+const applyRing = () => { document.body.classList.remove("ring-ink", "ring-primary", "ring-white"); document.body.classList.add(ringSel.value) }
+ringSel.addEventListener("change", applyRing); applyRing()
+$("#size").addEventListener("input", (e) => { root.style.setProperty("--w", e.target.value + "px"); $("#sizev").textContent = e.target.value + "px" })
+$("#showgrid").addEventListener("change", build)
+build()
+</script>
+</body>
+</html>

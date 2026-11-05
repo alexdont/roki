@@ -1059,118 +1059,126 @@ defmodule RokiWeb.FeaturedLive do
   attr :play_href, :string, default: nil
   attr :signed_in?, :boolean, default: false
   attr :class, :any, default: nil
+  attr :inner_class, :any, default: "w-full", doc: "the content's width — the card's final width"
 
   # What opens over a poster: the wide picture (the trailer, after a moment), Play, save and more,
   # and the facts. Where it sits is the caller's (`class`): over the whole slot in a row, over the
   # middle of the cell in a grid. What it shows beyond the poster comes from `/card/:type/:id`.
+  #
+  # The content is laid out at the card's final width (`inner_class`) from the first frame, and the
+  # panel clips it while the slot is still widening: laid out at the live width, the overview came
+  # and went as the width crossed its mark mid-way, and the row of buttons jumped with it.
   @doc false
   def card_panel(assigns) do
     ~H"""
     <div
       data-card-panel
       class={[
-        "@container pointer-events-none absolute z-30 flex flex-col overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 ",
+        "pointer-events-none absolute z-30 overflow-hidden rounded-xl bg-neutral-900 text-white opacity-0 shadow-2xl ring-1 ring-white/15 transition-opacity duration-200 ",
         @class
       ]}
     >
-      <.link
-        navigate={@title_href}
-        class="relative block min-h-[7rem] flex-1 overflow-hidden bg-neutral-800"
-      >
-        <img
-          :if={@picture}
-          data-card-img
-          src={@picture}
-          alt=""
-          class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
-        />
-        <div
-          data-card-trailer
-          id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}#{entry_suffix(@item)}"}
-          phx-update="ignore"
-          class="absolute inset-0 opacity-0 transition-opacity duration-500"
+      <div class={["@container flex h-full flex-col", @inner_class]}>
+        <.link
+          navigate={@title_href}
+          class="relative block min-h-[7rem] flex-1 overflow-hidden bg-neutral-800"
         >
-        </div>
-        <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
-        </div>
-        <p class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight drop-shadow">
-          {@item.title}
-        </p>
-      </.link>
+          <img
+            :if={@picture}
+            data-card-img
+            src={@picture}
+            alt=""
+            class="absolute inset-0 h-full w-full scale-110 object-cover blur-sm"
+          />
+          <div
+            data-card-trailer
+            id={"trailer-#{@kind}-#{String.replace(@key, "/", "-")}#{entry_suffix(@item)}"}
+            phx-update="ignore"
+            class="absolute inset-0 opacity-0 transition-opacity duration-500"
+          >
+          </div>
+          <div class="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/10 to-transparent">
+          </div>
+          <p class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight drop-shadow">
+            {@item.title}
+          </p>
+        </.link>
 
-      <div class="flex shrink-0 flex-col justify-start gap-3 p-3">
-        <div class="flex items-center gap-2">
-          <.link
-            navigate={@play_href}
-            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
-            aria-label={"Play #{@item.title}"}
-            title="Play"
-          >
-            <.icon name="hero-play-solid" class="h-5 w-5" />
-          </.link>
-          <.link
-            :if={!@signed_in?}
-            navigate={~p"/phoenix_kit/users/log-in"}
-            class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-            aria-label="Log in to save"
-            title="Log in to save"
-          >
-            <.icon name="hero-plus" class="h-5 w-5" />
-          </.link>
-          <button
-            :if={@signed_in?}
-            type="button"
-            data-card-save
-            class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-            aria-label="Save for later"
-            title="Save for later"
-          >
-            <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
-            <span data-on class="hidden flex"><.icon name="hero-check" class="h-5 w-5" /></span>
-          </button>
-          <button
-            :if={@signed_in?}
-            type="button"
-            data-card-watched
-            class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-            aria-label={
-              if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
-            }
-            title={
-              if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
-            }
-          >
-            <span data-off class="flex"><.icon name="hero-eye" class="h-5 w-5" /></span>
-            <span data-on class="hidden flex">
-              <.icon name="hero-eye-solid" class="h-5 w-5 text-emerald-400" />
-            </span>
-          </button>
-          <.link
-            navigate={@title_href}
-            class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
-            aria-label={"More about #{@item.title}"}
-            title="More info"
-          >
-            <.icon name="hero-chevron-down" class="h-5 w-5" />
-          </.link>
-        </div>
-        <div>
-          <p class="flex items-center gap-2 text-xs text-white/80">
-            <span
-              :if={is_number(@item[:vote]) and @item.vote > 0}
-              class="font-semibold text-emerald-400"
+        <div class="flex shrink-0 flex-col justify-start gap-3 p-3">
+          <div class="flex items-center gap-2">
+            <.link
+              navigate={@play_href}
+              class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-900 transition hover:scale-105"
+              aria-label={"Play #{@item.title}"}
+              title="Play"
             >
-              ★ {Float.round(@item.vote * 1.0, 1)}
-            </span>
-            <span :if={@item[:year]}>{@item.year}</span>
-            <span data-card-runtime></span>
-          </p>
-          <p
-            data-card-overview
-            class="mt-1 hidden line-clamp-2 text-xs @[323px]:[display:-webkit-box] leading-snug text-white/75"
-          >
-          </p>
-          <p data-card-genres class="mt-0.5 min-h-4 truncate text-xs text-white/50"></p>
+              <.icon name="hero-play-solid" class="h-5 w-5" />
+            </.link>
+            <.link
+              :if={!@signed_in?}
+              navigate={~p"/phoenix_kit/users/log-in"}
+              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label="Log in to save"
+              title="Log in to save"
+            >
+              <.icon name="hero-plus" class="h-5 w-5" />
+            </.link>
+            <button
+              :if={@signed_in?}
+              type="button"
+              data-card-save
+              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label="Save for later"
+              title="Save for later"
+            >
+              <span data-off class="flex"><.icon name="hero-plus" class="h-5 w-5" /></span>
+              <span data-on class="hidden flex"><.icon name="hero-check" class="h-5 w-5" /></span>
+            </button>
+            <button
+              :if={@signed_in?}
+              type="button"
+              data-card-watched
+              class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label={
+                if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
+              }
+              title={
+                if String.starts_with?(@key, "tv/"), do: "Mark as completed", else: "Mark as watched"
+              }
+            >
+              <span data-off class="flex"><.icon name="hero-eye" class="h-5 w-5" /></span>
+              <span data-on class="hidden flex">
+                <.icon name="hero-eye-solid" class="h-5 w-5 text-emerald-400" />
+              </span>
+            </button>
+            <.link
+              navigate={@title_href}
+              class="ml-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-white transition hover:border-white"
+              aria-label={"More about #{@item.title}"}
+              title="More info"
+            >
+              <.icon name="hero-chevron-down" class="h-5 w-5" />
+            </.link>
+          </div>
+          <div>
+            <p class="flex items-center gap-2 text-xs text-white/80">
+              <span
+                :if={is_number(@item[:vote]) and @item.vote > 0}
+                class="font-semibold text-emerald-400"
+              >
+                ★ {Float.round(@item.vote * 1.0, 1)}
+              </span>
+              <span :if={@item[:year]}>{@item.year}</span>
+              <span data-card-runtime></span>
+            </p>
+            <%!-- Two lines are kept for the overview before its text arrives, so nothing moves when it does. --%>
+            <p
+              data-card-overview
+              class="mt-1 hidden line-clamp-2 text-xs @[323px]:[display:-webkit-box] @[323px]:min-h-[2lh] leading-snug text-white/75"
+            >
+            </p>
+            <p data-card-genres class="mt-0.5 min-h-4 truncate text-xs text-white/50"></p>
+          </div>
         </div>
       </div>
     </div>
@@ -1341,6 +1349,7 @@ defmodule RokiWeb.FeaturedLive do
         play_href={@play_href}
         signed_in?={@signed_in?}
         class="inset-0"
+        inner_class="w-[calc(var(--card-w)*1.7)]"
       />
     </li>
     """

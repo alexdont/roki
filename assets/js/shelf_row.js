@@ -17,6 +17,55 @@ const TRAILER_MS = 1500 // how long the picture is shown before the trailer repl
 
 const csrf = () => document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || ""
 
+// The poster's own colour, for the glow around it under the pointer (`--tint`, app.css): the
+// picture averaged on a tiny canvas, the vivid pixels counting more than the grey ones, then its
+// hue kept and its lightness fixed, so a dark poster still glows in its colour. Read the first time
+// the pointer reaches a poster and remembered by picture, since the same poster is on many pages.
+// A picture from another origin taints the canvas and cannot be read: the glow is then neutral.
+const tints = new Map()
+let tintCanvas = null
+
+const tintOf = (img) => {
+  const src = img.currentSrc || img.src
+  if (!src || !img.complete || !img.naturalWidth) return null
+  if (tints.has(src)) return tints.get(src)
+  let tint = null
+  try {
+    tintCanvas ||= document.createElement("canvas")
+    tintCanvas.width = 8
+    tintCanvas.height = 12
+    const g = tintCanvas.getContext("2d", {willReadFrequently: true})
+    g.drawImage(img, 0, 0, 8, 12)
+    const d = g.getImageData(0, 0, 8, 12).data
+    let r = 0, gg = 0, b = 0, n = 0
+    for (let i = 0; i < d.length; i += 4) {
+      const w = 1 + (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2])) / 64
+      r += d[i] * w; gg += d[i + 1] * w; b += d[i + 2] * w; n += w
+    }
+    r /= n * 255; gg /= n * 255; b /= n * 255
+    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), span = mx - mn
+    let h = 0
+    if (span > 0) {
+      h = mx === r ? ((gg - b) / span) % 6 : mx === gg ? (b - r) / span + 2 : (r - gg) / span + 4
+      h = (h * 60 + 360) % 360
+    }
+    const l = (mx + mn) / 2
+    const sat = span === 0 ? 0 : span / (1 - Math.abs(2 * l - 1))
+    tint = sat < 0.08 ? "hsl(0 0% 70%)" : `hsl(${h.toFixed(0)} ${Math.round(Math.max(sat, 0.6) * 100)}% 58%)`
+  } catch (_e) {
+    tint = null // tainted: another origin's picture
+  }
+  tints.set(src, tint)
+  return tint
+}
+
+const tint = (li) => {
+  if (li.style.getPropertyValue("--tint")) return
+  const img = li.querySelector(".poster-card img")
+  const t = img && tintOf(img)
+  if (t) li.style.setProperty("--tint", t)
+}
+
 const minutes = (m) => (m ? (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`) : "")
 
 async function load(key) {
@@ -228,6 +277,10 @@ export const cardMethods = {
       const to = e.relatedTarget
       if ((this.hot && !this.hot.contains(to)) || (this.cand && !this.cand.contains(to))) this.leave()
     })
+    // The glow under the pointer is in the poster's own colour, read the moment it is reached.
+    const reach = (e) => { const li = e.target.closest?.("[data-card]"); if (li) tint(li) }
+    this.scroller.addEventListener("mouseover", reach)
+    this.scroller.addEventListener("focusin", reach)
     this.scroller.addEventListener("click", (e) => {
       const save = e.target.closest?.("[data-card-save]")
       if (save) { e.preventDefault(); this.toggle(save.closest("[data-card]"), "saved"); return }
@@ -287,14 +340,20 @@ export const cardMethods = {
     this.show(li, Date.now())
   },
 
-  // The dimming of the others sweeps in from the sides of the row towards the card, not out from
-  // the card: each poster waits in proportion to how near the card it is (`--dim-delay`, read by the
-  // filter transition in app.css). Lifting goes the same way, sides first — the posters at the
-  // sides, under the chevrons' shade, are always the first to settle, so nothing is still changing
-  // there by the time the pointer reaches a chevron. The delays stay on the posters for the lift.
+  // The dimming of the others spreads out from the card: each poster waits in proportion to how
+  // far from the card it is (`--dim-delay`, read by the filter transition in app.css), so the
+  // neighbours go first and the sides of the row last. Lifting goes the same way, out from the
+  // card. The delays stay on the posters for the lift. (It once swept in from the sides, while the
+  // chevrons' shade still greyed the posters under them.) A grid does not sweep: the whole page
+  // goes down and comes back up at once — rippling out and back from every poster the pointer
+  // crosses was too much movement on a page that is nothing but posters.
   sweep(li) {
-    const SWEEP = 0.22 // s, from the farthest poster to the nearest
-    const sel = this.grid ? "[data-grid-card]" : ":scope > [data-card]"
+    const SWEEP = 0.22 // s, from the nearest poster to the farthest
+    if (this.grid) {
+      for (const c of this.scroller.querySelectorAll("[data-grid-card]")) c.style.removeProperty("--dim-delay")
+      return
+    }
+    const sel = ":scope > [data-card]"
     const r = li.getBoundingClientRect()
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2
     // Only what is on the screen counts: the row goes on well past its sides, and measured against
@@ -305,7 +364,7 @@ export const cardMethods = {
       return {c, seen, d: Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy)}
     })
     const far = Math.max(1, ...cards.filter((x) => x.seen).map((x) => x.d))
-    for (const {c, seen, d} of cards) c.style.setProperty("--dim-delay", seen ? `${((1 - Math.min(1, d / far)) * SWEEP).toFixed(3)}s` : "0s")
+    for (const {c, seen, d} of cards) c.style.setProperty("--dim-delay", seen ? `${(Math.min(1, d / far) * SWEEP).toFixed(3)}s` : "0s")
     li.style.removeProperty("--dim-delay")
   },
 

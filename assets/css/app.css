@@ -259,9 +259,11 @@ html.study-open .site-header { display: none; }
 }
 
 /* The others in a grid's row make way for a card that opens (GridCards sets --nudge): moved, not
-   reflowed. */
+   reflowed. `filter` is the dimming (the Polish section below), listed here for the same reason
+   as in the row rule above: a transition list replaces, and the dimming rule once replaced this
+   one, which made the others jump aside instead of sliding. */
 [data-grid-card] {
-  transition: translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 [data-grid-card][data-nudge] {
@@ -420,14 +422,40 @@ html.study-open .site-header { display: none; }
 }
 
 /* …but not where the poster opens into a card: the lift would come off again under the widening card
-   the moment the card covers the pointer. */
+   the moment the card covers the pointer. There the pointer is answered by a ring and a glow
+   instead (below). */
 [data-card] .poster-card > .relative {
-  transition: none;
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color 0.2s ease, box-shadow 0.25s ease;
 }
 
 [data-card] .poster-card:hover > .relative {
   transform: none;
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+/* The ring and the glow: the moment the pointer is on a poster (or the keyboard focus), 2 px of
+   the page's ink 3 px outside the picture, and a soft shadow in the poster's own colour (`--tint`,
+   read off the picture by shelf_row.js; neutral when it cannot be). Once the card opens they move
+   to the card, so they outline the whole widened slot in a row and the wide card in a grid — the
+   card's own 1 px hairline is kept under them. Only where cards open: a mouse on a wide screen. */
+@media (hover: hover) and (min-width: 1024px) {
+  [data-card]:is(:hover, :has(:focus-visible)):not([data-open]) .poster-card > .relative {
+    outline-color: var(--color-base-content);
+    transition-duration: 0.12s, 0.2s;
+    box-shadow:
+      0 10px 40px -6px color-mix(in oklab, var(--tint, var(--color-base-content)) 75%, transparent),
+      0 0 0 1px color-mix(in oklab, var(--tint, var(--color-base-content)) 40%, transparent);
+  }
+
+  [data-card][data-open] [data-card-panel] {
+    outline: 2px solid var(--color-base-content);
+    outline-offset: 3px;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.15),
+      0 14px 48px -6px color-mix(in oklab, var(--tint, var(--color-base-content)) 75%, transparent);
+  }
 }
 
 /* Inputs and selects sit on the page, not in it. */
@@ -1197,9 +1225,10 @@ html.img-fade :is(.poster-card, .mood-fan, [data-card-panel], [data-hero], [data
 @media (hover: hover) and (min-width: 1024px) {
   /* The others dim exactly while a poster is widened, at the pace of the widening: down as it opens,
      back up as it closes, and not at all when nothing is open (on a chevron, say). The dimming
-     sweeps in from the sides of the row towards the card, and lifts the same way (`--dim-delay` per
-     poster, set by shelf_row.js `sweep`). */
-  [data-card-row] > li, ul.grid > [data-grid-card] { transition: filter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) var(--dim-delay, 0s); }
+     spreads out from the card to the sides of the row, and lifts the same way (`--dim-delay` per
+     poster, set by shelf_row.js `sweep`); on a grid every poster goes at once (its transition is
+     with the grid card's own, above, so as not to replace the slide). */
+  [data-card-row] > li { transition: filter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) var(--dim-delay, 0s); }
 
   [data-card-row]:has(> [data-open]) > li:not([data-open]),
   ul.grid:has(> [data-grid-card][data-open]) > [data-grid-card]:not([data-open]) { filter: brightness(0.6) saturate(0.85); }
