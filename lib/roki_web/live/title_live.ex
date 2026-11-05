@@ -1939,7 +1939,8 @@ defmodule RokiWeb.TitleLive do
   # ── the phone layout ───────────────────────────────────────────────
 
   # The less used actions behind the dots, top right of the title: on hold (anime has none:
-  # MyAnimeList keeps that) and the title's page on TMDB and, for anime, on MyAnimeList.
+  # MyAnimeList keeps that) and, for anime, the title's page on MyAnimeList. TMDB and IMDb
+  # are the buttons under About.
   attr :id, :string, required: true
   attr :title, :map, required: true
   attr :linked?, :boolean, default: false
@@ -2042,8 +2043,9 @@ defmodule RokiWeb.TitleLive do
 
   defp forget_confirm(%{title: title}), do: "Remove the watch progress for #{title}?"
 
-  # Where else the title lives: MyAnimeList first for anime (its first season's entry, or the
-  # film itself — the cross-id list, no request), then TMDB and, when TMDB knows it, IMDb.
+  # Where else the title lives, for anime: MyAnimeList (its first season's entry, or the film
+  # itself — the cross-id list, no request). TMDB and IMDb are the buttons under About, so the
+  # menu does not repeat them.
   defp external_links(t, entry) do
     kind = if t.type == "movie", do: "movie", else: "tv"
 
@@ -2075,13 +2077,7 @@ defmodule RokiWeb.TitleLive do
         []
       end
 
-    imdb =
-      case t.imdb_id do
-        "tt" <> _ = id -> [{"Open on IMDb", "https://www.imdb.com/title/#{id}/"}]
-        _ -> []
-      end
-
-    mal ++ [{"Open on TMDB", "https://www.themoviedb.org/#{kind}/#{t.id}"}] ++ imdb
+    mal
   end
 
   defp thousands(n) when is_integer(n),
