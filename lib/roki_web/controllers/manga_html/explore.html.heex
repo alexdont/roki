@@ -1,18 +1,38 @@
-<div class="max-w-6xl mx-auto px-4 py-8">
-  <RokiWeb.Layouts.manga_title back="/manga" back_label="Saved">
-    Explore
-  </RokiWeb.Layouts.manga_title>
-
-  <form method="get" action="/manga/search" class="flex gap-2 mb-6">
+<%!-- The site's listing look: a coloured hero under the floating header, the search in it. --%>
+<RokiWeb.PageHero.page_hero eyebrow="Manga" title="Explore" hue={300}>
+  <a
+    href="/manga"
+    class="absolute right-4 top-16 z-20 inline-flex h-11 items-center gap-1.5 rounded-full border border-white/25 bg-black/35 px-4 text-sm font-medium backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 sm:right-6 lg:right-12 lg:top-20 xl:right-16"
+  >
+    <RokiWeb.CoreComponents.icon name="hero-arrow-left-micro" class="h-4 w-4" /> Your manga
+  </a>
+  <form
+    method="get"
+    action="/manga/search"
+    role="search"
+    class="flex max-w-3xl items-center gap-2"
+  >
     <input
-      type="text"
+      type="search"
       name="q"
-      placeholder="Search manga..."
-      class="input input-bordered flex-1"
+      placeholder="Search manga across every source"
+      autocomplete="off"
+      maxlength="120"
+      style="background-color: rgb(0 0 0 / 0.3)"
+      class="input h-12 min-w-0 flex-1 rounded-full border border-white/25 px-5 text-white backdrop-blur-md placeholder:text-white/60 focus:border-white/60 focus:outline-none"
     />
-    <button type="submit" class="btn btn-primary">Search</button>
+    <button
+      type="submit"
+      aria-label="Search"
+      class="btn btn-primary h-12 min-h-0 shrink-0 rounded-full max-sm:w-12 max-sm:px-0 sm:px-6"
+    >
+      <RokiWeb.CoreComponents.icon name="hero-magnifying-glass" class="h-5 w-5 sm:hidden" />
+      <span class="max-sm:hidden">Search</span>
+    </button>
   </form>
+</RokiWeb.PageHero.page_hero>
 
+<div class={RokiWeb.PageHero.content_class()}>
   <%= if @manga != [] do %>
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
       <div

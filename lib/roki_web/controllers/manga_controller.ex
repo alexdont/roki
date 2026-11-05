@@ -8,6 +8,12 @@ defmodule RokiWeb.MangaController do
        [html: {RokiWeb.Layouts, :manga}]
        when action not in [:show, :search_extension, :explore_extension]
 
+  # These open with a hero under a floating header (`RokiWeb.Layouts.manga/1`); a title's page
+  # says so itself in `do_index/3`.
+  plug :page_hero when action in [:explore, :search, :categories]
+
+  defp page_hero(conn, _opts), do: assign(conn, :hero, true)
+
   # Tierlist, Grid and Comments moved out of the reader and under /:username, where they are
   # the account's own pages: one person's, in this site's plain frame rather than the reader's.
   plug :profile_page when action in [:annotations, :tierlist, :grid]
@@ -841,6 +847,8 @@ defmodule RokiWeb.MangaController do
   end
 
   defp do_index(conn, %{"source" => source, "slug" => slug} = params, template) do
+    conn = assign(conn, :hero, template == :index2)
+
     # Kotatsu browse links carry the search-result title as `?st=` —
     # register it as the details-skeleton seed (some parsers never
     # re-parse the title, see Roki.Manga.KotatsuSource).

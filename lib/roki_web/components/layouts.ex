@@ -484,6 +484,10 @@ defmodule RokiWeb.Layouts do
   says where it is with a `current_path` assign.
 
   The chapter reader itself is deliberately NOT wrapped: it is a full-screen canvas.
+
+  A page that opens with a hero (a title, the shelf, Explore, Search, Categories) sets `hero:
+  true` in its assigns: the header then floats over the picture and spans the window, as on the
+  site's own pages.
   """
   def manga(assigns) do
     path =
@@ -501,6 +505,8 @@ defmodule RokiWeb.Layouts do
       conn={assigns[:conn]}
       current_path={@path}
       flush
+      bleed={assigns[:hero] == true}
+      overlay={assigns[:hero] == true}
     >
       {@inner_content}
     </.app>

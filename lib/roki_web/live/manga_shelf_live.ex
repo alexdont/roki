@@ -418,9 +418,12 @@ defmodule RokiWeb.MangaShelfLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={@current_path}
       flush
+      bleed
+      overlay
     >
-      <div class="mx-auto max-w-6xl px-4 pb-12 pt-4 sm:pt-6">
-        <.hero :if={@resume} item={@resume} />
+      <.hero :if={@resume} item={@resume} />
+      <RokiWeb.PageHero.page_hero :if={!@resume} eyebrow="Your manga" title="Manga" hue={300} />
+      <div class="px-4 pb-12 sm:px-6 lg:px-12 xl:px-16">
         <.toolbar {assigns} />
 
         <div
@@ -553,21 +556,18 @@ defmodule RokiWeb.MangaShelfLive do
     """
   end
 
-  # The title last read: its cover blurred behind, the chapter and how far, and the way back in.
+  # The title last read, as the top of the page: its cover blurred into a wide picture under the
+  # floating header (the look of the site's title pages), the chapter and how far, Continue and
+  # the way to its page.
   attr :item, :map, required: true
 
   defp hero(assigns) do
     m = assigns.item.m
-    strip? = MangaHTML.strip_mode?(m.reading_mode)
-
-    left =
-      strip? &&
-        MangaHTML.percent_left(m.last_page, m.last_page_fraction, m.last_chapter_total_pages)
 
     tail =
       cond do
-        left -> " · #{left}% left"
-        !strip? && m.last_page -> " · Page #{m.last_page}"
+        assigns.item.chapter_pct -> " · #{assigns.item.chapter_pct}% left"
+        m.last_page -> " · Page #{m.last_page}"
         true -> ""
       end
 
@@ -581,38 +581,52 @@ defmodule RokiWeb.MangaShelfLive do
       )
 
     ~H"""
-    <section class="group relative mb-6 overflow-hidden rounded-2xl shadow-lg transition-shadow hover:shadow-2xl">
-      <img
-        src={@item.cover}
-        alt=""
-        aria-hidden="true"
-        decoding="async"
-        class="absolute inset-0 h-full w-full scale-110 object-cover blur-xl brightness-[0.35] saturate-150 transition-[filter] duration-300 group-hover:brightness-[0.45]"
-      />
-      <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent"></div>
+    <section
+      class="group relative z-20 flex min-h-[clamp(20rem,46svh,30rem)] flex-col justify-end text-white"
+      aria-label={"Continue #{@m.title}"}
+    >
+      <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
+        <img
+          src={@item.cover}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          class="h-full w-full scale-110 object-cover blur-2xl brightness-[0.5] saturate-150 transition-[filter] duration-300 group-hover:brightness-[0.6]"
+        />
+        <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/45 to-black/15"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/50">
+        </div>
+      </div>
       <a href={@read_url} class="absolute inset-0 z-10" aria-label={"Continue #{@m.title}"}></a>
-      <div class="pointer-events-none relative z-20 flex items-center gap-4 p-4 sm:gap-6 sm:p-6">
+      <div class="pointer-events-none relative z-20 flex items-end gap-5 px-4 pb-6 pt-28 sm:gap-6 sm:px-6 lg:px-12 xl:px-16">
         <img
           src={@item.cover}
           alt={@m.title}
           decoding="async"
-          class="aspect-[3/4] w-24 flex-shrink-0 rounded-xl object-cover shadow-2xl ring-1 ring-white/20 transition-all group-hover:ring-white/40 sm:w-32"
+          class="aspect-[3/4] w-24 shrink-0 rounded-xl object-cover shadow-2xl ring-1 ring-white/15 transition group-hover:ring-white/40 sm:w-36"
         />
-        <div class="min-w-0 flex-1 text-white">
-          <p class="mb-1 text-[11px] uppercase tracking-widest text-white/60">Continue reading</p>
-          <h2 class="line-clamp-2 text-xl font-extrabold drop-shadow-md sm:text-3xl">{@m.title}</h2>
-          <p class="mt-1 truncate text-sm text-white/70">
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">
+            Continue reading
+          </p>
+          <h1 class="mt-1 line-clamp-2 text-3xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-5xl">
+            {@m.title}
+          </h1>
+          <p class="mt-2 text-sm text-white/75">
             <%= if @rereading? do %>
               Rereading Ch. {@m.last_chapter}{@tail}
-              <span class="text-white/40">· Read up to Ch. {@m.max_chapter}</span>
+              <span class="text-white/45">· Read up to Ch. {@m.max_chapter}</span>
             <% else %>
               Chapter {@m.last_chapter}{@tail}
             <% end %>
           </p>
-          <div class="mt-3 flex flex-wrap gap-2 sm:mt-4">
+          <div class="pointer-events-auto mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
+            <a href={@read_url} class="btn btn-primary h-12 gap-2 rounded-full px-6 text-lg shadow-md">
+              <.icon name="hero-play-solid" class="h-5 w-5" /> Continue
+            </a>
             <a
               href={"/manga/manga2/#{@m.source}/#{@m.slug}"}
-              class="btn btn-sm pointer-events-auto gap-1.5 rounded-full border-white/20 bg-white/10 px-5 text-white backdrop-blur-sm hover:bg-white/20 sm:btn-md"
+              class="inline-flex h-12 items-center gap-1.5 rounded-full border border-white/25 bg-black/35 px-5 text-sm font-medium backdrop-blur-md transition hover:border-white/60 hover:bg-black/55"
             >
               <.icon name="hero-information-circle" class="h-4 w-4" /> Details
             </a>
@@ -633,7 +647,7 @@ defmodule RokiWeb.MangaShelfLive do
   # under the header while the shelf scrolls.
   defp toolbar(assigns) do
     ~H"""
-    <div class="sticky top-14 z-30 -mx-4 mb-4 flex items-center gap-2 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur">
+    <div class="sticky top-14 z-30 -mx-4 mb-4 flex items-center gap-2 border-b border-base-300/50 bg-base-100/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-12 lg:px-12 xl:-mx-16 xl:px-16">
       <div
         id="manga-chips"
         class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"

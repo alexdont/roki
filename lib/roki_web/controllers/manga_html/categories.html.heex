@@ -1,21 +1,26 @@
-<div class="max-w-6xl mx-auto px-4 py-8">
-  <RokiWeb.Layouts.manga_title back="/manga" back_label="Saved">
-    Categories
-  </RokiWeb.Layouts.manga_title>
-
+<RokiWeb.PageHero.page_hero eyebrow="Manga" title="Categories" hue={300}>
+  <a
+    href="/manga"
+    class="absolute right-4 top-16 z-20 inline-flex h-11 items-center gap-1.5 rounded-full border border-white/25 bg-black/35 px-4 text-sm font-medium backdrop-blur-md transition hover:border-white/60 hover:bg-black/55 sm:right-6 lg:right-12 lg:top-20 xl:right-16"
+  >
+    <RokiWeb.CoreComponents.icon name="hero-arrow-left-micro" class="h-4 w-4" /> Your manga
+  </a>
   <%!-- Add new category --%>
-  <form id="add-category-form" class="flex gap-2 mb-6 max-w-md">
+  <form id="add-category-form" class="flex max-w-md items-center gap-2">
     <input
       type="text"
       id="new-cat-name"
       placeholder="New category name"
       maxlength="50"
-      class="input input-bordered flex-1"
       required
+      style="background-color: rgb(0 0 0 / 0.3)"
+      class="input h-12 min-w-0 flex-1 rounded-full border border-white/25 px-5 text-white backdrop-blur-md placeholder:text-white/60 focus:border-white/60 focus:outline-none"
     />
-    <button type="submit" class="btn btn-primary">Add</button>
+    <button type="submit" class="btn btn-primary h-12 min-h-0 shrink-0 rounded-full px-6">Add</button>
   </form>
+</RokiWeb.PageHero.page_hero>
 
+<div class={RokiWeb.PageHero.content_class()}>
   <%!-- Built-in (client-side) categories. These don't exist as
        phoenix_kit category rows — they're filter chips on the home
        page driven by saved-manga fields. Renderable order + visibility
