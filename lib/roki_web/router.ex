@@ -315,6 +315,8 @@ defmodule RokiWeb.Router do
       live "/shows", CategoryLive, :shows
       live "/anime", CategoryLive, :anime
       live "/search", SearchLive, :index
+      # An actor and everything they played in (from a title's cast row).
+      live "/person/:id", PersonLive, :show
       live "/title/tv/:id/episodes", TitleLive, :episodes
       live "/title/:type/:id", TitleLive, :show
       live "/sources/movie/:id", SourcesLive, :movie

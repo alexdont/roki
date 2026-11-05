@@ -47,16 +47,17 @@ defmodule Roki.Watch do
   """
   def title(type, id, uuid \\ nil) when type in ~w(movie tv) and is_integer(id) do
     case Roki.Titles.get(type, id) do
-      {:ok, title, true} ->
+      {:ok, title, true} when is_map_key(title, :budget) ->
         {:ok, title}
 
-      {:ok, title, false} ->
+      {:ok, title, false} when is_map_key(title, :budget) ->
         refresh_title(type, id, uuid)
         {:ok, title}
 
-      :none ->
-        # One read at a time, and the answer kept a little while in memory: a burst of visitors
-        # to a new title is one request.
+      # None, or a copy from before the budget and takings were kept: read once more.
+      # One read at a time, and the answer kept a little while in memory: a burst of visitors
+      # to a new title is one request.
+      _ ->
         TTLCache.fetch({:title, 3, type, id}, 600, fn -> read_title(type, id, uuid) end)
     end
   end
@@ -118,9 +119,15 @@ defmodule Roki.Watch do
       spoken: for(l <- d["spoken_languages"] || [], do: l["english_name"] || l["name"]),
       episodes_total: d["number_of_episodes"],
       last_air_date: d["last_air_date"],
+      # A film's budget and takings in dollars (TMDB has none for a show, and 0 means unknown).
+      budget: amount(d["budget"]),
+      revenue: amount(d["revenue"]),
       search: title_variants(d)
     }
   end
+
+  defp amount(n) when is_integer(n) and n > 0, do: n
+  defp amount(_), do: nil
 
   defp seasons(%{"seasons" => seasons}) when is_list(seasons) do
     list =

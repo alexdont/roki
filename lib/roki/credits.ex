@@ -11,8 +11,9 @@ defmodule Roki.Credits do
   @cast 18
 
   @doc """
-  `%{cast: [%{name, character, photo}], directors: [name], writers: [name]}`, or the same with
-  nothing in it when TMDB has none or cannot be reached. `type` is `"movie"` or `"tv"`.
+  `%{cast: [%{id, name, character, photo}], directors: [name], writers: [name], composers: [name]}`,
+  or the same with nothing in it when TMDB has none or cannot be reached. `type` is `"movie"` or
+  `"tv"`. An actor's `id` is TMDB's, for the page of everything they have been in.
   """
   def for_title(type, id, uuid \\ nil) when type in ["movie", "tv"] and is_integer(id) do
     case TTLCache.fetch({:credits, type, id}, @ttl_s, fn -> lookup(type, id, uuid) end) do
@@ -21,7 +22,7 @@ defmodule Roki.Credits do
     end
   end
 
-  def empty, do: %{cast: [], directors: [], writers: []}
+  def empty, do: %{cast: [], directors: [], writers: [], composers: []}
 
   defp lookup(type, id, uuid) do
     case Roki.Laev.public(uuid, fn -> TmdbApi.get("/#{type}/#{id}/credits") end) do
@@ -35,6 +36,7 @@ defmodule Roki.Credits do
     cast =
       for %{"name" => name} = person <- Enum.take(body["cast"] || [], @cast) do
         %{
+          id: person["id"],
           name: name,
           character: blank(person["character"]),
           photo:
@@ -47,7 +49,8 @@ defmodule Roki.Credits do
     %{
       cast: cast,
       directors: names(crew, &(&1["job"] == "Director")),
-      writers: names(crew, &(&1["job"] in ["Screenplay", "Writer", "Story"]), 3)
+      writers: names(crew, &(&1["job"] in ["Screenplay", "Writer", "Story"]), 3),
+      composers: names(crew, &(&1["job"] in ["Original Music Composer", "Music"]), 2)
     }
   end
 

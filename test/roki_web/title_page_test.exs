@@ -214,5 +214,23 @@ defmodule RokiWeb.TitlePageTest do
     test "the page's header floats over it", %{conn: conn} do
       assert open_page(conn) =~ "site-header--overlay"
     end
+
+    # A reload (or a shared link) paints the page before LiveView connects: the hero from the
+    # site's own copy of the title, and a placeholder in the hero's shape when it has none —
+    # never the padded column of the page that was.
+    test "its first paint is the hero, from the kept copy", %{conn: conn} do
+      html = conn |> get("/title/tv/209867") |> html_response(200)
+      assert html =~ ~s(id="hero")
+      assert html =~ "Frieren"
+      assert html =~ "site-header--overlay"
+    end
+
+    test "its first paint is a hero-shaped placeholder when there is no copy yet", %{conn: conn} do
+      html = conn |> get("/title/movie/424242424") |> html_response(200)
+      refute html =~ ~s(id="hero")
+      assert html =~ ~s(aria-busy="true")
+      assert html =~ "animate-pulse"
+      assert html =~ "site-header--overlay"
+    end
   end
 end

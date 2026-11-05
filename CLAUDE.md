@@ -390,6 +390,13 @@ Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`)
 
 The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet.
 
+### Title page: facts, music, actors
+
+- The facts panel shows a film's **Budget** and **Box office** (TMDB's `budget`/`revenue`, kept in the title's copy; a stored copy from before they were kept is read once more — `Roki.Watch.title/3` treats one without the `:budget` key as none) and **Music by** (the composer, `Roki.Credits` `composers`).
+- **Soundtrack** section (`Roki.Soundtrack`, after the cast): MusicBrainz release groups of secondary type *soundtrack* named after the title (a film within a year of its release; "Body Heat" is not Heat's — the album's words must begin with the title's), oldest first, up to eight; the first album's tracks are read at once, the others when their chip is picked (`ost_album`), ten shown then "All N tracks" (`ost_all`). An anime gets its MAL opening/ending songs per season (`opening_themes`/`ending_themes`, needs `MAL_CLIENT_ID`). Every row is a YouTube *search* link (artist, track, title) — nothing is embedded; no YouTube key. Kept in `roki_kept` (`ost_albums` a month, `ost_tracks` a year, `ost_themes` a month) and in `TTLCache` half a day; failures are not kept. MusicBrainz wants a user agent and one request a second. A kana-only artist credit is named by its Latin sort name ("Kanno, Yoko" → "Yoko Kanno").
+- A face in the cast row leads to `/person/:id` (`PersonLive`, `Roki.People`): the actor's films and shows as a grid, newest first, All / Movies / Shows (`?kind=`), with the device's poster size. Talk/news/reality appearances and "Self" roles are left out. TMDB's person with `combined_credits`, kept a month.
+- The dead render of a title page draws the hero from the site's own copy of the title when it has one (`stored_title/3`), and a hero-shaped dark placeholder otherwise, so a reload never opens as the old padded column first.
+
 ## The watch flow (replaces the single-page Play described above)
 
 Pages, in order — nothing plays on the title page any more:

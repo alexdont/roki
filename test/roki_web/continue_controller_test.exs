@@ -15,6 +15,8 @@ defmodule RokiWeb.ContinueControllerTest do
     overview: "A rumour.",
     status: "Released",
     seasons: [],
+    budget: 8_000_000,
+    revenue: 75_000_000,
     search: %{search: ["Easy A"], accept: ["Easy A"]}
   }
 

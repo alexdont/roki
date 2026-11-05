@@ -6,7 +6,7 @@ defmodule Roki.CreditsTest do
   @body %{
     "cast" =>
       [
-        %{"name" => "A Actor", "character" => "Hero", "profile_path" => "/a.jpg"},
+        %{"id" => 7, "name" => "A Actor", "character" => "Hero", "profile_path" => "/a.jpg"},
         %{"name" => "B Actor", "character" => "", "profile_path" => nil}
       ] ++
         for(n <- 1..30, do: %{"name" => "Extra #{n}", "character" => "x", "profile_path" => nil}),
@@ -14,7 +14,8 @@ defmodule Roki.CreditsTest do
       %{"name" => "D Director", "job" => "Director"},
       %{"name" => "D Director", "job" => "Director"},
       %{"name" => "W Writer", "job" => "Screenplay"},
-      %{"name" => "Cam Era", "job" => "Director of Photography"}
+      %{"name" => "Cam Era", "job" => "Director of Photography"},
+      %{"name" => "Comp Oser", "job" => "Original Music Composer"}
     ]
   }
 
@@ -23,6 +24,7 @@ defmodule Roki.CreditsTest do
     assert length(cast) == 18
 
     assert first == %{
+             id: 7,
              name: "A Actor",
              character: "Hero",
              photo: "https://image.tmdb.org/t/p/w185/a.jpg"
@@ -33,12 +35,13 @@ defmodule Roki.CreditsTest do
     assert second.character == nil
   end
 
-  test "directors are the Director credits only, each once" do
-    assert %{directors: ["D Director"], writers: ["W Writer"]} = Credits.parse(@body)
+  test "directors are the Director credits only, each once; the composer is kept too" do
+    assert %{directors: ["D Director"], writers: ["W Writer"], composers: ["Comp Oser"]} =
+             Credits.parse(@body)
   end
 
   test "an answer with nothing in it, or none, is empty" do
-    assert Credits.parse(%{}) == %{cast: [], directors: [], writers: []}
+    assert Credits.parse(%{}) == %{cast: [], directors: [], writers: [], composers: []}
     assert Credits.parse(nil) == Credits.empty()
   end
 end

@@ -74,6 +74,9 @@
   backdrop: "https://image.tmdb.org/t/p/w1280/rBOnrVlck7BIlGeWVlzYiZeg4l2.jpg",
   episodes_total: 38,
   last_air_date: "2026-03-27",
+  # A show has no budget on TMDB; the keys are kept all the same (a copy without them is read again).
+  budget: nil,
+  revenue: nil,
   original_title: "葬送のフリーレン",
   spoken: ["Japanese"],
   studios: [

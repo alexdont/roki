@@ -51,6 +51,9 @@ defmodule RokiWeb.TitleLive do
         link_state: :none,
         trailer: nil,
         credits: Roki.Credits.empty(),
+        ost: nil,
+        ost_album: nil,
+        ost_all?: false,
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rate_mal: nil,
         rating_error: nil,
@@ -80,9 +83,21 @@ defmodule RokiWeb.TitleLive do
       if uuid, do: Phoenix.PubSub.subscribe(Roki.PubSub, "link:#{uuid}")
       start_async(socket, :title, fn -> load_title(type, id, uuid) end)
     else
-      socket
+      # The first paint of a reload or a shared link: the hero from the site's own copy of the
+      # title, when it has one, so the page does not open as a placeholder and then redraw. What
+      # this person has done with it arrives with the connected load.
+      assign(socket, :title, stored_title(socket.assigns.live_action, type, id))
     end
   end
+
+  defp stored_title(:show, type, id) do
+    case Roki.Titles.get(type, id) do
+      {:ok, title, _fresh?} -> title
+      _ -> nil
+    end
+  end
+
+  defp stored_title(_action, _type, _id), do: nil
 
   # How this device plays: the page tells us (`player` in the socket params, from the browser's
   # own storage). It decides what the sources page does when a release is found.
@@ -115,6 +130,17 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp left_at(_uuid, _title), do: nil
+
+  # The anime's MyAnimeList entries, a season each (`{label, mal}`), for its opening and ending
+  # songs; a film is one entry.
+  defp mal_sections(_uuid, %{anime?: true, type: "tv"}, sections),
+    do: for(s <- sections, is_integer(s.mal), do: {s.label, s.mal})
+
+  defp mal_sections(uuid, %{anime?: true, type: "movie", id: id}, _sections),
+    do:
+      for(m <- Roki.Laev.public(uuid, fn -> Laev.AnimeMap.mal_ids("movie", id) end), do: {nil, m})
+
+  defp mal_sections(_uuid, _title, _sections), do: []
 
   defp load_title(type, id, uuid) do
     with {:ok, title} <- Watch.title(type, id, uuid) do
@@ -335,6 +361,27 @@ defmodule RokiWeb.TitleLive do
 
   def handle_event("study_open", _params, socket), do: {:noreply, socket}
 
+  # Another soundtrack album: its tracks are read the first time it is picked.
+  def handle_event("ost_album", %{"id" => id}, %{assigns: %{ost: %{albums: albums}}} = socket) do
+    case Enum.find(albums, &(&1.id == id)) do
+      %{tracks: nil} ->
+        {:noreply,
+         socket
+         |> assign(ost_album: id, ost_all?: false)
+         |> start_async(:ost_tracks, fn -> {id, Roki.Soundtrack.tracks(id)} end)}
+
+      %{} ->
+        {:noreply, assign(socket, ost_album: id, ost_all?: false)}
+
+      nil ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("ost_album", _params, socket), do: {:noreply, socket}
+
+  def handle_event("ost_all", _params, socket), do: {:noreply, assign(socket, :ost_all?, true)}
+
   def handle_event("select_season", %{"season" => key}, socket),
     do:
       {:noreply, push_patch(socket, to: ~p"/title/tv/#{socket.assigns.id}/episodes?#{[s: key]}")}
@@ -525,6 +572,9 @@ defmodule RokiWeb.TitleLive do
      |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title, sections) end)
      |> start_async(:trailer, fn -> Roki.Trailers.key(title.type, title.id, uuid) end)
      |> start_async(:credits, fn -> Roki.Credits.for_title(title.type, title.id, uuid) end)
+     |> start_async(:soundtrack, fn ->
+       Roki.Soundtrack.for_title(title, mal_sections(uuid, title, sections))
+     end)
      |> select()}
   end
 
@@ -543,6 +593,21 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :credits, credits)}
 
   def handle_async(:credits, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:soundtrack, {:ok, %{albums: albums} = ost}, socket),
+    do:
+      {:noreply,
+       assign(socket, ost: ost, ost_album: with(%{id: id} <- List.first(albums), do: id))}
+
+  def handle_async(:soundtrack, _other, socket), do: {:noreply, socket}
+
+  # Another album's tracks, read when it was picked.
+  def handle_async(:ost_tracks, {:ok, {id, tracks}}, %{assigns: %{ost: %{} = ost}} = socket) do
+    albums = for a <- ost.albums, do: if(a.id == id, do: %{a | tracks: tracks}, else: a)
+    {:noreply, assign(socket, :ost, %{ost | albums: albums})}
+  end
+
+  def handle_async(:ost_tracks, _other, socket), do: {:noreply, socket}
 
   def handle_async(:study, {:ok, %{} = choice}, socket),
     do: {:noreply, assign(socket, :study, choice)}
@@ -649,10 +714,18 @@ defmodule RokiWeb.TitleLive do
 
   @impl true
   def render(assigns) do
-    # The show page runs edge to edge once its title is in; before that (and on the episodes page)
-    # it has the padded column it always had.
+    # The show page runs edge to edge, its placeholder too (so a reload does not open as another
+    # page); the episodes page once its title is in. An error has the padded column.
     assigns =
-      assign(assigns, :full?, assigns.live_action in [:show, :episodes] and assigns.title != nil)
+      assign(
+        assigns,
+        :full?,
+        case assigns.live_action do
+          :show -> assigns.title_error == nil
+          :episodes -> assigns.title != nil
+          _ -> false
+        end
+      )
 
     ~H"""
     <%!-- Flush: this page lays itself out. The hero runs to the edges of the window under a header
@@ -675,9 +748,32 @@ defmodule RokiWeb.TitleLive do
               else: "Log in to open titles — they are read with your own TMDB key."}
           </p>
 
-          <div :if={@title == nil and @title_error == nil} class="space-y-4" aria-busy="true">
-            <div class="skeleton h-64 w-full rounded-box"></div>
-            <div class="skeleton h-8 w-1/3 rounded"></div>
+          <%!-- While the title loads: the hero's shape — its height, the name and the line under it,
+                the Start pill — so what appears settles into place instead of replacing a page. --%>
+          <div :if={@title == nil and @title_error == nil} class="space-y-8" aria-busy="true">
+            <div class="relative flex min-h-[clamp(34rem,86svh,54rem)] flex-col justify-end overflow-hidden bg-neutral-900 lg:min-h-[clamp(34rem,80svh,54rem)]">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30">
+              </div>
+              <div class="relative flex max-w-4xl flex-col gap-3 px-4 pb-7 pt-32 sm:px-6 lg:gap-4 lg:px-12 lg:pb-14 xl:px-16">
+                <div class="h-3 w-12 animate-pulse rounded bg-white/15"></div>
+                <div class="h-10 w-3/4 max-w-md animate-pulse rounded-lg bg-white/15 sm:h-12 xl:h-16">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <div class="h-6 w-14 animate-pulse rounded-md bg-white/15"></div>
+                  <div class="h-6 w-12 animate-pulse rounded-md bg-white/10"></div>
+                  <div class="h-6 w-24 animate-pulse rounded-full bg-white/10"></div>
+                  <div class="h-6 w-20 animate-pulse rounded-full bg-white/10"></div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 pt-3 sm:gap-3">
+                  <div class="h-14 w-full animate-pulse rounded-full bg-white/20 sm:w-56"></div>
+                  <div class="h-12 w-12 animate-pulse rounded-full bg-white/10 max-sm:hidden"></div>
+                  <div class="h-12 w-12 animate-pulse rounded-full bg-white/10 max-sm:hidden"></div>
+                </div>
+              </div>
+            </div>
+            <div class="px-4 sm:px-6 lg:px-12 xl:px-16">
+              <div class="skeleton h-56 w-full rounded-3xl"></div>
+            </div>
           </div>
 
           <div :if={@title && @live_action == :show} class="space-y-8">
@@ -733,6 +829,7 @@ defmodule RokiWeb.TitleLive do
 
             <.facts_panel title={@title} credits={@credits} />
             <.cast_row cast={@credits.cast} />
+            <.soundtrack_section ost={@ost} album={@ost_album} all?={@ost_all?} title={@title} />
 
             <%!-- The comments come right after the cast: they matter more than more like this. --%>
             <div
@@ -1292,10 +1389,13 @@ defmodule RokiWeb.TitleLive do
         {"Newest season", newest_season(t)},
         {"Directed by", join(c.directors)},
         {"Written by", join(c.writers)},
+        {"Music by", join(c[:composers])},
         {"Language", join(t[:spoken]) || t[:language]},
         {"Country", join(t[:countries])},
         {if(t.type == "tv", do: "Network", else: "Studio"),
-         join(Enum.take((t.type == "tv" && t[:networks]) || t[:studios] || [], 3))}
+         join(Enum.take((t.type == "tv" && t[:networks]) || t[:studios] || [], 3))},
+        {"Budget", money(t[:budget])},
+        {"Box office", money(t[:revenue])}
       ]
       |> Enum.filter(fn {_label, value} -> is_binary(value) and value != "" end)
 
@@ -1425,28 +1525,211 @@ defmodule RokiWeb.TitleLive do
     """
   end
 
+  # Dollars as the page says them: $160M, $1.2B, $850K.
+  defp money(n) when is_integer(n) and n >= 1_000_000_000, do: "$" <> short(n / 1.0e9) <> "B"
+  defp money(n) when is_integer(n) and n >= 1_000_000, do: "$" <> short(n / 1.0e6) <> "M"
+  defp money(n) when is_integer(n) and n >= 1_000, do: "$" <> short(n / 1.0e3) <> "K"
+  defp money(n) when is_integer(n) and n > 0, do: "$#{n}"
+  defp money(_), do: nil
+
+  defp short(x) when x >= 100, do: Integer.to_string(round(x))
+
+  defp short(x) do
+    case Float.round(x, 1) do
+      r when r == trunc(r) -> Integer.to_string(trunc(r))
+      r -> Float.to_string(r)
+    end
+  end
+
+  attr :ost, :any, required: true, doc: "`Roki.Soundtrack.for_title/2`'s map; nil while it loads"
+  attr :album, :any, required: true, doc: "the id of the album shown"
+  attr :all?, :boolean, required: true, doc: "every track, not just the first ten"
+  attr :title, :map, required: true
+
+  @tracks_shown 10
+
+  # The music: an anime's opening and ending songs, then the soundtrack albums with their
+  # tracks. Every line is a YouTube search for it; nothing is embedded or played here.
+  defp soundtrack_section(assigns) do
+    ost = assigns.ost
+    albums = (ost && ost.albums) || []
+    chosen = Enum.find(albums, &(&1.id == assigns.album)) || List.first(albums)
+    tracks = (chosen && chosen.tracks) || []
+    shown = if assigns.all?, do: tracks, else: Enum.take(tracks, @tracks_shown)
+
+    assigns =
+      assign(assigns,
+        albums: albums,
+        chosen: chosen,
+        tracks: tracks,
+        shown: shown,
+        themes: (ost && ost.themes) || []
+      )
+
+    ~H"""
+    <section
+      :if={@albums != [] or @themes != []}
+      id="title-soundtrack"
+      class="px-4 sm:px-6 lg:px-12 xl:px-16"
+      aria-label="Soundtrack"
+    >
+      <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 class="text-2xl font-semibold tracking-tight">Soundtrack</h2>
+        <a
+          href={Roki.Soundtrack.youtube([@title.title, @title[:year], "soundtrack"])}
+          target="_blank"
+          rel="noopener"
+          class="text-sm font-medium text-primary hover:underline"
+        >
+          Full soundtrack on YouTube ↗
+        </a>
+      </div>
+      <div class="rounded-3xl border border-base-300/70 bg-base-100/70 p-4 shadow-sm backdrop-blur sm:p-6">
+        <div :for={s <- @themes} class="mb-5 last:mb-0">
+          <h3 :if={length(@themes) > 1} class="mb-1 text-sm font-semibold text-base-content/70">
+            {s.label}
+          </h3>
+          <ul class="divide-y divide-base-300/60">
+            <li :for={
+              {kind, t} <- Enum.map(s.openings, &{"OP", &1}) ++ Enum.map(s.endings, &{"ED", &1})
+            }>
+              <a
+                href={Roki.Soundtrack.youtube([t.song, t.artist])}
+                target="_blank"
+                rel="noopener"
+                class="group/track flex items-center gap-3 py-2"
+              >
+                <span class={[
+                  "badge badge-sm w-12 shrink-0 justify-center font-mono",
+                  kind == "OP" && "badge-primary",
+                  kind == "ED" && "badge-secondary"
+                ]}>
+                  {kind}{t.n}
+                </span>
+                <span class="min-w-0 flex-1 truncate">
+                  <span class="font-medium group-hover/track:text-primary">{t.song}</span>
+                  <span :if={t.artist} class="text-base-content/60"> · {t.artist}</span>
+                </span>
+                <span :if={t.eps} class="hidden shrink-0 text-xs text-base-content/50 sm:inline">
+                  {t.eps}
+                </span>
+                <.icon
+                  name="hero-arrow-top-right-on-square"
+                  class="h-4 w-4 shrink-0 text-base-content/40 group-hover/track:text-primary"
+                />
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div :if={@chosen} class={@themes != [] && "mt-5 border-t border-base-300/60 pt-5"}>
+          <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div :if={length(@albums) > 1} class="flex flex-wrap gap-1.5">
+              <button
+                :for={a <- @albums}
+                type="button"
+                phx-click="ost_album"
+                phx-value-id={a.id}
+                class={[
+                  "btn btn-sm max-w-xs rounded-full border-0",
+                  a.id == @chosen.id && "btn-primary",
+                  a.id != @chosen.id && "bg-base-200"
+                ]}
+              >
+                <span class="truncate">{a.title}</span>
+                <span :if={a.year} class="opacity-60">{a.year}</span>
+              </button>
+            </div>
+            <p :if={length(@albums) == 1} class="text-sm font-semibold">
+              {@chosen.title}<span :if={@chosen.year} class="text-base-content/60"> ({@chosen.year})</span>
+            </p>
+            <span :if={@chosen.artist} class="text-sm text-base-content/60">
+              by {@chosen.artist}
+            </span>
+          </div>
+          <ol :if={@shown != []} class="divide-y divide-base-300/60">
+            <li :for={t <- @shown}>
+              <a
+                href={Roki.Soundtrack.youtube([t.artist || @chosen.artist, t.title, @title.title])}
+                target="_blank"
+                rel="noopener"
+                class="group/track flex items-center gap-3 py-2"
+              >
+                <span class="w-6 shrink-0 text-right font-mono text-xs text-base-content/40">
+                  {t.n}
+                </span>
+                <span class="min-w-0 flex-1 truncate">
+                  <span class="font-medium group-hover/track:text-primary">{t.title}</span>
+                  <span :if={t.artist && t.artist != @chosen.artist} class="text-base-content/60">
+                    · {t.artist}
+                  </span>
+                </span>
+                <span :if={t.secs} class="shrink-0 font-mono text-xs text-base-content/50">
+                  {clock(t.secs)}
+                </span>
+                <.icon
+                  name="hero-arrow-top-right-on-square"
+                  class="h-4 w-4 shrink-0 text-base-content/40 group-hover/track:text-primary"
+                />
+              </a>
+            </li>
+          </ol>
+          <p
+            :if={@chosen.tracks == nil}
+            class="flex items-center gap-2 py-2 text-sm text-base-content/60"
+          >
+            <span class="loading loading-spinner loading-xs"></span> Reading the track list…
+          </p>
+          <p :if={@chosen.tracks == []} class="py-2 text-sm text-base-content/60">
+            No track list for this album.
+          </p>
+          <button
+            :if={length(@tracks) > length(@shown)}
+            type="button"
+            phx-click="ost_all"
+            class="btn btn-ghost btn-sm mt-2"
+          >
+            All {length(@tracks)} tracks
+          </button>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
   attr :cast, :list, required: true
 
   defp cast_row(assigns) do
     ~H"""
     <.scroll_row :if={@cast != []} id="row-cast" title="Cast">
       <li :for={p <- @cast} class="w-32 shrink-0 snap-start text-center xl:w-36">
-        <div class="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-base-300 ring-1 ring-base-content/10 xl:h-32 xl:w-32">
-          <img
-            :if={p.photo}
-            src={Roki.Images.local(p.photo)}
-            alt=""
-            loading="lazy"
-            class="h-full w-full object-cover"
-          />
-          <span :if={!p.photo} class="text-2xl font-semibold text-base-content/40">
-            {p.name |> String.first()}
-          </span>
-        </div>
-        <p class="mt-2 truncate text-sm font-medium" title={p.name}>{p.name}</p>
-        <p :if={p.character} class="truncate text-xs text-base-content/60" title={p.character}>
-          {p.character}
-        </p>
+        <%!-- A face leads to everything that actor has been in. --%>
+        <.link
+          navigate={p[:id] && ~p"/person/#{p.id}"}
+          class="group/face block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <div class="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-base-300 ring-1 ring-base-content/10 transition group-hover/face:ring-2 group-hover/face:ring-base-content/60 xl:h-32 xl:w-32">
+            <img
+              :if={p.photo}
+              src={Roki.Images.local(p.photo)}
+              alt=""
+              loading="lazy"
+              class="h-full w-full object-cover transition duration-300 group-hover/face:scale-105"
+            />
+            <span :if={!p.photo} class="text-2xl font-semibold text-base-content/40">
+              {p.name |> String.first()}
+            </span>
+          </div>
+          <p
+            class="mt-2 truncate text-sm font-medium group-hover/face:text-primary"
+            title={p.name}
+          >
+            {p.name}
+          </p>
+          <p :if={p.character} class="truncate text-xs text-base-content/60" title={p.character}>
+            {p.character}
+          </p>
+        </.link>
       </li>
     </.scroll_row>
     """
