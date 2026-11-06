@@ -214,7 +214,7 @@ the app is serving. `forksight-dev` hit exactly this.
 
 ## Laev (optional per-user connection)
 
-`laev` (hex, 0.1.50 since 2026-11-06; 0.1.47 relaxed its Elixir requirement to 1.19, so it compiles here without the warning) is a dependency. `Roki.Laev` runs everything inside a per-user
+`laev` (hex, 0.1.52 since 2026-11-06; 0.1.47 relaxed its Elixir requirement to 1.19, so it compiles here without the warning) is a dependency. `Roki.Laev` runs everything inside a per-user
 `Laev.Scope` rooted at `<home>/laev-users/<user uuid>` (`/root/laev-users` = `data/roki-ee/root/`
 on the host). An account starts **not connected**; the home page (`RokiWeb.HomeLive`) lets a user
 paste their own laev key, which laev saves in that directory (`config`, mode 600) — there is no

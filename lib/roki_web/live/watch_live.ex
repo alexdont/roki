@@ -144,6 +144,8 @@ defmodule RokiWeb.WatchLive do
 
   # The title is known: find the release, start it, and (for a series) fetch the season's
   # episodes so the next one is known.
+  @resolve_ms 120_000
+
   defp resolve(socket) do
     token = socket.assigns.token + 1
 
@@ -177,6 +179,7 @@ defmodule RokiWeb.WatchLive do
       checks: [],
       decode_prompt: nil
     )
+    |> tap(fn _ -> Process.send_after(self(), {:resolve_timeout, token}, @resolve_ms) end)
     |> start_async(
       :resolve,
       Roki.Study.wrap(fn ->
@@ -408,7 +411,9 @@ defmodule RokiWeb.WatchLive do
         tried = [source.hash | tried]
         send(parent, {:tried, token, tried})
         # A release that would not start is not kept as the one to go straight to.
-        if res.key and skippable?(reason), do: SourceCache.mark_bad(uuid, res.key, source.hash)
+        if res.key != nil and skippable?(reason),
+          do: SourceCache.mark_bad(uuid, res.key, source.hash)
+
         next = if auto? and left > 0 and skippable?(reason), do: next_pair(res, tried, caps)
 
         if next do
@@ -803,9 +808,13 @@ defmodule RokiWeb.WatchLive do
           {:noreply, assign(socket, failed: Resolver.failure(reason), failed_reason: reason)}
         )
 
-  def handle_async(:resolve, {:exit, reason}, socket),
-    do:
-      {:noreply, assign(socket, :failed, "Something went wrong (#{inspect(reason, limit: 3)}).")}
+  def handle_async(:resolve, {:exit, reason}, socket) do
+    Trace.log({self(), socket.assigns.token}, "resolve crashed",
+      reason: inspect(reason, limit: :infinity, printable_limit: 2000)
+    )
+
+    {:noreply, assign(socket, :failed, "Something went wrong (#{inspect(reason, limit: 3)}).")}
+  end
 
   def handle_async(:resolve, _stale, socket), do: {:noreply, socket}
 
@@ -1380,6 +1389,20 @@ defmodule RokiWeb.WatchLive do
 
   def handle_info({:checked, token, hash, state}, %{assigns: %{token: token}} = socket),
     do: {:noreply, update(socket, :checks, &Roki.Watch.Checks.mark(&1, hash, state))}
+
+  # Finding and starting a release never goes on for ever: past two minutes with no player and no
+  # answer, the work is cancelled and the failure card (with the way back to the releases) shows.
+  def handle_info(
+        {:resolve_timeout, token},
+        %{assigns: %{token: token, player: nil, failed: nil}} = socket
+      ) do
+    Trace.log({self(), token}, "watch page gave up", reason: :timeout)
+
+    {:noreply,
+     socket
+     |> cancel_async(:resolve)
+     |> assign(failed: Resolver.failure(:timeout), failed_reason: :timeout)}
+  end
 
   def handle_info(_stale, socket), do: {:noreply, socket}
 

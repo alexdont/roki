@@ -345,14 +345,18 @@ defmodule RokiWeb.SourcesLive do
            auto: :off
          )}
 
-  def handle_async(:pipeline, {:exit, reason}, socket),
-    do:
-      {:noreply,
-       assign(socket,
-         phase: :failed,
-         failed: "Something went wrong (#{inspect(reason, limit: 3)}).",
-         auto: :off
-       )}
+  def handle_async(:pipeline, {:exit, reason}, socket) do
+    Trace.log({self(), socket.assigns.token}, "pipeline crashed",
+      reason: inspect(reason, limit: :infinity, printable_limit: 2000)
+    )
+
+    {:noreply,
+     assign(socket,
+       phase: :failed,
+       failed: "Something went wrong (#{inspect(reason, limit: 3)}).",
+       auto: :off
+     )}
+  end
 
   def handle_async(:pipeline, _stale, socket), do: {:noreply, socket}
 
@@ -521,6 +525,8 @@ defmodule RokiWeb.SourcesLive do
   # The browser plays on its own page; an external player is opened from here.
   # The browser's player is prepared *here*, before its page opens — so the page opens on a video
   # that is already running instead of starting it, which was a second wait after the first.
+  @prestart_ms 120_000
+
   defp start(%{assigns: %{mode: :browser}} = socket, {source, stream} = pair) do
     %{uuid: uuid, ctx: ctx, caps: caps} = socket.assigns
 
@@ -531,6 +537,7 @@ defmodule RokiWeb.SourcesLive do
     socket
     |> assign(starting: %{name: source.name}, current: pair, start_error: nil, auto: :done)
     |> start_async(:prestart, fn -> {source, Watch.start(uuid, ctx, source, stream, caps)} end)
+    |> tap(fn _ -> Process.send_after(self(), {:prestart_timeout, source.hash}, @prestart_ms) end)
   end
 
   defp start(socket, pair), do: hand_over(socket, pair)
@@ -736,6 +743,31 @@ defmodule RokiWeb.SourcesLive do
 
   def handle_info({:checked, token, hash, state}, %{assigns: %{token: token}} = socket),
     do: {:noreply, update(socket, :checks, &Roki.Watch.Checks.mark(&1, hash, state))}
+
+  # Getting the video ready never goes on for ever: a start that has not answered in two minutes is
+  # cancelled and the releases are listed again with a message, so the page is never a dead end.
+  def handle_info(
+        {:prestart_timeout, hash},
+        %{assigns: %{starting: %{}, current: {source, _}}} = socket
+      )
+      when is_map(source) do
+    if source.hash == hash do
+      Trace.log({self(), socket.assigns.token}, "sources page gave up preparing",
+        release: Trace.release(source)
+      )
+
+      {:noreply,
+       socket
+       |> cancel_async(:prestart)
+       |> assign(
+         starting: nil,
+         current: nil,
+         start_error: "Getting the video ready took too long. Pick another release, or try again."
+       )}
+    else
+      {:noreply, socket}
+    end
+  end
 
   def handle_info(_stale, socket), do: {:noreply, socket}
 

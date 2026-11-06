@@ -8,7 +8,7 @@ defmodule Roki.Watch do
     1. **Title** — TMDB details, normalised, and the names to search and accept
        (`title/3`, `episodes/4`).
     2. **Sources** — torrents for a film or an episode: Torrentio and ThePirateBay by IMDb
-       id and name; Nyaa/AnimeTosho for anime. Public data, so one search is shared and
+       id and name; Nyaa/Torrentio for anime. Public data, so one search is shared and
        cached (`sources/4`); the user's own debrid library is added per user
        (`with_library/3`).
     3. **Probe** — `Laev.Providers.probe_sources/2` asks Real-Debrid / TorBox which of them
