@@ -27,6 +27,15 @@ export function keep(from, to) {
     to.setAttribute("data-shown", "")
     if (from.hasAttribute("data-instant")) to.setAttribute("data-instant", "")
   }
+  // The study player's own state (Peek, theater, the list's panel and sheet) lives in data attributes on
+  // `#study-ui`, which is `phx-update="ignore"`. For such an element LiveView still sets the ones the
+  // server sends and REMOVES every other `data-*`: so any re-render of the page (a track arriving, the
+  // address updating) wiped `data-peek`, and Peek was off until it was switched off and on again.
+  if (from.id === "study-ui") {
+    for (const a of ["data-peek", "data-theater", "data-panel", "data-sheet"]) {
+      if (from.hasAttribute(a)) to.setAttribute(a, from.getAttribute(a))
+    }
+  }
   // The header's `--hdr` (how far it has crossed to the frosted bar) is the scroll's, not the server's.
   if (from.classList && from.classList.contains("site-header") && from.style.getPropertyValue("--hdr")) {
     to.style.setProperty("--hdr", from.style.getPropertyValue("--hdr"))

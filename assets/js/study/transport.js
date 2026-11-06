@@ -171,7 +171,7 @@ export function bindTransport(root, video, stage, study) {
 
   // Keys, unless something is being typed in.
   document.addEventListener("keydown", (e) => {
-    root.dispatchEvent(new CustomEvent("roki:wake"))
+    if (e.key !== ";") root.dispatchEvent(new CustomEvent("roki:wake"))
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && e.target.type !== "range") return
     if (!root.isConnected) return
@@ -184,6 +184,11 @@ export function bindTransport(root, video, stage, study) {
       case "l": step(10); break
       case "ArrowUp": e.preventDefault(); video.muted = false; video.volume = Math.min(1, video.volume + 0.05); break
       case "ArrowDown": e.preventDefault(); video.volume = Math.max(0, video.volume - 0.05); break
+      case ",": if (!study.tools) return; study.stepLine(-1); stage.dataset.active = "1"; break
+      case ".": if (!study.tools) return; study.stepLine(1); stage.dataset.active = "1"; break
+      case "/": if (!study.tools) return; e.preventDefault(); study.replay(); stage.dataset.active = "1"; break
+      case "c": { if (!study.tools) return; const b = $("[data-role=copy-line]"); if (b) study.copyWithNotice(b, study.linePrompt()); break }
+      case ";": study.toggleTranslation(); break
       case "m": video.muted = !video.muted; break
       case "f": $("[data-role=fullscreen]")?.click(); break
       default: return

@@ -596,7 +596,7 @@ html.study-open .site-header { display: none; }
 }
 /* The other tracks, under the line being studied: smaller, softer. */
 .study-trans { color: color-mix(in srgb, color-mix(in srgb, var(--cap-color, #fff) 88%, #888) var(--cap-text, 100%), transparent); cursor: default; }
-.study-overlay .study-trans { font-size: calc(clamp(0.8rem, 2.2cqw, 1.7rem) * var(--cap-scale, 1)); pointer-events: auto; }
+.study-overlay .study-trans { font-size: calc(clamp(0.9rem, 2.7cqw, 2.1rem) * var(--cap-scale, 1) * var(--cap-trans, 0.65)); pointer-events: auto; }
 .study-ui[data-peek="true"] .study-trans:not([data-revealed]) { filter: blur(0.35em); cursor: pointer; }
 .study-word { pointer-events: auto; cursor: help; border-radius: 0.2em; }
 .study-line ::selection, .study-line::selection { background: rgb(250 204 21 / 0.55); color: #000; text-shadow: none; }
@@ -1313,3 +1313,22 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
   html.img-fade img { transition: none !important; filter: none !important; opacity: 1 !important; }
   .site-header { transition: none; }
 }
+
+/* ── The watch player, quiet: while it plays only the picture and the lines are on screen ───────
+   The bar floats over the picture and comes with the pointer (the strip along the bottom, see `evaluate` in sidebar.js). The line tools — back a line,
+   replay, on a line, and the Study toggle — are one group in the bar; the round replay and
+   copy buttons that used to float over the picture are gone (C copies the line; the word card
+   has its own copy). The lines are drawn (by default) without a box — the caption look in Settings still rules the box, colour, edge and size — the studied one first, the translation
+   under it smaller and softer. */
+.study-lines { display: inline-flex; align-items: center; gap: 0.1rem; margin-right: 0.4rem; padding: 0.15rem; border-radius: 9999px; background: rgb(18 18 24 / 0.62); border: 1px solid rgb(255 255 255 / 0.12); }
+.study-lines .btn { background: transparent !important; }
+.study-lines .btn:hover { background: rgb(255 255 255 / 0.18) !important; }
+.study-lines .btn.is-on { background: var(--color-primary) !important; color: var(--color-primary-content) !important; }
+.study-immersive .study-replay, .study-immersive .study-copyline { display: none !important; }
+.study-immersive .study-main { position: relative; }
+.study-immersive .study-bar2 .btn { background: transparent; }
+.study-immersive .study-bar2 .btn:hover { background: rgb(255 255 255 / 0.18); }
+.study-immersive .study-overlay { gap: 0.1rem; }
+.study-immersive .study-line { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; font-weight: 500; letter-spacing: 0.01em; }
+.study-immersive .study-overlay .study-trans { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 400; opacity: 0.72; }
+.study-immersive .study-word:hover, .study-immersive .study-word[data-on] { background: rgb(255 255 255 / 0.14); }

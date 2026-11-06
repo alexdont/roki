@@ -236,7 +236,12 @@ export const StudySidebar = {
     this.dict = new Map()
     this.pausedAt = -1
     this.watching = -1
-    this.study = store.get("study") === "1"
+    // Study mode shows the line tools (back, replay, on, and a pause toggle); `this.study` is the pause
+    // after every line, which the toggle switches on its own. Opening the player from the title page's
+    // Study button (data-study) turns the tools on, pausing by default.
+    const forced = this.el.dataset.study === "true"
+    this.tools = forced || store.get("study") === "1"
+    this.study = this.tools && (forced && store.get("study") !== "1" ? true : store.get("pause") !== "0")
     this.peek = store.get("peek") === "1"
     // Dialogue drawn on the timeline (transport.js): on unless switched off.
     this.talk = store.get("talk") !== "0"
@@ -528,6 +533,28 @@ export const StudySidebar = {
       v.pause()
     }
     return this.pausedAt >= 0 && v.paused && !live.includes(this.pausedAt) ? [this.pausedAt] : live
+  },
+
+  // The key for a blurred translation (Peek): show it, or blur it again. The next line comes blurred
+  // as ever, being drawn anew.
+  toggleTranslation() {
+    const lines = [...this.el.querySelectorAll(".study-overlay .study-trans")]
+    if (!lines.length) return
+    const show = lines.some((l) => !l.hasAttribute("data-revealed"))
+    for (const l of lines) l.toggleAttribute("data-revealed", show)
+  },
+
+  // One line back (-1) or on (+1) from the one being watched (or paused on), played from its start:
+  // for the translation of a line you missed.
+  stepLine(d) {
+    const cues = this.p.cues
+    if (!cues.length) return
+    const cur = this.pausedAt >= 0 ? this.pausedAt : Math.max(0, this.p.idx)
+    const i = Math.max(0, Math.min(cues.length - 1, cur + d))
+    this.pausedAt = -1
+    this.watching = -1
+    this.seekAbs(Math.max(0, cues[i].start + this.offset))
+    this.video.play().catch(() => {})
   },
 
   replay() {
@@ -939,7 +966,9 @@ export const StudySidebar = {
       this.video.addEventListener("playing", () => { started = true })
       const evaluate = () => {
         const r = main.getBoundingClientRect()
-        const inBottom = !overTip && pointerY !== null && pointerY >= r.bottom - BOTTOM && pointerY <= r.bottom
+        // The strip is as tall as the bar itself (less its fade), so the pointer anywhere on the bar keeps it.
+        const strip = Math.max(BOTTOM, (this.el.querySelector(".study-controls")?.offsetHeight || 0) - 20)
+        const inBottom = !overTip && pointerY !== null && pointerY >= r.bottom - strip && pointerY <= r.bottom
         const inTop = !overTip && pointerY !== null && pointerY >= r.top && pointerY <= r.top + TOP
         const menu = !!this.el.querySelector(".study-pop:not([hidden])")
         const recent = Date.now() < wakeUntil
@@ -954,7 +983,8 @@ export const StudySidebar = {
       }, {passive: true})
       this.el.addEventListener("pointerleave", () => { pointerY = null; overTip = false; evaluate() })
       this.el.addEventListener("pointerdown", (e) => { pointerY = e.clientY; if (e.pointerType === "touch") wake(3000); evaluate() }, {passive: true})
-      document.addEventListener("keydown", () => { wake(); evaluate() })
+      // (`;` only blurs or unblurs a translation: it must not bring the bar up.)
+      document.addEventListener("keydown", (e) => { if (e.key === ";") return; wake(); evaluate() })
       this.el.addEventListener("roki:wake", () => { wake(); evaluate() })
       this.wakeTimer = setInterval(evaluate, 250)
       evaluate()
@@ -1161,24 +1191,28 @@ export const StudySidebar = {
     // every video in this browser (like the size above), applied as variables on the player.
     const EDGES = {
       none: "none",
-      shadow: "0 1px 2px #000, 0 0 5px rgb(0 0 0 / 0.8)",
+      shadow: "0 1px 2px rgb(0 0 0 / 0.95), 0 0 14px rgb(0 0 0 / 0.6)",
       outline: "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px #000",
     }
-    const CAP_DEFAULT = {color: "#ffffff", text: 100, bg: 66, edge: "shadow"}
+    const CAP_DEFAULT = {color: "#ffffff", text: 100, bg: 0, edge: "shadow", trans: 65}
     let caps = {...CAP_DEFAULT}
     try { caps = {...CAP_DEFAULT, ...JSON.parse(store.get("caption") || "{}")} } catch {}
     if (!EDGES[caps.edge]) caps.edge = CAP_DEFAULT.edge
     const colorInput = $("[data-role=cap-color]")
     const textRange = $("[data-role=cap-text]")
     const bgRange = $("[data-role=cap-bg]")
+    const transRange = $("[data-role=cap-trans]")
     const applyCaps = (save = true) => {
       this.ui.style.setProperty("--cap-color", caps.color)
       this.ui.style.setProperty("--cap-text", `${caps.text}%`)
       this.ui.style.setProperty("--cap-bg", String(caps.bg / 100))
       this.ui.style.setProperty("--cap-edge", EDGES[caps.edge])
+      this.ui.style.setProperty("--cap-trans", String(caps.trans / 100))
       colorInput.value = caps.color
       textRange.value = caps.text
       bgRange.value = caps.bg
+      transRange.value = caps.trans
+      $("[data-role=cap-trans-out]").textContent = `${caps.trans}%`
       $("[data-role=cap-text-out]").textContent = `${caps.text}%`
       $("[data-role=cap-bg-out]").textContent = `${caps.bg}%`
       for (const b of this.el.querySelectorAll("[data-role=cap-swatch]"))
@@ -1192,6 +1226,7 @@ export const StudySidebar = {
     colorInput.addEventListener("input", () => { caps.color = colorInput.value; applyCaps() })
     textRange.addEventListener("input", () => { caps.text = Number(textRange.value); applyCaps() })
     bgRange.addEventListener("input", () => { caps.bg = Number(bgRange.value); applyCaps() })
+    transRange.addEventListener("input", () => { caps.trans = Number(transRange.value); applyCaps() })
     for (const b of this.el.querySelectorAll("[data-role=cap-edge]"))
       b.addEventListener("click", () => { caps.edge = b.dataset.edge; applyCaps() })
     $("[data-role=cap-reset]").addEventListener("click", () => { caps = {...CAP_DEFAULT}; applyCaps() })
@@ -1202,22 +1237,38 @@ export const StudySidebar = {
     const replay = $("[data-role=replay]")
     const copyLine = $("[data-role=copy-line]")
     const quick = $("[data-role=study-quick]")
-    const setStudy = (on) => {
+    const pauseBtn = $("[data-role=study-toggle]")
+    // The pause after every line on or off (the pause button in the line tools).
+    const setPausing = (on) => {
       this.study = on
-      study.checked = on
-      quick.classList.toggle("btn-primary", on)
-      quick.setAttribute("aria-pressed", String(on))
-      replay.hidden = !on
-      if (copyLine) copyLine.hidden = !on
-      store.set("study", on ? "1" : "0")
+      if (pauseBtn) { pauseBtn.classList.toggle("is-on", on); pauseBtn.setAttribute("aria-pressed", String(on)) }
+      store.set("pause", on ? "1" : "0")
       this.pausedAt = -1
       this.watching = -1
     }
+    // Study mode: the line tools shown or not. On, it pauses after every line to begin with; off, it stops.
+    const setStudy = (on, keepPausing) => {
+      this.tools = on
+      study.checked = on
+      quick.classList.toggle("btn-primary", on)
+      quick.setAttribute("aria-pressed", String(on))
+      const lines = this.el.querySelector(".study-lines")
+      if (lines) lines.hidden = !on
+      replay.hidden = !on
+      if (copyLine) copyLine.hidden = !on
+      store.set("study", on ? "1" : "0")
+      setPausing(keepPausing ? this.study : on)
+    }
     study.addEventListener("change", () => setStudy(study.checked))
-    quick.addEventListener("click", () => setStudy(!this.study))
+    quick.addEventListener("click", () => setStudy(!this.tools))
     replay.addEventListener("click", () => this.replay())
+    if (pauseBtn) pauseBtn.addEventListener("click", () => setPausing(!this.study))
+    const lineBtn = (role, fn) => { const b = $(`[data-role=${role}]`); if (b) b.addEventListener("click", fn) }
+    lineBtn("line-prev", () => this.stepLine(-1))
+    lineBtn("line-next", () => this.stepLine(1))
+    lineBtn("line-replay", () => this.replay())
     if (copyLine) copyLine.addEventListener("click", () => this.copyWithNotice(copyLine, this.linePrompt()))
-    setStudy(this.study)
+    setStudy(this.tools, true)
 
     // Peek: the other tracks blurred until you click them.
     const peek = $("[data-role=peek]")

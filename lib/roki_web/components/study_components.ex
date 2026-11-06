@@ -241,6 +241,47 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                 </div>
                 <div class="study-bar-group">
+                  <%!-- Study mode's line tools (shown only while it is on): back a line, replay this one, on
+                        a line, and the pause toggle (pause after every line). Keys , . and / the same. --%>
+                  <div class="study-lines" role="group" aria-label="Lines" hidden>
+                    <button
+                      type="button"
+                      data-role="line-prev"
+                      class="btn btn-sm btn-circle"
+                      title="Previous line ( , )"
+                      aria-label="Previous line"
+                    >
+                      <.icon name="hero-chevron-left" class="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      data-role="line-replay"
+                      class="btn btn-sm btn-circle"
+                      title="Replay this line ( / )"
+                      aria-label="Replay this line"
+                    >
+                      <.icon name="hero-arrow-path" class="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      data-role="line-next"
+                      class="btn btn-sm btn-circle"
+                      title="Next line ( . )"
+                      aria-label="Next line"
+                    >
+                      <.icon name="hero-chevron-right" class="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      data-role="study-toggle"
+                      class="btn btn-sm btn-circle"
+                      title="Pause after every line"
+                      aria-label="Pause after every line"
+                      aria-pressed="false"
+                    >
+                      <.icon name="hero-pause" class="h-5 w-5" />
+                    </button>
+                  </div>
                   <.link
                     :if={@sources}
                     navigate={@sources}
@@ -678,6 +719,19 @@ defmodule RokiWeb.StudyComponents do
               class="range range-xs flex-1"
             />
             <span data-role="cap-text-out" class="w-10 text-right tabular-nums">100%</span>
+          </label>
+          <label class="flex w-full items-center gap-3 text-sm">
+            <span class="w-24 shrink-0">Translation size</span>
+            <input
+              type="range"
+              data-role="cap-trans"
+              min="40"
+              max="120"
+              step="5"
+              value="65"
+              class="range range-xs flex-1"
+            />
+            <span data-role="cap-trans-out" class="w-10 text-right tabular-nums">65%</span>
           </label>
           <label class="flex w-full items-center gap-3 text-sm">
             <span class="w-24 shrink-0">Background</span>
