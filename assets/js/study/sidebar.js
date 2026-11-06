@@ -332,6 +332,7 @@ export const StudySidebar = {
 
     // Progress goes back to the server only when the page asked for it, and never before the
     // resume seek has happened (a playhead at 0 would overwrite where you were).
+    this.guardSeeks()
     if (this.el.dataset.progress === "true") {
       this.measure()
       this.postTimer = setInterval(() => !v.paused && this.postProgress(), 5000)
@@ -442,8 +443,53 @@ export const StudySidebar = {
       this.pushEvent("seek_back", {position: Math.max(0, Math.floor(t))})
       return false
     }
-    this.video.currentTime = Math.max(0, t - this.shift)
+    const v = this.video
+    clearInterval(this.pendingTimer)
+    this.catchup = null
+    const reachNow = () => { const r = v.seekable; return r && r.length ? r.end(r.length - 1) + this.shift : 0 }
+    const reach = reachNow()
+    // The conversion is written while you watch, and a seek past what is written is clamped by
+    // some players and thrown back to 0:00 by others (Safari). So a seek past it does not touch
+    // the clock: far past, the same release is converted from there (as a resume does); near it,
+    // the page waits for the conversion to get there, with the overlay saying how far it has got.
+    if (this.calibrate() && reach > 0 && t > reach + 0.5) {
+      if (t - reach > 90) {
+        this.pushEvent("seek_back", {position: Math.max(0, Math.floor(t))})
+        return false
+      }
+      let tries = 360
+      this.catchup = {target: t, reach}
+      this.pendingTimer = setInterval(() => {
+        const now = reachNow()
+        if (now >= t - 0.5 || --tries <= 0) {
+          clearInterval(this.pendingTimer)
+          this.catchup = null
+          if (now >= t - 0.5) this.landAt(t)
+        } else this.catchup = {target: t, reach: now}
+      }, 500)
+      return false
+    }
+    this.landAt(t)
     return true
+  },
+
+  // Set the clock, and make sure it stays: a seek that ends at 0:00 although it was asked to go
+  // far in (Safari does this when the place is not yet loaded) is asked again, twice at most.
+  landAt(t) {
+    this.lastAsk = {rel: Math.max(0, t - this.shift), at: Date.now(), tries: 0}
+    this.video.currentTime = this.lastAsk.rel
+  },
+
+  guardSeeks() {
+    const v = this.video
+    v.addEventListener("seeked", () => {
+      const a = this.lastAsk
+      if (!a || this.local || a.tries >= 2 || Date.now() - a.at > 10000) return
+      if (a.rel > 5 && v.currentTime < 2) {
+        a.tries++
+        setTimeout(() => { if (this.lastAsk === a && v.currentTime < 2) v.currentTime = a.rel }, 400)
+      } else if (Math.abs(v.currentTime - a.rel) < 3) this.lastAsk = null
+    })
   },
 
   // The time the subtitles are on: the film's, minus the sync offset.
@@ -1648,6 +1694,8 @@ export const StudySidebar = {
     this.shift = this.base
     this.calibrated = !this.base
     clearInterval(this.seekTimer)
+    clearInterval(this.pendingTimer)
+    this.lastAsk = null
     clearInterval(this.pictureTimer)
     this.catchup = null
     this.failedSent = false
@@ -1788,7 +1836,7 @@ export const StudySidebar = {
       const reach = r.length ? r.end(r.length - 1) : 0
       const rel = this.calibrate() ? t - this.shift : Infinity
       if (reach >= rel - 1) {
-        v.currentTime = Math.max(0, rel)
+        this.landAt(rel + this.shift)
         this.ready = true
         this.catchup = null
         clearInterval(this.seekTimer)
