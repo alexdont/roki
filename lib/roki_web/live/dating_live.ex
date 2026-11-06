@@ -388,7 +388,7 @@ defmodule RokiWeb.DatingLive do
             Nothing to place by {@up_to}. Slide the year on.
           </p>
 
-          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          <ul class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
             <li :for={i <- @shown_items} class="space-y-1">
               <div class="relative">
                 <.poster

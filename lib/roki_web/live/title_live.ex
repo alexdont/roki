@@ -414,7 +414,7 @@ defmodule RokiWeb.TitleLive do
      socket
      |> assign(:lib_busy, true)
      |> start_async(:bulk, fn ->
-       Watch.set_series_watched(uuid, title, new, solo: solo?)
+       Watch.toggle_completed(uuid, title, new, solo: solo?)
        {new, Watch.library(uuid, title)}
      end)}
   end

@@ -946,7 +946,7 @@ defmodule RokiWeb.ProfileLive do
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <ul
             :if={@list == nil}
-            class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8"
+            class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8"
             aria-busy="true"
           >
             <li :for={_ <- 1..16} class="skeleton aspect-[2/3] rounded-box"></li>
@@ -963,7 +963,7 @@ defmodule RokiWeb.ProfileLive do
 
           <ul
             :if={@matches != []}
-            class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8"
+            class="grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8"
           >
             <li :for={c <- Enum.take(@matches, @shown)}>
               <button

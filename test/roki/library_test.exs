@@ -112,4 +112,30 @@ defmodule Roki.Watch.LibraryTest do
     refute Watch.library(@uuid, anime).held?
     refute Watch.library(@uuid, anime).all_watched?
   end
+
+  describe "completing" do
+    defp ago(days), do: Date.utc_today() |> Date.add(-days) |> Date.to_iso8601()
+
+    test "only a show that ended and has been quiet for long completes by itself" do
+      refute Watch.settled?(%{status: "Ended", last_air_date: ago(30)})
+      refute Watch.settled?(%{status: "Ended", last_air_date: ago(500)})
+      refute Watch.settled?(%{status: "Returning Series", last_air_date: ago(3000)})
+      refute Watch.settled?(%{status: "Ended", last_air_date: nil})
+      assert Watch.settled?(%{status: "Ended", last_air_date: ago(900)})
+      assert Watch.settled?(%{status: "Canceled", last_air_date: ago(4000)})
+    end
+
+    test "taking Completed back leaves the episodes watched: caught up" do
+      Watch.set_many_watched(@uuid, show(), [{1, 1}, {1, 2}], true)
+      Watch.set_completed(@uuid, show(), true)
+      assert Watch.library(@uuid, show()).all_watched?
+
+      Watch.toggle_completed(@uuid, show(), false, [])
+      refute Watch.library(@uuid, show()).all_watched?
+
+      assert Roki.Laev.run(@uuid, fn ->
+               Laev.Position.finished?(%{type: "tv", tmdb_id: 1396, season: 1, episode: 2})
+             end)
+    end
+  end
 end

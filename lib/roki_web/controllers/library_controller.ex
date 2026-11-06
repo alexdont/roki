@@ -38,7 +38,7 @@ defmodule RokiWeb.LibraryController do
   end
 
   defp flip("watched", uuid, title) do
-    Watch.set_series_watched(uuid, title, not Watch.library(uuid, title).all_watched?)
+    Watch.toggle_completed(uuid, title, not Watch.library(uuid, title).all_watched?, [])
   end
 
   defp state(uuid, title) do

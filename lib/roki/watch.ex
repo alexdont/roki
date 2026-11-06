@@ -288,19 +288,51 @@ defmodule Roki.Watch do
   # Unmarking an episode takes the series out of Completed; marking the last episode of an anime
   # entry completes that entry, as finishing it in the terminal does.
   defp follow_episodes(uuid, title, ctxs, true) do
-    Roki.Laev.run(uuid, fn ->
-      marks = Laev.Position.anime_marks()
+    # A new show that has had its season is caught up, not completed: more is likely to come.
+    # Only one that has been quiet for long is completed by finishing it (`settled?/1`); any
+    # other is completed by the person pressing "Mark as completed".
+    if settled?(title) do
+      Roki.Laev.run(uuid, fn ->
+        marks = Laev.Position.anime_marks()
 
-      for mal <- ctxs |> Enum.map(& &1[:mal_id]) |> Enum.filter(&is_integer/1) |> Enum.uniq(),
-          total = Laev.Anime.episodes(mal),
-          is_integer(total) and total > 0 and Map.get(marks, mal, 0) >= total,
-          do: Laev.Position.set_watched(%{mal_id: mal}, true)
-    end)
+        for mal <- ctxs |> Enum.map(& &1[:mal_id]) |> Enum.filter(&is_integer/1) |> Enum.uniq(),
+            total = Laev.Anime.episodes(mal),
+            is_integer(total) and total > 0 and Map.get(marks, mal, 0) >= total,
+            do: Laev.Position.set_watched(%{mal_id: mal}, true)
+      end)
+    end
 
-    _ = title
+    :ok
   end
 
   defp follow_episodes(uuid, title, _ctxs, false), do: set_completed(uuid, title, false)
+
+  # How long a show has to be quiet before finishing it counts as completing it by itself.
+  @settled_after_days 2 * 365
+
+  @doc """
+  Is this show old enough news that finishing it completes it? TMDB calls it ended or cancelled
+  and nothing has aired for two years. A newer one — whatever its status says, TMDB files a
+  show as Ended the week it finishes — is only ever caught up until the person says otherwise.
+  """
+  def settled?(title) do
+    title[:status] in ["Ended", "Canceled"] and
+      case Date.from_iso8601(to_string(title[:last_air_date])) do
+        {:ok, last} -> Date.diff(Date.utc_today(), last) > @settled_after_days
+        _ -> false
+      end
+  end
+
+  @doc """
+  The button under the poster: completed or not. Completing marks every episode that is out as
+  well; taking it back only takes the mark off the show — the episodes stay watched (caught up).
+  """
+  def toggle_completed(uuid, title, true, opts), do: set_series_watched(uuid, title, true, opts)
+
+  def toggle_completed(uuid, title, false, _opts) do
+    set_completed(uuid, title, false)
+    library_changed(uuid)
+  end
 
   defp aired_seasons(title) do
     today = Date.utc_today()
@@ -469,7 +501,7 @@ defmodule Roki.Watch do
 
   # What is rated has been seen: the film, or every aired episode of the show, unless it is
   # marked already. (A show rated half-way through is a judgement on it all the same.) The show
-  # itself is only marked completed once it is over: a rating is not a promise that nothing more
+  # itself is only marked completed once it is over and long quiet (`settled?/1`): a rating is not a promise that nothing more
   # is coming.
   defp watched_by_rating(uuid, title) do
     lib = library(uuid, title)
@@ -726,7 +758,8 @@ defmodule Roki.Watch do
 
     set_many_watched(uuid, title, pairs, watched?, Keyword.take(opts, [:solo]))
 
-    if watched? and Keyword.get(opts, :only_if_over, false) and not over?(title, seasons) do
+    if watched? and Keyword.get(opts, :only_if_over, false) and
+         not (over?(title, seasons) and settled?(title)) do
       :ok
     else
       # The whole series, from the button under the poster: completed or not completed.

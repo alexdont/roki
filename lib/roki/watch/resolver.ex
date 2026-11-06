@@ -386,7 +386,9 @@ defmodule Roki.Watch.Resolver do
     send(parent, {:probe, token, 0, 0, total})
     send(parent, {:candidates, token, Enum.map(page, &Roki.Watch.Checks.summary/1)})
 
-    notify = fn {:result, idx, source, result} ->
+    # What one answer does, whichever way it was got: the page's count, the check's mark, the
+    # trace. Returns the answer as it stands after the extra checks.
+    settle = fn idx, source, result ->
       # For an account that may not have a video re-encoded: a release whose name does not say what
       # the video is gets its real codec read here, and one that would need re-encoding is dropped
       # now rather than offered and refused later.
@@ -412,34 +414,54 @@ defmodule Roki.Watch.Resolver do
 
       send(parent, {:checked, token, source.hash, state})
       Trace.log({parent, token}, "checked", release: Trace.release(source), result: state)
+      result
     end
 
-    # A whole page at once (laev's default is two): the first release that plays is what counts,
-    # so they all race, and the answer comes with the quickest instead of after the waves.
-    opts =
-      [notify: notify, ctx: ctx, concurrency: if(quick?, do: 8, else: 4)] ++
-        if(ctx.anime, do: [], else: [season: ctx.season])
+    notify = fn {:result, idx, source, result} ->
+      settle.(idx, source, result)
+      :ok
+    end
 
     # Releases are not all numbered alike, and what plays is not always what was asked for: laev
     # asks each release for the episode number it uses and checks the file that comes back.
     indexed = Enum.with_index(page)
 
-    task =
-      Task.async(
-        Roki.Study.wrap(fn ->
-          Roki.Laev.run(uuid, fn ->
-            # A release numbered by the part it belongs to is asked for that number.
-            for {ctx, group} <- by_numbering(indexed, ctx) do
-              Laev.Providers.probe_sources(group, probe_opts(opts, ctx))
-            end
-          end)
-        end)
-      )
+    # Starting to play (`quick?`) wants one release that works, so they are asked the way laev's
+    # own player asks (`Laev.Providers.resolve_best`): the best first, a second beside it only
+    # when the first is slow, never more than three at once, and the first to play wins. Asking
+    # all eight every time was eight torrents added to the debrid account for one film watched.
+    # A list to choose from (the sources page) still checks a page at once.
+    {task, hedged?} =
+      if quick? do
+        {Task.async(
+           Roki.Study.wrap(fn ->
+             Roki.Laev.run(uuid, fn -> hedged(indexed, ctx, notify, settle) end)
+           end)
+         ), true}
+      else
+        opts =
+          [notify: notify, ctx: ctx, concurrency: 4] ++
+            if(ctx.anime, do: [], else: [season: ctx.season])
+
+        {Task.async(
+           Roki.Study.wrap(fn ->
+             Roki.Laev.run(uuid, fn ->
+               # A release numbered by the part it belongs to is asked for that number.
+               for {ctx, group} <- by_numbering(indexed, ctx) do
+                 Laev.Providers.probe_sources(group, probe_opts(opts, ctx))
+               end
+             end)
+           end)
+         ), false}
+      end
 
     deadline =
       System.monotonic_time(:millisecond) + if(quick?, do: @quick_deadline_ms, else: @deadline_ms)
 
-    late = await_probes(task, agent, page, parent, token, nil, quick?, deadline)
+    late =
+      if hedged?,
+        do: await_hedged(task, agent, page, parent, token, deadline),
+        else: await_probes(task, agent, page, parent, token, nil, quick?, deadline)
 
     ok = Agent.get(agent, & &1.ok)
     Agent.stop(agent)
@@ -447,6 +469,88 @@ defmodule Roki.Watch.Resolver do
     {ok
      |> Enum.sort_by(&elem(&1, 0))
      |> Enum.map(fn {_i, source, stream} -> {source, stream} end), late}
+  end
+
+  # The hedged race over a page: the releases a browser reads as they are (1080p, not heavy) go
+  # first, the rest keep laev's order. Each is asked on its own, with the number it uses.
+  defp hedged(indexed, ctx, _notify, settle) do
+    by_hash =
+      for {c, group} <- by_numbering(indexed, ctx), {source, idx} <- group, into: %{} do
+        {source.hash, {idx, c}}
+      end
+
+    {ideal, rest} = Enum.split_with(indexed, fn {source, _} -> ideal?(source) end)
+    ordered = for {source, _} <- ideal ++ rest, do: source
+
+    resolver = fn source, _opts ->
+      {idx, c} = Map.fetch!(by_hash, source.hash)
+      me = self()
+
+      opts =
+        probe_opts(
+          [
+            notify: fn
+              {:result, _, _, r} -> send(me, {:hedge_answer, source.hash, r})
+              _ -> :ok
+            end,
+            concurrency: 1
+          ],
+          c
+        )
+
+      Laev.Providers.probe_sources([{source, idx}], opts)
+
+      result =
+        receive do
+          {:hedge_answer, hash, r} when hash == source.hash -> r
+        after
+          60_000 -> {:error, :timeout}
+        end
+
+      settle.(idx, source, result)
+    end
+
+    Laev.Providers.resolve_best(ordered, resolver: resolver, notify: fn _ -> :ok end)
+  end
+
+  # Waits for the hedged race; the releases it never needed to ask go back to the unchecked list.
+  defp await_hedged(task, agent, page, parent, token, deadline) do
+    wait = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    timed_out? =
+      case Task.yield(task, wait) do
+        nil ->
+          Task.shutdown(task, :brutal_kill)
+          true
+
+        _ ->
+          false
+      end
+
+    st = Agent.get(agent, & &1)
+    seen = MapSet.new(st.seen)
+    unasked = Enum.reject(page, &MapSet.member?(seen, &1.hash))
+
+    if timed_out? do
+      Trace.log({parent, token}, "page stopped",
+        why: :deadline,
+        ok: length(st.ok),
+        of: length(page)
+      )
+
+      for s <- unasked, do: send(parent, {:checked, token, s.hash, {:bad, "no answer in time"}})
+      []
+    else
+      Trace.log({parent, token}, "page stopped",
+        why: :hedged,
+        ok: length(st.ok),
+        answered: length(st.seen),
+        of: length(page)
+      )
+
+      for s <- unasked, do: send(parent, {:checked, token, s.hash, {:later, "not needed"}})
+      unasked
+    end
   end
 
   # `[{ctx, releases}]`: the releases that name the season in `ctx.scene` (Lupin's "S02E06" or
