@@ -2303,11 +2303,22 @@ defmodule Roki.Watch do
     played = Laev.Position.played(ctx) || %{watched: 0, skipped: 0, reported: nil}
     previous = played[:reported] || Laev.Position.saved_position(ctx) || 0
 
+    total_watched = played.watched + watched
+    skipped = played.skipped + max(trunc(position - previous - watched), 0)
+
+    # Skipping cannot be more than what is left of the video once what was watched is taken off:
+    # a jump that the page's position clock made without anyone seeking (a conversion restarting
+    # part-way, a resume) must not pile up past the length of the episode. Not known → as it was.
+    skipped =
+      if is_number(duration) and duration > 0,
+        do: min(skipped, max(trunc(duration) - total_watched, 0)),
+        else: skipped
+
     Laev.Position.record(ctx, %{
       position: position,
       duration: duration,
-      watched: played.watched + watched,
-      skipped: played.skipped + max(trunc(position - previous - watched), 0),
+      watched: total_watched,
+      skipped: skipped,
       finished: duration > 0 and position >= duration * 0.85 and previous < duration * 0.85,
       log_seconds: watched,
       reported: position
