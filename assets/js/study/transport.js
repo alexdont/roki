@@ -171,7 +171,8 @@ export function bindTransport(root, video, stage, study) {
 
   // Keys, unless something is being typed in.
   document.addEventListener("keydown", (e) => {
-    if (e.key !== ";") root.dispatchEvent(new CustomEvent("roki:wake"))
+    // `;` and the space that carries on from study mode's own pause leave the bar as it is.
+    if (!study.quietKey(e)) root.dispatchEvent(new CustomEvent("roki:wake"))
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && e.target.type !== "range") return
     if (!root.isConnected) return

@@ -535,6 +535,17 @@ export const StudySidebar = {
     return this.pausedAt >= 0 && v.paused && !live.includes(this.pausedAt) ? [this.pausedAt] : live
   },
 
+  // Paused by study mode at the end of a line (not by the person): the space bar that carries on from it
+  // is a step in the lesson, not a reason to show the bar.
+  autoPaused() { return this.study && this.pausedAt >= 0 && this.video.paused },
+
+  // A key that must not show the bar: `;`, or the space/K that carries on from study mode's pause. Worked
+  // out once per key press (by whichever listener sees it first), since the key itself resumes the video.
+  quietKey(e) {
+    if (e.rokiQuiet === undefined) e.rokiQuiet = e.key === ";" || ((e.key === " " || e.key === "k") && this.autoPaused())
+    return e.rokiQuiet
+  },
+
   // The key for a blurred translation (Peek): show it, or blur it again. The next line comes blurred
   // as ever, being drawn anew.
   toggleTranslation() {
@@ -984,7 +995,7 @@ export const StudySidebar = {
       this.el.addEventListener("pointerleave", () => { pointerY = null; overTip = false; evaluate() })
       this.el.addEventListener("pointerdown", (e) => { pointerY = e.clientY; if (e.pointerType === "touch") wake(3000); evaluate() }, {passive: true})
       // (`;` only blurs or unblurs a translation: it must not bring the bar up.)
-      document.addEventListener("keydown", (e) => { if (e.key === ";") return; wake(); evaluate() })
+      document.addEventListener("keydown", (e) => { if (this.quietKey(e)) return; wake(); evaluate() })
       this.el.addEventListener("roki:wake", () => { wake(); evaluate() })
       this.wakeTimer = setInterval(evaluate, 250)
       evaluate()
