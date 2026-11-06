@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>laev: sync strips the log's final newline</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1d22; --mut:#5b6270; --line:#e3e6ec; --card:#f6f7f9; --acc:#3b5bdb; --code:#eef0f4 }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14161a; --fg:#e8eaee; --mut:#9aa1ae; --line:#2a2e36; --card:#1b1e24; --acc:#8ea2ff; --code:#22262d } }
+  * { box-sizing: border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif }
+  main { max-width:760px; margin:0 auto; padding:32px 16px 80px }
+  h1 { font-size:1.6rem; line-height:1.25; margin:0 0 6px }
+  h2 { font-size:1.15rem; margin:34px 0 8px }
+  p, li { color:var(--fg) } .mut { color:var(--mut) }
+  code, pre { font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--code); border-radius:6px }
+  code { padding:1px 5px } pre { padding:12px 14px; overflow-x:auto; margin:10px 0 }
+  pre code { padding:0; background:none }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:14px 0 }
+  button { font:inherit; background:var(--acc); color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer }
+  @media (prefers-color-scheme: dark) { button { color:#10131a } }
+  ol, ul { padding-left:1.3rem } li { margin:4px 0 }
+</style>
+</head>
+<body>
+<main>
+  <h1>laev: sync rewrites append-only logs without their final newline</h1>
+  <p class="mut">Found 2026-11-06 on roki.ee while checking why a finished series showed 17 minutes watched. Written for a coding agent working in the laev repo.</p>
+
+  <div class="card">
+    <p style="margin-top:0"><strong>Send this to the laev bot</strong> (everything in the box below is the task; the rest of the page is the evidence it refers to).</p>
+    <button id="copy" type="button">Copy the task</button>
+    <pre id="task"><code>Fix a data-loss bug in laev's sync (version 0.1.52).
+
+PROBLEM
+Append-only logs lose their trailing newline when they pass through sync, so the next
+appended line is glued to the previous one. A glued line can't be parsed, and the entry
+is dropped from stats. Real example from a ticks log (device log in ticks/&lt;device&gt;.log):
+
+  1793960473 tv-289517-s1e8 3511793960669 movie-1657630 4
+  1793958987 tv-289517-s1e8 41793959117 tv-289517-s1e8 2
+
+Each should be two lines: "...s1e8 351" and "1793960669 movie-1657630 4" (a 10-digit
+epoch, a key, whole seconds). One account lost about 6 minutes of a 24-minute session
+this way, so its stats page said 17 minutes.
+
+ROOT CAUSE (lib/laev/sync.ex)
+1. read_dir/1 (~line 519) does String.trim(b) on every file it reads for the bundle. That
+   removes the final "\n" from logs.
+2. apply_dir/2 (~line 718) writes rec["data"] back as-is. A pulled ticks/ or watched/ log
+   therefore ends without "\n". Position.record / Stints / Days only append, so the next
+   write fuses onto the last line. (Roki's CLAUDE.md already notes fused watched/*.log
+   entries, "2026-10-22 12026-10-22 2", which is the same cause.)
+
+FIX
+1. In apply_dir/2, for the collections that are line logs (ticks, watched, and any other
+   append-only .log), write the data with exactly one trailing "\n" when it is non-empty
+   and doesn't end with one. Leave single-record files (positions, played, dated, holds,
+   tracks) byte-for-byte as they are.
+2. Better still: stop trimming in read_dir/1 for log files, so a round trip is lossless.
+   Check that the reconcile/diff against the sidecar (sync.json) still treats "same
+   content" as equal, so this doesn't make every log look changed once.
+3. Make the readers survive logs already damaged by earlier versions:
+   - Laev.Stints.read_log/1 (lib/laev/stints.ex, ~line 170) and Laev.Days: split a line
+     that contains more than one entry. In a ticks line the epoch is always exactly 10
+     digits starting 1[6-9]. When digits run straight from the previous entry's seconds
+     into the next entry's epoch, the last 10 digits before a key token are the epoch,
+     and whatever precedes them is the previous entry's seconds. Same idea for the days
+     log: a date "YYYY-MM-DD" begins a new entry. Skip anything still unparsable, as now.
+   - Only split when the result is unambiguous; otherwise keep today's skip behaviour.
+4. Optional: a `laev doctor` check (or `laev repair-logs`) that rewrites damaged logs
+   with the fused lines split, after backing the file up as *.bak.
+
+TESTS (please add)
+- Sync round trip: write ticks/x.log "1793958841 movie-1 5\n", push, pull into an empty
+  dir, then append one tick via the normal API; the file has two parseable lines.
+- Same for watched/*.log.
+- Positions and other single-record files are unchanged byte for byte after a pull.
+- Reader: the two glued examples above parse into the right entries and seconds; a
+  normal file parses as before; a garbage line is still skipped.
+- Stints.sessions over a log with a glued line includes the dropped seconds.
+
+RELEASE
+Patch release, with a CHANGELOG entry saying that logs damaged by 0.1.50-0.1.52 and
+earlier are read correctly again and new syncs no longer damage them.</code></pre>
+  </div>
+
+  <h2>What I saw</h2>
+  <ul>
+    <li>Series finished on the site: all 8 episodes seen, but only the last episode has ticks (the others weren't played on the site).</li>
+    <li>That episode's readable ticks add up to 1,059 s (17.6 min), which is the number on the stats page. Two glued lines hid another 4 s and 351 s.</li>
+    <li>The glued lines sit exactly where a different tick followed one written before a sync. The device log had no final newline at that point.</li>
+  </ul>
+
+  <h2>Where in the code</h2>
+  <pre><code>lib/laev/sync.ex   read_dir/1   ~519   File.read |&gt; String.trim(b)
+lib/laev/sync.ex   apply_dir/2  ~718   File.write(path, to_string(rec["data"]))
+lib/laev/stints.ex read_log/1   ~170   String.split("\n", trim: true) |&gt; flat_map(&amp;parse/1)</code></pre>
+
+  <h2>Not part of this task</h2>
+  <p class="mut">Episodes that were marked watched without being played contribute no minutes by design: the stats count time actually played. Repairing one account's existing logs is a separate step on roki.ee's side.</p>
+</main>
+<script>
+  document.getElementById("copy").addEventListener("click", async function () {
+    var text = document.getElementById("task").innerText, b = this
+    try { await navigator.clipboard.writeText(text); b.textContent = "Copied" }
+    catch (e) { var r = document.createRange(); r.selectNodeContents(document.getElementById("task")); var s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Select and copy" }
+    setTimeout(function () { b.textContent = "Copy the task" }, 1800)
+  })
+</script>
+</body>
+</html>
