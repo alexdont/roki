@@ -457,14 +457,14 @@ the watch page, and on the sources page header and external panel.
 **Finding and starting a release** (sources page / watch page). The probe round streams what it is doing: `{:candidates, token,
 [Checks.summary]}` then `{:checked, token, hash, :ok | {:bad, why}}` per release (`Roki.Watch.Checks`), drawn by
 `WatchComponents.checks_list` — a spinner, a green tick, or grey with the reason — in the auto-start pop-up, under the
-progress line, and on the watch page's loading card. Releases are probed **four at a time** and the round does not
-wait for the slowest: at five that play (or three seconds after the first), `await_probes` stops, and the ones not
+progress line, and on the watch page's loading card. Releases are probed **three at a time** and the round does not
+wait for the slowest: at three that play (or four seconds after the first), `await_probes` stops, and the ones not
 answered go back to `rest` ("Load more", shown as "slow, set aside"). In the browser's mode the chosen release is
 **prepared on the sources page** (`Watch.start` in `:prestart`, a "Getting the video ready" pop-up) *before* the
 watch page opens, which then reuses the running remux and plays at once — one wait, not two. A failure to prepare
 stays on the sources page with a message and the list.
 
-**Hedged finding (2026-11-06).** When a release is being found to start playing (`quick?` in `Resolver.probe_page`), the page is raced the way laev's `resolve_best` does it (`hedged/4`, `await_hedged/6`): browser-ready releases (1080p, not heavy) first, one at a time, a second beside it only if the first has not answered in 2.5 s, three at most, the first that plays wins; the rest go back to "Load more" ("not needed"). `resolve_best` is public but takes a `resolver:` function, which is how each release is still asked with its own numbering and checked (`scene_retry`, re-encode). A list to choose from (the sources page) still checks the page four at a time. Not exercised by the tests (needs a debrid account).
+**Hedged finding (2026-11-06).** When a release is being found to start playing (`quick?` in `Resolver.probe_page`), the page is raced the way laev's `resolve_best` does it (`hedged/4`, `await_hedged/6`): browser-ready releases (1080p, not heavy) first, one at a time, a second beside it only if the first has not answered in 2.5 s, three at most, the first that plays wins; the rest go back to "Load more" ("not needed"). `resolve_best` is public but takes a `resolver:` function, which is how each release is still asked with its own numbering and checked (`scene_retry`, re-encode). A list to choose from (the sources page) asks three at a time in laev's order and stops at three that play (or four seconds after the first), the rest left for "Load more". Not exercised by the tests (needs a debrid account).
 
 **Completed is the person's call for anything recent** (`Watch.settled?/1`: TMDB Ended/Canceled and nothing aired for two years). Finishing a show, marking a season or rating it only completes it when settled; otherwise every episode is marked and it is *caught up*. Anime was completed the moment an MAL entry's last episode was marked (`follow_episodes`), which made a one-season anime "Completed". The button under the poster still completes (and marks every episode); pressing it again only takes the mark off the show — the episodes stay watched (`Watch.toggle_completed/4`).
 

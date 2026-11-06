@@ -374,6 +374,11 @@ defmodule Roki.Watch.Resolver do
 
   # A release that never answers (a host that hangs) must not hold the page for ever: after this
   # long the round ends with what it has, and the ones still silent are given up on.
+  # A list to choose from asks three at a time, in laev's order, and stops once three play (or four
+  # seconds after the first): the releases not yet asked stay for "Load more", not eight torrents
+  # added to the debrid account to show a page.
+  @list_in_flight 3
+
   @deadline_ms 45_000
   @quick_deadline_ms 30_000
 
@@ -440,7 +445,7 @@ defmodule Roki.Watch.Resolver do
          ), true}
       else
         opts =
-          [notify: notify, ctx: ctx, concurrency: 4] ++
+          [notify: notify, ctx: ctx, concurrency: @list_in_flight] ++
             if(ctx.anime, do: [], else: [season: ctx.season])
 
         {Task.async(
@@ -665,8 +670,8 @@ defmodule Roki.Watch.Resolver do
   # Once enough releases play — five, or at least one for three seconds — the slowest ones are not
   # waited for: they go back to the unchecked list ("Load more"), and the answer comes at once.
   # (Eight releases used to take as long as the slowest of them, often twice the rest.)
-  @enough 8
-  @grace_ms 6_000
+  @enough 3
+  @grace_ms 4_000
   # Starting to play wants one release that works, not a list: it stops sooner.
   @quick_enough 4
   @quick_grace_ms 1_000
