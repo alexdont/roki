@@ -91,7 +91,8 @@ async function libraryState(key) {
 
 const setSaved = (li, saved) => {
   // The bookmark on the poster itself, drawn or taken away now.
-  setSavedMark(li.querySelector("a.poster-card [data-peek]"), saved)
+  // On the Saved list itself every title is saved, so it wears no bookmark.
+  if (!li.querySelector("[phx-click=unsave]")) setSavedMark(li.querySelector("a.poster-card [data-peek]"), saved)
   const btn = li.querySelector("[data-card-save]")
   if (!btn) return
   btn.querySelector("[data-off]")?.classList.toggle("hidden", !!saved)
@@ -360,6 +361,9 @@ export const cardMethods = {
     // else the poster itself.
     this.panelHost = li.querySelector("[data-card-box]") || li
     this.panelHost.appendChild(p)
+    // Drawn as the page knows it from the first frame (the Saved list: always saved), so the
+    // plus does not turn into a tick a moment later; the server's answer then confirms it.
+    setSaved(li, d.saved === "true" || !!li.querySelector("[phx-click=unsave]"))
     // Laid out once before the poster is marked open, so the card fades in from nothing instead
     // of appearing at once (a transition needs a starting style to run from).
     void p.offsetWidth

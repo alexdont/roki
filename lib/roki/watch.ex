@@ -566,6 +566,7 @@ defmodule Roki.Watch do
 
     # Saving is something to tell the feed about; taking it off is not.
     if result == :added, do: Roki.Activity.saved(uuid, title)
+    if result == :removed, do: Roki.Activity.retract(uuid, title.type, title.id, ["saved"])
 
     library_changed(uuid)
     result
@@ -574,6 +575,7 @@ defmodule Roki.Watch do
   @doc "Take a title off the saved-for-later list."
   def unsave(uuid, type, id) do
     Roki.Laev.run(uuid, fn -> Laev.Watchlist.remove(type, id) end)
+    if type in ["movie", "tv"], do: Roki.Activity.retract(uuid, type, id, ["saved"])
     library_changed(uuid)
   end
 
@@ -620,6 +622,16 @@ defmodule Roki.Watch do
       scrobble(uuid, [ctx])
       # One film or episode marked on its own (after an external player, say) is a finish.
       Roki.Activity.record(uuid, ctx, "finished")
+    else
+      # Unmarked: it was not watched after all, so the feed should not say it was.
+      Roki.Activity.retract(
+        uuid,
+        title.type,
+        title.id,
+        ["finished", "backdated"],
+        season,
+        episode
+      )
     end
 
     if title.type == "tv", do: follow_episodes(uuid, title, [ctx], watched?)
@@ -644,7 +656,13 @@ defmodule Roki.Watch do
         end
       end)
 
-    if watched?, do: scrobble(uuid, ctxs)
+    if watched? do
+      scrobble(uuid, ctxs)
+    else
+      for {s, e} <- pairs,
+          do: Roki.Activity.retract(uuid, title.type, title.id, ["finished", "backdated"], s, e)
+    end
+
     if title.type == "tv", do: follow_episodes(uuid, title, ctxs, watched?)
     if watched? and title.type == "tv", do: Roki.Link.mirror(uuid, title.id, pairs, opts)
 

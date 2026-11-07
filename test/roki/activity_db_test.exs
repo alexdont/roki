@@ -32,6 +32,17 @@ defmodule Roki.ActivityDbTest do
     assert [%{kind: "backdated", title: "Film 2"}] = Activity.recent(10, users: [u.uuid])
   end
 
+  test "unmarking takes the finish out of the feed, and only that title's" do
+    u = register("activ9")
+    Activity.insert_now(u.uuid, film(8), "finished")
+    Activity.insert_now(u.uuid, film(9), "finished")
+    Activity.insert_now(u.uuid, film(8), "saved")
+
+    assert Activity.retract(u.uuid, "movie", 8, ["finished", "backdated"]) == 1
+    kinds = Activity.recent(10, users: [u.uuid]) |> Enum.map(&{&1.title, &1.kind}) |> Enum.sort()
+    assert kinds == [{"Film 8", "saved"}, {"Film 9", "finished"}]
+  end
+
   test "the test account records nothing" do
     u = register("test")
     assert Activity.backdated(u.uuid, [film(3)], ~D[2012-01-01]) == 0

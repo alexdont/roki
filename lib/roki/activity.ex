@@ -207,6 +207,33 @@ defmodule Roki.Activity do
     :ok
   end
 
+  @doc """
+  Take back what an undone action put in the feed: a film or episode unmarked loses its `finished`
+  and `backdated` entries, a title taken off the Saved list its `saved` one. `season`/`episode`
+  narrow it to one episode; with both `nil` for a series, every episode of it goes. Open pages are
+  told when something went.
+  """
+  def retract(uuid, type, tmdb_id, kinds, season \\ nil, episode \\ nil)
+      when is_binary(uuid) and type in ["movie", "tv"] and is_integer(tmdb_id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{num_rows: n} =
+      Repo.query!(
+        """
+        delete from roki_activity
+         where user_uuid = $1 and type = $2 and tmdb_id = $3 and kind = any($4)
+           and ($5::int is null or season = $5)
+           and ($6::int is null or episode = $6)
+        """,
+        [bin, type, tmdb_id, kinds, season, episode]
+      )
+
+    if n > 0, do: Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
+    n
+  rescue
+    _ -> 0
+  end
+
   @doc "Is this account one whose doings are not shown to anyone (the test account)?"
   def silent?(uuid) when is_binary(uuid) do
     Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [

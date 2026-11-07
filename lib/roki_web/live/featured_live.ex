@@ -578,9 +578,10 @@ defmodule RokiWeb.FeaturedLive do
           Couldn't reach TMDB just now. Try again in a minute.
         </p>
       </div>
-      <%!-- Last, and only once the shelves above have settled, so it can never push anything down. --%>
+      <%!-- Always drawn (the lists are static data, their posters arrive later): while the shelves
+            above are still skeletons it holds the room, so a quick scroll never meets the end of the
+            page and then finds more. --%>
       <.lists_row
-        :if={not @loading?}
         lists={Enum.take(@lists, @lists_shown)}
         total={length(@lists)}
         more?={@lists_shown < length(@lists)}
@@ -1136,6 +1137,7 @@ defmodule RokiWeb.FeaturedLive do
       data-grid-card
       data-key={@key}
       data-signed={to_string(@signed_in?)}
+      data-saved={to_string(@item[:saved] == true)}
       data-no-card={@no_card? && ""}
       data-keep-colour={@keep_colour? && ""}
       data-title={@item.title}
@@ -1201,6 +1203,7 @@ defmodule RokiWeb.FeaturedLive do
       data-card
       data-key={@key}
       data-signed={to_string(@signed_in?)}
+      data-saved={to_string(@item[:saved] == true)}
       data-title={@item.title}
       data-year={@item[:year]}
       data-vote={@vote}
