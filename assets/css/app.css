@@ -1447,3 +1447,12 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
 .study-immersive[data-look="sleek"] .study-svc-mini { display: inline-flex; flex: none; color: rgb(255 255 255 / 0.55); }
 .study-immersive[data-look="sleek"] .study-svc-mini:hover { color: #fff; background: rgb(255 255 255 / 0.12); }
 .study-immersive[data-look="sleek"] [data-role="subs-off"][hidden] ~ .study-svc-mini { margin-left: auto; }
+
+/* The invisible strip round the timeline that takes the pointer (transport.js): pointing anywhere in
+   it swells the hairline rail, pressing in it seeks. Away from it, the rail is the fine line. */
+.study-seek-zone { position: absolute; z-index: 2; cursor: pointer; touch-action: none; }
+.study-immersive[data-look="sleek"] .study-timeline[data-near] .study-seek { height: 0.45rem; }
+
+/* How much is loaded ahead, above the current time. */
+.study-ahead { position: absolute; left: 0.2rem; bottom: 100%; z-index: 1; font-size: 0.72rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; color: rgb(255 255 255 / 0.62); pointer-events: none; font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; text-shadow: 0 1px 3px rgb(0 0 0 / 0.6); }
+.study-ahead[hidden] { display: none; }

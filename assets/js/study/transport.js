@@ -30,6 +30,14 @@ export function bindTransport(root, video, stage, study) {
   // are in, on the film's clock (`abs()` adds the shift of a stream begun part-way through), as
   // `--b` on the bar, which paints it lighter than what is still to load. Nothing when the time is
   // in no buffered range (a seek still reading) or the length is unknown.
+  // How much is loaded ahead, written above the current time ("+42s", "+1m 05s"): enough to tell
+  // whether the picture will run on without a stop.
+  const ahead = document.createElement("span")
+  ahead.className = "study-ahead"
+  ahead.title = "Loaded ahead of where you are"
+  ahead.hidden = true
+  seek.parentElement.append(ahead)
+  const aheadText = (secs) => (secs < 60 ? `+${secs}s` : `+${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`)
   const showBuffered = (total = duration()) => {
     const b = video.buffered
     const t = video.currentTime
@@ -40,6 +48,9 @@ export function bindTransport(root, video, stage, study) {
       }
     }
     paint2(seek, total > 0 ? end / total : 0)
+    const secs = end > 0 ? Math.floor(end - (study.abs() || 0)) : 0
+    ahead.hidden = !(total > 0 && secs >= 1)
+    if (!ahead.hidden) ahead.textContent = aheadText(secs)
   }
   const showTime = () => {
     const total = duration()
@@ -110,6 +121,15 @@ export function bindTransport(root, video, stage, study) {
     toggle()
   })
   video.addEventListener("dblclick", () => $("[data-role=fullscreen]")?.click())
+  // A right click on the picture plays or pauses (not the browser's menu; not over the bar, a menu,
+  // a word's card or a button, and only where there is a mouse: a long press on a phone is not it).
+  stage.addEventListener("contextmenu", (e) => {
+    if (!window.matchMedia("(pointer: fine)").matches) return
+    if (e.target.closest(".study-controls, .study-pop, .study-tip, .study-close, button, a, input")) return
+    e.preventDefault()
+    toggle()
+    root.dispatchEvent(new CustomEvent("roki:wake"))
+  })
   for (const ev of ["play", "pause", "ended"]) video.addEventListener(ev, showPlaying)
   for (const ev of ["timeupdate", "durationchange", "loadedmetadata", "seeked"]) video.addEventListener(ev, showTime)
   // Loading goes on while paused, when no time updates come.
@@ -128,11 +148,11 @@ export function bindTransport(root, video, stage, study) {
   seek.parentElement.append(clip, hover)
   const hoverTime = hover.firstChild
   const mark = clip.firstChild
-  seek.addEventListener("pointermove", (e) => {
+  const showHover = (clientX, pointerType) => {
     const total = duration()
-    if (!total || e.pointerType === "touch") return
+    if (!total || pointerType === "touch") return
     const box = seek.getBoundingClientRect()
-    const x = Math.max(0, Math.min(box.width, e.clientX - box.left))
+    const x = Math.max(0, Math.min(box.width, clientX - box.left))
     // Placed from the bar's own box, so it sits on the bar whatever the padding around it.
     const row = seek.parentElement.getBoundingClientRect()
     hover.style.left = `${x + (box.left - row.left)}px`
@@ -143,8 +163,61 @@ export function bindTransport(root, video, stage, study) {
     clip.hidden = false
     hoverTime.textContent = formatTime((x / box.width) * total, total)
     hover.hidden = false
+  }
+  const hideHover = () => { hover.hidden = true; clip.hidden = true }
+  seek.addEventListener("pointermove", (e) => showHover(e.clientX, e.pointerType))
+  seek.addEventListener("pointerleave", hideHover)
+
+  // A hit zone round the rail: the rail itself is a hairline in the sleek look, and to seek you had
+  // to land on it. The zone is a taller, invisible strip laid over it. Pointing anywhere in it
+  // swells the rail (`data-near` on the row, which the sleek CSS reads), and pressing in it seeks
+  // and drags, exactly as pressing on the rail does (the input events it sends are the ones the
+  // rail's own would be). The input stays under it for the keyboard and for screen readers.
+  const row = seek.parentElement
+  const zone = document.createElement("div")
+  zone.className = "study-seek-zone"
+  zone.setAttribute("aria-hidden", "true")
+  row.append(zone)
+  const placeZone = () => {
+    const box = seek.getBoundingClientRect()
+    const r = row.getBoundingClientRect()
+    const h = Math.max(box.height, 36)
+    Object.assign(zone.style, {
+      left: `${box.left - r.left}px`, width: `${box.width}px`,
+      top: `${box.top - r.top + box.height / 2 - h / 2}px`, height: `${h}px`,
+    })
+  }
+  if (window.ResizeObserver) new ResizeObserver(placeZone).observe(seek)
+  video.addEventListener("loadedmetadata", placeZone)
+  placeZone()
+  const seekTo = (clientX) => {
+    const box = seek.getBoundingClientRect()
+    const f = box.width > 0 ? Math.max(0, Math.min(1, (clientX - box.left) / box.width)) : 0
+    seek.value = Math.round(f * 1000)
+    seek.dispatchEvent(new Event("input", {bubbles: true}))
+  }
+  let pressed = false
+  zone.addEventListener("pointerenter", () => { row.dataset.near = "" })
+  zone.addEventListener("pointerleave", () => { if (!pressed) { delete row.dataset.near; hideHover() } })
+  zone.addEventListener("pointerdown", (e) => {
+    if (seek.disabled || e.button > 0) return
+    pressed = true
+    row.dataset.near = ""
+    zone.setPointerCapture(e.pointerId)
+    seekTo(e.clientX)
   })
-  seek.addEventListener("pointerleave", () => { hover.hidden = true; clip.hidden = true })
+  zone.addEventListener("pointermove", (e) => {
+    if (pressed) seekTo(e.clientX)
+    showHover(e.clientX, e.pointerType)
+  })
+  const release = (e) => {
+    if (!pressed) return
+    pressed = false
+    seek.dispatchEvent(new Event("change", {bubbles: true}))
+    if (!zone.matches(":hover")) { delete row.dataset.near; hideHover() }
+  }
+  zone.addEventListener("pointerup", release)
+  zone.addEventListener("pointercancel", release)
 
   seek.addEventListener("input", () => {
     dragging = true
