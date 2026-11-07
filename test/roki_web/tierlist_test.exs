@@ -57,6 +57,10 @@ defmodule RokiWeb.TierlistTest do
     assert Tiers.tier(10.0) == "s"
     assert Tiers.tier(9.0) == "a"
     assert Tiers.tier(8.4) == "b"
+    assert Tiers.tier(8.5) == "b"
+    assert Tiers.tier(9.5) == "a"
+    assert Tiers.tier(5.5) == "e"
+    assert Tiers.tier(6.5) == "d"
     assert Tiers.tier(5.0) == "e"
     assert Tiers.tier(nil) == nil
 

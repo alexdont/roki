@@ -19,13 +19,17 @@ defmodule Roki.Tiers do
   @doc "The score a tier stands for, or nil for the tiers that are not a rating."
   def score(tier), do: MAL.tier_score(tier)
 
-  @doc "The tier a score belongs in."
+  @doc """
+  The tier a score belongs in. A half score is rounded *down*: 8.5 is a B, with the 8s, not an A —
+  if it were good enough for the 9s it would have been given a 9. (`board/1` still puts it above
+  the plain 8s inside the tier.)
+  """
   def tier(nil), do: nil
-  def tier(score) when score >= 9.5, do: "s"
-  def tier(score) when score >= 8.5, do: "a"
-  def tier(score) when score >= 7.5, do: "b"
-  def tier(score) when score >= 6.5, do: "c"
-  def tier(score) when score >= 5.5, do: "d"
+  def tier(score) when score >= 10, do: "s"
+  def tier(score) when score >= 9, do: "a"
+  def tier(score) when score >= 8, do: "b"
+  def tier(score) when score >= 7, do: "c"
+  def tier(score) when score >= 6, do: "d"
   def tier(score) when score > 0, do: "e"
   def tier(_), do: nil
 
@@ -140,12 +144,20 @@ defmodule Roki.Tiers do
           key: key,
           key_string: "#{elem(key, 0)}:#{elem(key, 1)}",
           tier: saved_tier || from_rating || "pool",
+          rating: ratings[key] || ratings[legacy],
           placed?: saved_tier == nil and from_rating != nil,
           mode: mode_of(i)
         })
       end
 
-    {Enum.group_by(items, & &1.tier), Enum.filter(items, & &1.placed?)}
+    # Inside a tier the better-rated come first, so an 8.5 sits above the 8s (the sort is stable:
+    # the unrated, and those with the same score, keep their order).
+    buckets =
+      items
+      |> Enum.group_by(& &1.tier)
+      |> Map.new(fn {tier, list} -> {tier, Enum.sort_by(list, &(-(&1.rating || 0)))} end)
+
+    {buckets, Enum.filter(items, & &1.placed?)}
   end
 
   # A season of an anime is its MyAnimeList entry: it is rated there, one score to a season, and

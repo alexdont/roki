@@ -33,6 +33,26 @@ defmodule RokiWeb.TitleLive do
     end
   end
 
+  # The heading's picture: known (a url, or nil for none), or `:loading` — drawn as a skeleton for a
+  # moment (`@logo_wait_ms`) instead of the plain name that would then be swapped for it.
+  @logo_wait_ms 2_500
+
+  defp initial_logo(type, id, uuid) do
+    case Roki.TitleLogo.peek(type, id) do
+      {:ok, url} -> url
+      :miss -> if Roki.TitleLogo.possible?(uuid), do: :loading
+    end
+  end
+
+  defp start_logo(socket, title, uuid) do
+    if socket.assigns.logo == :loading do
+      Process.send_after(self(), :logo_timeout, @logo_wait_ms)
+      start_async(socket, :logo, fn -> Roki.TitleLogo.for_title(title.type, title.id, uuid) end)
+    else
+      socket
+    end
+  end
+
   defp init(socket, type, id) do
     scope = socket.assigns[:phoenix_kit_current_scope]
     uuid = if scope && Scope.authenticated?(scope), do: Scope.user_uuid(scope)
@@ -51,6 +71,7 @@ defmodule RokiWeb.TitleLive do
         link_state: :none,
         trailer: nil,
         credits: Roki.Credits.empty(),
+        logo: initial_logo(type, id, uuid),
         ost: nil,
         ost_album: nil,
         ost_all?: false,
@@ -574,6 +595,7 @@ defmodule RokiWeb.TitleLive do
      |> start_async(:study, fn -> if uuid, do: study_choice(uuid, title, sections) end)
      |> start_async(:trailer, fn -> Roki.Trailers.key(title.type, title.id, uuid) end)
      |> start_async(:credits, fn -> Roki.Credits.for_title(title.type, title.id, uuid) end)
+     |> start_logo(title, uuid)
      |> start_async(:soundtrack, fn ->
        Roki.Soundtrack.for_title(title, mal_sections(uuid, title, sections))
      end)
@@ -595,6 +617,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :credits, credits)}
 
   def handle_async(:credits, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:logo, {:ok, url}, socket) when is_binary(url),
+    do: {:noreply, assign(socket, :logo, url)}
+
+  def handle_async(:logo, _other, socket), do: {:noreply, assign(socket, :logo, nil)}
 
   def handle_async(:soundtrack, {:ok, %{albums: albums} = ost}, socket),
     do:
@@ -697,6 +724,12 @@ defmodule RokiWeb.TitleLive do
   # The link panel (RokiWeb.LinkProgress), and marks carried in from a friend.
   @impl true
   def handle_info({:link_solo, solo?}, socket), do: {:noreply, assign(socket, :solo?, solo?)}
+  # No logo in time: the plain name, for good.
+  def handle_info(:logo_timeout, %{assigns: %{logo: :loading}} = socket),
+    do: {:noreply, assign(socket, :logo, nil)}
+
+  def handle_info(:logo_timeout, socket), do: {:noreply, socket}
+
   def handle_info(:link_reload, socket), do: {:noreply, reload_marks(socket)}
 
   def handle_info({:link_state, state}, socket),
@@ -812,6 +845,7 @@ defmodule RokiWeb.TitleLive do
               mal={@rate_mal}
               link_state={@link_state}
               trailer={@trailer}
+              logo={@logo}
               study={@study}
               rating={@rating}
               title={@title}
@@ -1102,6 +1136,7 @@ defmodule RokiWeb.TitleLive do
   attr :mal, :any, default: nil
   attr :link_state, :any, default: :none
   attr :trailer, :any, default: nil
+  attr :logo, :any, default: nil
   attr :study, :map, default: nil
 
   # The title at the top of the page on a wide screen. The backdrop runs edge to edge under the
@@ -1168,8 +1203,26 @@ defmodule RokiWeb.TitleLive do
         class="relative z-10 flex max-w-4xl flex-col gap-3 px-4 pb-7 pt-32 sm:px-6 lg:gap-4 lg:px-12 lg:pb-14 xl:px-16"
       >
         <p class="text-xs font-semibold uppercase tracking-[0.25em] text-white/70">{@kind}</p>
-        <h1 class="text-4xl font-bold leading-[1.04] tracking-tight drop-shadow-lg sm:text-5xl xl:text-7xl">
-          {@title.title}
+        <h1 class={[
+          "font-bold leading-[1.04] tracking-tight drop-shadow-lg",
+          is_nil(@logo) && "text-4xl sm:text-5xl xl:text-7xl"
+        ]}>
+          <%!-- The title as its makers drew it, when TMDB has the picture; the name stays for
+                screen readers and search. --%>
+          <span
+            :if={@logo == :loading}
+            class="skeleton block h-14 w-64 max-w-[80vw] rounded-lg sm:h-20 sm:w-96 xl:h-28"
+            role="status"
+          >
+            <span class="sr-only">{@title.title}</span>
+          </span>
+          <img
+            :if={is_binary(@logo)}
+            src={@logo}
+            alt={@title.title}
+            class="max-h-24 w-auto max-w-[min(80vw,28rem)] object-contain object-left drop-shadow-[0_2px_12px_rgb(0_0_0/0.55)] sm:max-h-32 xl:max-h-40 xl:max-w-[36rem]"
+          />
+          <span :if={is_nil(@logo)}>{@title.title}</span>
         </h1>
 
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/85">
