@@ -56,6 +56,7 @@ defmodule RokiWeb.WatchLive do
           nuvio_tried: [],
           torrent_forced: params["src"] == "torrent" or params["study"] == "1",
           uuid: uuid,
+          look: if(uuid, do: Roki.Laev.web_settings(uuid)["player_look"], else: "sleek"),
           linked?: uuid != nil and Roki.Laev.connected?(uuid),
           title: nil,
           title_error: nil,
@@ -1562,6 +1563,7 @@ defmodule RokiWeb.WatchLive do
       player={@player}
       progress?={true}
       immersive?={true}
+      look={@look}
       study?={@study != nil}
       episodes={if is_list(@episodes), do: @episodes, else: []}
       current={@episode}

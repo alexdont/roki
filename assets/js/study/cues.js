@@ -77,9 +77,13 @@ export function liveIndexes(cues, idx, t, lookback = 12) {
 }
 
 // 83 → "1:23", 3725 → "1:02:05".
-export function formatTime(seconds) {
+// `span` is the length of what is being timed: when it runs to an hour or more, every time is
+// written with hours (0:01:37, not 1:37), so the clock at each end of the timeline is as wide as
+// the other.
+export function formatTime(seconds, span = 0) {
   const s = Math.max(0, Math.floor(seconds))
   const h = Math.floor(s / 3600)
+  if (h === 0 && span >= 3600) return `0:${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`
   const m = Math.floor((s % 3600) / 60)
   const sec = String(s % 60).padStart(2, "0")
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`

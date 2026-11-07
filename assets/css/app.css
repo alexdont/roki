@@ -1334,3 +1334,116 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
 .study-immersive .study-line { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; font-weight: 500; letter-spacing: 0.01em; }
 .study-immersive .study-overlay .study-trans { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 400; opacity: 0.72; }
 .study-immersive .study-word:hover, .study-immersive .study-word[data-on] { background: rgb(255 255 255 / 0.14); }
+
+/* ── The sleek look of the watch player's bar (account setting "Player look", `data-look="sleek"`).
+   Only skin: the same controls, the same hooks, the same behaviour as the classic bar. Rounded pills
+   instead of blocks, no box round anything, a soft shade instead of a black strip, the study tools
+   (episode, subtitles, lines) outlined, the menus frosted glass, the orange the only accent. ── */
+.study-immersive[data-look="sleek"] .study-controls {
+  background: linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0.34) 48%, transparent);
+  padding-top: 2.6rem;
+}
+.study-immersive[data-look="sleek"] .study-bar2 .btn,
+.study-immersive[data-look="sleek"] .study-bar2 a.btn {
+  min-height: 0; height: 2.5rem; border: 0; border-radius: 9999px; background: transparent; color: #fff; box-shadow: none;
+  font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; font-weight: 600; font-size: 0.85rem;
+  transition: background-color 0.15s, transform 0.12s;
+}
+.study-immersive[data-look="sleek"] .study-bar2 .btn.btn-square { width: 2.5rem; padding: 0; }
+.study-immersive[data-look="sleek"] .study-bar2 .btn:hover { background: rgb(255 255 255 / 0.16); }
+.study-immersive[data-look="sleek"] .study-bar2 .btn:active { transform: scale(0.94); }
+/* The study tools wear a thin outline, so they read as the part of the bar that is for learning. */
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="ep-btn"] {
+  height: 2.15rem; padding-inline: 0.9rem; border: 1px solid rgb(255 255 255 / 0.26);
+}
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="ep-btn"]:hover { border-color: rgb(255 255 255 / 0.5); }
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="lines-btn"] { width: 2.5rem; padding: 0; justify-content: center; }
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="lines-btn"] > span:not([class*="hero-"]) { display: none; }
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="lines-btn"][aria-pressed="true"] { color: var(--color-primary); }
+/* Line tools: no box of their own, the orange for what is on. */
+.study-immersive[data-look="sleek"] .study-lines { background: transparent; border: 0; padding: 0; margin-right: 0.2rem; }
+.study-immersive[data-look="sleek"] .study-lines .btn { width: 2.3rem; height: 2.3rem; }
+.study-immersive[data-look="sleek"] .study-lines .btn.is-on { background: transparent !important; color: var(--color-primary) !important; }
+/* The timeline: a finer rail that swells under the pointer. */
+.study-immersive[data-look="sleek"] .study-range { height: 0.25rem; }
+.study-immersive[data-look="sleek"] .study-range:hover { height: 0.42rem; }
+.study-immersive[data-look="sleek"] .study-clock { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; font-size: 0.78rem; color: rgb(255 255 255 / 0.7); }
+/* Menus and cards: frosted glass, the way the site's own cards are. */
+.study-immersive[data-look="sleek"] .study-pop,
+.study-immersive[data-look="sleek"] .study-tip {
+  background: rgb(24 24 28 / 0.82); backdrop-filter: blur(22px) saturate(1.5); -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid rgb(255 255 255 / 0.14); border-radius: 1rem; box-shadow: 0 18px 50px rgb(0 0 0 / 0.55);
+}
+@media (max-width: 1023px) {
+  .study-immersive[data-look="sleek"] .study-pop { border-radius: 1.1rem 1.1rem 0 0; }
+}
+.study-immersive[data-look="sleek"] .study-pop-head { border-bottom-color: rgb(255 255 255 / 0.1); font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; }
+/* The skip pill and the close button: glass, round. */
+.study-immersive[data-look="sleek"] .study-skip {
+  border-radius: 9999px; padding-inline: 1.1rem; background: rgb(20 20 24 / 0.6); backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4); border: 1px solid rgb(255 255 255 / 0.22); font-family: "Outfit", ui-sans-serif, system-ui, sans-serif;
+}
+.study-immersive[data-look="sleek"] .study-skip:hover { background: rgb(255 255 255 / 0.92); color: #000; }
+.study-immersive[data-look="sleek"] .study-close .btn {
+  border-radius: 9999px; background: rgb(20 20 24 / 0.55); color: #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgb(255 255 255 / 0.18); box-shadow: none;
+}
+.study-immersive[data-look="sleek"] .study-close .btn:hover { background: var(--color-primary); color: var(--color-primary-content); filter: none; }
+/* Icons only for the two that have a name in the classic bar (their titles stay for the pointer). */
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="audio-label"],
+.study-immersive[data-look="sleek"] .study-bar2 a.btn > span:not([class*="hero-"]) { display: none; }
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="audio-btn"],
+.study-immersive[data-look="sleek"] .study-bar2 a.btn { width: 2.5rem; padding: 0; justify-content: center; }
+
+/* Sleek: the timeline is one fine rail with the time so far before it and the length after it,
+   beside the bar, not written over it (the clocks are in the row, the rail takes what is left). */
+.study-immersive[data-look="sleek"] .study-timeline { position: relative; display: flex; align-items: center; gap: 0.8rem; padding: 0.3rem 0.2rem 0.2rem; }
+.study-immersive[data-look="sleek"] .study-timeline .study-clock,
+.study-immersive[data-look="sleek"] .study-timeline .study-clock:first-child,
+.study-immersive[data-look="sleek"] .study-timeline .study-clock:last-child {
+  position: static; transform: none; flex: none; min-width: 4ch; padding: 0; font-size: 0.78rem; font-weight: 500; font-variant-numeric: tabular-nums;
+  font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; color: rgb(255 255 255 / 0.72); text-shadow: none; text-align: left; pointer-events: none;
+}
+.study-immersive[data-look="sleek"] .study-timeline .study-clock:last-child { text-align: right; }
+.study-immersive[data-look="sleek"] .study-timeline .study-seek,
+.study-immersive[data-look="sleek"] .study-timeline .study-seek:hover { display: block; flex: 1 1 auto; width: auto; min-width: 0; height: 0.28rem; border-radius: 9999px; transition: height 0.15s; }
+.study-immersive[data-look="sleek"] .study-timeline .study-seek:hover { height: 0.45rem; }
+
+/* Sleek: the list of lines (headed "Subtitles") is frosted glass too, its rows soft pills. */
+.study-immersive[data-look="sleek"] .study-box {
+  background: rgb(16 16 20 / 0.78); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border-color: rgb(255 255 255 / 0.1); box-shadow: none;
+}
+.study-immersive[data-look="sleek"] .study-head { padding: 0.7rem 0.8rem 0.6rem 0.9rem; border-bottom: 0; font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; font-size: 1rem; }
+.study-immersive[data-look="sleek"] .study-head .btn { border-radius: 9999px; }
+.study-immersive[data-look="sleek"] .study-head [data-role="study-quick"] { height: 1.9rem; border: 1px solid rgb(255 255 255 / 0.26); background: transparent; color: #fff; padding-inline: 0.9rem; font-weight: 600; }
+.study-immersive[data-look="sleek"] .study-head [data-role="study-quick"][aria-pressed="true"] { background: var(--color-primary); border-color: transparent; color: var(--color-primary-content); }
+.study-immersive[data-look="sleek"] .study-row { border-radius: 0.85rem; padding: 0.55rem 0.7rem; margin-inline: 0.35rem; }
+.study-immersive[data-look="sleek"] .study-row:hover { background: rgb(255 255 255 / 0.07); }
+.study-immersive[data-look="sleek"] .study-row[data-state="past"] { opacity: 0.4; }
+.study-immersive[data-look="sleek"] .study-row[data-live="true"] { background: rgb(255 255 255 / 0.1); box-shadow: none; }
+.study-immersive[data-look="sleek"] .study-row .study-time { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; }
+.study-immersive[data-look="sleek"] .study-row .study-play { background: rgb(255 255 255 / 0.08); }
+/* Subtitles is a plain icon button like Audio (its languages are in the menu it opens). */
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="subs-label"] { display: none; }
+.study-immersive[data-look="sleek"] .study-bar2 [data-role="subs-btn"] { width: 2.5rem; padding: 0; justify-content: center; }
+/* Sleek, on a screen with a pointer: a menu closes by a click outside it or Escape, so its round
+   close button — and a header row that then holds only the title — are left out. A phone's sheet
+   keeps both (there the button is how you put it away). Subtitles keeps its header while it has
+   "Turn off" to show. */
+@media (min-width: 640px) {
+  .study-immersive[data-look="sleek"] .study-pop-head [data-role="pop-close"] { display: none; }
+  .study-immersive[data-look="sleek"] .study-pop-head:not(:has(> .btn:not([hidden]):not([data-role="pop-close"]))) { display: none; }
+  .study-immersive[data-look="sleek"] .study-pop-head { padding-block: 0.4rem; }
+}
+/* Sleek: a hairline closes the study set (‹ ↻ › ⏸), so it reads as its own group, apart from the
+   buttons beside it. It comes and goes with the group (hidden until study mode is on). */
+.study-immersive[data-look="sleek"] .study-lines { margin-right: 0.5rem; }
+.study-immersive[data-look="sleek"] .study-lines::after { content: ""; flex: none; width: 1px; height: 1.3rem; margin-left: 0.55rem; background: rgb(255 255 255 / 0.25); }
+/* "Subtitle services": the classic menu has its footer button; the sleek one a small + in the
+   header (with a hover note), so it takes no row of its own. */
+.study-svc-mini { display: none; }
+.study-immersive[data-look="sleek"] .study-svc-foot { display: none; }
+.study-immersive[data-look="sleek"] .study-svc-mini { display: inline-flex; flex: none; color: rgb(255 255 255 / 0.55); }
+.study-immersive[data-look="sleek"] .study-svc-mini:hover { color: #fff; background: rgb(255 255 255 / 0.12); }
+.study-immersive[data-look="sleek"] [data-role="subs-off"][hidden] ~ .study-svc-mini { margin-left: auto; }

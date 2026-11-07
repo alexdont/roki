@@ -674,6 +674,7 @@ defmodule RokiWeb.ProfileLive do
                 :for={i <- @favorites[kind]}
                 item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)}
                 kind={kind}
+                keep_colour?
               />
             </ul>
             <p

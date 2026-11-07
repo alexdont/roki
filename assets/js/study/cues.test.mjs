@@ -113,6 +113,9 @@ test("liveIndexes: the spoken line, none in a silence, both when two overlap", (
 })
 
 test("formatTime", () => {
+  assert.equal(formatTime(97, 6480), "0:01:37")
+  assert.equal(formatTime(97, 1200), "1:37")
+  assert.equal(formatTime(3725, 6480), "1:02:05")
   assert.equal(formatTime(0), "0:00")
   assert.equal(formatTime(83.9), "1:23")
   assert.equal(formatTime(3725), "1:02:05")

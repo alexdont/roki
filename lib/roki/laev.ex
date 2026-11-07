@@ -809,6 +809,13 @@ defmodule Roki.Laev do
         "nuvio" => "Nuvio (sandboxed providers)"
       }
     },
+    # How the watch player's bar looks: the original block buttons, or the sleeker pill look
+    # (frosted menus, rounded buttons, outlined study tools). Same controls and behaviour.
+    "player_look" => %{
+      default: "sleek",
+      allowed: ~w(sleek classic),
+      labels: %{"sleek" => "Sleek", "classic" => "Classic"}
+    },
     # How long found sources are kept so the next Play skips the search.
     "sources_cache" => %{
       default: "12",

@@ -35,6 +35,8 @@ defmodule RokiWeb.SettingsLive do
       "Where the sources page searches first, and where Play finds its source by itself. The original collection is the releases your debrid account streams; PenguPlay is plain https streams that need no account; Nuvio runs the providers you choose below. The sources page has a switch to look at any of the three either way.",
     "sources_cache" =>
       "Releases already found and checked are kept this long, so Play starts at once instead of searching again. Retry on a title looks for new ones.",
+    "player_look" =>
+      "How the browser player's controls look. Sleek: rounded buttons, frosted menus, outlined study tools. Classic: the original block buttons. Every control and shortcut is the same in both.",
     "anime_audio" =>
       "For anime. Your language plays the dub when a release has one. Japanese plays the original and looks for subtitles in your language — releases are searched, ranked and started with that in mind. A study session's languages win over this.",
     "browser_work" =>
@@ -53,7 +55,8 @@ defmodule RokiWeb.SettingsLive do
     "anime_audio" => "Anime audio",
     "browser_work" => "Browser player works on",
     "external_app" => "External player app",
-    "sources_cache" => "Keep found sources"
+    "sources_cache" => "Keep found sources",
+    "player_look" => "Player look"
   }
   @labels %{"LAEV_MAX_RESOLUTION" => "Resolution ceiling — external player & terminal app"}
 
@@ -1332,12 +1335,20 @@ defmodule RokiWeb.SettingsLive do
             "anime_audio",
             "browser_work",
             "external_app",
+            "player_look",
             "sources_cache"
           ])
       )
       |> Enum.sort_by(
         &Enum.find_index(
-          ["play_from", "anime_audio", "browser_work", "external_app", "sources_cache"],
+          [
+            "play_from",
+            "anime_audio",
+            "browser_work",
+            "external_app",
+            "player_look",
+            "sources_cache"
+          ],
           fn k ->
             k == elem(&1, 0)
           end

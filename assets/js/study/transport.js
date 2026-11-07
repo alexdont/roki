@@ -44,7 +44,7 @@ export function bindTransport(root, video, stage, study) {
   const showTime = () => {
     const total = duration()
     const now = study.abs() || 0
-    cur.textContent = formatTime(now)
+    cur.textContent = formatTime(now, total)
     dur.textContent = total ? formatTime(total) : "–:––"
     if (!dragging) {
       seek.value = total ? Math.round((now / total) * 1000) : 0
@@ -76,7 +76,7 @@ export function bindTransport(root, video, stage, study) {
     const box = seek.getBoundingClientRect()
     const dpr = window.devicePixelRatio || 1
     const key = on && box.width > 0
-      ? [cues.length, cues[0].start, cues[cues.length - 1].end, study.offset || 0, Math.round(total), Math.round(box.width), Math.round(box.height), dpr].join("|")
+      ? [cues.length, cues[0].start, cues[cues.length - 1].end, study.offset || 0, Math.round(total), Math.round(box.width), Math.round(box.height), dpr, !!seek.closest("[data-look=sleek]")].join("|")
       : "off"
     if (key === talkKey) return
     talkKey = key
@@ -89,8 +89,11 @@ export function bindTransport(root, video, stage, study) {
     const ctx = talk.getContext("2d")
     ctx.clearRect(0, 0, talk.width, talk.height)
     // A strip a little above the bottom edge, so it reads as lines on the bar and not as its border.
-    const h = Math.max(2, Math.round(box.height * 0.16)) * dpr
-    const y = talk.height - h - Math.max(2, Math.round(box.height * 0.14)) * dpr
+    // The sleek bar's rail is hairline-thin: there the marks are a band down its middle, so they
+    // sit the same on it at rest and swollen under the pointer.
+    const sleek = !!seek.closest("[data-look=sleek]")
+    const h = sleek ? Math.max(2 * dpr, Math.round(talk.height * 0.5)) : Math.max(2, Math.round(box.height * 0.16)) * dpr
+    const y = sleek ? Math.round((talk.height - h) / 2) : talk.height - h - Math.max(2, Math.round(box.height * 0.14)) * dpr
     ctx.fillStyle = "rgb(255 255 255 / 0.6)"
     for (const [a, b] of dialogueSpans(cues, total, talk.width, study.offset || 0)) ctx.fillRect(a, y, Math.max(dpr, b - a), h)
   }
@@ -138,7 +141,7 @@ export function bindTransport(root, video, stage, study) {
     Object.assign(clip.style, {left: `${box.left - row.left}px`, top: `${box.top - row.top}px`, width: `${box.width}px`, height: `${box.height}px`})
     mark.style.left = `${x}px`
     clip.hidden = false
-    hoverTime.textContent = formatTime((x / box.width) * total)
+    hoverTime.textContent = formatTime((x / box.width) * total, total)
     hover.hidden = false
   })
   seek.addEventListener("pointerleave", () => { hover.hidden = true; clip.hidden = true })
@@ -147,7 +150,7 @@ export function bindTransport(root, video, stage, study) {
     dragging = true
     const total = duration()
     paint(seek, seek.value / 1000)
-    if (total) cur.textContent = formatTime((seek.value / 1000) * total)
+    if (total) cur.textContent = formatTime((seek.value / 1000) * total, total)
   })
   seek.addEventListener("change", () => {
     dragging = false

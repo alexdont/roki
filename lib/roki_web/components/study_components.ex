@@ -39,6 +39,11 @@ defmodule RokiWeb.StudyComponents do
 
   attr :label, :string, default: nil, doc: "what is playing, in the bar (immersive)"
 
+  attr :look, :string,
+    default: "classic",
+    doc:
+      "the bar's look in the watch player: \"sleek\" or \"classic\" (the account's `player_look`)"
+
   attr :episodes, :list,
     default: [],
     doc: "the season's episodes, `%{number:, name:, aired?:}`, for the episode menu (immersive)"
@@ -83,6 +88,7 @@ defmodule RokiWeb.StudyComponents do
       data-player={@data}
       data-progress={to_string(@progress?)}
       data-immersive={to_string(@immersive?)}
+      data-look={@look}
       data-study={to_string(@study?)}
       data-episodes={@eps_json}
       data-seasons={@seasons_json}
@@ -293,16 +299,6 @@ defmodule RokiWeb.StudyComponents do
                   </.link>
                   <button
                     type="button"
-                    data-role="audio-btn"
-                    class="btn btn-sm gap-1.5"
-                    aria-haspopup="menu"
-                    title="Audio"
-                  >
-                    <.icon name="hero-speaker-wave" class="h-4 w-4 shrink-0" />
-                    <span data-role="audio-label" class="font-semibold">Audio</span>
-                  </button>
-                  <button
-                    type="button"
                     data-role="settings-btn"
                     class="btn btn-sm btn-square"
                     aria-haspopup="menu"
@@ -313,17 +309,51 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                   <button
                     type="button"
+                    data-role="audio-btn"
+                    class="btn btn-sm gap-1.5"
+                    aria-haspopup="menu"
+                    title="Audio"
+                  >
+                    <svg
+                      class="h-4 w-4 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 4v16M8 8v8M4 10.5v3M16 7v10M20 10v4" />
+                    </svg>
+                    <span data-role="audio-label" class="font-semibold">Audio</span>
+                  </button>
+                  <button
+                    type="button"
                     data-role="subs-btn"
                     class="btn btn-sm gap-1.5"
                     aria-haspopup="menu"
+                    title="Subtitles"
                   >
-                    <.icon name="hero-chat-bubble-bottom-center-text" class="h-4 w-4 shrink-0" />
+                    <svg
+                      class="h-4 w-4 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect x="2.5" y="5" width="19" height="14" rx="3" />
+                      <path d="M10.4 9.9A2.4 2.4 0 1 0 10.4 14.1M17.9 9.9A2.4 2.4 0 1 0 17.9 14.1" />
+                    </svg>
                     <span data-role="subs-label" class="max-w-[9rem] truncate">Subtitles</span>
                   </button>
                   <button
                     type="button"
                     data-role="lines-btn"
                     class="btn btn-sm gap-1.5"
+                    title="Lines"
                     aria-pressed="false"
                   >
                     <.icon name="hero-queue-list" class="h-4 w-4" />
@@ -386,7 +416,19 @@ defmodule RokiWeb.StudyComponents do
                   class="btn btn-sm gap-1.5"
                   aria-haspopup="menu"
                 >
-                  <.icon name="hero-chat-bubble-bottom-center-text" class="h-4 w-4 shrink-0" />
+                  <svg
+                    class="h-4 w-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="2.5" y="5" width="19" height="14" rx="3" />
+                    <path d="M10.4 9.9A2.4 2.4 0 1 0 10.4 14.1M17.9 9.9A2.4 2.4 0 1 0 17.9 14.1" />
+                  </svg>
                   <span data-role="subs-label" class="max-w-[9rem] truncate sm:max-w-[14rem]">Subtitles</span>
                   <.icon name="hero-chevron-down-micro" class="h-4 w-4 shrink-0 opacity-60" />
                 </button>
@@ -398,7 +440,17 @@ defmodule RokiWeb.StudyComponents do
                   aria-haspopup="menu"
                   title="Audio track"
                 >
-                  <.icon name="hero-speaker-wave" class="h-4 w-4 shrink-0" />
+                  <svg
+                    class="h-4 w-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 4v16M8 8v8M4 10.5v3M16 7v10M20 10v4" />
+                  </svg>
                   <span data-role="audio-label" class="font-semibold">AUDIO</span>
                 </button>
                 <button
@@ -537,6 +589,17 @@ defmodule RokiWeb.StudyComponents do
         <button type="button" data-role="subs-off" class="btn btn-xs btn-ghost ml-auto mr-1">
           Turn off
         </button>
+        <%!-- The sleek look's discreet way to the subtitle services (its footer link is hidden). --%>
+        <a
+          href="/account/services#connections"
+          target="_blank"
+          rel="noopener"
+          class="study-svc-mini btn btn-xs btn-ghost btn-circle"
+          title="Add subtitles from OpenSubtitles or Jimaku"
+          aria-label="Subtitle services"
+        >
+          <.icon name="hero-plus-micro" class="h-4 w-4" />
+        </a>
         <button
           type="button"
           data-role="pop-close"
@@ -555,7 +618,7 @@ defmodule RokiWeb.StudyComponents do
         href="/account/services#connections"
         target="_blank"
         rel="noopener"
-        class="btn btn-sm btn-ghost mx-2 mb-2 mt-1 justify-start gap-1.5 text-base-content/70"
+        class="study-svc-foot btn btn-sm btn-ghost mx-2 mb-2 mt-1 justify-start gap-1.5 text-base-content/70"
       >
         <.icon name="hero-plus-micro" class="h-4 w-4" /> Subtitle services
         <span class="text-xs opacity-60">OpenSubtitles, Jimaku</span>

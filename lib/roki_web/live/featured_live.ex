@@ -1064,6 +1064,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :seen, :boolean, default: false
   attr :cached_titles, :any, default: nil
   attr :signed_in?, :boolean, default: true
+  attr :keep_colour?, :boolean, default: false
   slot :inner_block
 
   # One title in a list of posters: a film or a show opens into the card the rows have (the
@@ -1077,6 +1078,7 @@ defmodule RokiWeb.FeaturedLive do
       seen={@seen}
       cached_titles={@cached_titles}
       signed_in?={@signed_in?}
+      keep_colour?={@keep_colour?}
     >
       {render_slot(@inner_block)}
     </.grid_card>
