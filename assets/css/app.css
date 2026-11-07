@@ -544,6 +544,8 @@ html.study-open .site-header { display: none; }
 .study-skip { position: absolute; right: 1rem; bottom: 3.6rem; z-index: 4; gap: 0.4rem; border: 1px solid rgb(255 255 255 / 0.35); background: rgb(20 20 20 / 0.78); color: #fff; font-weight: 600; backdrop-filter: blur(6px); }
 .study-skip:hover { background: rgb(255 255 255 / 0.92); color: #000; }
 .study-skip[hidden] { display: none; }
+.study-skip { transition: opacity 0.45s ease, background-color 0.15s, color 0.15s; }
+.study-skip[data-faded] { opacity: 0; pointer-events: none; }
 
 /* What is being said, over the picture, above the player's own controls. Only the words take
    the pointer, so the video underneath still gets every click that is not on a word. */

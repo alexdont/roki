@@ -11,6 +11,22 @@ export function bindSkip(root, video, study) {
   let key = ""
   let skips = []
   let shown = null
+  // The button greets the intro, then steps aside so it never sits over the picture of someone who
+  // wants to watch it; a pointer going down towards the controls brings it back (`wake`).
+  const FADE_MS = 3500
+  let fadeTimer = 0
+  const fadeSoon = (ms = FADE_MS) => {
+    clearTimeout(fadeTimer)
+    fadeTimer = setTimeout(() => {
+      if (btn.matches(":hover, :focus-visible")) return fadeSoon(1500)
+      btn.dataset.faded = "true"
+    }, ms)
+  }
+  const wake = () => {
+    if (btn.hidden) return
+    delete btn.dataset.faded
+    fadeSoon()
+  }
 
   // The track to read the gaps from: the studied one, unless it is still being read out of the
   // release on this device (it grows as the film plays, so its end is not its end) and another
@@ -42,7 +58,10 @@ export function bindSkip(root, video, study) {
     if (s !== shown) {
       shown = s
       btn.hidden = !s
+      clearTimeout(fadeTimer)
+      delete btn.dataset.faded
       if (s) {
+        fadeSoon()
         label.textContent = next ? "Next episode" : s.kind === "intro" ? "Skip intro" : "Skip credits"
         btn.dataset.kind = next ? "next" : s.kind
       }
@@ -58,6 +77,15 @@ export function bindSkip(root, video, study) {
     btn.hidden = true
     shown = null
   })
+
+  // Towards the controls (the lower third of the picture) or a tap: here it is again.
+  root.addEventListener("pointermove", (e) => {
+    if (btn.hidden || !btn.dataset.faded) return
+    const r = root.getBoundingClientRect()
+    if (e.clientY > r.top + r.height * 0.66) wake()
+  })
+  root.addEventListener("pointerdown", wake)
+  btn.addEventListener("focus", wake)
 
   for (const ev of ["timeupdate", "seeked", "durationchange"]) video.addEventListener(ev, update)
   study.refreshSkip = () => { key = ""; shown = undefined; update() }
