@@ -76,6 +76,7 @@ defmodule RokiWeb.TitleLive do
         ost_album: nil,
         ost_all?: false,
         rating: %{state: :loading, value: nil, provider: :tmdb},
+        rated_shelf: nil,
         rate_mal: nil,
         rating_error: nil,
         reviews: nil,
@@ -113,6 +114,20 @@ defmodule RokiWeb.TitleLive do
 
   # The episodes page too: its header from the copy; the seasons and episodes need the account's
   # laev scope and come with the connected load (the list draws its own placeholder meanwhile).
+  # The rating sheet's shelf: this account's other titles at each score, of this title's kind
+  # (anime are rated on MyAnimeList, films and shows on TMDB), this one left out.
+  defp load_rated_shelf(%{assigns: %{uuid: uuid, title: %{} = title, rating: rating}} = socket)
+       when is_binary(uuid) do
+    {type, except} =
+      if rating.provider == :mal,
+        do: {"mal", socket.assigns.rate_mal},
+        else: {title.type, title.id}
+
+    start_async(socket, :rated_shelf, fn -> Roki.Profile.rated_like(uuid, type, except) end)
+  end
+
+  defp load_rated_shelf(socket), do: socket
+
   defp stored_title(action, type, id) when action in [:show, :episodes] do
     case Roki.Titles.get(type, id) do
       {:ok, title, _fresh?} -> title
@@ -479,6 +494,9 @@ defmodule RokiWeb.TitleLive do
 
   def handle_event("rate", _params, socket), do: {:noreply, socket}
 
+  # The sheet opened: what else got each score, for its shelf (loaded then, not with the page).
+  def handle_event("rate_open", _params, socket), do: {:noreply, load_rated_shelf(socket)}
+
   def handle_event("clear_rating", _params, %{assigns: %{rating: %{state: :ok}}} = socket) do
     %{uuid: uuid, title: title, rate_mal: mal} = socket.assigns
 
@@ -672,8 +690,14 @@ defmodule RokiWeb.TitleLive do
     {:noreply,
      socket
      |> assign(rating: %{socket.assigns.rating | value: value}, rating_error: nil)
-     |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)}
+     |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)
+     |> load_rated_shelf()}
   end
+
+  def handle_async(:rated_shelf, {:ok, %{} = shelf}, socket),
+    do: {:noreply, assign(socket, :rated_shelf, shelf)}
+
+  def handle_async(:rated_shelf, _other, socket), do: {:noreply, socket}
 
   def handle_async(:lib_reload, {:ok, %{} = lib}, socket),
     do: {:noreply, assign(socket, :lib, lib)}
@@ -870,6 +894,7 @@ defmodule RokiWeb.TitleLive do
             <div id="title-sheets" class="contents">
               <.rate_sheet
                 :if={@linked?}
+                shelf={@rated_shelf}
                 title={@title}
                 rating={@rating}
                 error={@rating_error}
@@ -934,6 +959,7 @@ defmodule RokiWeb.TitleLive do
             <div class="space-y-6 px-4 pb-12 pt-6 sm:px-6 lg:px-12 xl:px-16">
               <.rate_sheet
                 :if={@linked? and @rating.provider == :mal}
+                shelf={@rated_shelf}
                 title={@title}
                 rating={@rating}
                 error={@rating_error}
@@ -1327,7 +1353,7 @@ defmodule RokiWeb.TitleLive do
             />
             <.glass_btn
               :if={@linked?}
-              click={JS.show(to: "#rate-sheet", display: "flex")}
+              click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
               icon={if @rating.value, do: "hero-star-solid", else: "hero-star"}
               on={@rating.value != nil}
               tone={:amber}
@@ -2903,7 +2929,12 @@ defmodule RokiWeb.TitleLive do
   attr :error, :string, default: nil
   attr :label, :string, default: nil
 
-  # Where you rate: TMDB's score for reference, a half-step slider, save or take it back.
+  attr :shelf, :map,
+    default: nil,
+    doc: "what else got each score, by the slider's key (`Roki.Profile.rated_like/4`)"
+
+  # Where you rate: TMDB's score for reference, a half-step slider, save or take it back, and
+  # under the slider the last few titles given the score it stands at.
   @doc false
   def rate_sheet(assigns) do
     ~H"""
@@ -2987,6 +3018,29 @@ defmodule RokiWeb.TitleLive do
             class="rate-range w-full"
             aria-label="Your rating"
           />
+          <%!-- What else got the score the slider stands at, newest first; the slider moves it
+                (`rokiScore` in app.js shows the row whose key is the score). --%>
+          <div :if={@shelf} id="rate-shelf" class="space-y-1.5">
+            <p class="text-xs text-base-content/60">
+              Also rated
+              <span id="rate-shelf-score" class="font-semibold">{fmt_rating(@rating.value || 7)}</span>
+            </p>
+            <div
+              :for={{score, items} <- @shelf}
+              data-score={score}
+              hidden={score != Roki.Profile.score_key(@rating.value || 7)}
+              class="flex gap-2"
+            >
+              <.rate_shelf_item :for={i <- items} item={i} />
+            </div>
+            <p
+              data-score-empty
+              hidden={Map.has_key?(@shelf, Roki.Profile.score_key(@rating.value || 7))}
+              class="text-xs text-base-content/40"
+            >
+              Nothing else rated this yet.
+            </p>
+          </div>
           <div class="flex gap-2">
             <button type="submit" class="btn btn-info flex-1">Save rating</button>
             <button
@@ -3018,6 +3072,47 @@ defmodule RokiWeb.TitleLive do
         <p :if={@error} class="mt-3 text-sm text-error">{@error}</p>
       </div>
     </div>
+    """
+  end
+
+  attr :item, :map, required: true
+
+  # One title of the shelf: its poster (a film or show opens its page; an anime is rated on
+  # MyAnimeList and has no page here), the name when there is no poster.
+  defp rate_shelf_item(assigns) do
+    ~H"""
+    <.link
+      :if={@item.type in ["movie", "tv"]}
+      navigate={~p"/title/#{@item.type}/#{@item.id}"}
+      title={@item.title}
+      class="block w-12 shrink-0 transition hover:scale-105"
+    >
+      <.rate_shelf_poster item={@item} />
+    </.link>
+    <div :if={@item.type not in ["movie", "tv"]} title={@item.title} class="w-12 shrink-0">
+      <.rate_shelf_poster item={@item} />
+    </div>
+    """
+  end
+
+  attr :item, :map, required: true
+
+  defp rate_shelf_poster(assigns) do
+    ~H"""
+    <img
+      :if={@item.poster}
+      src={@item.poster}
+      alt={@item.title || ""}
+      loading="lazy"
+      decoding="async"
+      class="aspect-[2/3] w-full rounded-md object-cover"
+    />
+    <span
+      :if={!@item.poster}
+      class="flex aspect-[2/3] w-full items-center justify-center overflow-hidden rounded-md bg-base-200 p-0.5 text-center text-[0.55rem] leading-tight text-base-content/60"
+    >
+      {@item.title || "?"}
+    </span>
     """
   end
 end

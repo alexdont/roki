@@ -390,7 +390,7 @@ Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`)
 
 ### Rating on TMDB
 
-The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet.
+The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet. Under the slider, the **shelf**: the last five titles this account gave the score the slider stands at (`Roki.Profile.rated_like/4`, loaded when the sheet opens — `rate_open` — and again after a rating; `rokiScore` in app.js shows the row whose `data-score` is the slider's key). Newest first: a date where there is one (MyAnimeList, a rating made on the site), else `roki_ratings.seq`, the place in TMDB's rated list (it comes oldest-first, undated), per kind — films, shows and anime are separate shelves. Anime names come from the MAL list (no pictures there).
 
 ### Title page: facts, music, actors
 

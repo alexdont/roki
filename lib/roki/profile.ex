@@ -1253,6 +1253,47 @@ defmodule Roki.Profile do
   end
 
   @doc """
+  What this account rated at each score, newest first, up to `per` a score — for the rating
+  sheet's shelf: `%{"8.5" => [%{type, id, title, year, poster}]}`, the keys as the slider says
+  them (`score_key/1`). One kind at a time (`type`: films, shows or anime — TMDB's order is
+  only known within a kind), the title at `except` left out. Newest is a date where there is
+  one (MyAnimeList, a rating made here), else the place in TMDB's list (`seq`).
+  """
+  def rated_like(uuid, type, except \\ nil, per \\ 5)
+      when is_binary(uuid) and type in ["movie", "tv", "mal"] do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!(
+        "select id, score from roki_ratings where user_uuid = $1 and type = $2 order by rated_at desc nulls last, seq desc nulls last, id desc",
+        [bin, type]
+      )
+
+    picked =
+      rows
+      |> Enum.reject(fn [id, _] -> id == except end)
+      |> Enum.group_by(fn [_, score] -> score * 1.0 end, fn [id, _] -> id end)
+      |> Map.new(fn {score, ids} -> {score, Enum.take(ids, per)} end)
+
+    cards = Roki.Titles.cards(for {_, ids} <- picked, id <- ids, do: {type, id})
+
+    Map.new(picked, fn {score, ids} ->
+      {score_key(score),
+       Enum.map(ids, fn id ->
+         c = cards[{type, id}] || %{}
+         %{type: type, id: id, title: c[:title], year: c[:year], poster: c[:poster]}
+       end)}
+    end)
+  end
+
+  @doc "A score as the rating slider says it: 8 → \"8\", 8.5 → \"8.5\"."
+  def score_key(score) when is_number(score) do
+    if score == trunc(score),
+      do: Integer.to_string(trunc(score)),
+      else: :erlang.float_to_binary(score * 1.0, decimals: 1)
+  end
+
+  @doc """
   One rating from the site's copy: `{:ok, score}`; `:none` when the copy is recent (a day) and
   has no rating of it; `:unknown` when the copy is old or was never made, so the source should
   be asked.
@@ -1295,10 +1336,13 @@ defmodule Roki.Profile do
     if is_number(score) and score > 0 do
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
+      # After everything of its type: the newest (`seq`, see `rated_like/4`).
       Repo.query!(
         """
-        insert into roki_ratings (user_uuid, type, id, score, rated_at, local) values ($1, $2, $3, $4, $5, $6)
-        on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = excluded.rated_at, local = excluded.local
+        insert into roki_ratings (user_uuid, type, id, score, rated_at, local, seq)
+        values ($1, $2, $3, $4, $5, $6, (select coalesce(max(seq), 0) + 1 from roki_ratings where user_uuid = $1 and type = $2))
+        on conflict (user_uuid, type, id) do update
+          set score = excluded.score, rated_at = excluded.rated_at, local = excluded.local, seq = excluded.seq
         """,
         [bin, type, id, score * 1.0, now, local]
       )
@@ -1344,10 +1388,12 @@ defmodule Roki.Profile do
     Roki.Laev.run(uuid, fn ->
       tmdb =
         if Laev.Tmdb.account?() do
+          # TMDB lists them in the order they were made (oldest first), with no dates: the
+          # place in the list is kept as `seq`, so newest-first is a sort on it.
           for {kind, type} <- [{"movies", "movie"}, {"tv", "tv"}],
-              r <- Laev.Tmdb.rated(kind),
+              {r, seq} <- Enum.with_index(Laev.Tmdb.rated(kind)),
               is_integer(r["id"]) and is_number(r["rating"]) do
-            {type, r["id"], r["rating"] * 1.0, nil}
+            {type, r["id"], r["rating"] * 1.0, nil, seq}
           end
         else
           []
@@ -1357,8 +1403,13 @@ defmodule Roki.Profile do
         if Laev.MAL.authenticated?() do
           case Laev.MAL.list() do
             {:ok, entries} ->
+              # The list carries the names (no pictures): kept, so a shelf can say them.
+              Roki.Titles.remember_later(
+                for %{mal_id: id, title: name} <- entries, do: %{type: "mal", id: id, title: name}
+              )
+
               for %{mal_id: id, score: score} = e <- entries, is_integer(score) and score > 0 do
-                {"mal", id, score * 1.0, e[:updated] && DateTime.from_unix!(e[:updated])}
+                {"mal", id, score * 1.0, e[:updated] && DateTime.from_unix!(e[:updated]), nil}
               end
 
             _ ->
@@ -1394,7 +1445,7 @@ defmodule Roki.Profile do
   defp replace_ratings(uuid, rows) do
     {:ok, bin} = Ecto.UUID.dump(uuid)
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    rows = Enum.uniq_by(rows, fn {type, id, _, _} -> {type, id} end)
+    rows = Enum.uniq_by(rows, fn {type, id, _, _, _} -> {type, id} end)
 
     {:ok, outcome} =
       Repo.transaction(fn ->
@@ -1423,15 +1474,17 @@ defmodule Roki.Profile do
           {values, params} =
             chunk
             |> Enum.with_index()
-            |> Enum.map_reduce([], fn {{type, id, score, at}, i}, acc ->
-              n = i * 4
-              {"($1, $#{n + 2}, $#{n + 3}, $#{n + 4}, $#{n + 5})", acc ++ [type, id, score, at]}
+            |> Enum.map_reduce([], fn {{type, id, score, at, seq}, i}, acc ->
+              n = i * 5
+
+              {"($1, $#{n + 2}, $#{n + 3}, $#{n + 4}, $#{n + 5}, $#{n + 6})",
+               acc ++ [type, id, score, at, seq]}
             end)
 
           Repo.query!(
-            "insert into roki_ratings (user_uuid, type, id, score, rated_at) values " <>
+            "insert into roki_ratings (user_uuid, type, id, score, rated_at, seq) values " <>
               Enum.join(values, ", ") <>
-              " on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = coalesce(excluded.rated_at, roki_ratings.rated_at) where not roki_ratings.local",
+              " on conflict (user_uuid, type, id) do update set score = excluded.score, rated_at = coalesce(excluded.rated_at, roki_ratings.rated_at), seq = coalesce(excluded.seq, roki_ratings.seq) where not roki_ratings.local",
             [bin | params]
           )
         end)

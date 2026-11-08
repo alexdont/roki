@@ -346,6 +346,17 @@ window.rokiScore = input => {
   if (gold) input.setAttribute("data-gold", "")
   else input.removeAttribute("data-gold")
 
+  // The shelf under the slider: the row of titles that got this score, else "nothing yet".
+  const shelf = document.getElementById("rate-shelf")
+  if (shelf) {
+    let any = false
+    for (const row of shelf.querySelectorAll("[data-score]")) { const on = row.dataset.score === key; row.hidden = !on; any = any || on }
+    const empty = shelf.querySelector("[data-score-empty]")
+    if (empty) empty.hidden = any
+    const label = document.getElementById("rate-shelf-score")
+    if (label) label.textContent = key
+  }
+
   // The bar is the colour of the score, filled up to the thumb: the colour, and how far along it
   // is. (Where the slider starts is its own: 0.5 for a TMDB rating, 1 for MyAnimeList's.)
   const min = Number(input.min), max = Number(input.max)
