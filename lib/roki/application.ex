@@ -10,6 +10,12 @@ defmodule Roki.Application do
     Roki.Laev.snapshot_env()
     Roki.Laev.scrub_env()
 
+    # laev's application start takes every logger handler away (it is a terminal app: nothing
+    # may write over its screen, see `Laev.Log.install/0`), which left this server logging
+    # nothing above debug to its own log — a LiveView that crashed on mount went unrecorded for
+    # hours on 2026-11-08. The standard handler is put back here, after laev has started.
+    restore_default_logger()
+
     children = [
       {Finch, [name: Swoosh.Finch]},
       RokiWeb.Telemetry,
@@ -58,6 +64,19 @@ defmodule Roki.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Roki.Supervisor]
     Supervisor.start_link(children, opts) |> PhoenixKit.boot()
+  end
+
+  defp restore_default_logger do
+    unless :default in :logger.get_handler_ids() do
+      :logger.add_handler(:default, :logger_std_h, %{
+        config: %{type: :standard_io},
+        formatter: Logger.default_formatter()
+      })
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   # Tell Phoenix to update the endpoint configuration

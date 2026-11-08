@@ -653,7 +653,11 @@ defmodule RokiWeb.FeaturedLive do
             <li :for={e <- @now} class="contents">
               <.now_card e={e} />
             </li>
-            <li :for={{run, i} <- @activity |> Enum.take(30) |> Enum.with_index()} class="contents">
+            <%!-- (The feed may still be loading while someone is already in the player.) --%>
+            <li
+              :for={{run, i} <- (@activity || []) |> Enum.take(30) |> Enum.with_index()}
+              class="contents"
+            >
               <.activity_card run={run} i={i} />
             </li>
           </ul>

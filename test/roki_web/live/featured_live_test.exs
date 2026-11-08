@@ -84,12 +84,13 @@ defmodule RokiWeb.FeaturedLiveTest do
       what = %{type: "tv", tmdb_id: 77, title: "Lupin", poster: nil, season: 2, episode: 5}
       page = spawn(fn -> Process.sleep(:infinity) end)
 
-      {:ok, view, _} = live(conn, "/")
-      render_async(view, 3000)
-      refute render(view) =~ "is watching"
-
+      # Someone is already in the player when the page opens: its card is drawn at once, before
+      # the feed has loaded (that was a crash: the feed is nil until then).
       Roki.NowWatching.report(user.uuid, page, what, 754, 2700, false)
       Roki.NowWatching.list()
+      {:ok, view, html} = live(conn, "/")
+      assert html =~ "Lupin S2E5"
+      render_async(view, 3000)
       html = render(view)
       assert html =~ "is watching"
       assert html =~ "Lupin S2E5"
