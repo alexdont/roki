@@ -32,6 +32,7 @@ import {MoodCarousel} from "./mood_carousel"
 // Each mood's animation over the home page's carousel.
 import {MoodFx} from "./mood_fx"
 import {ShelfRow} from "./shelf_row"
+import {KeynavToggle, setupKeynav} from "./keynav"
 import {GridCards} from "./grid_cards"
 import {EuDate} from "./eu_date"
 import {TrailerSheet} from "./trailer_sheet"
@@ -302,7 +303,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   // Marks the page's scripts put on elements (a picture that has arrived, a section shown) survive
   // the server's patches.
   dom: {onBeforeElUpdated: (from, to) => { keep(from, to); return true }},
-  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, MoodFx, ShelfRow, GridCards, EuDate, TrailerSheet, HeroTrailer},
+  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, MoodFx, ShelfRow, KeynavToggle, GridCards, EuDate, TrailerSheet, HeroTrailer},
 })
 
 // Whether this page was reached by moving around inside the site without a reload: the manga
@@ -407,6 +408,7 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
 // connect if there are any LiveViews on the page
 liveSocket.connect()
+setupKeynav()
 
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()

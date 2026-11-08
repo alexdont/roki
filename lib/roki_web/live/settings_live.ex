@@ -838,6 +838,24 @@ defmodule RokiWeb.SettingsLive do
             </div>
             <Layouts.theme_toggle />
           </div>
+          <div class="hidden items-center justify-between gap-4 border-b border-base-300 py-3 [@media(hover:hover)]:flex">
+            <div>
+              <p class="font-medium">Keyboard browsing</p>
+              <p class="text-sm text-base-content/60">
+                Arrow keys move between posters, tabs and buttons, Enter opens, Space plays a title,
+                Escape stops. On this device only.
+              </p>
+            </div>
+            <button
+              id="keynav-toggle"
+              type="button"
+              phx-hook="KeynavToggle"
+              class="btn btn-sm min-w-14"
+              aria-label="Keyboard browsing"
+            >
+              On
+            </button>
+          </div>
         </section>
 
         <div :if={@state == :not_connected} class="alert">

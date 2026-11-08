@@ -1468,3 +1468,16 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
 [data-role="airplay"][data-airplay="ready"] { animation: study-airplay-pulse 1.3s ease-in-out infinite; }
 [data-role="airplay"][data-airplay="preparing"] { opacity: 0.6; }
 @keyframes study-airplay-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0.55); } 70% { box-shadow: 0 0 0 7px rgb(255 255 255 / 0); } }
+
+/* Browsing with the arrow keys (keynav.js): a ring on whatever the keys have reached — posters have
+   theirs already (above); tabs, chips, buttons and links get this one — and the hint that shows once. */
+html[data-keynav] :is(a, button, summary, [role="tab"], [role="button"]):focus-visible:not([data-card] a) {
+  outline: 2px solid var(--color-base-content);
+  outline-offset: 3px;
+  border-radius: 0.6rem;
+}
+.keynav-hint { position: fixed; left: 50%; bottom: 1.25rem; z-index: 90; transform: translateX(-50%); display: flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.9rem; border-radius: 999px; background: rgb(15 15 15 / 0.85); color: #fff; font-size: 0.8rem; white-space: nowrap; backdrop-filter: blur(8px); box-shadow: 0 6px 24px rgb(0 0 0 / 0.35); transition: opacity 0.5s ease; pointer-events: none; }
+.keynav-hint kbd { display: inline-block; min-width: 1.4rem; padding: 0.1rem 0.4rem; border-radius: 0.35rem; background: rgb(255 255 255 / 0.16); text-align: center; font: inherit; font-weight: 600; }
+.keynav-hint span { opacity: 0.45; }
+.keynav-hint-out { opacity: 0; }
+@media (max-width: 640px) { .keynav-hint { display: none; } }
