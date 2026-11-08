@@ -1253,13 +1253,13 @@ defmodule Roki.Profile do
   end
 
   @doc """
-  What this account rated at each score, newest first, up to `per` a score — for the rating
+  What this account rated at each score, newest first, up to `per` a score (six: the sheet's row) — for the rating
   sheet's shelf: `%{"8.5" => [%{type, id, title, year, poster}]}`, the keys as the slider says
   them (`score_key/1`). One kind at a time (`type`: films, shows or anime — TMDB's order is
   only known within a kind), the title at `except` left out. Newest is a date where there is
   one (MyAnimeList, a rating made here), else the place in TMDB's list (`seq`).
   """
-  def rated_like(uuid, type, except \\ nil, per \\ 5)
+  def rated_like(uuid, type, except \\ nil, per \\ 6)
       when is_binary(uuid) and type in ["movie", "tv", "mal"] do
     {:ok, bin} = Ecto.UUID.dump(uuid)
 

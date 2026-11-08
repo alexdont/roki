@@ -3,7 +3,7 @@ defmodule Roki.RatedLikeTest do
 
   alias Roki.Profile
 
-  test "the shelf of each score: newest first, five at most, this title left out, with cards" do
+  test "the shelf of each score: newest first, six at most, this title left out, with cards" do
     uuid = Ecto.UUID.generate()
 
     Roki.Titles.remember([
@@ -18,8 +18,10 @@ defmodule Roki.RatedLikeTest do
 
     shelf = Profile.rated_like(uuid, "movie", 7)
     assert Map.keys(shelf) |> Enum.sort() == ["8", "8.5"]
-    # Newest first (7 is the one being rated, so it is left out), five at most.
-    assert Enum.map(shelf["8"], & &1.id) == [6, 5, 4, 3, 2]
+    # Newest first (7 is the one being rated, so it is left out), six at most.
+    for id <- 10..12, do: Profile.note_rating(uuid, {"movie", id}, 8.0)
+    shelf = Profile.rated_like(uuid, "movie", 7)
+    assert Enum.map(shelf["8"], & &1.id) == [12, 11, 10, 6, 5, 4]
     assert [%{id: 8, title: nil, poster: nil}] = shelf["8.5"]
     # A show is not on a film's shelf.
     refute Enum.any?(shelf["8"], &(&1.type == "tv"))
@@ -32,9 +34,13 @@ defmodule Roki.RatedLikeTest do
 
     assert poster =~ "/heat.jpg"
 
-    # (Five is five: 2 fell off the end.)
-    assert Enum.map(Profile.rated_like(uuid, "movie")["8"], & &1.id) == [1, 7, 6, 5, 4]
-    assert Enum.find(shelf["8"], &(&1.id == 2)).title == "Ronin"
+    # (Six is six: 4 fell off the end.)
+    assert Enum.map(Profile.rated_like(uuid, "movie")["8"], & &1.id) == [1, 12, 11, 10, 7, 6]
+    assert Enum.find(Profile.rated_like(uuid, "movie", 10)["8"], &(&1.id == 2)) == nil
+
+    assert Profile.rated_like(uuid, "movie", nil, 20)["8"]
+           |> Enum.find(&(&1.id == 2))
+           |> Map.get(:title) == "Ronin"
   end
 
   test "score keys are the slider's" do

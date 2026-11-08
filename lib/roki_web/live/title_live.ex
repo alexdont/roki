@@ -3029,7 +3029,7 @@ defmodule RokiWeb.TitleLive do
               :for={{score, items} <- @shelf}
               data-score={score}
               hidden={score != Roki.Profile.score_key(@rating.value || 7)}
-              class="flex gap-2"
+              class="grid grid-cols-6 gap-2"
             >
               <.rate_shelf_item :for={i <- items} item={i} />
             </div>
@@ -3085,11 +3085,11 @@ defmodule RokiWeb.TitleLive do
       :if={@item.type in ["movie", "tv"]}
       navigate={~p"/title/#{@item.type}/#{@item.id}"}
       title={@item.title}
-      class="block w-12 shrink-0 transition hover:scale-105"
+      class="block min-w-0 transition hover:scale-105"
     >
       <.rate_shelf_poster item={@item} />
     </.link>
-    <div :if={@item.type not in ["movie", "tv"]} title={@item.title} class="w-12 shrink-0">
+    <div :if={@item.type not in ["movie", "tv"]} title={@item.title} class="min-w-0">
       <.rate_shelf_poster item={@item} />
     </div>
     """
