@@ -1481,3 +1481,5 @@ html[data-keynav] :is(a, button, summary, [role="tab"], [role="button"]):focus-v
 .keynav-hint span { opacity: 0.45; }
 .keynav-hint-out { opacity: 0; }
 @media (max-width: 640px) { .keynav-hint { display: none; } }
+/* A poster's ring is the one the pointer gets (above), not the browser's own outline on its link. */
+html[data-keynav] [data-card] a:focus-visible { outline: none; }

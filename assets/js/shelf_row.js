@@ -288,6 +288,23 @@ export const cardMethods = {
       const to = e.relatedTarget
       if ((this.hot && !this.hot.contains(to)) || (this.cand && !this.cand.contains(to))) this.leave()
     })
+    // Arrow-key browsing (keynav.js): resting on a poster opens its card, as the pointer does, and
+    // moving on closes it. Only while the keys are in charge (`data-keynav` on <html>).
+    this.scroller.addEventListener("focusin", (e) => {
+      const li = e.target.closest?.("[data-card]")
+      clearTimeout(this.keyTimer)
+      if (!document.documentElement.dataset.keynav || !hovers.matches || !li || li.hasAttribute("data-no-card")) return
+      if (li === this.hot) return
+      this.leave()
+      this.keyTimer = setTimeout(() => {
+        if (document.documentElement.dataset.keynav && li.contains(document.activeElement)) this.open(li)
+      }, STILL_MS)
+    })
+    this.scroller.addEventListener("focusout", (e) => {
+      clearTimeout(this.keyTimer)
+      const to = e.relatedTarget
+      if (this.hot && document.documentElement.dataset.keynav && !(to && this.hot.contains(to))) this.leave()
+    })
     // The glow under the pointer is in the poster's own colour, read the moment it is reached.
     const reach = (e) => { const li = e.target.closest?.("[data-card]"); if (li) tint(li) }
     this.scroller.addEventListener("mouseover", reach)
