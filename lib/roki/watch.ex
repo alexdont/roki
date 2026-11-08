@@ -544,7 +544,11 @@ defmodule Roki.Watch do
               true -> Laev.Tmdb.clear_tv_rating(title.id)
             end
 
-          if result == :ok, do: Roki.Profile.note_rating(uuid, {title.type, title.id}, nil)
+          if result == :ok do
+            Roki.Profile.note_rating(uuid, {title.type, title.id}, nil)
+            Roki.Activity.retract(uuid, title.type, title.id, ["rated"])
+          end
+
           result
       end
     end)

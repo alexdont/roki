@@ -77,4 +77,20 @@ defmodule Roki.ActivityDbTest do
     Roki.Repo.query!("delete from phoenix_kit_users where uuid = $1", [Ecto.UUID.dump!(u.uuid)])
     assert Activity.recent(10) == []
   end
+
+  test "rating a title again replaces its entry; taking the rating back removes it" do
+    u = register("activ5")
+    t = %{type: "movie", id: 77, title: "Variety"}
+
+    Activity.rated_now(u.uuid, t, 7.0)
+    Activity.rated_now(u.uuid, t, 8.5)
+    Activity.rated_now(u.uuid, %{type: "movie", id: 78, title: "Other"}, 6.0)
+
+    rated = Activity.recent(10, users: [u.uuid], kinds: ["rated"])
+    assert Enum.map(rated, & &1.title) |> Enum.sort() == ["Other", "Variety"]
+    assert Enum.find(rated, &(&1.title == "Variety")).score == 8.5
+
+    assert Activity.retract(u.uuid, "movie", 77, ["rated"]) == 1
+    assert [%{title: "Other"}] = Activity.recent(10, users: [u.uuid], kinds: ["rated"])
+  end
 end

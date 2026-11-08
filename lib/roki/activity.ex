@@ -209,7 +209,8 @@ defmodule Roki.Activity do
 
   @doc """
   Take back what an undone action put in the feed: a film or episode unmarked loses its `finished`
-  and `backdated` entries, a title taken off the Saved list its `saved` one. `season`/`episode`
+  and `backdated` entries, a title taken off the Saved list its `saved` one, a rating taken back its
+  `rated` ones. `season`/`episode`
   narrow it to one episode; with both `nil` for a series, every episode of it goes. Open pages are
   told when something went.
   """
@@ -257,20 +258,35 @@ defmodule Roki.Activity do
   @doc "A title was rated (`score`, as given)."
   def rated(uuid, %{type: type, id: id, title: title} = t, score)
       when type in ["movie", "tv"] and is_integer(id) and is_number(score),
-      do:
-        insert(
-          uuid,
-          %{
-            type: type,
-            tmdb_id: id,
-            title: title,
-            poster: poster_url(t[:poster_path]),
-            score: score * 1.0
-          },
-          "rated"
-        )
+      do: rate_entry(uuid, type, id, title, t, score)
 
   def rated(_uuid, _title, _score), do: :ok
+
+  # Rating it again replaces the entry rather than adding a second one: the older ratings of the
+  # title go, then the new one is written, in that order, behind the caller.
+  defp rate_entry(uuid, type, id, title, t, score) do
+    Task.start(fn -> rated_now(uuid, %{t | type: type, id: id, title: title}, score) end)
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  @doc false
+  def rated_now(uuid, %{type: type, id: id, title: title} = t, score) do
+    retract(uuid, type, id, ["rated"])
+
+    insert_now(
+      uuid,
+      %{
+        type: type,
+        tmdb_id: id,
+        title: title,
+        poster: poster_url(t[:poster_path]),
+        score: score * 1.0
+      },
+      "rated"
+    )
+  end
 
   @doc """
   Things the person put on an earlier day (`date`): `items` are `%{type, tmdb_id, title}`, the
