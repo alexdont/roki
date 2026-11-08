@@ -788,7 +788,7 @@ defmodule RokiWeb.UserHomeLive do
       <div
         id="shelf-cards"
         phx-hook="GridCards"
-        class="space-y-10 px-4 pb-12 pt-8 [overflow-x:clip] sm:px-6 lg:px-12 xl:px-16"
+        class="space-y-4 px-4 pb-12 pt-4 [overflow-x:clip] sm:px-6 sm:pt-5 lg:px-12 xl:px-16"
       >
         <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
 
