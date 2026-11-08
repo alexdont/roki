@@ -792,10 +792,6 @@ defmodule RokiWeb.UserHomeLive do
       >
         <.no_data_yet :if={@data && @completed == [] && empty_shelf?(@data)} />
 
-        <div :if={@data} class="-mb-6 flex justify-end">
-          <RokiWeb.GridSize.grid_switch size={@grid_size} />
-        </div>
-
         <%!-- Watchlist placeholder: the same grid the real one fills, so nothing moves. --%>
         <section :if={!@data} class="space-y-3" aria-busy="true">
           <div class="skeleton h-7 w-40 rounded"></div>
@@ -808,24 +804,26 @@ defmodule RokiWeb.UserHomeLive do
           </ul>
         </section>
 
-        <div
-          :if={@data}
-          class="tabs tabs-box w-fit max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]"
-          role="tablist"
-        >
-          <button
-            :for={{id, label, n} <- shelf_tabs(@data, @completed)}
-            type="button"
-            role="tab"
-            aria-selected={to_string(@tab == id)}
-            phx-click="tab"
-            phx-value-id={id}
-            onclick="this.scrollIntoView({inline: 'center', block: 'nearest', behavior: 'smooth'})"
-            class={["tab shrink-0 gap-1.5 whitespace-nowrap", @tab == id && "tab-active"]}
+        <div :if={@data} class="flex items-center justify-between gap-3">
+          <div
+            class="tabs tabs-box w-fit min-w-0 max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]"
+            role="tablist"
           >
-            {label}
-            <span :if={n} class="text-xs tabular-nums text-base-content/50">{n}</span>
-          </button>
+            <button
+              :for={{id, label, n} <- shelf_tabs(@data, @completed)}
+              type="button"
+              role="tab"
+              aria-selected={to_string(@tab == id)}
+              phx-click="tab"
+              phx-value-id={id}
+              onclick="this.scrollIntoView({inline: 'center', block: 'nearest', behavior: 'smooth'})"
+              class={["tab shrink-0 gap-1.5 whitespace-nowrap", @tab == id && "tab-active"]}
+            >
+              {label}
+              <span :if={n} class="text-xs tabular-nums text-base-content/50">{n}</span>
+            </button>
+          </div>
+          <RokiWeb.GridSize.grid_switch size={@grid_size} step_on_phone />
         </div>
 
         <.poster_row
