@@ -12,6 +12,7 @@
 import {setSavedMark} from "./saved_mark"
 const cache = new Map()
 const STILL_MS = 260 // how long the pointer must rest on a poster before it opens
+const KEY_MS = 800 // …and how long the arrow keys must rest on one (a longer wait: moving along a row is not asking for a card)
 const STILL_PX = 5 // …and how little it may drift while it does
 const TRAILER_MS = 1500 // how long the picture is shown before the trailer replaces it
 
@@ -298,7 +299,7 @@ export const cardMethods = {
       this.leave()
       this.keyTimer = setTimeout(() => {
         if (document.documentElement.dataset.keynav && li.contains(document.activeElement)) this.open(li)
-      }, STILL_MS)
+      }, KEY_MS)
     })
     this.scroller.addEventListener("focusout", (e) => {
       clearTimeout(this.keyTimer)

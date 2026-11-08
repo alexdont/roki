@@ -1483,3 +1483,10 @@ html[data-keynav] :is(a, button, summary, [role="tab"], [role="button"]):focus-v
 @media (max-width: 640px) { .keynav-hint { display: none; } }
 /* A poster's ring is the one the pointer gets (above), not the browser's own outline on its link. */
 html[data-keynav] [data-card] a:focus-visible { outline: none; }
+/* Tabs and chips sit in strips that scroll sideways, which clip anything drawn outside them (the
+   ring showed only down the sides): theirs is drawn inside. */
+html[data-keynav] :is([role="tab"], .overflow-x-auto a, .overflow-x-auto button):focus-visible:not([data-card] a) {
+  outline-offset: -2px;
+}
+/* On the dark mood banner the ring is white whatever the theme. */
+html[data-keynav] [data-mood-chip]:focus-visible, html[data-keynav] #mood-picker a:focus-visible { outline-color: #fff; }

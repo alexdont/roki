@@ -989,7 +989,7 @@ defmodule RokiWeb.FeaturedLive do
         class="mood-tabs absolute inset-x-0 bottom-4 z-10 px-4 sm:px-6 lg:px-12 xl:px-16"
       >
         <div
-          class="flex gap-5 overflow-x-auto border-t border-white/10 [scrollbar-width:none]"
+          class="flex gap-1 overflow-x-auto border-t border-white/10 [scrollbar-width:none]"
           role="tablist"
           aria-label="Moods"
         >
@@ -999,7 +999,7 @@ defmodule RokiWeb.FeaturedLive do
             data-mood-chip={m.slug}
             role="tab"
             aria-selected={to_string(m.slug == @start)}
-            class="relative shrink-0 pb-1 pt-3 text-sm font-medium text-white/50 transition hover:text-white aria-selected:text-white"
+            class="relative shrink-0 rounded-lg px-2 pb-1 pt-3 text-sm font-medium text-white/50 transition first:-ml-2 hover:text-white aria-selected:text-white"
           >
             <span class="absolute inset-x-0 -top-px h-0.5 overflow-hidden" aria-hidden="true">
               <span
