@@ -1164,6 +1164,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :cached_titles, :any, default: nil
   attr :signed_in?, :boolean, default: true
   attr :keep_colour?, :boolean, default: false
+  attr :upcoming, :map, default: %{}
   slot :inner_block
 
   # One title in a list of posters: a film or a show opens into the card the rows have (the
@@ -1178,6 +1179,7 @@ defmodule RokiWeb.FeaturedLive do
       cached_titles={@cached_titles}
       signed_in?={@signed_in?}
       keep_colour?={@keep_colour?}
+      upcoming={@upcoming}
     >
       {render_slot(@inner_block)}
     </.grid_card>
@@ -1187,7 +1189,14 @@ defmodule RokiWeb.FeaturedLive do
   def tile(assigns) do
     ~H"""
     <li class="space-y-1">
-      <.poster item={@item} seen={@seen} cached_titles={@cached_titles} compact title?={false} />
+      <.poster
+        item={@item}
+        seen={@seen}
+        upcoming={@upcoming}
+        cached_titles={@cached_titles}
+        compact
+        title?={false}
+      />
       {render_slot(@inner_block)}
     </li>
     """

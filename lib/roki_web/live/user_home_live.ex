@@ -59,6 +59,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:error, nil)
           |> assign(:open, MapSet.new())
           |> assign(:tab, "watchlist")
+          |> assign(:upcoming, %{})
           |> assign(:stats, kept_stats(state, uuid))
           |> assign(:pulse, nil)
           |> assign(:hero, nil)
@@ -272,8 +273,25 @@ defmodule RokiWeb.UserHomeLive do
 
   # The shelf comes with its progress bars worked out (`Laev.shelf/1`), so nothing is added to it
   # afterwards and nothing changes under the reader's eye when it lands.
-  def handle_async(:overview, {:ok, {:ok, data}}, socket),
-    do: {:noreply, maybe_hero(assign(socket, state: :ready, data: data, busy: nil))}
+  def handle_async(:overview, {:ok, {:ok, data}}, socket) do
+    uuid = socket.assigns.uuid
+
+    # What is not out yet gets its red edge: dates are looked up behind the page, for the
+    # lists of titles (only ones dated this year or later are asked about).
+    items =
+      data.saved ++ data.watchlist.behind ++ data.watchlist.on_hold ++ data.watchlist.caught_up
+
+    {:noreply,
+     socket
+     |> assign(state: :ready, data: data, busy: nil)
+     |> maybe_hero()
+     |> start_async(:dates, fn -> Roki.Watch.upcoming(uuid, items) end)}
+  end
+
+  def handle_async(:dates, {:ok, %{} = found}, socket),
+    do: {:noreply, update(socket, :upcoming, &Map.merge(&1, found))}
+
+  def handle_async(:dates, _other, socket), do: {:noreply, socket}
 
   # The picture across the top is the backdrop of what you are watching.
   def handle_async(:hero, {:ok, {key, url}}, socket) when is_binary(url),
@@ -405,6 +423,7 @@ defmodule RokiWeb.UserHomeLive do
         hero={@hero}
         completed={@completed}
         tab={@tab}
+        upcoming={@upcoming}
         completed_shown={@completed_shown}
         ratings={@ratings}
         reading={@reading}
@@ -604,6 +623,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :hero, :any, default: nil
   attr :completed, :any, default: nil
   attr :tab, :string, default: "watchlist"
+  attr :upcoming, :map, default: %{}
   attr :completed_shown, :integer, default: 100
   attr :ratings, :map, default: %{}
   attr :reading, :any, default: nil, doc: "the one manga to carry on with, if any"
@@ -832,6 +852,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.watchlist.behind}
           empty="Nothing in progress. Start something and it waits here for you to pick it up."
           cached_titles={@cached_titles}
+          upcoming={@upcoming}
         />
         <.fold
           :if={@data && @tab == "saved"}
@@ -841,6 +862,7 @@ defmodule RokiWeb.UserHomeLive do
           empty="Nothing saved yet. Hover a poster and press the bookmark to keep it for later."
           unsave
           cached_titles={@cached_titles}
+          upcoming={@upcoming}
         />
         <.fold
           :if={@data && @tab == "caught_up"}
@@ -849,6 +871,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.watchlist.caught_up}
           empty="Shows where you have seen every episode so far wait here for the next one."
           cached_titles={@cached_titles}
+          upcoming={@upcoming}
         />
         <.fold
           :if={@data && @tab == "on_hold"}
@@ -857,6 +880,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.watchlist.on_hold}
           empty="Put a show on hold from its page and it rests here, out of your way."
           cached_titles={@cached_titles}
+          upcoming={@upcoming}
         />
         <.fold
           :if={@data && @tab == "history"}
@@ -865,6 +889,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.continue}
           empty="What you start watching shows up here."
           cached_titles={@cached_titles}
+          upcoming={@upcoming}
         />
         <.completed
           :if={@data && @tab == "completed"}
@@ -919,6 +944,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :id, :string, required: true
   attr :items, :list, required: true
   attr :cached_titles, :any, default: nil
+  attr :upcoming, :map, default: %{}
 
   attr :unsave, :boolean,
     default: false,
@@ -938,7 +964,12 @@ defmodule RokiWeb.UserHomeLive do
         :if={@items != []}
         class={["grid gap-4", @cols]}
       >
-        <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={String.to_atom(@id)}>
+        <RokiWeb.FeaturedLive.tile
+          :for={i <- @items}
+          item={i}
+          kind={String.to_atom(@id)}
+          upcoming={@upcoming}
+        >
           <%!-- No badge: everything here is saved. Taking a title off in its hover card clicks this
                 to drop the tile (assets/js/peek.js), so the list closes up without a refresh. --%>
           <button
@@ -1031,6 +1062,7 @@ defmodule RokiWeb.UserHomeLive do
   # The media library's copy when there is one, else the source's own address through this
   # site, which carries the headers the source asks for.
   attr :cached_titles, :any, default: nil
+  attr :upcoming, :map, default: %{}
   attr :items, :list, required: true
   attr :empty, :string, default: nil, doc: "what to say while there is nothing in it"
 
@@ -1044,7 +1076,12 @@ defmodule RokiWeb.UserHomeLive do
         :if={@items != []}
         class={["grid gap-4", @cols]}
       >
-        <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={:watchlist} />
+        <RokiWeb.FeaturedLive.tile
+          :for={i <- @items}
+          item={i}
+          kind={:watchlist}
+          upcoming={@upcoming}
+        />
       </ul>
     </section>
     """
