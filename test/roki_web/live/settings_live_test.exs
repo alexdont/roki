@@ -64,7 +64,7 @@ defmodule RokiWeb.SettingsLiveTest do
   end
 
   test "the Nuvio section lists the providers with the defaults already on", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings?tab=sources")
     html = render_async(view, 5_000)
 
     assert has_element?(view, "#nuvio")
@@ -77,7 +77,7 @@ defmodule RokiWeb.SettingsLiveTest do
   end
 
   test "a Nuvio provider is switched on and off with one toggle", %{conn: conn, user: user} do
-    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings?tab=sources")
     render_async(view, 5_000)
     switch = ~s(#nuvio-purstream input[role="switch"])
 
@@ -100,7 +100,7 @@ defmodule RokiWeb.SettingsLiveTest do
     conn: conn,
     user: user
   } do
-    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings?tab=sources")
     render_async(view, 5_000)
     assert render(element(view, "#nuvio-count")) =~ "4 on"
     assert render(element(view, "#nuvio-count")) =~ "up to 18 are asked per search"
@@ -121,7 +121,7 @@ defmodule RokiWeb.SettingsLiveTest do
       user
     end)
 
-    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings?tab=sources")
     render_async(view, 5_000)
     count = render(element(view, "#nuvio-count"))
     assert count =~ "20 on"
@@ -145,7 +145,7 @@ defmodule RokiWeb.SettingsLiveTest do
     {:ok, user} = Roki.Nuvio.Settings.set_enabled(user, "movix", false)
     {:ok, _user} = Roki.Nuvio.Settings.set_options(user, "purstream", %{"lang" => "fr"})
 
-    {:ok, view, _html} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _html} = live(conn, "/u/settingstest/settings?tab=sources")
     render_async(view, 5_000)
     reset = ~s(#nuvio button[phx-click="nuvio_reset"])
     refute has_element?(view, reset <> "[disabled]")
@@ -176,7 +176,7 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     connect!(user)
-    {:ok, view, _} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings?tab=accounts")
     html = render_async(view, 3000)
 
     assert html =~ "TMDB"
@@ -194,7 +194,7 @@ defmodule RokiWeb.SettingsLiveTest do
       File.read!(Path.join(dir, "config")) <> "TMDB_SESSION_ID=abc123\n"
     )
 
-    {:ok, view, _} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings?tab=accounts")
     html = render_async(view, 3000)
     assert html =~ "Date my titles"
     assert html =~ "Your ratings → Export"
@@ -244,7 +244,7 @@ defmodule RokiWeb.SettingsLiveTest do
   test "notification switches: friends' activity starts off, a switch takes effect at once, and it is the person's own",
        %{conn: conn, user: user} do
     # Open to someone who has not connected laev too: it is about the bell, not about laev.
-    {:ok, view, html} = live(conn, "/u/settingstest/settings")
+    {:ok, view, html} = live(conn, "/u/settingstest/settings?tab=notifications")
     assert html =~ "Notifications"
     assert html =~ "New episodes and releases"
 
@@ -269,7 +269,12 @@ defmodule RokiWeb.SettingsLiveTest do
   test "the settings are laid out by group, with laev's own labels", %{conn: conn, user: user} do
     connect!(user)
     {:ok, view, _} = live(conn, "/u/settingstest/settings")
-    html = render_async(view, 3000)
+    render_async(view, 3000)
+
+    html =
+      Enum.map_join(~w(general accounts sync), fn tab ->
+        render_patch(view, "/u/settingstest/settings?tab=#{tab}")
+      end)
 
     for text <- [
           "Playback",
@@ -307,7 +312,7 @@ defmodule RokiWeb.SettingsLiveTest do
 
   test "the terminal app's settings are shown but locked", %{conn: conn, user: user} do
     connect!(user)
-    {:ok, view, _} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings?tab=sync")
     html = render_async(view, 3000)
 
     assert html =~ "Terminal app only"
@@ -389,7 +394,7 @@ defmodule RokiWeb.SettingsLiveTest do
         "LAEV_SYNC_TOKEN=laev_#{String.duplicate("a", 40)}.#{String.duplicate("b", 40)}\nLAEV_SYNC_KEYS=on\n"
     )
 
-    {:ok, view, _} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings?tab=sync")
     html = render_async(view, 3000)
     assert html =~ "No need"
 
@@ -452,7 +457,7 @@ defmodule RokiWeb.SettingsLiveTest do
     user: user
   } do
     connect!(user)
-    {:ok, view, _} = live(conn, "/u/settingstest/settings")
+    {:ok, view, _} = live(conn, "/u/settingstest/settings?tab=accounts")
     render_async(view, 3000)
 
     html =

@@ -97,6 +97,25 @@ defmodule RokiWeb.SettingsLive do
     "MAL_CLIENT_ID" => "https://myanimelist.net/apiconfig"
   }
 
+  @tabs [
+    {"general", "General"},
+    {"sources", "Sources"},
+    {"accounts", "Accounts"},
+    {"notifications", "Notifications"},
+    {"sync", "Sync"}
+  ]
+  @tab_keys Enum.map(@tabs, &elem(&1, 0))
+
+  # Which tab each of laev's groups sits on.
+  defp group_tab(:cli), do: "sync"
+  defp group_tab(_), do: "general"
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    tab = if params["tab"] in @tab_keys, do: params["tab"], else: "general"
+    {:noreply, assign(socket, :tab, tab)}
+  end
+
   @impl true
   def mount(%{"username" => username}, _session, socket) do
     case RokiWeb.UserGuard.check(socket, username) do
@@ -109,6 +128,7 @@ defmodule RokiWeb.SettingsLive do
         socket =
           socket
           |> assign(:page_title, "Settings")
+          |> assign(:tab, "general")
           |> assign(:username, username)
           |> assign(:uuid, uuid)
           |> assign(:state, if(linked?, do: :loading, else: :not_connected))
@@ -193,6 +213,9 @@ defmodule RokiWeb.SettingsLive do
   @impl true
   # Which player this device uses: remembered in the browser itself (the hook-less
   # `roki:player` event writes it), read back from the socket params on connect.
+  def handle_event("tab", %{"id" => id}, socket) when id in @tab_keys,
+    do: {:noreply, assign(socket, :tab, id)}
+
   def handle_event("change", %{"_target" => ["d", "player"], "d" => %{"player" => mode}}, socket)
       when mode in ["external", "browser"] do
     Process.send_after(self(), {:clear_saved, "device_player"}, 2_000)
@@ -761,6 +784,7 @@ defmodule RokiWeb.SettingsLive do
     assigns =
       assign(assigns,
         groups: @groups,
+        tabs: @tabs,
         by_group: by_group,
         keys: Map.get(by_group, :keys, []),
         key_help: @key_help,
@@ -779,7 +803,7 @@ defmodule RokiWeb.SettingsLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/u/#{@username}/settings"}
     >
-      <div class="mx-auto max-w-3xl space-y-10">
+      <div class="mx-auto max-w-3xl space-y-6">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
           <a
@@ -790,7 +814,22 @@ defmodule RokiWeb.SettingsLive do
           </a>
         </div>
 
-        <section class="space-y-1">
+        <div
+          class="tabs tabs-box w-fit max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]"
+          role="tablist"
+        >
+          <.link
+            :for={{id, label} <- @tabs}
+            patch={~p"/u/#{@username}/settings?tab=#{id}"}
+            role="tab"
+            aria-selected={to_string(@tab == id)}
+            class={["tab shrink-0 whitespace-nowrap", @tab == id && "tab-active"]}
+          >
+            {label}
+          </.link>
+        </div>
+
+        <section :if={@tab == "general"} class="space-y-1">
           <h2 class="text-xl font-semibold">Appearance</h2>
           <div class="flex items-center justify-between gap-4 border-b border-base-300 py-3">
             <div>
@@ -808,20 +847,23 @@ defmodule RokiWeb.SettingsLive do
 
         <p :if={@error} class="alert alert-error text-sm">{@error}</p>
 
-        <div :if={@state == :loading} class="flex justify-center gap-3 py-16 text-base-content/60">
+        <div
+          :if={@state == :loading and @tab in ["general", "sync"]}
+          class="flex justify-center gap-3 py-16 text-base-content/60"
+        >
           <span class="loading loading-spinner"></span> Loading your settings…
         </div>
 
         <form
-          :if={@state == :ready}
+          :if={@state == :ready and @tab in ["general", "sync"]}
           id="settings-form"
           phx-change="change"
-          class="space-y-10"
+          class="space-y-8"
           onsubmit="return false"
         >
           <section
             :for={{group, title} <- @groups}
-            :if={@by_group[group]}
+            :if={@by_group[group] && group_tab(group) == @tab}
             class="space-y-1"
           >
             <h2 class="text-xl font-semibold">{title}</h2>
@@ -865,7 +907,7 @@ defmodule RokiWeb.SettingsLive do
         <%!-- The manga reader's preferences, absorbed from its own settings page so this
              site has one. Outside the form above: these save themselves with a PUT per
              control (RokiWeb.MangaController), they are not laev settings. --%>
-        <section id="reading" class="space-y-1 scroll-mt-4">
+        <section :if={@tab == "general"} id="reading" class="space-y-1 scroll-mt-4">
           <h2 class="text-xl font-semibold">Reading</h2>
           <p class="pb-2 text-sm text-base-content/60">
             The manga reader: how it opens, how pages turn, and what panel snap does. Every
@@ -882,7 +924,7 @@ defmodule RokiWeb.SettingsLive do
 
         <%!-- PenguPlay: a link of your own, or the owner's lent to you. Outside laev's own sections,
              so it works without a laev account (watch history still needs one). --%>
-        <section id="penguplay" class="space-y-2 scroll-mt-4">
+        <section :if={@tab == "sources"} id="penguplay" class="space-y-2 scroll-mt-4">
           <h2 class="text-xl font-semibold">PenguPlay</h2>
           <p class="text-sm text-base-content/60">
             Plain https streams from PenguPlay's providers — no debrid account needed. Sign in at
@@ -928,7 +970,7 @@ defmodule RokiWeb.SettingsLive do
 
         <%!-- Nuvio: providers from the All-in-One-Nuvio manifest, each one enabled by hand and
              run in the sandbox. Independent of PenguPlay and of the debrid collection. --%>
-        <section id="nuvio" class="space-y-3 scroll-mt-4">
+        <section :if={@tab == "sources"} id="nuvio" class="space-y-3 scroll-mt-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-xl font-semibold">Nuvio</h2>
             <div class="flex flex-wrap gap-2">
@@ -1123,7 +1165,7 @@ defmodule RokiWeb.SettingsLive do
 
         <%!-- Torrents: a Real-Debrid or TorBox key, for an account that has none yet (and is not lent
              one). Once it has, the Connections section below is where keys are changed. --%>
-        <section :if={not @debrid?} id="debrid" class="space-y-2 scroll-mt-4">
+        <section :if={@tab == "sources" and not @debrid?} id="debrid" class="space-y-2 scroll-mt-4">
           <h2 class="text-xl font-semibold">Torrents — Real-Debrid or TorBox</h2>
           <p class="text-sm text-base-content/60">
             Torrent releases play through a debrid account (paid). Sign up at
@@ -1161,7 +1203,11 @@ defmodule RokiWeb.SettingsLive do
           </p>
         </section>
 
-        <section :if={@state == :ready} id="connections" class="space-y-1 scroll-mt-4">
+        <section
+          :if={@state == :ready and @tab == "accounts"}
+          id="connections"
+          class="space-y-1 scroll-mt-4"
+        >
           <h2 class="text-xl font-semibold">Connections</h2>
           <p class="pb-2 text-sm text-base-content/60">
             Your API keys. A key is only saved once the service confirms it works, and it is never shown
@@ -1217,13 +1263,18 @@ defmodule RokiWeb.SettingsLive do
           </form>
         </section>
 
-        <.tmdb_section :if={@state == :ready} tmdb={@tmdb} username={@username} uploads={@uploads} />
+        <.tmdb_section
+          :if={@state == :ready and @tab == "accounts"}
+          tmdb={@tmdb}
+          username={@username}
+          uploads={@uploads}
+        />
 
-        <.mal_section :if={@state == :ready} mal={@mal} />
+        <.mal_section :if={@state == :ready and @tab == "accounts"} mal={@mal} />
 
-        <.notify_section choices={@notify} />
+        <.notify_section :if={@tab == "notifications"} choices={@notify} />
 
-        <section :if={@state == :ready} class="space-y-3">
+        <section :if={@state == :ready and @tab == "sync"} class="space-y-3">
           <h2 class="text-xl font-semibold">Sync</h2>
           <div class="space-y-1 text-sm">
             <p>
