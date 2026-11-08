@@ -11,6 +11,7 @@ defmodule RokiWeb.UserHomeLive do
   use RokiWeb, :live_view
 
   @completed_page 100
+  @tabs ~w(watchlist saved caught_up on_hold history completed)
 
   import RokiWeb.PosterComponents
 
@@ -57,6 +58,7 @@ defmodule RokiWeb.UserHomeLive do
           |> assign(:busy, nil)
           |> assign(:error, nil)
           |> assign(:open, MapSet.new())
+          |> assign(:tab, "watchlist")
           |> assign(:stats, kept_stats(state, uuid))
           |> assign(:pulse, nil)
           |> assign(:hero, nil)
@@ -212,6 +214,11 @@ defmodule RokiWeb.UserHomeLive do
          {:error, why} -> {:error, why}
        end
      end)}
+  end
+
+  def handle_event("tab", %{"id" => id}, socket) when id in @tabs do
+    socket = assign(socket, :tab, id)
+    {:noreply, if(id == "completed", do: fetch_posters(socket), else: socket)}
   end
 
   def handle_event("toggle_section", %{"id" => id}, socket) do
@@ -397,6 +404,7 @@ defmodule RokiWeb.UserHomeLive do
         pulse={@pulse}
         hero={@hero}
         completed={@completed}
+        tab={@tab}
         completed_shown={@completed_shown}
         ratings={@ratings}
         reading={@reading}
@@ -595,6 +603,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :pulse, :any, default: nil
   attr :hero, :any, default: nil
   attr :completed, :any, default: nil
+  attr :tab, :string, default: "watchlist"
   attr :completed_shown, :integer, default: 100
   attr :ratings, :map, default: %{}
   attr :reading, :any, default: nil, doc: "the one manga to carry on with, if any"
@@ -799,68 +808,88 @@ defmodule RokiWeb.UserHomeLive do
           </ul>
         </section>
 
-        <.poster_row
+        <div
           :if={@data}
+          class="tabs tabs-box w-fit max-w-full flex-nowrap overflow-x-auto [scrollbar-width:none]"
+          role="tablist"
+        >
+          <button
+            :for={{id, label, n} <- shelf_tabs(@data, @completed)}
+            type="button"
+            role="tab"
+            aria-selected={to_string(@tab == id)}
+            phx-click="tab"
+            phx-value-id={id}
+            onclick="this.scrollIntoView({inline: 'center', block: 'nearest', behavior: 'smooth'})"
+            class={["tab shrink-0 gap-1.5 whitespace-nowrap", @tab == id && "tab-active"]}
+          >
+            {label}
+            <span :if={n} class="text-xs tabular-nums text-base-content/50">{n}</span>
+          </button>
+        </div>
+
+        <.poster_row
+          :if={@data && @tab == "watchlist"}
           cols={@cols}
-          title="Watchlist"
-          count={length(@data.watchlist.behind)}
           items={@data.watchlist.behind}
           empty="Nothing in progress. Start something and it waits here for you to pick it up."
           cached_titles={@cached_titles}
         />
         <.fold
-          :if={@data}
+          :if={@data && @tab == "saved"}
           cols={@cols}
           id="saved"
-          title="Saved"
           items={@data.saved}
           empty="Nothing saved yet. Hover a poster and press the bookmark to keep it for later."
           unsave
-          open={@open}
           cached_titles={@cached_titles}
         />
         <.fold
-          :if={@data}
+          :if={@data && @tab == "caught_up"}
           cols={@cols}
           id="caught_up"
-          title="Caught up"
           items={@data.watchlist.caught_up}
           empty="Shows where you have seen every episode so far wait here for the next one."
-          open={@open}
           cached_titles={@cached_titles}
         />
         <.fold
-          :if={@data}
+          :if={@data && @tab == "on_hold"}
           cols={@cols}
           id="on_hold"
-          title="On hold"
           items={@data.watchlist.on_hold}
           empty="Put a show on hold from its page and it rests here, out of your way."
-          open={@open}
           cached_titles={@cached_titles}
         />
         <.fold
-          :if={@data}
+          :if={@data && @tab == "history"}
           cols={@cols}
           id="history"
-          title="History"
           items={@data.continue}
           empty="What you start watching shows up here."
-          open={@open}
           cached_titles={@cached_titles}
         />
         <.completed
-          :if={@data && @completed != nil}
+          :if={@data && @tab == "completed"}
           cols={@cols}
-          items={@completed}
+          items={@completed || []}
           shown={@completed_shown}
-          open={MapSet.member?(@open, "completed")}
           ratings={@ratings}
           cached_titles={@cached_titles}
         />
       </div>
     </div>
     """
+  end
+
+  defp shelf_tabs(data, completed) do
+    [
+      {"watchlist", "Watchlist", length(data.watchlist.behind)},
+      {"saved", "Saved", length(data.saved)},
+      {"caught_up", "Caught up", length(data.watchlist.caught_up)},
+      {"on_hold", "On hold", length(data.watchlist.on_hold)},
+      {"history", "History", length(data.continue)},
+      {"completed", "Completed", completed && length(completed)}
+    ]
   end
 
   defp empty_shelf?(data) do
@@ -890,9 +919,7 @@ defmodule RokiWeb.UserHomeLive do
   # A section that starts closed and draws nothing — no posters, so no image
   # requests — until it is opened. Open state lives on the server.
   attr :id, :string, required: true
-  attr :title, :string, required: true
   attr :items, :list, required: true
-  attr :open, :any, required: true
   attr :cached_titles, :any, default: nil
 
   attr :unsave, :boolean,
@@ -906,29 +933,11 @@ defmodule RokiWeb.UserHomeLive do
   attr :cols, :string, required: true, doc: "the grid's columns (GridSize)"
 
   defp fold(assigns) do
-    assigns = assign(assigns, :shown, MapSet.member?(assigns.open, assigns.id))
-
     ~H"""
     <section class="space-y-3">
-      <button
-        phx-click="toggle_section"
-        phx-value-id={@id}
-        aria-expanded={to_string(@shown)}
-        class={[
-          "flex cursor-pointer items-center gap-2 text-2xl font-semibold tracking-tight",
-          @items == [] && "text-base-content/60"
-        ]}
-      >
-        <.icon
-          name="hero-chevron-right"
-          class={["h-4 w-4 transition", @shown && "rotate-90"]}
-        />
-        {@title}
-        <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
-      </button>
-      <p :if={@shown and @items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
+      <p :if={@items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
       <ul
-        :if={@shown and @items != []}
+        :if={@items != []}
         class={["grid gap-4", @cols]}
       >
         <RokiWeb.FeaturedLive.tile :for={i <- @items} item={i} kind={String.to_atom(@id)}>
@@ -955,7 +964,6 @@ defmodule RokiWeb.UserHomeLive do
   # its posters cost nothing until wanted; a hundred rows per page.
   attr :items, :list, required: true
   attr :shown, :integer, required: true
-  attr :open, :boolean, required: true
   attr :ratings, :map, default: %{}
   attr :cached_titles, :any, default: nil
 
@@ -972,22 +980,10 @@ defmodule RokiWeb.UserHomeLive do
 
     ~H"""
     <section class="space-y-3" id="completed">
-      <button
-        phx-click="toggle_section"
-        phx-value-id="completed"
-        aria-expanded={to_string(@open)}
-        class={[
-          "flex cursor-pointer items-center gap-2 text-2xl font-semibold tracking-tight",
-          @items == [] && "text-base-content/60"
-        ]}
-      >
-        <.icon name="hero-chevron-right" class={["h-4 w-4 transition", @open && "rotate-90"]} />
-        Completed <span class="text-sm font-normal text-base-content/60">{length(@items)}</span>
-      </button>
-      <p :if={@open and @items == []} class="text-sm text-base-content/50">
+      <p :if={@items == []} class="text-sm text-base-content/50">
         Everything you finish watching is kept here, newest first.
       </p>
-      <div :if={@open and @items != []} class="space-y-6">
+      <div :if={@items != []} class="space-y-6">
         <div :for={group <- @groups} class="space-y-2">
           <h3 class="text-sm font-medium text-base-content/60">{month_label(hd(group))}</h3>
           <ul class={["grid gap-4", @cols]}>
@@ -1036,8 +1032,6 @@ defmodule RokiWeb.UserHomeLive do
 
   # The media library's copy when there is one, else the source's own address through this
   # site, which carries the headers the source asks for.
-  attr :title, :string, required: true
-  attr :count, :integer, default: nil
   attr :cached_titles, :any, default: nil
   attr :items, :list, required: true
   attr :empty, :string, default: nil, doc: "what to say while there is nothing in it"
@@ -1047,10 +1041,6 @@ defmodule RokiWeb.UserHomeLive do
   defp poster_row(assigns) do
     ~H"""
     <section class="space-y-3">
-      <h2 class={["text-2xl font-semibold tracking-tight", @items == [] && "text-base-content/60"]}>
-        {@title}
-        <span class="text-sm font-normal text-base-content/60">{@count}</span>
-      </h2>
       <p :if={@items == [] and @empty} class="text-sm text-base-content/50">{@empty}</p>
       <ul
         :if={@items != []}
