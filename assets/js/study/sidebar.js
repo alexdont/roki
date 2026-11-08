@@ -13,6 +13,7 @@
 // No framework: the video is a plain <video>, the rest is plain DOM.
 import {parseVtt, activeIndex, liveIndexes, formatTime} from "./cues.js"
 import {bindTransport} from "./transport.js"
+import {bindAirPlay, remoteSubtitleTrack} from "./airplay.js"
 import {bindSkip} from "./skip.js"
 import {bindLoading} from "./loading.js"
 import {startLocalPlayer} from "./local_player.js"
@@ -1009,6 +1010,10 @@ export const StudySidebar = {
       $("[data-role=close]").addEventListener("click", () => this.closePlayer())
     }
 
+    // ── AirPlay (Safari): the picture on a TV; the bar's button shows when one is in reach.
+    bindAirPlay(this.el, this.video, this.stage, this)
+    if (this.video.textTracks && this.video.textTracks.addEventListener) this.video.textTracks.addEventListener("addtrack", () => this.syncRemoteSubs())
+
     // ── theater and fullscreen
     const theater = $("[data-role=theater]")
     const setTheater = (on) => {
@@ -1774,7 +1779,7 @@ export const StudySidebar = {
     clearTimeout(this.startTimer)
     if (p.startup) {
       this.startTimer = setTimeout(() => {
-        if (!this.gone && this.playerUrl === p.url && !this.failedSent && v.readyState < 3 && v.currentTime < 0.5) this.playerFailed("did not start")
+        if (!this.gone && !this.wireless && this.playerUrl === p.url && !this.failedSent && v.readyState < 3 && v.currentTime < 0.5) this.playerFailed("did not start")
       }, p.startup)
     }
 
@@ -1868,7 +1873,8 @@ export const StudySidebar = {
     let silent = 0
     let last = -1
     this.pictureTimer = setInterval(() => {
-      if (document.hidden || v.paused || v.seeking || v.readyState < 2) { silent = 0; return }
+      // On a TV through AirPlay the element draws no frames of its own: not a failure.
+      if (this.wireless || document.hidden || v.paused || v.seeking || v.readyState < 2) { silent = 0; return }
       const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null
       const frames = q ? q.totalVideoFrames : v.videoWidth ? 1 : 0
       const running = v.currentTime !== last && v.currentTime > 1
@@ -1911,6 +1917,32 @@ export const StudySidebar = {
         this.catchup = {target: t, reach: reach + this.shift}
       }
     }, 500)
+  },
+
+  // ── AirPlay ────────────────────────────────────────────────────────
+
+  // The picture went to a TV (or came back). The receiver plays the playlist itself and draws
+  // only the subtitle renditions in it — the element's own text tracks — so the studied track is
+  // switched on there, and off again after (this page draws its own lines). Audio needs nothing:
+  // the track picked on the element (`setAudio`) is what the receiver plays.
+  setWireless(on) {
+    this.wireless = !!on
+    this.syncRemoteSubs()
+  },
+
+  syncRemoteSubs() {
+    const v = this.video
+    if (!v || !v.textTracks || this.hls || this.local) return
+    const ours = new Set(Array.from(v.querySelectorAll("track")).map((el) => el.track))
+    const u = this.p && (this.p.want || this.p.url)
+    const want = this.wireless && u && u !== "upload" ? this.tracks.find((t) => t.url === u) : null
+    const pick = remoteSubtitleTrack(v.textTracks, want, ours)
+    for (let i = 0; i < v.textTracks.length; i++) {
+      const t = v.textTracks[i]
+      if (ours.has(t)) continue
+      const mode = t === pick ? "showing" : "disabled"
+      if (t.mode !== mode) t.mode = mode
+    }
   },
 
   // ── audio tracks ───────────────────────────────────────────────────
@@ -2383,6 +2415,7 @@ export const StudySidebar = {
     this.overlayKey = ""
     this.buildRows()
     this.renderMenu()
+    this.syncRemoteSubs()
   },
 
   // Put a track's lines into a layer: from what was downloaded before, or by loading it.

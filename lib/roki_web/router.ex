@@ -249,6 +249,9 @@ defmodule RokiWeb.Router do
     pipe_through :session_user
 
     get "/stream/:id/:file", StreamController, :file
+
+    # The same under a signed token, for an AirPlay receiver that has no cookie (RokiWeb.StreamToken).
+    get "/stream/t/:token/:id/:file", StreamController, :signed
     get "/peek/:type/:id", PeekController, :show
     get "/card/:type/:id", CardController, :show
     get "/library/:type/:id", LibraryController, :show

@@ -1740,7 +1740,7 @@ defmodule Roki.Watch do
 
         {:ok,
          %{
-           url: stream_url(src),
+           url: stream_url(uuid, src),
            hls?: src.kind == :remux,
            resume_at: from,
            start: part_start(src),
@@ -1752,10 +1752,12 @@ defmodule Roki.Watch do
     end)
   end
 
-  defp stream_url(%{kind: :remux, remux_id: id} = src),
-    do: "/stream/#{id}/playlist.m3u8" <> Roki.Direct.part_query(src[:part] || 0)
+  # The playlist under a signed token (`RokiWeb.StreamToken`), not the cookie-only address: an
+  # AirPlay receiver fetches it by itself, and inherits the token through the relative names.
+  defp stream_url(uuid, %{kind: :remux, remux_id: id} = src),
+    do: RokiWeb.StreamToken.path(uuid, id) <> Roki.Direct.part_query(src[:part] || 0)
 
-  defp stream_url(src), do: src.url
+  defp stream_url(_uuid, src), do: src.url
 
   # Where the conversion begins, in seconds of the film: a direct part's first fragment says.
   defp part_start(%{kind: :remux, remux_id: id, part: part}) when is_integer(part) and part > 0,

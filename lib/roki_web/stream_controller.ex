@@ -11,6 +11,10 @@ defmodule RokiWeb.StreamController do
   `?from=1800` names the part of a direct conversion (one begun 1800 s in, see
   `Roki.Direct`) a playlist or subtitle piece is made for; the part's own files carry it in
   their names (`media-1800.mp4`).
+
+  `/stream/t/:token/:id/:file` is the same under a signed token (`RokiWeb.StreamToken`): the
+  address the player loads, so that an AirPlay receiver — which fetches the playlist and all
+  under it by itself, with no cookie — gets the same files, as the account the token names.
   """
   use RokiWeb, :controller
 
@@ -21,17 +25,26 @@ defmodule RokiWeb.StreamController do
   @allowed ~r/^(playlist\.m3u8|media(?:-\d+)?\.mp4|video\.m3u8|audio\d\.m3u8|audio\d(?:-\d+)?\.mp4|(?:sub\d+|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?)(?:\.m3u8|\.\d+\.vtt)|index\.m3u8|master\.m3u8|s_[A-Za-z0-9]+\.m3u8|seg\d{5}\.ts|s_[A-Za-z0-9]+_\d{5}\.ts|sub\d+(?:-\d+)?\.vtt|ext-[a-z]{2,3}(?:-(?:\d|os\d{1,10}))?\.vtt)$/
 
   def file(conn, %{"id" => id, "file" => file} = params) do
-    cond do
-      is_nil(conn.assigns[:phoenix_kit_current_user]) ->
-        send_resp(conn, 401, "sign in to watch")
+    case conn.assigns[:phoenix_kit_current_user] do
+      %{uuid: uuid} when is_binary(uuid) -> checked(conn, uuid, id, file, params)
+      _ -> send_resp(conn, 401, "sign in to watch")
+    end
+  end
 
-      not (Laev.Remux.valid_id?(id) and file =~ @allowed) ->
-        send_resp(conn, 400, "bad request")
+  def signed(conn, %{"token" => token, "id" => id, "file" => file} = params) do
+    case RokiWeb.StreamToken.verify(token, id) do
+      {:ok, uuid} -> checked(conn, uuid, id, file, params)
+      :error -> send_resp(conn, 401, "this link has expired")
+    end
+  end
 
-      true ->
-        Laev.Remux.touch(id)
-        Roki.Direct.touch(id)
-        serve(conn, id, part(params["from"]), file)
+  defp checked(conn, uuid, id, file, params) do
+    if Laev.Remux.valid_id?(id) and file =~ @allowed do
+      Laev.Remux.touch(id)
+      Roki.Direct.touch(id)
+      serve(assign(conn, :stream_uuid, uuid), id, part(params["from"]), file)
+    else
+      send_resp(conn, 400, "bad request")
     end
   end
 
@@ -102,8 +115,8 @@ defmodule RokiWeb.StreamController do
   defp prefer(conn, id), do: [account_language(conn), Roki.Direct.original_language(id)]
 
   defp account_language(conn) do
-    case conn.assigns[:phoenix_kit_current_user] do
-      %{uuid: uuid} when is_binary(uuid) -> Roki.Laev.run(uuid, fn -> Laev.Config.lang() end)
+    case conn.assigns[:stream_uuid] do
+      uuid when is_binary(uuid) -> Roki.Laev.run(uuid, fn -> Laev.Config.lang() end)
       _ -> nil
     end
   rescue

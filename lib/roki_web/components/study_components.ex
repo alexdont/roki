@@ -114,6 +114,7 @@ defmodule RokiWeb.StudyComponents do
                 controls={!@immersive?}
                 playsinline
                 controlslist="nofullscreen"
+                x-webkit-airplay="allow"
                 class="study-video"
               ></video>
               <div :if={@immersive?} class="study-close">
@@ -128,6 +129,24 @@ defmodule RokiWeb.StudyComponents do
                 </button>
               </div>
               <div data-role="overlay" class="study-overlay"></div>
+              <%!-- While the picture is on a TV through AirPlay (Safari), see study/airplay.js. --%>
+              <div data-role="airplay-note" class="study-airplay-note" hidden aria-live="polite">
+                <svg
+                  class="h-10 w-10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1" />
+                  <path d="M12 15l5 6H7l5-6z" />
+                </svg>
+                <span>Playing on AirPlay</span>
+                <small>The AirPlay button brings it back here.</small>
+              </div>
               <button
                 :if={@immersive?}
                 type="button"
@@ -361,6 +380,29 @@ defmodule RokiWeb.StudyComponents do
                   </button>
                   <button
                     type="button"
+                    data-role="airplay"
+                    hidden
+                    class="btn btn-sm btn-square"
+                    title="AirPlay"
+                    aria-label="AirPlay"
+                    aria-pressed="false"
+                  >
+                    <svg
+                      class="h-5 w-5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1" />
+                      <path d="M12 15l5 6H7l5-6z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
                     data-role="fullscreen"
                     class="btn btn-sm btn-square"
                     title="Fullscreen, with the subtitles"
@@ -504,6 +546,30 @@ defmodule RokiWeb.StudyComponents do
                   aria-label="Theater mode"
                 >
                   <.icon name="hero-film" class="h-4 w-4" />
+                </button>
+                <button
+                  :if={!@immersive?}
+                  type="button"
+                  data-role="airplay"
+                  hidden
+                  class="btn btn-sm btn-square"
+                  title="AirPlay"
+                  aria-label="AirPlay"
+                  aria-pressed="false"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1" />
+                    <path d="M12 15l5 6H7l5-6z" />
+                  </svg>
                 </button>
                 <button
                   :if={!@immersive?}

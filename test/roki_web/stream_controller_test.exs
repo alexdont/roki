@@ -25,7 +25,11 @@ defmodule RokiWeb.StreamControllerTest do
       })
 
     token = PhoenixKit.Users.Auth.generate_user_session_token(user, [])
-    {:ok, conn: Plug.Test.init_test_session(conn, %{user_token: token}), visitor: build_conn()}
+
+    {:ok,
+     conn: Plug.Test.init_test_session(conn, %{user_token: token}),
+     visitor: build_conn(),
+     user: user}
   end
 
   test "a visitor gets nothing", %{visitor: conn} do
@@ -60,5 +64,32 @@ defmodule RokiWeb.StreamControllerTest do
 
   test "playlist.m3u8 is whichever playlist the remux started with", %{conn: conn} do
     assert conn |> get("/stream/#{@id}/playlist.m3u8") |> response(200) =~ "EXTM3U"
+  end
+
+  # An AirPlay receiver fetches the playlist and everything under it with no cookie.
+  test "a signed address serves a visitor the same files, for its own remux, for a day",
+       %{visitor: conn, user: user} do
+    assert conn |> get(RokiWeb.StreamToken.path(user.uuid, @id)) |> response(200) =~ "EXTM3U"
+
+    seg = get(conn, RokiWeb.StreamToken.path(user.uuid, @id, "seg00000.ts"))
+    assert response(seg, 200) == "ts"
+    assert get_resp_header(seg, "content-type") |> hd() =~ "video/mp2t"
+
+    # The names are checked as ever.
+    assert conn |> get(RokiWeb.StreamToken.path(user.uuid, @id, "passwd")) |> response(400)
+
+    # A token for one remux opens no other.
+    other = RokiWeb.StreamToken.sign(user.uuid, String.duplicate("f", 16))
+    assert conn |> get("/stream/t/#{other}/#{@id}/seg00000.ts") |> response(401)
+
+    # Nor does a mangled one, or one from yesterday.
+    assert conn |> get("/stream/t/not-a-token/#{@id}/seg00000.ts") |> response(401)
+
+    old =
+      Phoenix.Token.sign(RokiWeb.Endpoint, "stream", %{"u" => user.uuid, "id" => @id},
+        signed_at: System.system_time(:second) - 25 * 3600
+      )
+
+    assert conn |> get("/stream/t/#{old}/#{@id}/seg00000.ts") |> response(401)
   end
 end
