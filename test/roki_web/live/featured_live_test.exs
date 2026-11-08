@@ -104,7 +104,9 @@ defmodule RokiWeb.FeaturedLiveTest do
       assert html =~ "Paused"
 
       Process.exit(page, :kill)
+      Process.sleep(50)
       Roki.NowWatching.list()
+      :sys.get_state(view.pid)
       refute render(view) =~ "Lupin S2E5"
     end
 
