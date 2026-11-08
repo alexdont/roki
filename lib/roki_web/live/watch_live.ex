@@ -1061,6 +1061,22 @@ defmodule RokiWeb.WatchLive do
     end
   end
 
+  # Safari's AirPlay hands the TV an address to fetch, and the device player has none (it
+  # assembles the video in the browser): the server takes this play over as a stream the TV can
+  # fetch (study/airplay.js), from where it is. Not remembered — the next title plays on the
+  # device again.
+  def handle_event("airplay", _params, %{assigns: %{player: %{local: true}}} = socket) do
+    {:noreply,
+     socket
+     |> assign(
+       caps: Map.put(socket.assigns.caps, :local, false),
+       status: "Getting it ready for AirPlay — a moment…"
+     )
+     |> resolve()}
+  end
+
+  def handle_event("airplay", _params, socket), do: {:noreply, socket}
+
   def handle_event(
         "player_failed",
         %{"local" => true} = params,

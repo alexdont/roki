@@ -1011,7 +1011,7 @@ export const StudySidebar = {
     }
 
     // ── AirPlay (Safari): the picture on a TV; the bar's button shows when one is in reach.
-    bindAirPlay(this.el, this.video, this.stage, this)
+    this.airplay = bindAirPlay(this.el, this.video, this.stage, this)
     if (this.video.textTracks && this.video.textTracks.addEventListener) this.video.textTracks.addEventListener("addtrack", () => this.syncRemoteSubs())
 
     // ── theater and fullscreen
@@ -1769,6 +1769,14 @@ export const StudySidebar = {
     this.loader.begin({startup: p.startup || null, local: !!p.local, from: p.resume > 0 ? p.resume : 0})
     if (this.hls) { this.hls.destroy(); this.hls = null }
     if (this.local) { const l = this.local; this.local = null; l.stop() }
+    // AirPlay needs the element's remote playback on — the device player turns it off for its
+    // MediaSource (and hls.js does, with a <source> of its own) — so a stream puts it back.
+    this.localMode = !!p.local
+    if (!p.local) {
+      for (const el of v.querySelectorAll("source")) el.remove()
+      if ("disableRemotePlayback" in v) v.disableRemotePlayback = false
+    }
+    if (this.airplay) { if (p.local) this.airplay.prep(null); this.airplay.show() }
     this.clearMain()
     this.extras = []
     this.cache.clear()
@@ -1811,9 +1819,10 @@ export const StudySidebar = {
       return
     }
 
-    // `p.hlsjs`: a playlist from elsewhere (PenguPlay) is read by hls.js wherever the browser can run it;
-    // its own HLS is left to browsers that have nothing else (iPhones).
-    if (p.hls && (p.hlsjs || !v.canPlayType("application/vnd.apple.mpegurl"))) {
+    // A playlist is read by hls.js where the browser has no HLS of its own. Safari plays every
+    // playlist itself (PenguPlay's and Nuvio's too — it used to run hls.js for those): that is the
+    // only way its AirPlay can send the picture, not just the sound.
+    if (p.hls && !v.canPlayType("application/vnd.apple.mpegurl")) {
       const Hls = await loadHls()
       if (this.playerUrl !== p.url) return // another source was chosen while it loaded
       if (!Hls || !Hls.isSupported()) {
@@ -1858,6 +1867,13 @@ export const StudySidebar = {
       this.loader.phase("first")
       v.src = p.url
       v.load()
+      // The stream the AirPlay button asked for in device mode: say so, and open the picker if
+      // Safari lets a page do that without a press (else the note says to press again).
+      if (this.airplayWanted) {
+        this.airplayWanted = false
+        if (this.airplay) this.airplay.prep("ready")
+        v.addEventListener("loadedmetadata", () => { try { v.webkitShowPlaybackTargetPicker() } catch (e) {} }, {once: true})
+      }
     }
 
     if (p.resume > 0) this.seekWhenReachable(p.resume)
@@ -1928,6 +1944,17 @@ export const StudySidebar = {
   setWireless(on) {
     this.wireless = !!on
     this.syncRemoteSubs()
+  },
+
+  // Safari's AirPlay hands the TV an address to fetch, and the device player has none: the
+  // server is asked to take this play over as a stream (from where it is), and the picker opens
+  // once that plays (`startMedia`). Only this play: the next title plays on the device again.
+  prepareAirPlay() {
+    if (this.airplayWanted) return
+    this.airplayWanted = true
+    this.postProgress(true)
+    if (this.airplay) this.airplay.prep("preparing")
+    this.pushEvent("airplay", {})
   },
 
   syncRemoteSubs() {

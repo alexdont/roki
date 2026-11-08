@@ -40,8 +40,12 @@ defmodule RokiWeb.StreamController do
 
   defp checked(conn, uuid, id, file, params) do
     if Laev.Remux.valid_id?(id) and file =~ @allowed do
-      Laev.Remux.touch(id)
-      Roki.Direct.touch(id)
+      # (laev's touch makes a file of a directory that is not there: a made-up id must not.)
+      if File.dir?(Laev.Remux.dir(id)) do
+        Laev.Remux.touch(id)
+        Roki.Direct.touch(id)
+      end
+
       serve(assign(conn, :stream_uuid, uuid), id, part(params["from"]), file)
     else
       send_resp(conn, 400, "bad request")

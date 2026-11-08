@@ -1464,3 +1464,7 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
 .study-airplay-note svg { opacity: 0.9; margin-bottom: 0.25rem; }
 .study-airplay-note span { font-weight: 600; }
 .study-airplay-note small { font-size: 0.8rem; opacity: 0.7; }
+/* The AirPlay button, once the server's stream is ready for it: a pulse until it is pressed. */
+[data-role="airplay"][data-airplay="ready"] { animation: study-airplay-pulse 1.3s ease-in-out infinite; }
+[data-role="airplay"][data-airplay="preparing"] { opacity: 0.6; }
+@keyframes study-airplay-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0.55); } 70% { box-shadow: 0 0 0 7px rgb(255 255 255 / 0); } }
