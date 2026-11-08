@@ -1954,7 +1954,7 @@ export const StudySidebar = {
     this.airplayWanted = true
     this.postProgress(true)
     if (this.airplay) this.airplay.prep("preparing")
-    this.pushEvent("airplay", {})
+    this.pushEvent("airplay", {position: Math.floor(this.abs())})
   },
 
   syncRemoteSubs() {

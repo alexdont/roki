@@ -842,6 +842,9 @@ defmodule RokiWeb.WatchLive do
     data = %{
       player
       | url: p.url,
+        # (A restart for AirPlay turns the device player into a stream.)
+        hls: p.hls?,
+        local: p[:local] == true,
         resume: p.resume_at,
         start: p[:start] || 0,
         tracks: p.subtitles ++ kept
@@ -1065,14 +1068,35 @@ defmodule RokiWeb.WatchLive do
   # assembles the video in the browser): the server takes this play over as a stream the TV can
   # fetch (study/airplay.js), from where it is. Not remembered — the next title plays on the
   # device again.
-  def handle_event("airplay", _params, %{assigns: %{player: %{local: true}}} = socket) do
-    {:noreply,
-     socket
-     |> assign(
-       caps: Map.put(socket.assigns.caps, :local, false),
-       status: "Getting it ready for AirPlay — a moment…"
-     )
-     |> resolve()}
+  def handle_event("airplay", params, %{assigns: %{player: %{local: true}}} = socket) do
+    socket = assign(socket, caps: Map.put(socket.assigns.caps, :local, false))
+
+    case socket.assigns do
+      # The same PenguPlay or Nuvio stream, played again as the server would for a browser
+      # without the device player.
+      %{nuvio: {provider_id, id}} when is_binary(provider_id) and is_binary(id) ->
+        {:noreply, play_nuvio(socket)}
+
+      %{pengu: id} when is_binary(id) ->
+        {:noreply, play_pengu(socket)}
+
+      # The release that is playing, as a stream from where it is — no new search.
+      %{current: {source, stream}, ctx: %{} = ctx, uuid: uuid, token: token, caps: caps}
+      when is_binary(uuid) ->
+        from = if is_number(params["position"]), do: trunc(params["position"]), else: 0
+
+        {:noreply,
+         start_async(
+           socket,
+           :restart,
+           Roki.Study.wrap(fn ->
+             {token, Watch.restart(uuid, ctx, source, stream, caps, from)}
+           end)
+         )}
+
+      _ ->
+        {:noreply, resolve(socket)}
+    end
   end
 
   def handle_event("airplay", _params, socket), do: {:noreply, socket}
