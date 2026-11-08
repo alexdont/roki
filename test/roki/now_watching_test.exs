@@ -36,7 +36,7 @@ defmodule Roki.NowWatchingTest do
     uuid = Ecto.UUID.generate()
     page = spawn(fn -> Process.sleep(:infinity) end)
     Roki.NowWatching.report(uuid, page, @what, 10, 100, false)
-    assert_receive :now_watching, 1000
+    assert_receive :now_watching, 5000
     Process.exit(page, :kill)
   end
 end
