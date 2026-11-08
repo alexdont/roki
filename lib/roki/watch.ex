@@ -2277,6 +2277,16 @@ defmodule Roki.Watch do
       {:finished, finished? and not before?}
     end)
     |> tap(fn _ -> note_started(uuid, ctx, position) end)
+    |> tap(fn _ ->
+      Roki.NowWatching.report(
+        uuid,
+        self(),
+        Roki.Activity.describe_ctx(ctx),
+        position,
+        duration,
+        paused?
+      )
+    end)
     |> tap(fn {:finished, new?} ->
       if new? do
         scrobble(uuid, [ctx])

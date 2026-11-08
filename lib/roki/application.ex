@@ -20,6 +20,8 @@ defmodule Roki.Application do
       # request budgets, and a short cache in front of them (see Roki.Search).
       {Roki.RateLimit, clean_period: :timer.minutes(10)},
       Roki.TTLCache,
+      # Who is in the player this moment, for the Featured page's Activity row.
+      Roki.NowWatching,
       # The manga sources' own cache, carried over with them (Roki.Manga.Cache).
       Roki.Manga.Cache,
       # One fetch at a time per source per reader, so a binge does not hammer a site. Both of

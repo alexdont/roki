@@ -41,7 +41,7 @@ defmodule RokiWeb.FeaturedLive do
       |> assign(:upcoming, %{})
       |> assign(:uuid, uuid(socket))
       |> assign(:activity, if(uuid(socket), do: nil, else: []))
-      |> assign(activity_kind: nil, activity_who: :all, activity_open: nil)
+      |> assign(activity_kind: nil, activity_who: :all, activity_open: nil, now: [])
       |> assign(:lists, Enum.map(Roki.Lists.summaries(), &Map.put(&1, :watched, nil)))
       # The mood picker: what is held already is drawn in the first render, the rest arrives.
       |> assign(:moods, Roki.Mood.hero_peek())
@@ -84,15 +84,43 @@ defmodule RokiWeb.FeaturedLive do
     end
   end
 
+  # Who is in the player right now (`Roki.NowWatching`), narrowed by the same "whose" switch as
+  # the rest of the row; hidden when the row is narrowed to a kind that is not "started".
+  defp load_now(%{assigns: %{uuid: uuid, activity_kind: kind, activity_who: who}} = socket)
+       when is_binary(uuid) do
+    friends = if who == :friends, do: MapSet.new(Roki.Social.friends(uuid), & &1.uuid)
+
+    now =
+      if kind in [nil, "started"] do
+        Enum.filter(Roki.NowWatching.list(), fn e ->
+          case who do
+            :mine -> e.user == uuid
+            :friends -> MapSet.member?(friends, e.user)
+            _ -> true
+          end
+        end)
+      else
+        []
+      end
+
+    assign(socket, :now, now)
+  end
+
+  defp load_now(socket), do: socket
+
   @impl true
   def handle_event("activity_kind", %{"kind" => kind}, socket) do
     kind = if kind in Roki.Activity.kinds(), do: kind
-    {:noreply, socket |> assign(activity_kind: kind, activity_open: nil) |> load_activity()}
+
+    {:noreply,
+     socket |> assign(activity_kind: kind, activity_open: nil) |> load_activity() |> load_now()}
   end
 
   def handle_event("activity_who", %{"who" => who}, socket) do
     who = Enum.find([:all, :friends, :mine], :all, &(Atom.to_string(&1) == who))
-    {:noreply, socket |> assign(activity_who: who, activity_open: nil) |> load_activity()}
+
+    {:noreply,
+     socket |> assign(activity_who: who, activity_open: nil) |> load_activity() |> load_now()}
   end
 
   # A group of titles opens as a list of them.
@@ -130,6 +158,7 @@ defmodule RokiWeb.FeaturedLive do
 
   @impl true
   def handle_info(:activity, socket), do: {:noreply, load_activity(socket)}
+  def handle_info(:now_watching, socket), do: {:noreply, load_now(socket)}
   def handle_info(_other, socket), do: {:noreply, socket}
 
   defp start(socket) do
@@ -137,8 +166,12 @@ defmodule RokiWeb.FeaturedLive do
     socket = Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1))
     socket = fetch_seasonal(socket)
 
-    if uuid, do: Phoenix.PubSub.subscribe(Roki.PubSub, Roki.Activity.topic())
-    socket = load_activity(socket)
+    if uuid do
+      Phoenix.PubSub.subscribe(Roki.PubSub, Roki.Activity.topic())
+      Phoenix.PubSub.subscribe(Roki.PubSub, Roki.NowWatching.topic())
+    end
+
+    socket = socket |> load_activity() |> load_now()
     socket = start_async(socket, :moods, fn -> Roki.Mood.hero(uuid) end)
 
     socket =
@@ -265,6 +298,65 @@ defmodule RokiWeb.FeaturedLive do
 
   def handle_async({:page, kind}, {:exit, reason}, socket),
     do: {:noreply, failed(socket, kind, reason)}
+
+  attr :e, :map, required: true
+
+  # Someone in the player this moment: a green dot that pulses while it plays (a still amber one
+  # when it is paused but open), how far in, and the title. Leads the row; the finished/started
+  # cards follow it.
+  defp now_card(assigns) do
+    ~H"""
+    <.link
+      navigate={~p"/title/#{@e.what.type}/#{@e.what.tmdb_id}"}
+      class={[
+        "group flex w-64 shrink-0 snap-start items-center gap-3 rounded-box border bg-base-100 p-2.5 transition hover:bg-base-200 sm:w-72",
+        (@e.paused? && "border-base-300") || "border-success/50"
+      ]}
+    >
+      <.activity_poster poster={@e.what.poster} class="h-16 w-11 shrink-0" />
+      <div class="min-w-0 flex-1 text-sm leading-snug">
+        <p class="line-clamp-2">
+          <span class="font-semibold">{@e.username}</span>
+          <span class="text-base-content/70">{if @e.paused?, do: "paused", else: "is watching"}</span>
+          <span class="font-semibold">{now_title(@e.what)}</span>
+        </p>
+        <p class="mt-0.5 flex items-center gap-1.5 text-xs text-base-content/60">
+          <span class="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+            <span
+              :if={!@e.paused?}
+              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"
+            ></span>
+            <span class={[
+              "relative inline-flex h-2.5 w-2.5 rounded-full",
+              (@e.paused? && "bg-warning") || "bg-success"
+            ]}></span>
+          </span>
+          <span class={["font-semibold", (@e.paused? && "text-warning") || "text-success"]}>
+            {if @e.paused?, do: "Paused", else: "Live"}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span class="min-w-0 truncate tabular-nums">
+            {live_clock(@e.position)}<span :if={@e.duration > 0}> / {live_clock(@e.duration)}</span>
+          </span>
+        </p>
+      </div>
+    </.link>
+    """
+  end
+
+  defp now_title(%{type: "tv", title: t, season: s, episode: e}) when s != nil and e != nil,
+    do: "#{t} S#{s}E#{e}"
+
+  defp now_title(%{title: t}), do: t
+
+  defp live_clock(sec) when is_number(sec) do
+    sec = trunc(sec)
+    {h, m, s} = {div(sec, 3600), div(rem(sec, 3600), 60), rem(sec, 60)}
+    pad = &String.pad_leading(Integer.to_string(&1), 2, "0")
+    if h > 0, do: "#{h}:#{pad.(m)}:#{pad.(s)}", else: "#{m}:#{pad.(s)}"
+  end
+
+  defp live_clock(_), do: "0:00"
 
   attr :run, :map, required: true
   attr :i, :integer, required: true
@@ -546,7 +638,7 @@ defmodule RokiWeb.FeaturedLive do
           <div :if={@activity == nil} class="skeleton h-[5.25rem] w-full rounded-box"></div>
 
           <p
-            :if={@activity == []}
+            :if={@activity == [] and @now == []}
             class="rounded-box border border-dashed border-base-300 px-4 py-5 text-center text-sm text-base-content/60"
           >
             {if @activity_who == :friends,
@@ -555,9 +647,12 @@ defmodule RokiWeb.FeaturedLive do
           </p>
 
           <ul
-            :if={@activity not in [nil, []]}
+            :if={@activity not in [nil, []] or @now != []}
             class="flex snap-x gap-2 overflow-x-auto rounded-box pb-2 [scrollbar-width:none]"
           >
+            <li :for={e <- @now} class="contents">
+              <.now_card e={e} />
+            </li>
             <li :for={{run, i} <- @activity |> Enum.take(30) |> Enum.with_index()} class="contents">
               <.activity_card run={run} i={i} />
             </li>

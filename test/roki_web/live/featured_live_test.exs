@@ -79,6 +79,35 @@ defmodule RokiWeb.FeaturedLiveTest do
       refute html =~ ~s(aria-label="Titles in this group")
     end
 
+    test "someone in the player leads the row: live while it plays, paused when it stops" do
+      {user, conn} = signed_in("actlive")
+      what = %{type: "tv", tmdb_id: 77, title: "Lupin", poster: nil, season: 2, episode: 5}
+      page = spawn(fn -> Process.sleep(:infinity) end)
+
+      {:ok, view, _} = live(conn, "/")
+      render_async(view, 3000)
+      refute render(view) =~ "is watching"
+
+      Roki.NowWatching.report(user.uuid, page, what, 754, 2700, false)
+      Roki.NowWatching.list()
+      html = render(view)
+      assert html =~ "is watching"
+      assert html =~ "Lupin S2E5"
+      assert html =~ "12:34"
+      assert html =~ "45:00"
+      assert html =~ "Live"
+
+      Roki.NowWatching.report(user.uuid, page, what, 760, 2700, true)
+      Roki.NowWatching.list()
+      html = render(view)
+      assert html =~ "paused"
+      assert html =~ "Paused"
+
+      Process.exit(page, :kill)
+      Roki.NowWatching.list()
+      refute render(view) =~ "Lupin S2E5"
+    end
+
     test "a single title is a link to its page" do
       {user, conn} = signed_in("actsingle")
 
