@@ -50,6 +50,7 @@ defmodule RokiWeb.WatchedLive do
           visible?: true,
           history: nil,
           ratings: %{},
+          season_notes: %{},
           sort: :latest,
           kind: :all,
           q: "",
@@ -114,6 +115,7 @@ defmodule RokiWeb.WatchedLive do
 
     socket
     |> start_async(:ratings, fn -> Profile.ratings(uuid) end)
+    |> start_async(:season_notes, fn -> Profile.season_notes(uuid) end)
     |> start_async(:history, fn -> Profile.history_all(uuid) end)
     |> refresh_ratings()
   end
@@ -141,7 +143,7 @@ defmodule RokiWeb.WatchedLive do
   defp arranged(%{assigns: a}) when is_list(a.history) do
     list =
       Profile.arrange(
-        a.history,
+        Profile.by_season(a.history, a.season_notes, a.owner? or a.profile.show_ratings),
         if(a.owner? or a.profile.show_ratings, do: a.ratings, else: %{}),
         a.kind,
         a.sort,
@@ -569,6 +571,11 @@ defmodule RokiWeb.WatchedLive do
   # ── async results ──────────────────────────────────────────────────
 
   @impl true
+  def handle_async(:season_notes, {:ok, %{} = notes}, socket),
+    do: {:noreply, assign(socket, :season_notes, notes)}
+
+  def handle_async(:season_notes, _other, socket), do: {:noreply, socket}
+
   def handle_async(:history, {:ok, items}, socket) when is_list(items),
     do: {:noreply, socket |> assign(:history, items) |> wait_for_genres()}
 
@@ -727,6 +734,15 @@ defmodule RokiWeb.WatchedLive do
 
   defp groups(items, _sort, _months), do: [{nil, items}]
 
+  # How many titles a list holds: a show listed once per season is still one.
+  defp title_count(items), do: items |> Enum.uniq_by(& &1.key) |> length()
+
+  # The seasons shown under a row: those rated but not dated (the dated ones are listings of their own).
+  defp undated_seasons(%{season_no: _}, _notes), do: []
+
+  defp undated_seasons(item, notes),
+    do: notes |> Map.get(item.key, []) |> Enum.reject(& &1.at)
+
   defp kind_label(%{anime: true}), do: "Anime"
   defp kind_label(%{type: "movie"}), do: "Movie"
   defp kind_label(%{type: "tv"}), do: "Show"
@@ -783,7 +799,7 @@ defmodule RokiWeb.WatchedLive do
               Watched
             </h1>
             <span :if={is_list(@history)} class="text-lg tabular-nums text-white/70">
-              {length(@items)}
+              {title_count(@items)}
             </span>
           </div>
         </div>
@@ -1135,6 +1151,7 @@ defmodule RokiWeb.WatchedLive do
                   selectable?={selectable?(i, @seasons_all)}
                   selected={MapSet.member?(@selected, i.key)}
                   show_score={@owner? or @profile.show_ratings}
+                  seasons={undated_seasons(i, @season_notes)}
                 />
               </li>
             </ul>
@@ -1167,7 +1184,7 @@ defmodule RokiWeb.WatchedLive do
               type="button"
               phx-click="select_all"
               class="btn btn-ghost btn-sm whitespace-nowrap"
-            >All {length(@items)}</button>
+            >All {title_count(@items)}</button>
             <button
               type="button"
               phx-click="select_none"
@@ -1590,7 +1607,7 @@ defmodule RokiWeb.WatchedLive do
   defp day_row(assigns) do
     ~H"""
     <div class="flex items-center justify-between text-xs text-base-content/50">
-      <span>{day(@i)}</span>
+      <span>{if @i[:season_no], do: "S#{@i.season_no} · "}{day(@i)}</span>
       <span :if={@i.score != nil and @show_score} class="font-semibold text-warning">
         ★ {Profile.score_text(@i.score)}
       </span>
@@ -1689,6 +1706,7 @@ defmodule RokiWeb.WatchedLive do
   attr :selected, :boolean, default: false
   attr :selectable?, :boolean, default: true
   attr :show_score, :boolean, default: true
+  attr :seasons, :list, default: []
 
   # One title as a line: a small poster, its name, what kind and which year, and on the right
   # the owner's rating and the day.
@@ -1707,7 +1725,7 @@ defmodule RokiWeb.WatchedLive do
           @selected && "bg-primary/10"
         ]}
       >
-        <.row_body item={@item} show_score={@show_score} />
+        <.row_body item={@item} show_score={@show_score} seasons={@seasons} />
         <span class={[
           "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2",
           if(@selected,
@@ -1720,7 +1738,7 @@ defmodule RokiWeb.WatchedLive do
       </button>
     <% else %>
       <.link navigate={@href} class="flex items-center gap-3 p-2 transition hover:bg-base-200 sm:p-3">
-        <.row_body item={@item} show_score={@show_score} />
+        <.row_body item={@item} show_score={@show_score} seasons={@seasons} />
       </.link>
     <% end %>
     """
@@ -1728,6 +1746,7 @@ defmodule RokiWeb.WatchedLive do
 
   attr :item, :map, required: true
   attr :show_score, :boolean, default: true
+  attr :seasons, :list, default: []
 
   defp row_body(assigns) do
     ~H"""
@@ -1744,7 +1763,10 @@ defmodule RokiWeb.WatchedLive do
     <div class="min-w-0 flex-1">
       <div class="truncate font-medium">{@item.title}</div>
       <div class="truncate text-sm text-base-content/60">
-        {kind_label(@item)}<span :if={@item.year}> · {@item.year}</span>
+        {kind_label(@item)}<span :if={@item.year}> · {@item.year}</span><span
+          :if={@item[:season_no]}
+          class="font-medium text-base-content/80"
+        > · Season {@item.season_no}</span>
       </div>
       <div :if={!finished?(@item)} class="flex items-center gap-1.5 text-xs text-base-content/70">
         <span class={[
@@ -1758,6 +1780,19 @@ defmodule RokiWeb.WatchedLive do
           class="truncate text-base-content/50"
         > · {@item.note}</span>
       </div>
+      <%!-- The seasons with something kept: the day each was watched, and what it was given. The
+            day is when it was watched and never moves for a rating. --%>
+      <ul
+        :if={@seasons != []}
+        class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-base-content/60"
+      >
+        <li :for={s <- @seasons} class="whitespace-nowrap">
+          <span class="font-medium">S{s.season}</span><span
+            :if={s.score && @show_score}
+            class="text-warning"
+          > · ★ {Profile.score_text(s.score)}</span>
+        </li>
+      </ul>
       <div class="text-xs text-base-content/50 sm:hidden">{day(@item)}</div>
     </div>
     <div class="shrink-0 text-right">

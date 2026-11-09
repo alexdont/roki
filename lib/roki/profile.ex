@@ -563,6 +563,53 @@ defmodule Roki.Profile do
     end)
   end
 
+  @doc """
+  Say when a season was watched **unless a date is already kept** — what the site does when a
+  season is finished: the day it was watched stays, whatever is done to the season afterwards
+  (rating it included). Only the owner's own edit (`set_season_date/5`) moves it.
+  """
+  def set_season_date_once(uuid, type, id, season, %Date{} = date)
+      when is_binary(type) and is_integer(id) and is_integer(season) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    at = NaiveDateTime.new!(date, ~T[12:00:00])
+    now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+    %{num_rows: n} =
+      Repo.query!(
+        "insert into roki_season_dates (user_uuid, type, id, season, at, inserted_at, updated_at) " <>
+          "values ($1, $2, $3, $4, $5, $6, $6) on conflict (user_uuid, type, id, season) do nothing",
+        [bin, type, id, season, at, now]
+      )
+
+    if n > 0, do: :set, else: :kept
+  end
+
+  @doc """
+  The seasons a show has something kept for, for the watched list: `%{"tv:1396" => [%{season: 2,
+  at: unix | nil, score: 8.5 | nil}]}` — the day each was watched (`season_dates/1`) and what the
+  account gave it (`season_ratings/2`). A season with neither is not listed.
+  """
+  def season_notes(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    dates = for {{"tv", id, season}, at} <- season_dates(uuid), into: %{}, do: {{id, season}, at}
+
+    %{rows: rows} =
+      Repo.query!(
+        "select tmdb_id, season, score from roki_season_ratings where user_uuid = $1",
+        [bin]
+      )
+
+    scores = Map.new(rows, fn [id, season, score] -> {{id, season}, score * 1.0} end)
+
+    (Map.keys(dates) ++ Map.keys(scores))
+    |> Enum.uniq()
+    |> Enum.group_by(&elem(&1, 0), fn {id, season} ->
+      %{season: season, at: dates[{id, season}], score: scores[{id, season}]}
+    end)
+    |> Map.new(fn {id, list} -> {"tv:#{id}", Enum.sort_by(list, & &1.season)} end)
+  end
+
   @doc "Say when one season was watched. A `nil` date takes the answer back."
   def set_season_date(uuid, type, id, season, nil)
       when is_binary(type) and is_integer(id) and is_integer(season) do
@@ -789,6 +836,59 @@ defmodule Roki.Profile do
     end)
   end
 
+  @doc """
+  A show watched a season at a time is listed once per dated season, each on the day that season
+  was watched (`season_notes/1`), so the history says S1 in March and S2 in September rather than
+  the show on one day. `scores?` lays each season's own rating on its listing (the show's rating
+  stands in for a season never rated). The listings of one show share its `key`, so it still counts
+  as one show; a listing carries `season_no`. A show with seasons watched beyond the dated ones keeps
+  its own listing as well. Films, anime entries and shows with no season date are left as they are.
+  """
+  def by_season(items, notes, scores? \\ true) do
+    items
+    |> split_seasons(notes, scores?)
+    # The list arrives newest first (dated before undated); a season listing carries its own day,
+    # so it has to find its place in that order — the split must not leave months out of sequence.
+    # A stable sort: what was already in order stays where it is.
+    |> then(fn list ->
+      if length(list) == length(items),
+        do: list,
+        else: Enum.sort_by(list, &{if(&1.dated?, do: 0, else: 1), -&1.at})
+    end)
+  end
+
+  defp split_seasons(items, notes, scores?) do
+    Enum.flat_map(items, fn item ->
+      dated = for s <- Map.get(notes, item[:key], []), s.at != nil, do: s
+
+      if item[:type] != "tv" or is_integer(item[:mal_id]) or dated == [] do
+        [item]
+      else
+        listings =
+          for s <- dated do
+            Map.merge(item, %{
+              season_no: s.season,
+              at: s.at,
+              dated?: true,
+              season_score: scores? && s.score
+            })
+          end
+
+        if length(dated) < seasons_watched(item), do: listings ++ [item], else: listings
+      end
+    end)
+  end
+
+  # "2/5 seasons" -> 2; nothing said, the dated seasons are taken to be all of them.
+  defp seasons_watched(%{note: note}) when is_binary(note) do
+    case Regex.run(~r/(\d+)\/\d+ seasons?/, note) do
+      [_, n] -> String.to_integer(n)
+      _ -> 0
+    end
+  end
+
+  defp seasons_watched(_item), do: 0
+
   defp rating_filter(true), do: 10
   defp rating_filter(:none), do: :none
   defp rating_filter(n) when is_integer(n) and n in 1..10, do: n
@@ -825,6 +925,9 @@ defmodule Roki.Profile do
   # everything else on TMDB.
   @doc "The rating a `ratings/1` map holds for a title (an item with `type`, `id` and maybe `mal_id`), or nil."
   def score_for(ratings, item), do: score_of(ratings, item)
+
+  # A season's own rating on its listing; a season never rated reads as the show's.
+  defp score_of(_ratings, %{season_no: _, season_score: s}) when is_number(s), do: s
 
   defp score_of(ratings, %{mal_id: mal} = item) when is_integer(mal),
     do: ratings[{"mal", mal}] || ratings[{item.type, item.id}]

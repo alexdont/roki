@@ -867,9 +867,33 @@ defmodule Roki.Watch do
           end)
         end
       end)
+
+      date_finished_seasons(uuid, ctxs)
     end)
 
     :ok
+  rescue
+    _ -> :ok
+  end
+
+  # A season whose last episode has just been marked is watched *today*, and that is kept
+  # (`Profile.set_season_date_once/5`): rating the season later, or marking more of it, never moves
+  # the day it was watched. A season still airing is not finished; neither is one with an episode
+  # unmarked. Season 0 (specials) is not dated.
+  defp date_finished_seasons(uuid, ctxs) do
+    ctxs
+    |> Enum.filter(&(&1[:type] == "tv" and is_integer(&1[:season]) and &1[:season] > 0))
+    |> Enum.map(&{&1.tmdb_id, &1.season})
+    |> Enum.uniq()
+    |> Enum.each(fn {id, season} ->
+      with {:ok, title} <- title("tv", id, uuid),
+           {:ok, eps} when eps != [] <- episodes(id, season, uuid),
+           true <- Enum.all?(eps, & &1.aired?),
+           done = watched_episodes(uuid, title, season, eps),
+           true <- Enum.all?(eps, &MapSet.member?(done, &1.number)) do
+        Roki.Profile.set_season_date_once(uuid, "tv", id, season, Date.utc_today())
+      end
+    end)
   rescue
     _ -> :ok
   end
