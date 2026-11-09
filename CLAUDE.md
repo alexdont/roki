@@ -443,7 +443,9 @@ MAL entry).
 **Next episode** (`Watch.next_episode/4`: the next one out in the season, else the first of the next season,
 with the "S2E1" tag). The player bar's **Next** button (watch page) sends `next`; the page goes to the next
 episode's watch address with `?prefer=<hash>` — a hint: the release that was playing is kept if it is among the
-first few checked (a season pack is), else the best starts. The sources page has the same for an external
+first few checked (a season pack is), else the best starts. **External player panel survives a reload:** `hand_over` patches the address to `?h=<release hash>` (replace); a page that loads or rejoins on it (`reopen`, only in external mode) puts the panel back from the found releases without launching the player again (`launch?: false`). **Next marks once:** `leaving/1` marks the episode watched when the device is in external mode and a player was opened for it — the panel, or after a reload the resume entry pointing at this episode (`Watch.opened_externally?/2`) — and never twice (`Watch.mark_watched_once/2`: a mark that exists is left alone, so the feed does not say it again). Previous never marks.
+
+The sources page has the same for an external
 player: a button in the header and a big **Play next episode** in the open-in-VLC panel, going to
 `/sources/tv/…?auto=1&prefer=…`; pressing it there marks the current episode watched (an external player cannot
 report progress). **Audio** (`audioList/setAudio` in sidebar.js) works on hls.js and on a native `audioTracks`

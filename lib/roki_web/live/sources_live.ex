@@ -67,6 +67,7 @@ defmodule RokiWeb.SourcesLive do
           next: nil,
           prev: nil,
           prefer: nil,
+          reopen: nil,
           auto: :off,
           auto_req: false,
           failed: nil,
@@ -148,6 +149,13 @@ defmodule RokiWeb.SourcesLive do
       if params["prefer"] in [nil, ""],
         do: socket,
         else: assign(socket, :prefer, String.slice(params["prefer"], 0, 64))
+
+    # `h`: the release an external player was opened with (see `hand_over/3`). A page that loads or
+    # rejoins on that address — the phone slept while VLC played — shows its panel again.
+    socket =
+      if params["h"] in [nil, ""] or socket.assigns.external != nil,
+        do: socket,
+        else: assign(socket, :reopen, String.slice(params["h"], 0, 64))
 
     cond do
       # Playing in the browser, the sources page has nothing to add: the watch page finds the
@@ -489,6 +497,26 @@ defmodule RokiWeb.SourcesLive do
         good: res.good
       )
 
+    if socket.assigns.reopen && socket.assigns.mode == :external do
+      reopen(socket, res)
+    else
+      auto_start(socket, res)
+    end
+  end
+
+  # The address names the release an external player was opened with: put its panel back, without
+  # opening the player a second time. A release no longer among those found is just not restored.
+  defp reopen(socket, res) do
+    hash = socket.assigns.reopen
+    socket = assign(socket, reopen: nil, auto: :off)
+
+    case Resolver.find(res.playable, hash) do
+      {_source, _stream} = pair -> hand_over(socket, pair, false)
+      _ -> socket
+    end
+  end
+
+  defp auto_start(socket, res) do
     if socket.assigns.auto == :pending do
       case preferred(socket, res) ||
              Resolver.pick(
@@ -540,9 +568,10 @@ defmodule RokiWeb.SourcesLive do
     |> tap(fn _ -> Process.send_after(self(), {:prestart_timeout, source.hash}, @prestart_ms) end)
   end
 
-  defp start(socket, pair), do: hand_over(socket, pair)
+  defp start(socket, pair), do: hand_over(socket, pair, true)
 
-  defp hand_over(socket, {source, stream} = pair) do
+  # `launch?`: open the player now. False when the panel is only being put back after a reload.
+  defp hand_over(socket, {source, stream} = pair, launch?) do
     %{uuid: uuid, ctx: ctx, key: key, title: title, platform: platform} = socket.assigns
     app = Roki.Laev.web_settings(uuid)["external_app"]
     external = Watch.external(uuid, ctx, source, stream)
@@ -552,8 +581,17 @@ defmodule RokiWeb.SourcesLive do
 
     socket
     |> assign(current: pair, external: Map.merge(external, %{app: app, launch: launch}))
-    |> then(&if(launch, do: push_event(&1, "roki:launch", %{url: launch}), else: &1))
+    |> then(&if(launch && launch?, do: push_event(&1, "roki:launch", %{url: launch}), else: &1))
+    # The address names the release, so a reload (the phone slept while it played) brings the panel back.
+    |> then(
+      &if(launch?,
+        do: push_patch(&1, to: opened_path(&1.assigns, source.hash), replace: true),
+        else: &1
+      )
+    )
   end
+
+  defp opened_path(assigns, hash), do: clean_path(assigns) <> "?" <> URI.encode_query(h: hash)
 
   defp watch_path(%{type: "movie", id: id}, hash), do: ~p"/watch/movie/#{id}?#{[h: hash]}"
 
@@ -629,7 +667,7 @@ defmodule RokiWeb.SourcesLive do
         Watch.remember_resolution(socket.assigns.uuid, socket.assigns.ctx, source)
 
         if socket.assigns.mode == :external or params["via"] == "external",
-          do: {:noreply, hand_over(assign(socket, :auto, :done), pair)},
+          do: {:noreply, hand_over(assign(socket, :auto, :done), pair, true)},
           else:
             {:noreply,
              push_navigate(socket, to: watch_path(socket.assigns, source.hash), replace: true)}
@@ -683,8 +721,8 @@ defmodule RokiWeb.SourcesLive do
   # best one starts by itself. Going on from an external player means this one was watched — the
   # player cannot say so itself — so it is marked.
   def handle_event("next", _params, %{assigns: %{next: {s, e, _tag}}} = socket) do
-    %{uuid: uuid, ctx: ctx, external: external, current: current, id: id} = socket.assigns
-    if external && uuid && ctx, do: Watch.mark_watched(uuid, ctx)
+    %{current: current, id: id} = socket.assigns
+    leaving(socket)
 
     query =
       case current do
@@ -715,6 +753,21 @@ defmodule RokiWeb.SourcesLive do
     if uuid && ctx, do: Watch.mark_watched(uuid, ctx)
     {:noreply, socket}
   end
+
+  # Going on from an external player: the episode it was opened for is marked watched, once. Not
+  # when it already is (it would be told to the feed again), and not when no player was opened for
+  # it — only the resume entry knows that after the page has reloaded, so it is asked, not the panel.
+  defp leaving(%{assigns: %{mode: :external, uuid: uuid, title: %{} = title} = a})
+       when uuid != nil do
+    if a.type == "tv" or a.external do
+      ctx = a.ctx || Watch.ctx(uuid, title, a.season, a.episode)
+      if a.external || Watch.opened_externally?(uuid, ctx), do: Watch.mark_watched_once(uuid, ctx)
+    end
+
+    :ok
+  end
+
+  defp leaving(_socket), do: :ok
 
   defp new_cap(%{assigns: %{ctx: nil, cap: cap}}, _mode), do: cap
 

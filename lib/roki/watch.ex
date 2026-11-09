@@ -1410,6 +1410,30 @@ defmodule Roki.Watch do
     library_changed(uuid)
   end
 
+  @doc """
+  Was an external player opened for this film or episode? The resume entry (written by `external/4`)
+  points at it. After a reload of the sources page, this is all that is left of the panel.
+  """
+  def opened_externally?(uuid, ctx) do
+    Roki.Laev.run(uuid, fn ->
+      case Laev.Resume.get(ctx.type, ctx.tmdb_id) do
+        %{} = entry ->
+          entry["season"] == ctx[:season] and entry["episode"] == ctx[:episode] and
+            is_map(entry["source"])
+
+        _ ->
+          false
+      end
+    end)
+  end
+
+  @doc "`mark_watched/2` unless it is marked already (the feed would say it a second time). `:already` then."
+  def mark_watched_once(uuid, ctx) do
+    if Roki.Laev.run(uuid, fn -> Laev.Position.finished?(ctx) end),
+      do: :already,
+      else: mark_watched(uuid, ctx)
+  end
+
   @doc "Mark this episode or film watched (an external player cannot report progress)."
   def mark_watched(uuid, ctx) do
     Roki.Laev.run(uuid, fn ->
