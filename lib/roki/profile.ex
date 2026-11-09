@@ -1253,6 +1253,58 @@ defmodule Roki.Profile do
   end
 
   @doc """
+  How many titles of each kind the account rated at each score: `%{"movie" => %{7.5 => 3, ...},
+  "tv" => ..., "mal" => ...}` (anime are MyAnimeList entries). Read from the site's copy.
+  """
+  def rating_counts(uuid) when is_binary(uuid) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!(
+        "select type, score, count(*) from roki_ratings where user_uuid = $1 and score > 0 group by type, score",
+        [bin]
+      )
+
+    Enum.reduce(rows, %{}, fn [type, score, n], acc ->
+      Map.update(acc, type, %{(score * 1.0) => n}, &Map.put(&1, score * 1.0, n))
+    end)
+  end
+
+  @doc """
+  The bars of a rating breakdown for the kinds in `kinds` (`nil` = all): `%{bars: [{score, count}],
+  total:, average:, top:}`; bars from the lowest score used to 10, half points kept only when the
+  account gives them. `nil` when nothing was rated.
+  """
+  def rating_breakdown(counts, kinds \\ nil) do
+    merged =
+      counts
+      |> Enum.filter(fn {type, _} -> kinds == nil or type in kinds end)
+      |> Enum.reduce(%{}, fn {_type, by}, acc -> Map.merge(acc, by, fn _, a, b -> a + b end) end)
+
+    total = merged |> Map.values() |> Enum.sum()
+
+    if total == 0 do
+      nil
+    else
+      halves? = Enum.any?(merged, fn {score, _} -> score != Float.round(score) end)
+      step = if halves?, do: 0.5, else: 1.0
+      low = merged |> Map.keys() |> Enum.min() |> min(10.0)
+      count = trunc((10.0 - low) / step)
+
+      bars = for i <- 0..count, score = 10.0 - i * step, do: {score, Map.get(merged, score, 0)}
+      bars = Enum.reverse(bars)
+      sum = Enum.reduce(merged, 0.0, fn {score, n}, acc -> acc + score * n end)
+
+      %{
+        bars: bars,
+        total: total,
+        average: Float.round(sum / total, 1),
+        top: bars |> Enum.max_by(&elem(&1, 1)) |> elem(0)
+      }
+    end
+  end
+
+  @doc """
   What this account rated at each score, newest first, up to `per` a score (six: the sheet's row) — for the rating
   sheet's shelf: `%{"8.5" => [%{type, id, title, year, poster}]}`, the keys as the slider says
   them (`score_key/1`). One kind at a time (`type`: films, shows or anime — TMDB's order is

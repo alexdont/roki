@@ -59,6 +59,8 @@ defmodule RokiWeb.ProfileLive do
           notice: nil,
           stats: nil,
           watched: nil,
+          rating_counts: nil,
+          rating_kind: "all",
           films: nil,
           favorites: nil,
           shelf: nil,
@@ -93,6 +95,7 @@ defmodule RokiWeb.ProfileLive do
     socket
     |> start_async(:favorites, fn -> Profile.favorites(uuid) end)
     |> start_async(:watched, fn -> Profile.counts(uuid) end)
+    |> start_async(:ratings, fn -> Profile.rating_counts(uuid) end)
     |> then(fn s ->
       if Roki.Laev.connected?(uuid),
         do: start_async(s, :stats, fn -> Profile.hours(uuid) end),
@@ -132,6 +135,9 @@ defmodule RokiWeb.ProfileLive do
   end
 
   def handle_event("validate", _params, socket), do: {:noreply, socket}
+
+  def handle_event("rating_kind", %{"kind" => kind}, socket) when kind in ~w(all movie tv mal),
+    do: {:noreply, assign(socket, :rating_kind, kind)}
 
   # Friends: the buttons beside the name. Whatever the answer, the page then shows how the two
   # stand now (a request may have been taken back or answered meanwhile).
@@ -422,6 +428,11 @@ defmodule RokiWeb.ProfileLive do
     do: {:noreply, assign(socket, watched: n, films: f)}
 
   def handle_async(:watched, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:ratings, {:ok, counts}, socket) when is_map(counts),
+    do: {:noreply, assign(socket, :rating_counts, counts)}
+
+  def handle_async(:ratings, _other, socket), do: {:noreply, socket}
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
 
@@ -506,7 +517,7 @@ defmodule RokiWeb.ProfileLive do
             </div>
           </div>
 
-          <div class="flex flex-col gap-5 px-4 pb-6 pt-28 sm:px-6 lg:px-12 xl:px-16">
+          <div class="flex flex-col gap-4 px-4 pb-5 pt-24 sm:gap-5 sm:px-6 sm:pb-6 sm:pt-28 lg:px-12 xl:px-16">
             <div class="flex flex-wrap items-end gap-x-5 gap-y-3">
               <%!-- The avatar is PhoenixKit's biggest; on a phone it is drawn smaller. --%>
               <div class="w-24 shrink-0 rounded-full ring-4 ring-white/25 sm:w-36 [&_.avatar>div]:!h-24 [&_.avatar>div]:!w-24 sm:[&_.avatar>div]:!h-36 sm:[&_.avatar>div]:!w-36">
@@ -562,36 +573,43 @@ defmodule RokiWeb.ProfileLive do
             </p>
 
             <%!-- The numbers, as the thing they are: big, with a word under each. --%>
-            <div class="flex flex-wrap gap-x-10 gap-y-3">
+            <div class="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:gap-x-10 sm:gap-y-3">
               <.link navigate={"/u/#{@username}/watched"} class="group">
-                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
                   {if @watched, do: thousands(@watched), else: "…"}
                 </div>
-                <div class="text-xs font-medium uppercase tracking-wide text-white/60 group-hover:text-white">
+                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs group-hover:text-white">
                   Watched →
                 </div>
               </.link>
               <div>
-                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
                   {if @films, do: thousands(@films), else: "…"}
                 </div>
-                <div class="text-xs font-medium uppercase tracking-wide text-white/60">Films</div>
+                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
+                  Films
+                </div>
               </div>
               <div>
-                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
                   {stat(@stats, :episodes)}
                 </div>
-                <div class="text-xs font-medium uppercase tracking-wide text-white/60">Episodes</div>
+                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
+                  Episodes
+                </div>
               </div>
               <div>
-                <div class="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
+                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
                   {stat(@stats, :hours)}
                 </div>
-                <div class="text-xs font-medium uppercase tracking-wide text-white/60">
-                  Hours watched
+                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
+                  Hours<span class="hidden sm:inline"> watched</span>
                 </div>
               </div>
             </div>
+            <%!-- On a wide screen it sits on the banner's right, level with the numbers; below that
+                  it follows them. --%>
+            <.rating_breakdown :if={@rating_counts} counts={@rating_counts} kind={@rating_kind} />
           </div>
         </section>
 
@@ -802,6 +820,91 @@ defmodule RokiWeb.ProfileLive do
     """
   end
 
+  attr :counts, :map, required: true
+  attr :kind, :string, required: true
+
+  # How the account rates: a column per score, as tall as the number of titles given it, in the
+  # score's own colour, with the average and the total. Films, shows and anime on their own or
+  # together. Nothing at all when there is nothing rated.
+  defp rating_breakdown(assigns) do
+    kinds = if assigns.kind == "all", do: nil, else: [assigns.kind]
+    breakdown = Profile.rating_breakdown(assigns.counts, kinds)
+
+    present =
+      for {k, label} <- [{"movie", "Films"}, {"tv", "Shows"}, {"mal", "Anime"}],
+          Map.has_key?(assigns.counts, k),
+          do: {k, label}
+
+    assigns =
+      assign(assigns,
+        b: breakdown,
+        tabs: [{"all", "All"} | present],
+        max: breakdown && breakdown.bars |> Enum.map(&elem(&1, 1)) |> Enum.max()
+      )
+
+    ~H"""
+    <section
+      :if={@counts != %{}}
+      class="w-full space-y-2 rounded-box border border-white/15 bg-black/35 p-3 backdrop-blur-md sm:space-y-3 sm:p-4 lg:absolute lg:bottom-6 lg:right-12 lg:w-[26rem] xl:right-16"
+      aria-label="Ratings"
+    >
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-white/70">Ratings</h2>
+          <p :if={@b} class="text-sm text-white/70">
+            <span class="text-2xl font-bold tabular-nums text-white">
+              {Roki.Profile.score_text(@b.average)}
+            </span>
+            average · {@b.total} rated
+          </p>
+        </div>
+        <div
+          :if={length(@tabs) > 2}
+          role="tablist"
+          class="tabs tabs-box tabs-xs bg-white/10 [--color-base-content:#fff] [&_.tab-active]:!text-neutral-900"
+        >
+          <button
+            :for={{k, label} <- @tabs}
+            type="button"
+            role="tab"
+            phx-click="rating_kind"
+            phx-value-kind={k}
+            class={["tab", @kind == k && "tab-active"]}
+          >
+            {label}
+          </button>
+        </div>
+      </div>
+
+      <div :if={@b}>
+        <ol class="flex h-20 items-end gap-0.5 sm:h-28 sm:gap-1">
+          <li
+            :for={{score, n} <- @b.bars}
+            class="group relative flex h-full min-w-0 flex-1 flex-col justify-end"
+            title={"#{Roki.Profile.score_text(score)}: #{n} #{if n == 1, do: "title", else: "titles"}"}
+          >
+            <span class="mb-0.5 text-center text-[0.6rem] tabular-nums text-white/70">
+              {if n > 0, do: n}
+            </span>
+            <span
+              class="block w-full rounded-t-sm"
+              style={"height: #{if n == 0, do: "2px", else: "#{max(n / @max * 100, 3)}%"}; background: #{RokiWeb.ScoreColor.color(score)}; opacity: #{if n == 0, do: "0.25", else: "1"}"}
+            ></span>
+          </li>
+        </ol>
+        <ol class="mt-1 flex gap-0.5 sm:gap-1">
+          <li
+            :for={{score, _n} <- @b.bars}
+            class="min-w-0 flex-1 text-center text-[0.6rem] tabular-nums text-white/55"
+          >
+            {if score == Float.round(score), do: trunc(score)}
+          </li>
+        </ol>
+      </div>
+    </section>
+    """
+  end
+
   attr :username, :string, required: true
   attr :owner?, :boolean, required: true
   attr :signed_in?, :boolean, required: true
@@ -818,7 +921,7 @@ defmodule RokiWeb.ProfileLive do
   defp friend_bar(assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-2 sm:pb-1">
-      <.link navigate={"/u/#{@username}/friends"} class="btn btn-sm btn-ghost gap-1.5">
+      <.link navigate={"/u/#{@username}/friends"} class="btn btn-sm btn-ghost -ml-2 gap-1.5 sm:ml-0">
         <.icon name="hero-users" class="h-4 w-4" />
         {@count} {if @count == 1, do: "friend", else: "friends"}
         <span :if={@owner? and @pending > 0} class="badge badge-primary badge-sm">{@pending} new</span>
