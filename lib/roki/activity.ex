@@ -593,9 +593,37 @@ defmodule Roki.Activity do
       |> Enum.group_by(&{&1.user, &1.type, &1.tmdb_id})
       |> Enum.flat_map(fn {_key, evs} -> runs(evs) end)
 
-    (runs ++ Enum.map(other, &single/1))
+    {runs, singles} = fold_ratings(runs, Enum.map(other, &single/1))
+
+    (runs ++ singles)
     |> batch()
     |> Enum.sort_by(& &1.at, {:desc, DateTime})
+  end
+
+  # A rating given in the same sitting as the watching belongs to it: "watched 3 episodes and rated
+  # 6", not two lines. A rating joins the finished run of that title by that person nearest to it
+  # in time, within the run gap; the run then carries `score` and the rating is not shown alone.
+  defp fold_ratings(runs, singles) do
+    Enum.reduce(singles, {runs, []}, fn single, {runs, kept} ->
+      with "rated" <- single.kind,
+           {run, diff} when diff <= @gap_s <- nearest_run(runs, single) do
+        merged = %{run | score: single.score, at: Enum.max([run.at, single.at], DateTime)}
+        {Enum.map(runs, &if(&1 == run, do: merged, else: &1)), kept}
+      else
+        _ -> {runs, [single | kept]}
+      end
+    end)
+    |> then(fn {runs, kept} -> {runs, Enum.reverse(kept)} end)
+  end
+
+  defp nearest_run(runs, single) do
+    runs
+    |> Enum.filter(
+      &(&1.kind == "finished" and is_nil(&1.score) and &1.user == single.user and
+          &1.type == single.type and &1.tmdb_id == single.tmdb_id)
+    )
+    |> Enum.map(&{&1, abs(DateTime.diff(&1.at, single.at))})
+    |> Enum.min_by(&elem(&1, 1), fn -> nil end)
   end
 
   defp runs(evs) do
@@ -783,7 +811,14 @@ defmodule Roki.Activity do
         verb: before,
         subject: subject,
         after: nil,
-        detail: if(watched_text(e), do: watched_text(e) <> " watched")
+        detail:
+          [
+            if(watched_text(e), do: watched_text(e) <> " watched"),
+            if(e[:score], do: "rated " <> score_text(e.score))
+          ]
+          |> Enum.reject(&is_nil/1)
+          |> Enum.join(" · ")
+          |> then(&if(&1 == "", do: nil, else: &1))
       },
       look(kind)
     )

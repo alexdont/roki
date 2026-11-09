@@ -143,4 +143,21 @@ defmodule Roki.ActivityTest do
       assert Activity.describe(r).detail =~ "8.5"
     end
   end
+
+  test "a rating given in the same sitting folds into the watching" do
+    events =
+      for(n <- 1..3, do: ev("alex", 1, n)) ++
+        [ev("alex", 1, 10, %{kind: "rated", score: 6.0, season: nil, episode: nil})]
+
+    assert [run] = Activity.group(events)
+    assert run.count == 3 and run.score == 6.0
+    assert Activity.describe(run).detail =~ "rated ★ 6"
+  end
+
+  test "a rating of something else, or hours later, stays on its own" do
+    rated = ev("alex", 1, 600, %{kind: "rated", score: 7.0, season: nil, episode: nil})
+    assert length(Activity.group([ev("alex", 1, 1), rated])) == 2
+    other = ev("alex", 2, 2, %{kind: "rated", score: 7.0, season: nil, episode: nil})
+    assert length(Activity.group([ev("alex", 1, 1), other])) == 2
+  end
 end
