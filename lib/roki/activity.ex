@@ -235,6 +235,30 @@ defmodule Roki.Activity do
     _ -> 0
   end
 
+  @doc """
+  Take back the `rated` entries of a title: of the show as a whole (`season` nil) or of one
+  season — the two are separate ratings and one never removes the other.
+  """
+  def retract_rated(uuid, type, tmdb_id, season \\ nil)
+      when is_binary(uuid) and type in ["movie", "tv"] and is_integer(tmdb_id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{num_rows: n} =
+      Repo.query!(
+        """
+        delete from roki_activity
+         where user_uuid = $1 and type = $2 and tmdb_id = $3 and kind = 'rated'
+           and season is not distinct from $4
+        """,
+        [bin, type, tmdb_id, season]
+      )
+
+    if n > 0, do: Phoenix.PubSub.broadcast(Roki.PubSub, @topic, :activity)
+    n
+  rescue
+    _ -> 0
+  end
+
   @doc "Is this account one whose doings are not shown to anyone (the test account)?"
   def silent?(uuid) when is_binary(uuid) do
     Repo.query!("select 1 from phoenix_kit_users where uuid = $1 and username = any($2)", [
@@ -273,13 +297,14 @@ defmodule Roki.Activity do
 
   @doc false
   def rated_now(uuid, %{type: type, id: id, title: title} = t, score) do
-    retract(uuid, type, id, ["rated"])
+    retract_rated(uuid, type, id, t[:season])
 
     insert_now(
       uuid,
       %{
         type: type,
         tmdb_id: id,
+        season: t[:season],
         title: title,
         poster: poster_url(t[:poster_path]),
         score: score * 1.0
@@ -620,7 +645,8 @@ defmodule Roki.Activity do
     runs
     |> Enum.filter(
       &(&1.kind == "finished" and is_nil(&1.score) and &1.user == single.user and
-          &1.type == single.type and &1.tmdb_id == single.tmdb_id)
+          &1.type == single.type and &1.tmdb_id == single.tmdb_id and
+          (is_nil(single.season) or single.season == &1.season))
     )
     |> Enum.map(&{&1, abs(DateTime.diff(&1.at, single.at))})
     |> Enum.min_by(&elem(&1, 1), fn -> nil end)
@@ -799,7 +825,12 @@ defmodule Roki.Activity do
   def describe(%{kind: "rated"} = e),
     do:
       Map.merge(
-        %{verb: "rated", subject: e.title, after: nil, detail: score_text(e.score)},
+        %{
+          verb: "rated",
+          subject: e.title,
+          after: if(is_integer(e.season), do: "season #{e.season}"),
+          detail: score_text(e.score)
+        },
         look("rated")
       )
 

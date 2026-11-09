@@ -93,4 +93,25 @@ defmodule Roki.ActivityDbTest do
     assert Activity.retract(u.uuid, "movie", 77, ["rated"]) == 1
     assert [%{title: "Other"}] = Activity.recent(10, users: [u.uuid], kinds: ["rated"])
   end
+
+  test "a season's rating and the show's are separate entries, each replaced and retracted alone" do
+    u = register("activsr")
+    show = %{type: "tv", id: 500, title: "Seasoned"}
+
+    Activity.rated_now(u.uuid, show, 7.0)
+    Activity.rated_now(u.uuid, Map.put(show, :season, 2), 8.5)
+    Activity.rated_now(u.uuid, Map.put(show, :season, 2), 9.0)
+    assert length(Activity.recent(10, users: [u.uuid], kinds: ["rated"])) == 2
+
+    # Rating the show again does not take the season's away…
+    Activity.rated_now(u.uuid, show, 6.0)
+    rated = Activity.recent(10, users: [u.uuid], kinds: ["rated"])
+    assert length(rated) == 2
+    assert Enum.find(rated, &(&1.season == 2)).score == 9.0
+    assert Activity.describe(Enum.find(rated, &(&1.season == 2))).after == "season 2"
+
+    # …and taking one back leaves the other.
+    assert Activity.retract_rated(u.uuid, "tv", 500, 2) == 1
+    assert [%{season: nil, score: 6.0}] = Activity.recent(10, users: [u.uuid], kinds: ["rated"])
+  end
 end

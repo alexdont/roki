@@ -522,6 +522,52 @@ defmodule Roki.Watch do
     _ -> :ok
   end
 
+  @doc """
+  Rate one season of a show on Roki (TMDB cannot): `{:ok, score}`. It is told to the feed and to
+  friends as "rated Show season 2", and the season counts as watched (every episode of it that is
+  out and not yet marked) — a judgement of it, like the whole show's rating.
+  """
+  def rate_season(uuid, title, season, value) when is_integer(season) do
+    {:ok, score} = Roki.Profile.put_season_rating(uuid, title.id, season, value)
+
+    Roki.Activity.rated(uuid, Map.put(title, :season, season), score)
+
+    Task.start(fn ->
+      Roki.Social.friend_activity(
+        uuid,
+        :rated,
+        title.type,
+        title.id,
+        "#{title.title} season #{season}",
+        score
+      )
+    end)
+
+    watched_by_season_rating(uuid, title, season)
+    {:ok, score}
+  end
+
+  # The aired episodes of the season that are not marked yet.
+  defp watched_by_season_rating(uuid, title, season) do
+    with {:ok, eps} <- episodes(title.id, season, uuid) do
+      aired = Enum.filter(eps, & &1.aired?)
+      done = watched_episodes(uuid, title, season, aired)
+      todo = for e <- aired, not MapSet.member?(done, e.number), do: {season, e.number}
+      if todo != [], do: set_many_watched(uuid, title, todo, true)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  @doc "Take a season's rating back (the show's own stays); it reads as the show's again."
+  def clear_season_rating(uuid, title, season) do
+    Roki.Profile.clear_season_rating(uuid, title.id, season)
+    Roki.Activity.retract_rated(uuid, title.type, title.id, season)
+    :ok
+  end
+
   @doc "Take your rating back: `:ok` or `{:error, why}`."
   def clear_rating(uuid, title, entry \\ nil) do
     Roki.Laev.run(uuid, fn ->
@@ -546,7 +592,7 @@ defmodule Roki.Watch do
 
           if result == :ok do
             Roki.Profile.note_rating(uuid, {title.type, title.id}, nil)
-            Roki.Activity.retract(uuid, title.type, title.id, ["rated"])
+            Roki.Activity.retract_rated(uuid, title.type, title.id)
           end
 
           result

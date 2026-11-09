@@ -12,6 +12,7 @@ defmodule RokiWeb.TitleLive do
   use PhoenixKitComments.Embed
 
   alias PhoenixKit.Users.Auth.Scope
+  alias Roki.Profile
   alias Roki.Watch
   alias RokiWeb.ScoreColor
   alias Roki.Watch.SourceCache
@@ -77,6 +78,7 @@ defmodule RokiWeb.TitleLive do
         ost_all?: false,
         rating: %{state: :loading, value: nil, provider: :tmdb},
         rated_shelf: nil,
+        season_ratings: %{},
         rate_mal: nil,
         rating_error: nil,
         reviews: nil,
@@ -151,6 +153,8 @@ defmodule RokiWeb.TitleLive do
     SourceCache.keys(uuid, hours)
   end
 
+  defp uuid_of(socket), do: socket.assigns.uuid
+
   defp rating_state({provider, {:ok, value}}), do: %{state: :ok, value: value, provider: provider}
 
   defp rating_state({provider, :no_account}),
@@ -214,6 +218,32 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp rate_label(_sections, _mal), do: nil
+
+  # On the episodes page of a show with several seasons whose seasons TMDB (or MyAnimeList) does
+  # not rate one by one, the sheet rates the season on screen, on Roki alone. `nil` otherwise.
+  defp season_scope(%{
+         live_action: :episodes,
+         title: %{type: "tv"},
+         sections: sections,
+         rate_mal: mal,
+         season: season
+       })
+       when length(sections) > 1 and not is_integer(mal) and is_integer(season),
+       do: season
+
+  defp season_scope(_assigns), do: nil
+
+  # The sheet's view of a season's rating: the slider starts at the season's own score, else the
+  # show's (nothing is saved until Save), and Remove / "Your rating" are for an own one only.
+  defp season_sheet_rating(%{rating: rating, season_ratings: own}, season) do
+    show = if rating.state == :ok, do: rating.value
+
+    case Profile.season_rating(own, season, show) do
+      {:own, score} -> %{state: :ok, provider: :season, value: score, own: true}
+      {:seeded, score} -> %{state: :ok, provider: :season, value: score, own: false}
+      :none -> %{state: :ok, provider: :season, value: nil, own: false}
+    end
+  end
 
   defp play_mal(%{anime?: true, type: "tv"}, sections, %{season: s, episode: e})
        when is_integer(s) and is_integer(e) do
@@ -479,8 +509,15 @@ defmodule RokiWeb.TitleLive do
   # Your TMDB rating (0.5–10, half steps): sent to TMDB through laev, shown beside TMDB's average.
   def handle_event("rate", %{"value" => v}, %{assigns: %{rating: %{state: :ok}}} = socket) do
     %{uuid: uuid, title: title, rate_mal: mal} = socket.assigns
+    season = season_scope(socket.assigns)
 
     case Float.parse(to_string(v)) do
+      {value, _} when season != nil ->
+        {:noreply,
+         start_async(socket, :season_rating, fn ->
+           {:rate, season, Watch.rate_season(uuid, title, season, value)}
+         end)}
+
       {value, _} ->
         {:noreply,
          start_async(socket, :rating, fn ->
@@ -500,8 +537,17 @@ defmodule RokiWeb.TitleLive do
   def handle_event("clear_rating", _params, %{assigns: %{rating: %{state: :ok}}} = socket) do
     %{uuid: uuid, title: title, rate_mal: mal} = socket.assigns
 
-    {:noreply,
-     start_async(socket, :rating, fn -> {:clear, Watch.clear_rating(uuid, title, mal)} end)}
+    case season_scope(socket.assigns) do
+      nil ->
+        {:noreply,
+         start_async(socket, :rating, fn -> {:clear, Watch.clear_rating(uuid, title, mal)} end)}
+
+      season ->
+        {:noreply,
+         start_async(socket, :season_rating, fn ->
+           {:clear, season, Watch.clear_season_rating(uuid, title, season)}
+         end)}
+    end
   end
 
   def handle_event("clear_rating", _params, socket), do: {:noreply, socket}
@@ -594,6 +640,11 @@ defmodule RokiWeb.TitleLive do
         lib: lib || socket.assigns.lib,
         rating: rating_state(rating),
         rate_mal: mal,
+        season_ratings:
+          if(uuid_of(socket) && title.type == "tv",
+            do: Profile.season_ratings(uuid_of(socket), title.id),
+            else: %{}
+          ),
         page_title: title.title
       )
 
@@ -693,6 +744,22 @@ defmodule RokiWeb.TitleLive do
      |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)
      |> load_rated_shelf()}
   end
+
+  # Rating a season marks it watched: the episodes are read again.
+  def handle_async(:season_rating, {:ok, {:rate, season, {:ok, score}}}, socket) do
+    %{uuid: uuid, title: title} = socket.assigns
+
+    {:noreply,
+     socket
+     |> update(:season_ratings, &Map.put(&1, season, score))
+     |> reload_marks()
+     |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)}
+  end
+
+  def handle_async(:season_rating, {:ok, {:clear, season, :ok}}, socket),
+    do: {:noreply, update(socket, :season_ratings, &Map.delete(&1, season))}
+
+  def handle_async(:season_rating, _other, socket), do: {:noreply, socket}
 
   def handle_async(:rated_shelf, {:ok, %{} = shelf}, socket),
     do: {:noreply, assign(socket, :rated_shelf, shelf)}
@@ -917,6 +984,17 @@ defmodule RokiWeb.TitleLive do
               <.access_notice uuid={@uuid} linked?={@linked?} />
             </div>
 
+            <.season_ratings_strip
+              :if={
+                @linked? and @title.type == "tv" and length(@sections) > 1 and
+                  not is_integer(@rate_mal) and @rating.state == :ok
+              }
+              title={@title}
+              sections={@sections}
+              own={@season_ratings}
+              show={@rating.value}
+            />
+
             <.facts_panel title={@title} credits={@credits} />
             <.cast_row cast={@credits.cast} />
             <.soundtrack_section ost={@ost} album={@ost_album} all?={@ost_all?} title={@title} />
@@ -965,6 +1043,13 @@ defmodule RokiWeb.TitleLive do
                 error={@rating_error}
                 label={rate_label(@sections, @rate_mal)}
               />
+              <.rate_sheet
+                :if={@linked? and @rating.provider != :mal and season_scope(assigns) != nil}
+                title={@title}
+                rating={season_sheet_rating(assigns, @season)}
+                error={@rating_error}
+                label={@section && @section.label}
+              />
               <.access_notice uuid={@uuid} linked?={@linked?} />
 
               <.live_component
@@ -988,6 +1073,10 @@ defmodule RokiWeb.TitleLive do
                 title_id={@id}
                 can_play?={@linked?}
                 rating={@rating}
+                season_rating={
+                  season_scope(assigns) != nil && @rating.state == :ok &&
+                    Profile.season_rating(@season_ratings, @season, @rating.value)
+                }
               />
             </div>
           </div>
@@ -2099,6 +2188,10 @@ defmodule RokiWeb.TitleLive do
   attr :can_play?, :boolean, default: false
   attr :rating, :map, default: %{state: :loading, value: nil, provider: :tmdb}
 
+  attr :season_rating, :any,
+    default: false,
+    doc: "{:own | :seeded, score} | :none when this season can be rated on Roki; false otherwise"
+
   @doc false
   def episodes(assigns) do
     ~H"""
@@ -2166,6 +2259,33 @@ defmodule RokiWeb.TitleLive do
           <.icon name="hero-star" class="h-6 w-6" />
           <span :if={@rating.value} class="font-semibold text-info">{fmt_rating(@rating.value)}</span>
           <span :if={!@rating.value} class="hidden sm:inline">Rate</span>
+        </button>
+        <%!-- A season TMDB does not rate on its own: rated on Roki. Until it is, it reads as the
+              show's rating, dimmed. --%>
+        <button
+          :if={@can_play? and @season_rating != false}
+          type="button"
+          phx-click={JS.show(to: "#rate-sheet", display: "flex")}
+          class="btn h-12 shrink-0 gap-1.5 rounded-full px-5"
+          title={
+            if match?({:seeded, _}, @season_rating),
+              do: "Counted as your rating of the show: rate this season",
+              else: "Rate this season"
+          }
+          aria-label="Rate this season"
+        >
+          <.icon name="hero-star" class="h-6 w-6" />
+          <span
+            :if={@season_rating != :none}
+            class={[
+              "font-semibold",
+              match?({:own, _}, @season_rating) && "text-info",
+              match?({:seeded, _}, @season_rating) && "text-base-content/45"
+            ]}
+          >
+            {fmt_rating(elem(@season_rating, 1))}
+          </span>
+          <span :if={@season_rating == :none} class="hidden sm:inline">Rate</span>
         </button>
         <%!-- The whole season, marked or cleared: the same square button the episode rows carry.
               It says where the season stands, in three states, because "everything that is out is
@@ -2925,6 +3045,63 @@ defmodule RokiWeb.TitleLive do
   end
 
   attr :title, :map, required: true
+  attr :sections, :list, required: true
+  attr :own, :map, required: true
+  attr :show, :any, default: nil
+
+  # Your rating of each season, side by side. A season you have not rated reads as your rating of
+  # the show (dimmed); the page of the season is where you set its own.
+  defp season_ratings_strip(assigns) do
+    seasons =
+      assigns.sections
+      |> Enum.filter(&(&1.season > 0))
+      |> Enum.uniq_by(& &1.season)
+      |> Enum.map(fn sec ->
+        {sec, Profile.season_rating(assigns.own, sec.season, assigns.show)}
+      end)
+
+    assigns = assign(assigns, :seasons, seasons)
+
+    ~H"""
+    <section
+      :if={Enum.any?(@seasons, fn {_, r} -> r != :none end)}
+      id="season-ratings"
+      class="px-4 sm:px-6 lg:px-12 xl:px-16"
+      aria-label="Your ratings by season"
+    >
+      <h2 class="mb-2 text-lg font-semibold">Your seasons</h2>
+      <ul class="flex flex-wrap gap-2">
+        <li :for={{sec, rating} <- @seasons}>
+          <.link
+            patch={~p"/title/tv/#{@title.id}/episodes?#{[s: sec.key]}"}
+            class="flex items-center gap-2 rounded-full border border-base-300 bg-base-100/70 px-3 py-1.5 text-sm transition hover:border-primary/50"
+            title={
+              case rating do
+                {:seeded, _} -> "Counted as your rating of the show: open the season to rate it"
+                _ -> "Your rating of this season"
+              end
+            }
+          >
+            <span class="text-base-content/60">{sec.short}</span>
+            <span
+              :if={rating != :none}
+              class={[
+                "font-semibold tabular-nums",
+                match?({:own, _}, rating) && "text-info",
+                match?({:seeded, _}, rating) && "text-base-content/45"
+              ]}
+            >
+              ★ {fmt_rating(elem(rating, 1))}
+            </span>
+            <span :if={rating == :none} class="text-base-content/40">–</span>
+          </.link>
+        </li>
+      </ul>
+    </section>
+    """
+  end
+
+  attr :title, :map, required: true
   attr :rating, :map, required: true
   attr :error, :string, default: nil
   attr :label, :string, default: nil
@@ -2937,6 +3114,9 @@ defmodule RokiWeb.TitleLive do
   # under the slider the last few titles given the score it stands at.
   @doc false
   def rate_sheet(assigns) do
+    assigns =
+      assign(assigns, :own?, assigns.rating.value != nil and Map.get(assigns.rating, :own, true))
+
     ~H"""
     <div
       id="rate-sheet"
@@ -2960,8 +3140,8 @@ defmodule RokiWeb.TitleLive do
               on TMDB<span :if={@title.vote_count && @title.vote_count > 0}> · {thousands(
                 @title.vote_count
               )} votes</span><span :if={@rating.provider == :mal}> · your score goes to MyAnimeList</span><span :if={
-                @rating.provider == :roki
-              }> · your score is kept on Roki</span>
+                @rating.provider == :season
+              }> · this season only, kept on Roki</span><span :if={@rating.provider == :roki}> · your score is kept on Roki</span>
             </p>
           </div>
           <button
@@ -3050,7 +3230,7 @@ defmodule RokiWeb.TitleLive do
           <div class="flex gap-2">
             <button type="submit" class="btn btn-info flex-1">Save rating</button>
             <button
-              :if={@rating.value}
+              :if={@own?}
               type="button"
               phx-click={JS.push("clear_rating") |> JS.hide(to: "#rate-sheet")}
               class="btn btn-ghost"
@@ -3066,7 +3246,7 @@ defmodule RokiWeb.TitleLive do
             >Link a TMDB account</a>
             to send your ratings there too.
           </p>
-          <p :if={@rating.value} class="text-center text-xs text-base-content/60">
+          <p :if={@own?} class="text-center text-xs text-base-content/60">
             Your rating:
             <span class={["font-semibold", (gold?(@rating) && "rate-gold") || "text-info"]}>
               {fmt_rating(@rating.value)}

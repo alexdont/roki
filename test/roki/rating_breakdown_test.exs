@@ -1,5 +1,5 @@
 defmodule Roki.RatingBreakdownTest do
-  use ExUnit.Case, async: true
+  use Roki.DataCase, async: true
 
   alias Roki.Profile
 
@@ -28,5 +28,26 @@ defmodule Roki.RatingBreakdownTest do
     b = Profile.rating_breakdown(@counts, ["mal"])
     assert b.total == 3 and b.average == 6.0
     assert Enum.map(b.bars, &elem(&1, 0)) == [6.0, 7.0, 8.0, 9.0, 10.0]
+  end
+
+  describe "counts" do
+    setup do
+      {:ok, user} =
+        PhoenixKit.Users.Auth.register_user(%{
+          "email" => "bdseasons@example.com",
+          "password" => "a-long-enough-password-123",
+          "username" => "bdseasons"
+        })
+
+      %{uuid: user.uuid}
+    end
+
+    test "a season rated on its own counts with the shows", %{uuid: uuid} do
+      Profile.note_rating(uuid, {"tv", 7}, 8.0, local: true)
+      Profile.put_season_rating(uuid, 7, 1, 8.0)
+      Profile.put_season_rating(uuid, 7, 2, 6.5)
+
+      assert %{"tv" => %{8.0 => 2, 6.5 => 1}} = Profile.rating_counts(uuid)
+    end
   end
 end

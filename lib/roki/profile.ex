@@ -1252,6 +1252,66 @@ defmodule Roki.Profile do
     Map.new(rows, fn [type, id, score] -> {{type, id}, score * 1.0} end)
   end
 
+  # ── season ratings ─────────────────────────────────────────────────
+
+  @doc """
+  What this account gave each season of a show on Roki: `%{2 => 8.5}`. TMDB only rates a show as a
+  whole, so these never leave the site.
+  """
+  def season_ratings(uuid, tmdb_id) when is_binary(uuid) and is_integer(tmdb_id) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    %{rows: rows} =
+      Repo.query!(
+        "select season, score from roki_season_ratings where user_uuid = $1 and tmdb_id = $2",
+        [bin, tmdb_id]
+      )
+
+    Map.new(rows, fn [season, score] -> {season, score * 1.0} end)
+  end
+
+  def season_ratings(_uuid, _tmdb_id), do: %{}
+
+  @doc """
+  A season's rating: its own when it has one (`{:own, 8.5}`), else the show's (`{:seeded, 7.0}`),
+  else `:none`. Nothing is copied: a season never rated follows the show's rating.
+  """
+  def season_rating(season_ratings, season, show_rating) do
+    case {Map.get(season_ratings, season), show_rating} do
+      {score, _} when is_number(score) -> {:own, score}
+      {_, score} when is_number(score) -> {:seeded, score}
+      _ -> :none
+    end
+  end
+
+  @doc "Set a season's rating (0.5–10 in half steps)."
+  def put_season_rating(uuid, tmdb_id, season, score) when is_number(score) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+    score = (score * 2) |> round() |> max(1) |> min(20) |> Kernel./(2)
+
+    Repo.query!(
+      """
+      insert into roki_season_ratings (user_uuid, tmdb_id, season, score) values ($1, $2, $3, $4)
+      on conflict (user_uuid, tmdb_id, season) do update set score = excluded.score, rated_at = now()
+      """,
+      [bin, tmdb_id, season, score]
+    )
+
+    {:ok, score}
+  end
+
+  @doc "Take a season's own rating back: it reads as the show's again."
+  def clear_season_rating(uuid, tmdb_id, season) do
+    {:ok, bin} = Ecto.UUID.dump(uuid)
+
+    Repo.query!(
+      "delete from roki_season_ratings where user_uuid = $1 and tmdb_id = $2 and season = $3",
+      [bin, tmdb_id, season]
+    )
+
+    :ok
+  end
+
   @doc """
   How many titles of each kind the account rated at each score: `%{"movie" => %{7.5 => 3, ...},
   "tv" => ..., "mal" => ...}` (anime are MyAnimeList entries). Read from the site's copy.
@@ -1265,8 +1325,19 @@ defmodule Roki.Profile do
         [bin]
       )
 
+    # A season rated on its own is a rating too, counted with the shows.
+    %{rows: season_rows} =
+      Repo.query!(
+        "select score, count(*) from roki_season_ratings where user_uuid = $1 group by score",
+        [bin]
+      )
+
+    rows = rows ++ for [score, n] <- season_rows, do: ["tv", score, n]
+
     Enum.reduce(rows, %{}, fn [type, score, n], acc ->
-      Map.update(acc, type, %{(score * 1.0) => n}, &Map.put(&1, score * 1.0, n))
+      Map.update(acc, type, %{(score * 1.0) => n}, fn by ->
+        Map.update(by, score * 1.0, n, &(&1 + n))
+      end)
     end)
   end
 
