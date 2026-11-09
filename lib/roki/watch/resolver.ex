@@ -71,6 +71,9 @@ defmodule Roki.Watch.Resolver do
          {:ok, res} <-
            from_cache(uuid, token, ctx, cap, key, cached)
            |> fresh_if_none(fn ->
+             from_pack(parent, token, uuid, ctx, cap, key, hours, force?, light?, caps)
+           end)
+           |> fresh_if_none(fn ->
              search(
                parent,
                token,
@@ -163,6 +166,44 @@ defmodule Roki.Watch.Resolver do
        cached_at: entry.at,
        good: entry.good
      }}
+  end
+
+  # The season pack this show's season was last played from: one release to check for this
+  # episode, instead of a search and a round of probes that find the same torrent again. Only when
+  # it still clears the ceiling and the player's codec rule and its file really is this episode
+  # (the probe says so); otherwise `nil` and the search runs as before. Retry searches afresh.
+  defp from_pack(parent, token, uuid, ctx, cap, key, hours, force?, light?, caps) do
+    with false <- force?,
+         %{} = source <- SourceCache.pack(uuid, key, hours),
+         false <- source.hash in SourceCache.bad(uuid, key),
+         true <- Laev.Sources.resolution_at_most?(source.resolution, cap) do
+      send(parent, {:status, token, "Checking the season you are already on…"})
+
+      case probe_page(parent, token, uuid, ctx, [source], false, light?, caps) do
+        {[_ | _] = playable, _late} ->
+          Trace.log({parent, token}, "season pack reused", release: Trace.release(source))
+          if hours > 0, do: SourceCache.put(uuid, key, playable, [], light?)
+
+          {:ok,
+           %{
+             token: token,
+             ctx: ctx,
+             playable: playable,
+             rest: [],
+             cap: cap,
+             key: key,
+             cached_at: nil,
+             good: source.hash
+           }}
+
+        _ ->
+          Trace.log({parent, token}, "season pack not usable", release: Trace.release(source))
+          SourceCache.forget_pack(uuid, key)
+          nil
+      end
+    else
+      _ -> nil
+    end
   end
 
   defp fresh_if_none(nil, fun), do: fun.()

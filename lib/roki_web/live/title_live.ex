@@ -3032,14 +3032,20 @@ defmodule RokiWeb.TitleLive do
               class="grid grid-cols-6 gap-2"
             >
               <.rate_shelf_item :for={i <- items} item={i} />
+              <.rate_ghost :for={_ <- ghosts(items)} />
             </div>
-            <p
+            <%!-- Ghosts hold the places a short row leaves empty, so the sheet keeps its shape
+                  while the slider moves across the scores. --%>
+            <div
               data-score-empty
               hidden={Map.has_key?(@shelf, Roki.Profile.score_key(@rating.value || 7))}
-              class="text-xs text-base-content/40"
+              class="relative grid grid-cols-6 gap-2"
             >
-              Nothing else rated this yet.
-            </p>
+              <.rate_ghost :for={_ <- 1..6} />
+              <p class="absolute inset-0 flex items-center justify-center text-xs text-base-content/50">
+                Nothing else rated this yet.
+              </p>
+            </div>
           </div>
           <div class="flex gap-2">
             <button type="submit" class="btn btn-info flex-1">Save rating</button>
@@ -3072,6 +3078,17 @@ defmodule RokiWeb.TitleLive do
         <p :if={@error} class="mt-3 text-sm text-error">{@error}</p>
       </div>
     </div>
+    """
+  end
+
+  defp ghosts(items), do: List.duplicate(:ghost, max(6 - length(items), 0))
+
+  defp rate_ghost(assigns) do
+    ~H"""
+    <span
+      aria-hidden="true"
+      class="aspect-[2/3] w-full rounded-md border border-dashed border-base-content/15 bg-base-content/[0.03]"
+    ></span>
     """
   end
 

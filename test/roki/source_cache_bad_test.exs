@@ -1,5 +1,5 @@
 defmodule Roki.SourceCacheBadTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Roki.Watch.SourceCache
 
@@ -39,5 +39,27 @@ defmodule Roki.SourceCacheBadTest do
     # …and the one that works takes its place as the one to go to.
     SourceCache.mark_good(uuid, key, "fine")
     assert %{good: "fine"} = SourceCache.get(uuid, key, 12)
+  end
+
+  test "the season pack an episode played from is kept for the next one", %{uuid: uuid} do
+    pack = %{hash: "pack", name: "Show.S02.1080p.BluRay.x264-GRP"}
+    single = %{hash: "one", name: "Show.S02E03.1080p.WEB.x264-GRP"}
+    ep3 = {"tv", 5, 2, 3}
+    ep4 = {"tv", 5, 2, 4}
+
+    SourceCache.put(uuid, ep3, [{pack, %{}}, {single, %{}}], [])
+    SourceCache.mark_good(uuid, ep3, "pack")
+    assert %{hash: "pack"} = SourceCache.pack(uuid, ep4, 12)
+    # …for that season only
+    assert SourceCache.pack(uuid, {"tv", 5, 3, 1}, 12) == nil
+
+    # Choosing a single episode release instead takes the memory away.
+    SourceCache.mark_good(uuid, ep3, "one")
+    assert SourceCache.pack(uuid, ep4, 12) == nil
+
+    # A pack that would not play is forgotten with its mark.
+    SourceCache.mark_good(uuid, ep3, "pack")
+    SourceCache.mark_bad(uuid, ep3, "pack")
+    assert SourceCache.pack(uuid, ep4, 12) == nil
   end
 end

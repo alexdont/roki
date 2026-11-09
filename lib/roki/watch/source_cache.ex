@@ -127,12 +127,67 @@ defmodule Roki.Watch.SourceCache do
     with {:ok, bin} <- File.read(path(uuid, key)),
          %{} = entry <- :erlang.binary_to_term(bin, [:safe]) do
       write(uuid, key, %{entry | good: hash})
+      remember_pack(uuid, key, entry, hash)
     end
 
     :ok
   rescue
     _ -> :ok
   end
+
+  # ── the season pack a show is being watched from ───────────────────
+
+  # An old show is usually one torrent for the whole season, and the file for the next episode is
+  # already inside the one just played. When the release that started is such a pack it is kept
+  # for the season (`pack/3`), so the next episode checks that one release instead of searching and
+  # probing the same handful again — what the terminal app does (`reuse_pack`). A release that is
+  # not a pack, picked for a later episode, takes the memory away: the person chose something else.
+  defp remember_pack(uuid, {"tv", id, season, _episode}, entry, hash) do
+    source =
+      Enum.find_value(entry.playable, fn {source, _} -> if source.hash == hash, do: source end)
+
+    cond do
+      source && Laev.Episodes.pack?(source.name) ->
+        File.mkdir_p!(dir(uuid))
+
+        File.write!(
+          pack_path(uuid, id, season),
+          :erlang.term_to_binary(%{at: now(), source: source})
+        )
+
+      source ->
+        File.rm(pack_path(uuid, id, season))
+
+      true ->
+        :ok
+    end
+
+    :ok
+  end
+
+  defp remember_pack(_uuid, _key, _entry, _hash), do: :ok
+
+  @doc "The season pack this show's season was last played from, if kept and younger than `hours`."
+  def pack(uuid, {"tv", id, season, _episode}, hours) when hours > 0 do
+    with {:ok, bin} <- File.read(pack_path(uuid, id, season)),
+         %{at: at, source: source} <- :erlang.binary_to_term(bin, [:safe]),
+         true <- now() - at < hours * 3600 do
+      source
+    else
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  def pack(_uuid, _key, _hours), do: nil
+
+  @doc "Forget the kept pack of a season (it did not play)."
+  def forget_pack(uuid, {"tv", id, season, _episode}), do: File.rm(pack_path(uuid, id, season))
+  def forget_pack(_uuid, _key), do: :ok
+
+  defp pack_path(uuid, id, season),
+    do: Path.join(dir(uuid), "pack-tv-#{id}-#{season || 0}#{study_suffix()}.etf")
 
   @doc """
   A release that would not start or play: it is no longer the one to go straight to, it is taken
@@ -145,6 +200,7 @@ defmodule Roki.Watch.SourceCache do
          %{} = entry <- :erlang.binary_to_term(bin, [:safe]) do
       bad = Enum.uniq([hash | bad_of(entry)]) |> Enum.take(60)
       write(uuid, key, drop_bad(Map.put(entry, :bad, bad)))
+      forget_pack_if(uuid, key, hash)
     end
 
     :ok
@@ -153,6 +209,15 @@ defmodule Roki.Watch.SourceCache do
   end
 
   def mark_bad(_uuid, _key, _hash), do: :ok
+
+  defp forget_pack_if(uuid, {"tv", id, season, _} = key, hash) do
+    case pack(uuid, key, 1_000_000) do
+      %{hash: ^hash} -> File.rm(pack_path(uuid, id, season))
+      _ -> :ok
+    end
+  end
+
+  defp forget_pack_if(_uuid, _key, _hash), do: :ok
 
   def delete(uuid, key), do: File.rm(path(uuid, key)) && :ok
 
