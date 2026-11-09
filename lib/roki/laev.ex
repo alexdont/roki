@@ -1356,8 +1356,14 @@ defmodule Roki.Laev do
       |> Enum.filter(&is_map/1)
       |> Enum.map_reduce(0, fn row, moved ->
         case still_airing(row) do
-          nil -> {row, moved}
-          corrected -> {corrected, moved + 1}
+          nil ->
+            case anime_watched_through(row) do
+              nil -> {row, moved}
+              corrected -> {corrected, moved - 1}
+            end
+
+          corrected ->
+            {corrected, moved + 1}
         end
       end)
 
@@ -1369,8 +1375,24 @@ defmodule Roki.Laev do
   def shift_tally(tally, 0), do: tally
 
   def shift_tally(tally, moved) do
-    %{tally | behind: tally.behind + moved, caught_up: max(tally.caught_up - moved, 0)}
+    %{
+      tally
+      | behind: max(tally.behind + moved, 0),
+        caught_up: max(tally.caught_up - moved, 0)
+    }
   end
+
+  # Laev files an anime as "in progress" until its MyAnimeList entry is marked completed, however
+  # many episodes are watched. One with every episode watched is caught up, the way a show is.
+  defp anime_watched_through(%{mal_id: mal, caught_up: false} = row) when is_integer(mal) do
+    total = Laev.Anime.episodes(mal)
+
+    if row[:held] != true and is_integer(total) and total > 0 and
+         Map.get(Laev.Position.anime_marks(), mal, 0) >= total,
+       do: Map.put(row, :caught_up, true)
+  end
+
+  defp anime_watched_through(_row), do: nil
 
   defp still_airing(%{type: "tv", caught_up: true} = row) do
     with false <- row[:held] == true or is_integer(row[:mal_id]),
