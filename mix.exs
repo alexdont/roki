@@ -81,7 +81,7 @@ defmodule Roki.MixProject do
       # The rest of what the reader's own modules are written against: reading sessions, the
       # MyAnimeList client, GIFs in comments, and the calendar its history page draws on.
       {:stint, "~> 0.1.2"},
-      {:myanimelist, "~> 0.1"},
+      {:myanimelist, "~> 0.2"},
       {:giphy_api, "~> 0.1.0"},
       {:phoenix_live_calendar, "~> 0.5.0"},
       # OCR for the strip reader's smart auto-scroll. A path dependency there and here: it is not

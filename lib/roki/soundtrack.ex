@@ -15,7 +15,6 @@ defmodule Roki.Soundtrack do
   alias Roki.{Kept, TTLCache}
 
   @mb "https://musicbrainz.org/ws/2"
-  @mal "https://api.myanimelist.net/v2"
   @agent "roki.ee/0.1 (https://roki.ee)"
   @ttl_s 12 * 3600
   @kept_s 30 * 24 * 3600
@@ -236,24 +235,13 @@ defmodule Roki.Soundtrack do
 
   defp read_themes(mal) do
     case Application.get_env(:laev, :mal_client_id) do
-      id when is_binary(id) and id != "" ->
-        case Req.get(
-               Req.new(base_url: @mal, retry: false, receive_timeout: 8_000),
-               url: "/anime/#{mal}",
-               params: [fields: "opening_themes,ending_themes"],
-               headers: [{"x-mal-client-id", id}]
-             ) do
-          {:ok, %{status: 200, body: %{} = body}} -> {:ok, parse_themes(body)}
-          {:ok, %{status: status}} -> {:error, {:mal, status}}
-          {:error, reason} -> {:error, reason}
-        end
-
-      _ ->
-        {:error, :no_mal_client}
+      id when is_binary(id) and id != "" -> MyAnimeList.themes(mal, id, req_options: [receive_timeout: 8_000])
+      _ -> {:error, :no_mal_client}
     end
   end
 
   @doc false
+  # MAL's answer (`opening_themes`/`ending_themes`) read by the myanimelist package's parser.
   def parse_themes(body) do
     %{
       openings: for(t <- body["opening_themes"] || [], s = theme(t["text"]), s != nil, do: s),
@@ -263,28 +251,7 @@ defmodule Roki.Soundtrack do
 
   @doc false
   # MAL writes a theme as a line: `#2: "Space Lion" by The Seatbelts (ep 13)`.
-  def theme(text) when is_binary(text) do
-    case Regex.run(
-           ~r/^\s*(?:#?(\d+)\s*:\s*)?"(.+?)"\s+by\s+(.+?)(?:\s+\((eps?\.?[^)]*)\))?\s*$/u,
-           text
-         ) do
-      [_, n, song, artist | rest] ->
-        %{
-          n: if(n == "", do: nil, else: String.to_integer(n)),
-          song: song,
-          artist: artist,
-          eps: rest |> List.first() |> blank()
-        }
-
-      _ ->
-        case String.trim(text) do
-          "" -> nil
-          plain -> %{n: nil, song: plain, artist: nil, eps: nil}
-        end
-    end
-  end
-
-  def theme(_), do: nil
+  defdelegate theme(text), to: MyAnimeList, as: :parse_theme
 
   # ── YouTube ──────────────────────────────────────────────────────
 

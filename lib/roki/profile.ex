@@ -771,14 +771,9 @@ defmodule Roki.Profile do
   defp mal_picture(uuid, mal_id) do
     Roki.Laev.run(uuid, fn ->
       with client when is_binary(client) and client != "" <- Laev.MAL.client_id(),
-           {:ok, %{status: 200, body: %{"main_picture" => %{} = pic}}} <-
-             Req.get("https://api.myanimelist.net/v2/anime/#{mal_id}",
-               headers: [{"x-mal-client-id", client}],
-               params: [fields: "main_picture"],
-               retry: false,
-               receive_timeout: 10_000
-             ) do
-        pic["medium"] || pic["large"]
+           {:ok, %{cover_url: url}} when is_binary(url) <-
+             MyAnimeList.get(:anime, mal_id, client, req_options: [receive_timeout: 10_000]) do
+        url
       else
         _ -> nil
       end
