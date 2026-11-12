@@ -674,9 +674,11 @@ defmodule Roki.Watch do
 
   @doc """
   Put on hold (on the shelf's On hold row), or take it off. `:held | :released`. An anime is
-  held on MyAnimeList: the entries being watched go `on_hold` (with none started, the first);
-  taking it off puts every held entry back to `watching`. Without a MyAnimeList login nothing
-  changes (`:released`).
+  held on MyAnimeList: every entry of it not finished or dropped goes `on_hold` — the shelf
+  lists an anime by whichever entry has marks and is unfinished, so all of them must say it —
+  (with none, the first); taking it off puts every held entry back to `watching`. Without a
+  MyAnimeList login nothing changes (`:released`). The shelf's copy is forgotten either way,
+  so the corner moves the title at once.
   """
   def toggle_hold(uuid, %{anime?: true} = title) do
     result =
@@ -693,19 +695,21 @@ defmodule Roki.Watch do
             :released
 
           true ->
-            watching = Enum.filter(entries, &(anime_status(&1) == "watching"))
-            targets = if watching == [], do: Enum.take(entries, 1), else: watching
+            open = Enum.reject(entries, &(anime_status(&1) in ["completed", "dropped"]))
+            targets = if open == [], do: Enum.take(entries, 1), else: open
             Enum.each(targets, &set_anime_status(&1, "on_hold"))
             if targets == [], do: :released, else: :held
         end
       end)
 
+    Roki.Laev.forget_shelf(uuid)
     library_changed(uuid)
     result
   end
 
   def toggle_hold(uuid, title) do
     result = Roki.Laev.run(uuid, fn -> Laev.Holds.toggle(title.type, title.id) end)
+    Roki.Laev.forget_shelf(uuid)
     library_changed(uuid)
     result
   end
