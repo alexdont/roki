@@ -68,7 +68,7 @@ defmodule Roki.CacheSweeper do
     result
   end
 
-  defp running, do: Laev.Remux.running() ++ Roki.Direct.running()
+  defp running, do: Laev.Remux.running() ++ Direct.running()
 
   # The same clock laev reads: the playlist marker when there is one, else the directory.
   defp last_fetch(dir) do

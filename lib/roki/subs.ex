@@ -63,7 +63,7 @@ defmodule Roki.Subs do
   end
 
   # The WebVTT file a track's cues are in: the release's own are written per part.
-  defp cue_file("sub" <> _ = file, part), do: Roki.Direct.part_name(file, ".vtt", part)
+  defp cue_file("sub" <> _ = file, part), do: Direct.part_name(file, ".vtt", part)
   defp cue_file(file, _part), do: file <> ".vtt"
 
   defp present?(dir, name) do
@@ -94,15 +94,7 @@ defmodule Roki.Subs do
   end
 
   @doc "The `#EXT-X-MEDIA` lines for `tracks` (of `part`); none shown unless picked."
-  def renditions(tracks, part \\ 0) do
-    q = Roki.Direct.part_query(part)
-
-    Enum.map(tracks, fn t ->
-      lang = if t.lang != "", do: ~s(,LANGUAGE="#{Roki.Watch.short_code(t.lang)}"), else: ""
-
-      ~s(#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="#{t.name}"#{lang},DEFAULT=NO,AUTOSELECT=NO,URI="#{t.file}.m3u8#{q}")
-    end)
-  end
+  defdelegate renditions(tracks, part \\ 0), to: Direct.Playlist, as: :subtitle_renditions
 
   @doc """
   The subtitle media playlist of `file` (`"sub0"`) for `part`, cut like the stream's own
@@ -111,7 +103,7 @@ defmodule Roki.Subs do
   def playlist(id, file, part \\ 0) do
     case timeline(id, part) do
       %{segments: [_ | _] = segments, done?: done?, target: target} ->
-        q = Roki.Direct.part_query(part)
+        q = Direct.part_query(part)
 
         head = [
           "#EXTM3U",
@@ -166,11 +158,11 @@ defmodule Roki.Subs do
     dir = Laev.Remux.dir(id)
 
     cond do
-      Roki.Direct.direct?(id) ->
-        case Fmp4.scan(Roki.Direct.media(id, part)) do
+      Direct.direct?(id) ->
+        case Fmp4.scan(Direct.media(id, part)) do
           {:ok, %{start: start, fragments: fragments}} ->
             durations = Enum.map(fragments, & &1.duration)
-            done? = File.exists?(Path.join(dir, Roki.Direct.part_name("done", "", part)))
+            done? = File.exists?(Path.join(dir, Direct.part_name("done", "", part)))
 
             %{
               segments: starts(durations, start),

@@ -541,7 +541,7 @@ defmodule RokiWeb.WatchLive do
   # What this browser said it decodes itself, sent with the connection (see app.js).
   defp caps_param(socket) do
     params = if connected?(socket), do: get_connect_params(socket) || %{}, else: %{}
-    Roki.Direct.caps(params["caps"])
+    Direct.Caps.from_params(params["caps"])
   end
 
   @impl true

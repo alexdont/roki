@@ -76,12 +76,12 @@ defmodule Roki.SubsTest do
       assert_in_delta scan.start, 4.0, 0.05
       assert [first | _] = scan.fragments
       assert_in_delta first.time, 4.0, 0.05
-      assert Roki.Direct.parts(@id) == [5]
-      assert_in_delta Roki.Direct.start_at(@id, 5), 4.0, 0.05
-      assert Roki.Direct.ready?(@id, 5)
+      assert Direct.parts(@id) == [5]
+      assert_in_delta Direct.start_at(@id, 5), 4.0, 0.05
+      assert Direct.ready?(@id, 5)
 
       # The video playlist counts from the part's start; the file names carry the part.
-      video = Roki.Direct.media_playlist(@id, 5, "media")
+      video = Direct.media_playlist(@id, 5, "media")
       assert video =~ ~s(#EXT-X-MAP:URI="media-5.mp4")
       assert video =~ "#EXT-X-ENDLIST"
       assert Roki.Direct.playlist(@id, 5) =~ ~s(URI="sub0.m3u8?from=5")

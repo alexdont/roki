@@ -491,6 +491,17 @@ stays on the sources page with a message and the list.
   for its tests were made with ffmpeg from `testsrc`; a part-way file needs
   `-ss N -copyts -avoid_negative_ts disabled -movflags +frag_discont` to keep its clock.
 
+- **`direct`** (repo `alexdont/direct_stream`): the browser-decoded conversion — `Direct.start/2`,
+  parts, `Direct.playlist/3`, `Direct.media_playlist/3`, `Direct.Playlist` (master, `tidy_master`,
+  `subtitle_renditions`), `Direct.Caps` (`from_params`, `decodable?`), `Direct.Command` (the ffmpeg
+  line, pure), `Direct.Probe`, `Direct.Lang`, `Direct.Supervisor` (in `application.ex`). Files go
+  to laev's remux dir through `config :direct, dir: {Laev.Remux, :dir}`; ids are the same hash as
+  before (`Direct.id_for(name, size)`), so old cache dirs still match. `Roki.Direct` keeps only the
+  site's parts: `wanted?/2` (a source tuple), `start/3` (sweep + id from the stream), `playlist/3`
+  (adds `Roki.Subs.tracks`), `tidy_master/3`, `wrap_media/2`, `remember_title`/`original_language`.
+  `Roki.Subs.renditions` delegates to the package. The package's own tests run a real ffmpeg
+  conversion of a `testsrc` film (`mix test` in `/root/src/direct`).
+
 A package is tried from `{:pkg, path: "/root/src/pkg", override: true}` first, then pointed at
 Hex once published (the user publishes; Hex asks for a 2FA code).
 

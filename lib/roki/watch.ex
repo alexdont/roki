@@ -1705,7 +1705,7 @@ defmodule Roki.Watch do
       :unreachable -> :unreachable
       c when c in [nil, ""] -> nil
       "h264" -> true
-      c -> Roki.Direct.decodable?(c, caps)
+      c -> Direct.Caps.decodable?(c, caps)
     end
   end
 
@@ -1806,7 +1806,7 @@ defmodule Roki.Watch do
     case Roki.TTLCache.fetch(key, 3 * 3600, fn -> :none end) do
       {:ok, id} when is_binary(id) ->
         Laev.Remux.stop(id)
-        Roki.Direct.stop(id)
+        Direct.stop(id)
 
       _ ->
         :ok
@@ -1853,13 +1853,13 @@ defmodule Roki.Watch do
   # The playlist under a signed token (`RokiWeb.StreamToken`), not the cookie-only address: an
   # AirPlay receiver fetches it by itself, and inherits the token through the relative names.
   defp stream_url(uuid, %{kind: :remux, remux_id: id} = src),
-    do: RokiWeb.StreamToken.path(uuid, id) <> Roki.Direct.part_query(src[:part] || 0)
+    do: RokiWeb.StreamToken.path(uuid, id) <> Direct.part_query(src[:part] || 0)
 
   defp stream_url(_uuid, src), do: src.url
 
   # Where the conversion begins, in seconds of the film: a direct part's first fragment says.
   defp part_start(%{kind: :remux, remux_id: id, part: part}) when is_integer(part) and part > 0,
-    do: Roki.Direct.start_at(id, part)
+    do: Direct.start_at(id, part)
 
   defp part_start(_src), do: 0
 
@@ -1873,7 +1873,7 @@ defmodule Roki.Watch do
            kind: :remux,
            remux_id: id,
            part: part,
-           dir: Roki.Direct.dir(id),
+           dir: Direct.dir(id),
            url: stream.url,
            playable: true,
            title: ctx.title,
@@ -2178,7 +2178,7 @@ defmodule Roki.Watch do
 
       System.monotonic_time(:millisecond) > deadline ->
         Laev.Remux.stop(id)
-        Roki.Direct.stop(id)
+        Direct.stop(id)
         {:error, :timeout}
 
       true ->
@@ -2188,7 +2188,7 @@ defmodule Roki.Watch do
   end
 
   defp segments_ready?(id, part) do
-    if Roki.Direct.direct?(id), do: Roki.Direct.ready?(id, part), else: segments_on_disk?(id)
+    if Direct.direct?(id), do: Direct.ready?(id, part), else: segments_on_disk?(id)
   end
 
   defp segments_on_disk?(id) do
@@ -2213,7 +2213,7 @@ defmodule Roki.Watch do
 
       file =
         if String.starts_with?(base, "sub"),
-          do: Roki.Direct.part_name(base, ".vtt", part),
+          do: Direct.part_name(base, ".vtt", part),
           else: base <> ".vtt"
 
       %{lang: t.lang, label: language(t.lang), url: "/stream/#{id}/#{file}"}

@@ -41,8 +41,7 @@ defmodule Roki.Application do
       # Stops video conversions nobody is watching any more.
       {Phoenix.PubSub, name: Roki.PubSub},
       # Conversions that only change the container (the browser decodes the video itself).
-      {Registry, keys: :unique, name: Roki.Direct.Registry},
-      {DynamicSupervisor, name: Roki.Direct.Supervisor, strategy: :one_for_one},
+      Direct.Supervisor,
       # Removes conversions nobody has fetched for six hours (laev's own sweep waits a day).
       Roki.CacheSweeper,
       # Warms every account's copies (titles, ratings, pictures) on a clock, so pages never have to.

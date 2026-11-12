@@ -36,6 +36,10 @@ config :manhwa,
 # than a process on the loopback, so it is reached by name.
 config :roki, :kotatsu_url, "http://kotatsu:8420"
 
+# Browser-decoded conversions (the `direct` package) live in laev's remux directories, so the
+# stream route, the subtitle files beside them and laev's sweep apply to both kinds alike.
+config :direct, dir: {Laev.Remux, :dir}
+
 config :phoenix_kit, :comment_resource_handlers, %{
   "profile" => Roki.CommentHandler.Profile,
   "title" => Roki.CommentHandler.Title

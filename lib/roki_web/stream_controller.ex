@@ -43,7 +43,7 @@ defmodule RokiWeb.StreamController do
       # (laev's touch makes a file of a directory that is not there: a made-up id must not.)
       if File.dir?(Laev.Remux.dir(id)) do
         Laev.Remux.touch(id)
-        Roki.Direct.touch(id)
+        Direct.touch(id)
       end
 
       serve(assign(conn, :stream_uuid, uuid), id, part(params["from"]), file)
@@ -66,7 +66,7 @@ defmodule RokiWeb.StreamController do
   # playlist made from what is written so far; laev's are files on disk.
   defp serve(conn, id, part, "playlist.m3u8" = file) do
     cond do
-      Roki.Direct.direct?(id) ->
+      Direct.direct?(id) ->
         playlist(conn, Roki.Direct.playlist(id, part, prefer(conn, id)))
 
       Laev.Remux.entry_playlist(id) == "master.m3u8" ->
@@ -157,18 +157,18 @@ defmodule RokiWeb.StreamController do
   end
 
   defp direct_playlist(conn, id, part, base) do
-    if Roki.Direct.direct?(id) do
+    if Direct.direct?(id) do
       conn
       |> put_resp_content_type(content_type(base <> ".m3u8"))
       |> put_resp_header("cache-control", "no-store")
-      |> send_resp(200, Roki.Direct.media_playlist(id, part, base))
+      |> send_resp(200, Direct.media_playlist(id, part, base))
     else
       send_resp(conn, 404, "not ready")
     end
   end
 
   defp direct_file(conn, id, name, type) do
-    path = Roki.Direct.file(id, name)
+    path = Direct.file(id, name)
 
     if File.regular?(path),
       do: Fmp4.RangeFile.send(conn, path, type),

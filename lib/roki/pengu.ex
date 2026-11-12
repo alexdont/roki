@@ -240,7 +240,7 @@ defmodule Roki.Pengu do
   @doc """
   The stream to start without asking, or nil: what a browser can play first, then the language,
   then the sharpest picture up to 1080p (4K only when nothing else is left), then the providers
-  whose streams have played best here. `caps` is what the browser said it decodes (`Roki.Direct.caps/1`);
+  whose streams have played best here. `caps` is what the browser said it decodes (`Direct.Caps.from_params/1`);
   HEVC and AV1 are left out unless it did. `skip` is ids that already failed.
   """
   def best(streams, caps \\ %{}, skip \\ []) do
