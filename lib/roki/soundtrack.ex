@@ -235,8 +235,11 @@ defmodule Roki.Soundtrack do
 
   defp read_themes(mal) do
     case Application.get_env(:laev, :mal_client_id) do
-      id when is_binary(id) and id != "" -> MyAnimeList.themes(mal, id, req_options: [receive_timeout: 8_000])
-      _ -> {:error, :no_mal_client}
+      id when is_binary(id) and id != "" ->
+        MyAnimeList.themes(mal, id, req_options: [receive_timeout: 8_000])
+
+      _ ->
+        {:error, :no_mal_client}
     end
   end
 

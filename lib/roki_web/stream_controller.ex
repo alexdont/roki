@@ -171,7 +171,7 @@ defmodule RokiWeb.StreamController do
     path = Roki.Direct.file(id, name)
 
     if File.regular?(path),
-      do: RokiWeb.RangeFile.send(conn, path, type),
+      do: Fmp4.RangeFile.send(conn, path, type),
       else: send_resp(conn, 404, "not ready")
   end
 

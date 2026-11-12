@@ -23,7 +23,7 @@ defmodule RokiWeb.LabController do
          true <-
            (is_binary(file) and File.exists?(Path.join(@sample_dir, file))) ||
              {:error, :not_found} do
-      RokiWeb.RangeFile.send(conn, Path.join(@sample_dir, file), "video/x-matroska")
+      Fmp4.RangeFile.send(conn, Path.join(@sample_dir, file), "video/x-matroska")
     else
       {:error, :forbidden} -> send_resp(conn, 403, "owner only")
       _ -> send_resp(conn, 404, "no such sample")

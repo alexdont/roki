@@ -72,7 +72,7 @@ defmodule Roki.SubsTest do
 
       File.write!(Path.join(dir, "done-5"), "")
 
-      scan = Roki.Fmp4.scan(Path.join(dir, "media-5.mp4"))
+      {:ok, scan} = Fmp4.scan(Path.join(dir, "media-5.mp4"))
       assert_in_delta scan.start, 4.0, 0.05
       assert [first | _] = scan.fragments
       assert_in_delta first.time, 4.0, 0.05

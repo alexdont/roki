@@ -72,6 +72,8 @@ defmodule Roki.MixProject do
       {:fresco, "~> 0.15.0"},
       {:fresco_strip, "~> 0.3.0"},
       {:etcher, "~> 0.23.0"},
+      {:aniskip, "~> 0.1"},
+      {:fmp4, "~> 0.1"},
       {:chapter, "~> 0.1"},
       {:dims, "~> 0.1"},
       # The reader's own site scrapers come across with it: they parse HTML (floki) and need

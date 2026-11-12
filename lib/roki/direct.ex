@@ -309,8 +309,8 @@ defmodule Roki.Direct do
   defp stale_audio?(id, part) do
     multi?(id) and
       Enum.any?(tracks(id), fn t ->
-        case Roki.Fmp4.scan(file(id, part_name(t.file, ".mp4", part))) do
-          %{fragments: [%{duration: d}]} -> d > 10
+        case Fmp4.scan(file(id, part_name(t.file, ".mp4", part))) do
+          {:ok, %{fragments: [%{duration: d}]}} -> d > 10
           _ -> false
         end
       end)
@@ -318,12 +318,9 @@ defmodule Roki.Direct do
 
   # How far into the file a part has been written, in seconds.
   defp reach(id, part) do
-    case Roki.Fmp4.scan(media(id, part)) do
-      %{start: start, fragments: fragments} ->
-        start + Enum.sum(Enum.map(fragments, & &1.duration))
-
-      _ ->
-        0
+    case Fmp4.scan(media(id, part)) do
+      {:ok, info} -> Fmp4.reach(info)
+      _ -> 0
     end
   end
 
@@ -331,8 +328,8 @@ defmodule Roki.Direct do
   def start_at(_id, 0), do: 0
 
   def start_at(id, part) do
-    case Roki.Fmp4.scan(media(id, part)) do
-      %{start: start} -> start
+    case Fmp4.scan(media(id, part)) do
+      {:ok, %{start: start}} -> start
       _ -> part
     end
   end
@@ -367,8 +364,8 @@ defmodule Roki.Direct do
   end
 
   defp enough?(path) do
-    case Roki.Fmp4.scan(path) do
-      %{fragments: [_, _ | _]} -> true
+    case Fmp4.scan(path) do
+      {:ok, %{fragments: [_, _ | _]}} -> true
       _ -> false
     end
   end
@@ -513,54 +510,26 @@ defmodule Roki.Direct do
 
   # The video's rate so far, plus the audio, for the master playlist's required figure.
   defp bandwidth(id, part) do
-    case Roki.Fmp4.scan(media(id, part)) do
-      %{fragments: [_ | _] = fs} ->
-        bytes = Enum.sum(Enum.map(fs, & &1.size))
-        seconds = Enum.sum(Enum.map(fs, & &1.duration))
-        if seconds > 0, do: trunc(bytes * 8 / seconds) + 256_000, else: 10_000_000
-
-      _ ->
-        10_000_000
+    case Fmp4.scan(media(id, part)) do
+      {:ok, info} -> (Fmp4.bitrate(info) || 10_000_000) + 256_000
+      _ -> 10_000_000
     end
   end
 
   @doc """
   The HLS media playlist of what is written of one file of a part so far (`base` is `"media"`
-  or `"audio1"`): one byte range per fragment, ended once ffmpeg has finished. It counts from
-  the part's start: what the fragments carry says where that is in the file.
+  or `"audio1"`): one byte range per fragment (`Fmp4.playlist/3`), ended once ffmpeg has
+  finished. It counts from the part's start: what the fragments carry says where that is in
+  the file.
   """
   def media_playlist(id, part, base) do
     name = part_name(base, ".mp4", part)
 
-    case Roki.Fmp4.scan(file(id, name)) do
-      %{init: init, fragments: fragments} ->
-        # Fragments end at keyframes, so their length is the release's own; the target is kept
-        # high enough that it seldom has to change once the player has read it.
-        longest = fragments |> Enum.map(& &1.duration) |> Enum.max(fn -> 10 end)
+    case Fmp4.scan(file(id, name)) do
+      {:ok, info} ->
+        Fmp4.playlist(info, name, done: done?(id, part))
 
-        head = [
-          "#EXTM3U",
-          "#EXT-X-VERSION:7",
-          "#EXT-X-TARGETDURATION:#{max(ceil(longest), 10)}",
-          "#EXT-X-MEDIA-SEQUENCE:0",
-          "#EXT-X-PLAYLIST-TYPE:EVENT",
-          "#EXT-X-INDEPENDENT-SEGMENTS",
-          ~s(#EXT-X-MAP:URI="#{name}",BYTERANGE="#{init}@0")
-        ]
-
-        body =
-          Enum.flat_map(fragments, fn f ->
-            [
-              "#EXTINF:#{:erlang.float_to_binary(f.duration * 1.0, decimals: 3)},",
-              "#EXT-X-BYTERANGE:#{f.size}@#{f.offset}",
-              name
-            ]
-          end)
-
-        tail = if done?(id, part), do: ["#EXT-X-ENDLIST"], else: []
-        Enum.join(head ++ body ++ tail, "\n") <> "\n"
-
-      nil ->
+      _ ->
         "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
     end
   end

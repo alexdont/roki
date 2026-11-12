@@ -167,8 +167,8 @@ defmodule Roki.Subs do
 
     cond do
       Roki.Direct.direct?(id) ->
-        case Roki.Fmp4.scan(Roki.Direct.media(id, part)) do
-          %{start: start, fragments: fragments} ->
+        case Fmp4.scan(Roki.Direct.media(id, part)) do
+          {:ok, %{start: start, fragments: fragments}} ->
             durations = Enum.map(fragments, & &1.duration)
             done? = File.exists?(Path.join(dir, Roki.Direct.part_name("done", "", part)))
 

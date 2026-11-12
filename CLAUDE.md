@@ -475,6 +475,25 @@ stays on the sources page with a message and the list.
 
 **Completed is the person's call for anything recent** (`Watch.settled?/1`: TMDB Ended/Canceled and nothing aired for two years). Finishing a show, marking a season or rating it only completes it when settled; otherwise every episode is marked and it is *caught up*. Anime was completed the moment an MAL entry's last episode was marked (`follow_episodes`), which made a one-season anime "Completed". The button under the poster still completes (and marks every episode); pressing it again only takes the mark off the show — the episodes stay watched (`Watch.toggle_completed/4`).
 
+## Pieces published as Hex packages (the user's own, sources in `/root/src/`)
+
+- **`myanimelist`** (0.2.0, 2026-11-10): MAL API v2 — `Roki.Soundtrack` reads anime songs with
+  `MyAnimeList.themes/3`, `Roki.Profile` MAL posters with `MyAnimeList.get/4`; `seasons/3`
+  walks a series' MAL entries in order (the season switcher's idea). Laev still has its own
+  `Laev.MAL` (a candidate to replace).
+- **`aniskip`**: `Roki.AniSkip` is a wrapper over `AniSkip.times/3` adding the day cache, the
+  60/min budget, the offline flag and string kinds for the player's JS; `AniSkip.fit/3` is the
+  Elixir twin of `aniskipSkips` in cues.js.
+- **`fmp4`**: `Fmp4.scan/1` (was `Roki.Fmp4`, now `{:ok, info} | {:error, _}`),
+  `Fmp4.playlist/3` (what `Direct.media_playlist/3` serves — note a finished file's playlist is
+  `VOD` + `ENDLIST`, it used to stay `EVENT`), `Fmp4.reach/1`, `Fmp4.bitrate/1`, and
+  `Fmp4.RangeFile` (was `RokiWeb.RangeFile`; `wait`/`chunk`/`poll` are options now). Fixtures
+  for its tests were made with ffmpeg from `testsrc`; a part-way file needs
+  `-ss N -copyts -avoid_negative_ts disabled -movflags +frag_discont` to keep its clock.
+
+A package is tried from `{:pkg, path: "/root/src/pkg", override: true}` first, then pointed at
+Hex once published (the user publishes; Hex asks for a 2FA code).
+
 ## Study tools in the watch player (2026-11-06)
 - **Study mode shows the line tools** `‹ ↻ › ⏸` in the bar (`.study-lines`, `hidden` until on). Study turns on from the title page's Study button (`data-study`), the "Study" button in the lines box or the Settings toggle (`this.tools`, `roki:study:study`); turning it on pauses after every line, off stops it. The ⏸ button alone switches the pausing (`this.study`, `roki:study:pause`). Keys `,` back a line, `.` on, `/` replay, `C` copy the line's AI prompt (study mode only); `;` blurs/unblurs the current translation (Peek) and does not wake the bar. `stepLine(d)` / `toggleTranslation()` in sidebar.js.
 - **The bar is one auto-hide** (`evaluate` in sidebar.js: the strip along the bottom, as tall as the bar, a menu, a key or a tap); do not add a second one — two fought and the bar jumped 6 px. The round replay/copy buttons over the picture are gone in the watch player (CSS hides them).

@@ -17,6 +17,6 @@ defmodule RokiWeb.PageController do
   # conversion in progress would look like to the browser.
   def hevc_test_file(conn, %{"how" => how}) when how in ["sized", "growing"] do
     path = Path.join(:code.priv_dir(:roki), "static/images/hevc-test/hevc-frag.mp4")
-    RokiWeb.RangeFile.send(conn, path, "video/mp4", growing?: how == "growing")
+    Fmp4.RangeFile.send(conn, path, "video/mp4", growing?: how == "growing")
   end
 end
