@@ -431,6 +431,23 @@ and `import_from_mal/1`, which then forget the shelf, stats, history and ratings
 sync. Once a quarter hour per account (`Roki.RateLimit`), with a confirm, the counts reported under
 the section. The IMDb export dating (`Roki.ImdbDates`) stays beside them.
 
+### Social cards (what a shared link shows)
+
+`Roki.OpenGraph` draws a 1200×630 card for a title (`/og/title/:type/:id/card.jpg`: backdrop under
+a dark wash, poster at the right, name in Outfit, year · genres · TMDB score) and a profile
+(`/og/u/:username/card.jpg`: banner, avatar circle, name, what they watched, their average rating),
+served by `RokiWeb.OgController` (public, 60 renders/min site-wide) and named by the `og:image` /
+twitter tags the root layout draws from `@og` (`OpenGraph.for_title/3`, `for_profile/2`, set in the
+dead render of `TitleLive` and `ProfileLive` — a link preview reads nothing else). Scenes are
+`open_fresco`'s; the SVG is rasterised by **ImageMagick through files** (`magick`), because the
+resvg NIF cannot sit beside `rustler_precompiled` 0.10 here, `open_fresco`'s own magick pipe came
+back empty, and ImageMagick's SVG reader takes pictures from files (every inlined `data:` picture is
+written out first, `pictures_to_files/2`) and paints a stop-opacity gradient solid — so the scenes
+use the background wash and plain shapes only, and no ★ (Outfit has none; no fallback). The
+typeface is `priv/fonts/Outfit.ttf` (SIL OFL), copied to `~/.fonts` on first render so fontconfig
+finds it. Finished cards are kept a day under `$TMPDIR/roki-og` (`forget/1` to redraw one). Pictures
+come from where the pages take them (TMDB's picture server, the media library via 127.0.0.1).
+
 ### Title page: facts, music, actors
 
 - The facts panel shows a film's **Budget** and **Box office** (TMDB's `budget`/`revenue`, kept in the title's copy; a stored copy from before they were kept is read once more — `Roki.Watch.title/3` treats one without the `:budget` key as none) and **Music by** (the composer, `Roki.Credits` `composers`).

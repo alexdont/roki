@@ -253,6 +253,10 @@ defmodule RokiWeb.Router do
     # The same under a signed token, for an AirPlay receiver that has no cookie (RokiWeb.StreamToken).
     get "/stream/t/:token/:id/:file", StreamController, :signed
     get "/peek/:type/:id", PeekController, :show
+
+    # The social cards a shared link shows (Roki.OpenGraph); public, like the pages they stand for.
+    get "/og/title/:type/:id/card.jpg", OgController, :title
+    get "/og/u/:username/card.jpg", OgController, :profile
     get "/card/:type/:id", CardController, :show
     get "/library/:type/:id", LibraryController, :show
     get "/dict/:lang", DictController, :show

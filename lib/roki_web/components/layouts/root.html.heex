@@ -46,6 +46,27 @@
     <link rel="icon" type="image/png" sizes="192x192" href={~p"/images/icon-192.png"} />
     <link rel="shortcut icon" href="/favicon.ico" />
     <.live_title default="Roki" suffix=" · Roki" phx-no-format>{assigns[:page_title]}</.live_title>
+    <%!-- What a shared link shows elsewhere: the page's social card (Roki.OpenGraph), set by the
+          title and profile pages as `og`. --%>
+    <meta :if={assigns[:og]} property="og:type" content="website" />
+    <meta :if={assigns[:og]} property="og:site_name" content="Roki" />
+    <meta :if={assigns[:og]} property="og:title" content={@og.title} />
+    <meta
+      :if={assigns[:og] && @og[:description]}
+      property="og:description"
+      content={@og.description}
+    />
+    <meta :if={assigns[:og]} property="og:image" content={@og.image} />
+    <meta :if={assigns[:og]} property="og:image:width" content="1200" />
+    <meta :if={assigns[:og]} property="og:image:height" content="630" />
+    <meta :if={assigns[:og]} name="twitter:card" content="summary_large_image" />
+    <meta :if={assigns[:og]} name="twitter:title" content={@og.title} />
+    <meta
+      :if={assigns[:og] && @og[:description]}
+      name="twitter:description"
+      content={@og.description}
+    />
+    <meta :if={assigns[:og]} name="twitter:image" content={@og.image} />
     <%!-- Each build's files under a new address (`vsn=` the file's time), so a browser never keeps
           yesterday's script or styles: without it these are cached by guesswork. --%>
     <link

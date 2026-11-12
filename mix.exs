@@ -76,6 +76,7 @@ defmodule Roki.MixProject do
       {:fmp4, "~> 0.1"},
       {:direct, "~> 0.1"},
       {:musicbrainz, "~> 0.1"},
+      {:open_fresco, "~> 0.2"},
       {:chapter, "~> 0.1"},
       {:dims, "~> 0.1"},
       # The reader's own site scrapers come across with it: they parse HTML (floki) and need

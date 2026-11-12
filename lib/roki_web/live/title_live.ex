@@ -110,8 +110,13 @@ defmodule RokiWeb.TitleLive do
     else
       # The first paint of a reload or a shared link: the hero from the site's own copy of the
       # title, when it has one, so the page does not open as a placeholder and then redraw. What
-      # this person has done with it arrives with the connected load.
-      assign(socket, :title, stored_title(socket.assigns.live_action, type, id))
+      # this person has done with it arrives with the connected load. The social card's tags go
+      # in this paint too: a link preview reads nothing else.
+      stored = stored_title(socket.assigns.live_action, type, id)
+
+      socket
+      |> assign(:title, stored)
+      |> assign(:og, Roki.OpenGraph.for_title(type, id, stored))
     end
   end
 

@@ -42,6 +42,7 @@ defmodule RokiWeb.ProfileLive do
         socket
         |> assign(
           page_title: user.username,
+          og: Roki.OpenGraph.for_profile(user.username, profile),
           user: user,
           username: user.username,
           uuid: user.uuid,

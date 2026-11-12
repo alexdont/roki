@@ -189,9 +189,18 @@ defmodule Roki.Titles do
 
   # The whole title comes back from JSON with string keys; its keys are the ones
   # `Roki.Watch.normalize/2` writes, every one an atom the code already has.
-  defp atomize(%{} = map),
-    do: Map.new(map, fn {k, v} -> {String.to_existing_atom(k), atomize(v)} end)
+  # Keys come back as strings; the ones the code names are atoms it has, the rest stay strings
+  # (an atom only exists once a module naming it is loaded, and a copy can be read before then).
+  defp atomize(%{} = map), do: Map.new(map, fn {k, v} -> {atom(k), atomize(v)} end)
 
   defp atomize(list) when is_list(list), do: Enum.map(list, &atomize/1)
   defp atomize(other), do: other
+
+  defp atom(k) when is_binary(k) do
+    String.to_existing_atom(k)
+  rescue
+    ArgumentError -> k
+  end
+
+  defp atom(k), do: k
 end
