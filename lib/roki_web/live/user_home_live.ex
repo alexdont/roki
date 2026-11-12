@@ -853,7 +853,23 @@ defmodule RokiWeb.UserHomeLive do
               <span :if={n} class="text-xs tabular-nums text-base-content/50">{n}</span>
             </button>
           </div>
-          <RokiWeb.GridSize.grid_switch size={@grid_size} step_on_phone />
+          <div class="flex items-center gap-2">
+            <%!-- Saved titles already watched can all come off at once (the count is how many);
+                  in this row beside the size switch on a wide screen, its own row on a phone. --%>
+            <button
+              :if={@data && @tab == "saved" && Enum.any?(@data.saved, & &1[:seen])}
+              type="button"
+              phx-click="unsave_watched"
+              class="btn btn-ghost btn-sm hidden gap-1.5 sm:inline-flex"
+              title="Take every title you have watched off the saved list"
+            >
+              <.icon name="hero-check-circle" class="h-4 w-4 text-success" /> Remove watched
+              <span class="badge badge-sm badge-neutral tabular-nums">
+                {Enum.count(@data.saved, & &1[:seen])}
+              </span>
+            </button>
+            <RokiWeb.GridSize.grid_switch size={@grid_size} step_on_phone />
+          </div>
         </div>
 
         <.poster_row
@@ -868,7 +884,7 @@ defmodule RokiWeb.UserHomeLive do
         <%!-- Saved titles already watched can all come off at once; the button counts them. --%>
         <div
           :if={@data && @tab == "saved" && Enum.any?(@data.saved, & &1[:seen])}
-          class="flex items-center justify-end"
+          class="flex items-center justify-end sm:hidden"
         >
           <button
             type="button"
