@@ -40,6 +40,9 @@ config :roki, :kotatsu_url, "http://kotatsu:8420"
 # stream route, the subtitle files beside them and laev's sweep apply to both kinds alike.
 config :direct, dir: {Laev.Remux, :dir}
 
+# MusicBrainz asks every client to say who it is.
+config :musicbrainz, user_agent: "roki.ee/0.1 (https://roki.ee)"
+
 config :phoenix_kit, :comment_resource_handlers, %{
   "profile" => Roki.CommentHandler.Profile,
   "title" => Roki.CommentHandler.Title

@@ -502,6 +502,16 @@ stays on the sources page with a message and the list.
   `Roki.Subs.renditions` delegates to the package. The package's own tests run a real ffmpeg
   conversion of a `testsrc` film (`mix test` in `/root/src/direct`).
 
+- **`musicbrainz`**: MusicBrainz soundtrack albums and tracks (`MusicBrainz.albums/2` with
+  `year:`/`names:`, `tracks/2`, `youtube/1`); the user agent is `config :musicbrainz,
+  user_agent:`. `Roki.Soundtrack` keeps `for_title/2`, the TTLCache/`Roki.Kept` layers, the
+  MAL themes (via `myanimelist`) and adds `tracks: nil` to albums for the page.
+  **Kept-row atoms:** `Roki.Kept` turns stored JSON keys into atoms only where the atom already
+  exists; keys that are now only literals in a package module (`:artist`, `:secs`, `:eps`, …)
+  did not exist until that module loaded, and a kept row read first came back with string keys.
+  `Roki.Soundtrack.kept_keys/0` names them so loading the module makes the atoms — do the same
+  whenever a kept shape's keys move into a dependency.
+
 A package is tried from `{:pkg, path: "/root/src/pkg", override: true}` first, then pointed at
 Hex once published (the user publishes; Hex asks for a 2FA code).
 
