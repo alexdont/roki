@@ -232,6 +232,14 @@ defmodule RokiWeb.UserHomeLive do
     {:noreply, if(opening? and id == "completed", do: fetch_posters(socket), else: socket)}
   end
 
+  # Every saved title already watched comes off the list at once (the Saved tab's "Remove
+  # watched" button, which says how many).
+  def handle_event("unsave_watched", _params, %{assigns: %{data: %{} = data}} = socket) do
+    {watched, kept} = Enum.split_with(data.saved, & &1[:seen])
+    Roki.Watch.unsave_many(socket.assigns.uuid, watched)
+    {:noreply, assign(socket, :data, %{data | saved: kept})}
+  end
+
   # Off the saved list: gone from the page at once, so the rest closes up and it is plain that it
   # was removed.
   def handle_event(
@@ -854,6 +862,23 @@ defmodule RokiWeb.UserHomeLive do
           cached_titles={@cached_titles}
           upcoming={@upcoming}
         />
+        <%!-- Saved titles already watched can all come off at once; the button counts them. --%>
+        <div
+          :if={@data && @tab == "saved" && Enum.any?(@data.saved, & &1[:seen])}
+          class="flex items-center justify-end"
+        >
+          <button
+            type="button"
+            phx-click="unsave_watched"
+            class="btn btn-ghost btn-sm gap-1.5"
+            title="Take every title you have watched off the saved list"
+          >
+            <.icon name="hero-check-circle" class="h-4 w-4 text-success" /> Remove watched
+            <span class="badge badge-sm badge-neutral tabular-nums">
+              {Enum.count(@data.saved, & &1[:seen])}
+            </span>
+          </button>
+        </div>
         <.fold
           :if={@data && @tab == "saved"}
           cols={@cols}

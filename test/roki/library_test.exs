@@ -67,6 +67,15 @@ defmodule Roki.Watch.LibraryTest do
     refute Watch.library(@uuid, movie()).watched?
   end
 
+  test "several saved titles come off the list in one go" do
+    assert Watch.toggle_saved(@uuid, movie()) == :added
+    assert Watch.toggle_saved(@uuid, show()) == :added
+    assert Watch.unsave_many(@uuid, [movie(), show()]) == 2
+    refute Watch.library(@uuid, movie()).saved?
+    refute Watch.library(@uuid, show()).saved?
+    assert Watch.unsave_many(@uuid, []) == 0
+  end
+
   test "saving writes the title laev's saved list reads back" do
     Watch.toggle_saved(@uuid, movie())
 

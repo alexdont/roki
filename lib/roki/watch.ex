@@ -633,6 +633,23 @@ defmodule Roki.Watch do
   end
 
   @doc """
+  Take several titles (`[%{type, id}]`) off the saved-for-later list in one go — the Saved
+  tab's "Remove watched" — and tell the shelf once. Returns how many were asked.
+  """
+  def unsave_many(uuid, items) when is_list(items) do
+    Roki.Laev.run(uuid, fn ->
+      Enum.each(items, &Laev.Watchlist.remove(&1.type, &1.id))
+    end)
+
+    for %{type: type, id: id} <- items,
+        type in ["movie", "tv"],
+        do: Roki.Activity.retract(uuid, type, id, ["saved"])
+
+    if items != [], do: library_changed(uuid)
+    length(items)
+  end
+
+  @doc """
   Take a title's watch progress away, so it leaves what the shelf shows as being watched (Watchlist
   and History): where it was left (the resume record) and, for a title not finished, what was
   played of it — a film's saved spot, a show's watched episodes (and a season of anime by its
