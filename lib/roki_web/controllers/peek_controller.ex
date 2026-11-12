@@ -26,7 +26,9 @@ defmodule RokiWeb.PeekController do
         genres: Enum.take(t.genres || [], 4),
         tagline: t.tagline,
         overview: shorten(t.overview),
-        seasons: if(type == "tv", do: length(t.seasons || []))
+        seasons: if(type == "tv", do: length(t.seasons || [])),
+        # Friends who have seen it, with what they gave it against their own usual score.
+        friends: Enum.map(Roki.Friends.on_title(uuid, type, n), &Roki.Friends.describe/1)
       })
     else
       nil -> send_resp(conn, 401, "")

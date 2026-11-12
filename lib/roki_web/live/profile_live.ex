@@ -690,6 +690,7 @@ defmodule RokiWeb.ProfileLive do
             >
               <RokiWeb.FeaturedLive.tile
                 :for={i <- @favorites[kind]}
+                friends_seen={@friends_seen}
                 item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)}
                 kind={kind}
                 keep_colour?

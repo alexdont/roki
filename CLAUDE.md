@@ -407,6 +407,30 @@ The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_ratin
 
 TMDB rates a show as a whole, so a show with several seasons can also be rated **per season on Roki** (`roki_season_ratings`: user, tmdb id, season, score; `Profile.season_ratings/2`, `season_rating/3`, `put_season_rating/4`, `clear_season_rating/3`; never sent anywhere). Nothing is copied: a season with no row of its own *reads as the show's rating* (`{:seeded, score}`, drawn dimmed), so rating the show again moves every season that was never rated apart; setting a season makes it its own (`{:own, score}`, blue). On the episodes page (`season_scope/1`: several sections, no MyAnimeList entry for the season — anime with entries are still rated per entry on MyAnimeList) the star beside the season picker opens the same sheet, titled "· Season N", saving under `:season_rating`; the title page shows "Your seasons" chips (`season_ratings_strip`). `Watch.rate_season/4` also writes a `rated` feed entry carrying the season ("rated Show season 2"; `Activity.retract_rated/4` keeps the show's own and each season's entries apart), tells friends the same, and marks the season's aired, unmarked episodes watched (the show itself is not completed). The profile's breakdown counts a season's own rating with the shows. **The day a season was watched is kept and never moved by a rating:** when the last aired episode of a fully aired season is marked (any path — `scrobble/2` runs `date_finished_seasons/2`) that day goes to `roki_season_dates` with `Profile.set_season_date_once/5` (an existing date is left alone; only the owner's own edit on the watched page, `set_season_date/5`, changes it), and the watched page lists **a show once per dated season** (`Profile.by_season/3`, in `arranged/1`, then re-sorted newest first so months stay in sequence): each listing on that season's own day, carrying `season_no`, its own rating (the show's stands in for a season never rated) and the show's `key` — so selecting, dating and removing still act on the show, and the count (`title_count/1`) counts the show once. A show with seasons watched beyond the dated ones ("3/5 seasons", 2 dated) keeps its own listing as well; films, anime entries and undated shows stay one listing. Rated-but-undated seasons show as a line under the row (`Profile.season_notes/1`; the rating only where ratings are shown).
 
+### Friends on the grids
+
+`Roki.Friends` reads, from the site's own copies (`roki_watched`, `roki_ratings` — never a friend's
+laev scope), which of the viewer's friends (`Roki.Social.friends/1`) have seen a title and what they
+gave it, against each friend's own average: `verdict/2` (`:great` 1.5+ above their average, `:good`,
+`:typical`, `:below`, `:poor`) and `words/1` ("loved it", "more than their usual"…). An anime watched
+under its MyAnimeList entry counts for the TMDB title it maps to (`tmdb_type`/`tmdb_id`). Three places:
+`RokiWeb.FriendsSeen` (`on_mount` in the `:site` live session) assigns `@friends_seen`
+(`%{{type, id} => n}`, `Roki.Friends.seen/1`, cached five minutes; `forget/1` when friendships change),
+which every poster takes as `friends_seen` beside `cached_titles` and draws as a small 👥 count top
+left (under the score badge or progress mark); the hover card's `/peek` answer carries `friends:`
+lines (`Roki.Friends.describe/1`), shown as `.peek-friends`; the title page has a "Friends" line
+before the cast (`friends_line`, `Roki.Friends.on_title/3` loaded async). A grid that draws posters
+through `grid_card`/`tile` must pass `friends_seen={@friends_seen}` or it shows nothing.
+
+### Imports from the settings page
+
+Accounts tab: "Import my ratings as watched" (TMDB, linked) and "Import my list" (MyAnimeList,
+connected) run laev's own imports — `Laev.Ratings.import_from_tmdb/1` and `import_from_mal/1`, what
+`laev tmdb import` / `laev mal import` do in the terminal — through `Roki.Laev.import_from_tmdb/1`
+and `import_from_mal/1`, which then forget the shelf, stats, history and ratings copies and push the
+sync. Once a quarter hour per account (`Roki.RateLimit`), with a confirm, the counts reported under
+the section. The IMDb export dating (`Roki.ImdbDates`) stays beside them.
+
 ### Title page: facts, music, actors
 
 - The facts panel shows a film's **Budget** and **Box office** (TMDB's `budget`/`revenue`, kept in the title's copy; a stored copy from before they were kept is read once more — `Roki.Watch.title/3` treats one without the `:budget` key as none) and **Music by** (the composer, `Roki.Credits` `composers`).

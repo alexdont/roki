@@ -167,6 +167,7 @@ defmodule RokiWeb.PersonLive do
                 item={i}
                 kind={:search}
                 cached_titles={@cached_titles}
+                friends_seen={@friends_seen}
                 signed_in?={@uuid != nil}
               >
                 <p class="mt-1 truncate text-sm font-medium" title={i.title}>{i.title}</p>
@@ -207,6 +208,7 @@ defmodule RokiWeb.PersonLive do
                 kind={:search}
                 seen={MapSet.member?(@seen, {i.type, i.id})}
                 cached_titles={@cached_titles}
+                friends_seen={@friends_seen}
                 signed_in?={@uuid != nil}
               />
             </ul>

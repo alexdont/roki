@@ -580,6 +580,7 @@ defmodule RokiWeb.CategoryLive do
           >
             <RokiWeb.FeaturedLive.grid_card
               :for={i <- @items}
+              friends_seen={@friends_seen}
               kind={@kind}
               item={i}
               seen={MapSet.member?(@seen, {i.type, i.id})}

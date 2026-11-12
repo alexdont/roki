@@ -66,6 +66,10 @@ function render(el, info) {
   if (info?.overview) c.appendChild(line("peek-overview", info.overview))
   else if (info === undefined) c.appendChild(line("peek-muted", "…"))
 
+  // Friends who have seen it: names and scores once the lookup is here, the count from the page before.
+  if (info?.friends?.length) c.appendChild(line("peek-friends", info.friends.join(" · ")))
+  else if (info === undefined && el.dataset.peekFriends) c.appendChild(line("peek-friends", el.dataset.peekFriends))
+
   if (el.dataset.peekProgress) c.appendChild(line("peek-progress", el.dataset.peekProgress))
   if (el.dataset.peekResume) c.appendChild(line("peek-progress", el.dataset.peekResume))
   // Not out yet (red, from the page) or out already (grey, when the lookup arrives).

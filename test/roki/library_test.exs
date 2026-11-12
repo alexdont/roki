@@ -76,6 +76,11 @@ defmodule Roki.Watch.LibraryTest do
     assert Watch.unsave_many(@uuid, []) == 0
   end
 
+  test "the TMDB and MyAnimeList imports need their accounts linked" do
+    assert Roki.Laev.import_from_tmdb(@uuid) == {:error, :not_linked}
+    assert Roki.Laev.import_from_mal(@uuid) == {:error, :not_linked}
+  end
+
   test "saving writes the title laev's saved list reads back" do
     Watch.toggle_saved(@uuid, movie())
 

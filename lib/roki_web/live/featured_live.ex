@@ -569,6 +569,7 @@ defmodule RokiWeb.FeaturedLive do
           seen={@seen}
           upcoming={@upcoming}
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           signed_in?={@uuid != nil}
         />
       </div>
@@ -1021,6 +1022,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :seen, :any, required: true
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
 
   attr :signed_in?, :boolean, default: false
 
@@ -1058,6 +1060,7 @@ defmodule RokiWeb.FeaturedLive do
         seen={@seen}
         upcoming={@upcoming}
         cached_titles={@cached_titles}
+        friends_seen={@friends_seen}
         signed_in?={@signed_in?}
       />
     </div>
@@ -1071,6 +1074,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :seen, :any, required: true
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :signed_in?, :boolean, default: false
 
   # The chevrons belong to the row: they appear when the pointer is over it, the right one while
@@ -1138,6 +1142,7 @@ defmodule RokiWeb.FeaturedLive do
             item={i}
             seen={MapSet.member?(@seen, {i.type, i.id})}
             cached_titles={@cached_titles}
+            friends_seen={@friends_seen}
             upcoming={@upcoming}
             signed_in?={@signed_in?}
           />
@@ -1162,6 +1167,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :kind, :atom, required: true
   attr :seen, :boolean, default: false
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :signed_in?, :boolean, default: true
   attr :keep_colour?, :boolean, default: false
   attr :upcoming, :map, default: %{}
@@ -1177,6 +1183,7 @@ defmodule RokiWeb.FeaturedLive do
       item={@item}
       seen={@seen}
       cached_titles={@cached_titles}
+      friends_seen={@friends_seen}
       signed_in?={@signed_in?}
       keep_colour?={@keep_colour?}
       upcoming={@upcoming}
@@ -1194,6 +1201,7 @@ defmodule RokiWeb.FeaturedLive do
         seen={@seen}
         upcoming={@upcoming}
         cached_titles={@cached_titles}
+        friends_seen={@friends_seen}
         compact
         title?={false}
       />
@@ -1207,6 +1215,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :seen, :boolean, default: false
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :signed_in?, :boolean, default: false
 
   attr :no_card?, :boolean,
@@ -1266,6 +1275,7 @@ defmodule RokiWeb.FeaturedLive do
           seen={@seen}
           upcoming={@upcoming}
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           compact
           title?={false}
           rating_corner={:top_left}
@@ -1283,6 +1293,7 @@ defmodule RokiWeb.FeaturedLive do
   attr :seen, :boolean, default: false
   attr :upcoming, :map, default: %{}
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :signed_in?, :boolean, default: false
 
   # One title in a row: a poster, and — when the pointer rests on it, on a wide screen with a

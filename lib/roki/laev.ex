@@ -950,6 +950,58 @@ defmodule Roki.Laev do
     end)
   end
 
+  @doc """
+  Mark everything the person rated on TMDB as watched here, the way the terminal's
+  `laev tmdb import` does (`Laev.Ratings.import_from_tmdb/1`): `{:ok, %{marked:, already:,
+  partial:, failed:}}` or `{:error, :not_linked}`. The site's copies (shelf, stats, history,
+  ratings) are forgotten so the pages read the new marks at their next look.
+  """
+  def import_from_tmdb(uuid) do
+    result =
+      run(uuid, fn ->
+        if Laev.Tmdb.account?(),
+          do: {:ok, Laev.Ratings.import_from_tmdb()},
+          else: {:error, :not_linked}
+      end)
+
+    with {:ok, _} <- result, do: imported(uuid)
+    result
+  end
+
+  @doc """
+  Bring the person's MyAnimeList list in — every anime on it marked as far as it got, the
+  stats fixed — as the terminal's `laev mal import` does (`Laev.Ratings.import_from_mal/1`):
+  `{:ok, %{marked:, already:, partial:, failed:, finished:, anime:, episodes:, hours:,
+  cleared:}}` or `{:error, :not_linked}`.
+  """
+  def import_from_mal(uuid) do
+    result =
+      run(uuid, fn ->
+        if MAL.authenticated?() do
+          case Laev.Ratings.import_from_mal() do
+            %{} = counts -> {:ok, counts}
+            {:error, why} -> {:error, why}
+            other -> {:error, other}
+          end
+        else
+          {:error, :not_linked}
+        end
+      end)
+
+    with {:ok, _} <- result, do: imported(uuid)
+    result
+  end
+
+  # After an import: nothing the site copied is right any more.
+  defp imported(uuid) do
+    forget_shelf(uuid)
+    Roki.Stats.forget(uuid)
+    Roki.Profile.forget_history(uuid)
+    Roki.Profile.refresh_ratings(uuid)
+    Task.start(fn -> run(uuid, &Laev.Sync.live_push/0) end)
+    :ok
+  end
+
   @doc "Whether a TMDB account is linked, and whose: `%{linked?:, username:}`. TMDB is asked who."
   def tmdb_status(uuid) do
     run(uuid, fn ->

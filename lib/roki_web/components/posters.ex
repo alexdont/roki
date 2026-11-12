@@ -22,6 +22,11 @@ defmodule RokiWeb.PosterComponents do
     default: nil,
     doc: "map of {type, id} => release date for titles that are not out yet: a red mark"
 
+  attr :friends_seen, :any,
+    default: nil,
+    doc:
+      "map of {type, id} => how many of the viewer's friends have seen it (`Roki.Friends.seen/1`): a small count"
+
   attr :compact, :boolean,
     default: false,
     doc: "no caption under the poster: progress sits on the poster, the rest on hover"
@@ -58,7 +63,10 @@ defmodule RokiWeb.PosterComponents do
           ),
         cached?:
           match?(%MapSet{}, assigns.cached_titles) and
-            MapSet.member?(assigns.cached_titles, {assigns.item[:type], assigns.item[:id]})
+            MapSet.member?(assigns.cached_titles, {assigns.item[:type], assigns.item[:id]}),
+        friends:
+          is_map(assigns.friends_seen) &&
+            Roki.Friends.chip(assigns.friends_seen[{assigns.item[:type], assigns.item[:id]}])
       )
 
     # The score in the top left corner, when asked for and nothing else holds it.
@@ -80,6 +88,7 @@ defmodule RokiWeb.PosterComponents do
         data-peek-progress={@prog && progress_text(@prog, @item)}
         data-peek-resume={@item[:resume_at] && resume_title(@item)}
         data-peek-due={@due && "Not out yet: #{due_text(@due)}"}
+        data-peek-friends={@friends && "Seen by #{@friends} of your friends"}
       >
         <img
           :if={@item.poster}
@@ -102,6 +111,19 @@ defmodule RokiWeb.PosterComponents do
           class="absolute left-1.5 top-1.5 rounded-md bg-success/90 px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none text-success-content shadow-sm"
         >
           ✓ {@item[:partial]}
+        </span>
+        <%!-- Friends who have seen it: a small count, top left (under the progress mark when there
+              is one); who and what they gave it is on the hover card. --%>
+        <span
+          :if={@friends}
+          data-friends-mark
+          title={"Seen by #{@friends} of your friends"}
+          class={[
+            "absolute left-1.5 z-10 inline-flex items-center gap-0.5 rounded-md bg-base-100/85 px-1 py-0.5 text-[0.65rem] font-semibold leading-none text-base-content shadow-sm backdrop-blur-sm",
+            if(@score_tl? or (@item[:partial] && !@watched?), do: "top-7", else: "top-1.5")
+          ]}
+        >
+          <span class="hero-users-solid h-3 w-3"></span>{@friends}
         </span>
         <%!-- On your saved-for-later list: a bookmark ribbon hanging from the top edge, near the
               corner — just the shape, small and muted so it does not shout, with the notch of a real one. --%>

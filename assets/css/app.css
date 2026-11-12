@@ -821,6 +821,7 @@ button.sub-row:hover, .sub-row:hover { background: color-mix(in oklab, var(--col
 .peek-overview { margin-top: 0.5rem; font-size: 0.75rem; line-height: 1.45; opacity: 0.8; }
 .peek-muted { margin-top: 0.4rem; font-size: 0.75rem; opacity: 0.5; }
 .peek-progress { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 500; }
+.peek-friends { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 500; color: var(--color-info); }
 .peek-cached { margin-top: 0.35rem; font-size: 0.7rem; color: var(--color-success); }
 .peek-due { margin-top: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--color-error); }
 .peek-released { margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.55; }

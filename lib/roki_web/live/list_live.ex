@@ -198,6 +198,7 @@ defmodule RokiWeb.ListLive do
               kind={:list}
               seen={@watched?.(i)}
               cached_titles={@cached_titles}
+              friends_seen={@friends_seen}
               signed_in?={@uuid != nil}
             />
           </ul>

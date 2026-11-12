@@ -142,6 +142,7 @@ defmodule RokiWeb.SettingsLive do
           |> assign(:results, %{})
           |> assign(:sync, nil)
           |> assign(:mal, %{status: :loading, url: nil, error: nil, busy: false})
+          |> assign(:mal_note, nil)
           |> assign(:tmdb, %{status: :loading, note: nil})
           |> allow_upload(:imdb_csv, accept: ~w(.csv), max_entries: 1, max_file_size: 5_000_000)
           |> assign(:notify, Roki.Notify.choices(uuid))
@@ -534,6 +535,48 @@ defmodule RokiWeb.SettingsLive do
     end
   end
 
+  # Imports, as the terminal's `laev tmdb import` / `laev mal import`: once a quarter hour each,
+  # since they read a whole account and mark everything on it.
+  def handle_event("tmdb_import", _params, socket) do
+    uuid = socket.assigns.uuid
+
+    case Roki.RateLimit.check(:tmdb_import, {:user, uuid}, 1, 15 * 60_000) do
+      :ok ->
+        {:noreply,
+         socket
+         |> update(
+           :tmdb,
+           &%{&1 | note: "Reading your ratings from TMDB and marking them watched…"}
+         )
+         |> start_async(:tmdb_import, fn -> Laev.import_from_tmdb(uuid) end)}
+
+      {:error, {:rate_limited, secs}} ->
+        {:noreply,
+         update(
+           socket,
+           :tmdb,
+           &%{&1 | note: "Imported a moment ago — again in #{div(secs, 60) + 1} min."}
+         )}
+    end
+  end
+
+  def handle_event("mal_import", _params, socket) do
+    uuid = socket.assigns.uuid
+
+    case Roki.RateLimit.check(:mal_import, {:user, uuid}, 1, 15 * 60_000) do
+      :ok ->
+        {:noreply,
+         socket
+         |> update(:mal, &%{&1 | error: nil, busy: true})
+         |> assign(:mal_note, "Reading your list from MyAnimeList…")
+         |> start_async(:mal_import, fn -> Laev.import_from_mal(uuid) end)}
+
+      {:error, {:rate_limited, secs}} ->
+        {:noreply,
+         assign(socket, :mal_note, "Imported a moment ago — again in #{div(secs, 60) + 1} min.")}
+    end
+  end
+
   def handle_event("mal_logout", _params, socket) do
     Laev.mal_logout(socket.assigns.uuid)
 
@@ -631,6 +674,49 @@ defmodule RokiWeb.SettingsLive do
 
   def handle_async(:auto_sync, {:exit, _}, socket),
     do: {:noreply, assign(socket, auto_sync: :failed)}
+
+  def handle_async(:tmdb_import, {:ok, {:ok, c}}, socket) do
+    note =
+      "Marked #{c.marked} watched from your TMDB ratings" <>
+        if(c.already > 0, do: " (#{c.already} were already)", else: "") <>
+        if(c.partial > 0, do: ", #{c.partial} partly", else: "") <>
+        if(c.failed > 0, do: ", #{c.failed} could not be", else: "") <> "."
+
+    {:noreply, update(socket, :tmdb, &%{&1 | note: note})}
+  end
+
+  def handle_async(:tmdb_import, {:ok, {:error, :not_linked}}, socket),
+    do: {:noreply, update(socket, :tmdb, &%{&1 | note: "Link your TMDB account first."})}
+
+  def handle_async(:tmdb_import, _other, socket),
+    do:
+      {:noreply,
+       update(socket, :tmdb, &%{&1 | note: "The import did not finish; try again later."})}
+
+  def handle_async(:mal_import, {:ok, {:ok, c}}, socket) do
+    note =
+      "Marked #{c.marked} anime from your list" <>
+        if(c.already > 0, do: " (#{c.already} were already)", else: "") <>
+        if(c.partial > 0, do: ", #{c.partial} part-watched", else: "") <>
+        ", #{c.finished} finished · #{c.anime} anime, #{c.episodes} episodes, #{c.hours}h on MyAnimeList" <>
+        if(c.failed > 0, do: ", #{c.failed} could not be marked", else: "") <> "."
+
+    {:noreply, socket |> update(:mal, &%{&1 | busy: false}) |> assign(:mal_note, note)}
+  end
+
+  def handle_async(:mal_import, {:ok, {:error, :not_linked}}, socket),
+    do:
+      {:noreply,
+       socket
+       |> update(:mal, &%{&1 | busy: false})
+       |> assign(:mal_note, "Connect MyAnimeList first.")}
+
+  def handle_async(:mal_import, _other, socket),
+    do:
+      {:noreply,
+       socket
+       |> update(:mal, &%{&1 | busy: false})
+       |> assign(:mal_note, "The import did not finish; try again later.")}
 
   def handle_async(:imdb_dates, {:ok, {:ok, r}}, socket) do
     left =
@@ -1288,7 +1374,7 @@ defmodule RokiWeb.SettingsLive do
           uploads={@uploads}
         />
 
-        <.mal_section :if={@state == :ready and @tab == "accounts"} mal={@mal} />
+        <.mal_section :if={@state == :ready and @tab == "accounts"} mal={@mal} note={@mal_note} />
 
         <.notify_section :if={@tab == "notifications"} choices={@notify} />
 
@@ -1722,13 +1808,23 @@ defmodule RokiWeb.SettingsLive do
         <p class="text-sm text-base-content/60">
           Your film and show ratings are saved on this TMDB account, and shown here from it.
         </p>
-        <button
-          phx-click="tmdb_logout"
-          data-confirm="Unlink your TMDB account from this site? Your ratings stay on TMDB."
-          class="btn btn-sm btn-ghost text-error"
-        >
-          Unlink
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            phx-click="tmdb_import"
+            data-confirm="Mark every film and show you rated on TMDB as watched here? Titles already marked are left as they are."
+            class="btn btn-sm btn-outline"
+            title="What the terminal's `laev tmdb import` does"
+          >
+            Import my ratings as watched
+          </button>
+          <button
+            phx-click="tmdb_logout"
+            data-confirm="Unlink your TMDB account from this site? Your ratings stay on TMDB."
+            class="btn btn-sm btn-ghost text-error"
+          >
+            Unlink
+          </button>
+        </div>
 
         <form
           id="imdb-dates"
@@ -1769,6 +1865,7 @@ defmodule RokiWeb.SettingsLive do
   end
 
   attr :mal, :map, required: true
+  attr :note, :string, default: nil, doc: "what the last import said"
 
   # MyAnimeList: what anime ratings and watch progress go to once it is connected.
   defp mal_section(assigns) do
@@ -1786,13 +1883,25 @@ defmodule RokiWeb.SettingsLive do
         <p class="text-sm text-base-content/60">
           Anime you finish here is counted on your list, and anime is rated there instead of on TMDB.
         </p>
-        <button
-          phx-click="mal_logout"
-          data-confirm="Disconnect MyAnimeList from this site?"
-          class="btn btn-sm btn-ghost text-error"
-        >
-          Disconnect
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            phx-click="mal_import"
+            disabled={@mal.busy}
+            data-confirm="Bring your MyAnimeList list in? Every anime on it is marked watched as far as it got there; the stats follow."
+            class="btn btn-sm btn-outline"
+            title="What the terminal's `laev mal import` does"
+          >
+            Import my list
+          </button>
+          <button
+            phx-click="mal_logout"
+            data-confirm="Disconnect MyAnimeList from this site?"
+            class="btn btn-sm btn-ghost text-error"
+          >
+            Disconnect
+          </button>
+        </div>
+        <p :if={@note} class="text-sm text-base-content/60">{@note}</p>
       </div>
 
       <div :if={is_map(@mal.status) and not @mal.status.connected?} class="space-y-3">

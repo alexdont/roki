@@ -304,6 +304,7 @@ defmodule RokiWeb.Router do
     on_mount: [
       {PhoenixKitWeb.Users.Auth, :phoenix_kit_mount_current_scope},
       {RokiWeb.Cached, :assign_titles},
+      {RokiWeb.FriendsSeen, :assign},
       {RokiWeb.PlayerMode, :attach},
       {RokiWeb.SyncPull, :default},
       {RokiWeb.GridSize, :default}

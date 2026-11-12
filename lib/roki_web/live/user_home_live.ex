@@ -438,6 +438,7 @@ defmodule RokiWeb.UserHomeLive do
         manga_totals={@manga_totals}
         username={@username}
         cached_titles={@cached_titles}
+        friends_seen={@friends_seen}
       />
     </Layouts.app>
     """
@@ -638,6 +639,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :manga_totals, :map, default: %{seconds: 0, series: 0, chapters: 0}
   attr :username, :string, required: true
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :grid_size, :string, default: nil, doc: "the poster size chosen on this device (GridSize)"
 
   # Where Continue goes: playing, for a film or a show; the title's own page for anything else.
@@ -860,6 +862,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.watchlist.behind}
           empty="Nothing in progress. Start something and it waits here for you to pick it up."
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           upcoming={@upcoming}
         />
         <%!-- Saved titles already watched can all come off at once; the button counts them. --%>
@@ -887,6 +890,7 @@ defmodule RokiWeb.UserHomeLive do
           empty="Nothing saved yet. Hover a poster and press the bookmark to keep it for later."
           unsave
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           upcoming={@upcoming}
         />
         <.fold
@@ -896,6 +900,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.watchlist.caught_up}
           empty="Shows where you have seen every episode so far wait here for the next one."
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           upcoming={@upcoming}
         />
         <.fold
@@ -905,6 +910,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.watchlist.on_hold}
           empty="Put a show on hold from its page and it rests here, out of your way."
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           upcoming={@upcoming}
         />
         <.fold
@@ -914,6 +920,7 @@ defmodule RokiWeb.UserHomeLive do
           items={@data.continue}
           empty="What you start watching shows up here."
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
           upcoming={@upcoming}
         />
         <.completed
@@ -923,6 +930,7 @@ defmodule RokiWeb.UserHomeLive do
           shown={@completed_shown}
           ratings={@ratings}
           cached_titles={@cached_titles}
+          friends_seen={@friends_seen}
         />
       </div>
     </div>
@@ -969,6 +977,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :id, :string, required: true
   attr :items, :list, required: true
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :upcoming, :map, default: %{}
 
   attr :unsave, :boolean,
@@ -1020,6 +1029,7 @@ defmodule RokiWeb.UserHomeLive do
   attr :shown, :integer, required: true
   attr :ratings, :map, default: %{}
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
 
   attr :cols, :string, required: true, doc: "the grid's columns (GridSize)"
 
@@ -1087,6 +1097,7 @@ defmodule RokiWeb.UserHomeLive do
   # The media library's copy when there is one, else the source's own address through this
   # site, which carries the headers the source asks for.
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :upcoming, :map, default: %{}
   attr :items, :list, required: true
   attr :empty, :string, default: nil, doc: "what to say while there is nothing in it"

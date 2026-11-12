@@ -392,6 +392,7 @@ defmodule RokiWeb.DatingLive do
             <li :for={i <- @shown_items} class="space-y-1">
               <div class="relative">
                 <.poster
+                  friends_seen={@friends_seen}
                   item={Map.put(i, :badge, nil)}
                   compact
                   title?={false}

@@ -444,6 +444,7 @@ defmodule RokiWeb.MoodLive do
           <ul :if={is_list(@found) and @found != []} class={["grid gap-4", @grid]}>
             <RokiWeb.FeaturedLive.grid_card
               :for={i <- @found}
+              friends_seen={@friends_seen}
               kind={:mood_found}
               item={i}
               seen={MapSet.member?(@seen, {i.type, i.id})}
@@ -472,6 +473,7 @@ defmodule RokiWeb.MoodLive do
         >
           <RokiWeb.FeaturedLive.grid_card
             :for={i <- @items}
+            friends_seen={@friends_seen}
             kind={:mood}
             item={i}
             seen={MapSet.member?(@seen, {i.type, i.id})}

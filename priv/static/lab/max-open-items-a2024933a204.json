@@ -1,0 +1,905 @@
+{
+ "about": "Open items from importing Max's media export into roki.ee, 2026-10-30. 'why' says the reason it was not applied.",
+ "items": [
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "The Backrooms (2026)",
+   "category": "movie",
+   "year": 2026,
+   "liked": false,
+   "rating": 6.5,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "A Journey Through the Backrooms, Tape 2",
+    "year": "2025",
+    "tmdb_id": 1802695,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Disaster artist",
+   "category": "movie",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "The Disaster Artist",
+    "year": "2017",
+    "tmdb_id": 371638,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Naked Gun 33 1/3: The Final Insult",
+   "category": "movie",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Naked Gun 33⅓: The Final Insult",
+    "year": "1994",
+    "tmdb_id": 36593,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Something About Mary",
+   "category": "movie",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "There's Something About Mary",
+    "year": "1998",
+    "tmdb_id": 544,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Autopsy of Jane Doe",
+   "category": "movie",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "The Autopsy of Jane Doe",
+    "year": "2016",
+    "tmdb_id": 397243,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Time Perspectives",
+   "category": "movie",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Time Loop",
+    "year": "2020",
+    "tmdb_id": 647582,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Hell Boy (2004)",
+   "category": "movie",
+   "year": 2004,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "The Boy from Hell",
+    "year": "2004",
+    "tmdb_id": 105855,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": "s8 e22",
+   "title": "House M.D.",
+   "category": "tv_show",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": "except s1 - s3",
+   "why": "add_guess",
+   "candidate": {
+    "name": "House M.D.: The Doctor Directs",
+    "year": "2012",
+    "tmdb_id": 1568278,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": null,
+   "title": "Ozark",
+   "category": "tv_show",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "Ozark",
+    "year": "2017",
+    "tmdb_id": 69740,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s2 e",
+   "title": "Dexter",
+   "category": "tv_show",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "Dexter",
+    "year": "2006",
+    "tmdb_id": 1405,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": null,
+   "title": "The Magicians",
+   "category": "tv_show",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "The Magicians",
+    "year": "2015",
+    "tmdb_id": 64432,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s2 e5",
+   "title": "The Chilling Adventures of Sabrina",
+   "category": "tv_show",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Chilling Adventures of Sabrina",
+    "year": "2018",
+    "tmdb_id": 79242,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s2 e?",
+   "title": "God Friended Me",
+   "category": "tv_show",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "God Friended Me",
+    "year": "2018",
+    "tmdb_id": 81114,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "completed",
+   "progress": "s1 e26",
+   "title": "Oban Star-Racers",
+   "category": "animated_series",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Ōban Star-Racers",
+    "year": "2006",
+    "tmdb_id": 4335,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s1 e10",
+   "title": "Hit-Monkey",
+   "category": "animated_series",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "roki_row_title_differs",
+   "candidate": {
+    "name": "Marvel's Hit-Monkey",
+    "year": "2021",
+    "tmdb_id": 133903,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s4 e10",
+   "title": "Monkie Kid",
+   "category": "animated_series",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": "including episode 0",
+   "why": "roki_row_title_differs",
+   "candidate": {
+    "name": "LEGO Monkie Kid",
+    "year": "2020",
+    "tmdb_id": 106251,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": null,
+   "title": "Adventure Beast",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "Adventure Beast",
+    "year": "2021",
+    "tmdb_id": 134364,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": null,
+   "title": "I Heart Arlo",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "I Heart Arlo",
+    "year": "2021",
+    "tmdb_id": 123594,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": "Pilot",
+   "title": "Birdgirl",
+   "category": "animated_series",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_no_stop_point",
+   "candidate": {
+    "name": "Birdgirl",
+    "year": "2021",
+    "tmdb_id": 122486,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s1 e4",
+   "title": "Tangled: The Series",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Rapunzel's Tangled Adventure",
+    "year": "2017",
+    "tmdb_id": 70047,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s1 e1",
+   "title": "Gumball Chronicles",
+   "category": "animated_series",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "The Gumball Chronicles",
+    "year": "2020",
+    "tmdb_id": 133529,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "watched_partially_out_of_order",
+   "progress": null,
+   "title": "Kid vs Kat",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "Kid vs. Kat",
+    "year": "2008",
+    "tmdb_id": 17463,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "watched_partially_out_of_order",
+   "progress": null,
+   "title": "Foster's Home for Imaginary Friends",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "Foster's Home for Imaginary Friends",
+    "year": "2004",
+    "tmdb_id": 1720,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "watched_partially_out_of_order",
+   "progress": null,
+   "title": "Codename: Kids Next Door",
+   "category": "animated_series",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "Codename: Kids Next Door",
+    "year": "2002",
+    "tmdb_id": 2660,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "watched_partially_out_of_order",
+   "progress": null,
+   "title": "The Grim Adventures of Billy & Mandy",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "The Grim Adventures of Billy and Mandy",
+    "year": "2001",
+    "tmdb_id": 897,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "watched_partially_out_of_order",
+   "progress": null,
+   "title": "Dexter's Laboratory",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "Dexter's Laboratory",
+    "year": "1996",
+    "tmdb_id": 4229,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "watched_partially_out_of_order",
+   "progress": null,
+   "title": "Kim Possible",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "Kim Possible",
+    "year": "2002",
+    "tmdb_id": 2345,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "caught_up",
+   "progress": "s1 e12",
+   "title": "Mi Yu Xing Zhe",
+   "category": "anime",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Uncharted Walker",
+    "year": "2018",
+    "tmdb_id": 78649,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "caught_up",
+   "progress": "s1 e12",
+   "title": "Kami-tachi ni Hirowareta Otoko",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "By the Grace of the Gods",
+    "year": "2020",
+    "tmdb_id": 102086,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "caught_up",
+   "progress": "s1 e11",
+   "title": "Yuukoku no Moriarty",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Moriarty the Patriot",
+    "year": "2020",
+    "tmdb_id": 100281,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s3 e",
+   "title": "Golden Kamuy",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "Golden Kamuy",
+    "year": "2018",
+    "tmdb_id": 76757,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s1 e10",
+   "title": "The Journey of Elaina",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Wandering Witch: The Journey of Elaina",
+    "year": "2020",
+    "tmdb_id": 94693,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s2 e2",
+   "title": "Yakusoku no Neverland",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "roki_row_title_differs",
+   "candidate": {
+    "name": "The Promised Neverland",
+    "year": "2019",
+    "tmdb_id": 83097,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s2 e",
+   "title": "No Guns Life",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "fix_no_stop_point",
+   "candidate": {
+    "name": "No Guns Life",
+    "year": "2019",
+    "tmdb_id": 91270,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s1 e",
+   "title": "Yi Nian Yong Heng",
+   "category": "anime",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "An Eternal Thought",
+    "year": null,
+    "tmdb_id": 261597,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "in_progress",
+   "progress": "s1 e?",
+   "title": "SAO Alternative: Gun Gale Online",
+   "category": "anime",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": "Sub; beginning of the 2 tournament",
+   "why": "roki_row_title_differs",
+   "candidate": {
+    "name": "Sword Art Online Alternative: Gun Gale Online",
+    "year": "2018",
+    "tmdb_id": 78204,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Batman Unlimited: Animal Instinct",
+   "category": "animated_film",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Batman Unlimited: Animal Instincts",
+    "year": "2015",
+    "tmdb_id": 327418,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Reign of the superman",
+   "category": "animated_film",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Reign of the Supermen",
+    "year": "2019",
+    "tmdb_id": 487672,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Deathstroke: Knights & Dragons",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Deathstroke: Knights & Dragons - The Movie",
+    "year": "2020",
+    "tmdb_id": 703771,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "My Hero Academia the Movie The Two Heroes",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "My Hero Academia: Two Heroes",
+    "year": "2018",
+    "tmdb_id": 505262,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Mahou Shoujo MadokaMagica Movie 3: Hangyaku no Monogatari",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Puella Magi Madoka Magica the Movie -Rebellion-",
+    "year": "2013",
+    "tmdb_id": 212162,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Da Yu Hai Tang",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Big Fish & Chinese Flowering Crabapple",
+    "year": "2004",
+    "tmdb_id": 809219,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Psycho-Pass Movie",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "PSYCHO-PASS: The Movie",
+    "year": "2015",
+    "tmdb_id": 296917,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Psycho-Pass: Sinners of the System Case.1",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Psycho-Pass: Sinners of the System - Case.2 First Guardian",
+    "year": "2019",
+    "tmdb_id": 559562,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Psycho-Pass: Sinners of the System Case.2",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Psycho-Pass: Sinners of the System - Case.2 First Guardian",
+    "year": "2019",
+    "tmdb_id": 559562,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": null,
+   "title": "Fumiko no kokuhaku",
+   "category": "animated_film",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "add_guess",
+   "candidate": {
+    "name": "Fumiko's Confession",
+    "year": "2009",
+    "tmdb_id": 73786,
+    "tmdb_type": "movie"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "completed",
+   "progress": "s2 e8",
+   "title": "Ghosts",
+   "category": "tv_show",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "skipped_numbering_or_ambiguous",
+   "candidate": {
+    "name": "Ghosts",
+    "year": "2021",
+    "tmdb_id": 126027,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "completed",
+   "progress": "s5 e10",
+   "title": "Samurai Jack",
+   "category": "animated_series",
+   "year": null,
+   "liked": false,
+   "rating": null,
+   "note": "season 1 - 4 is mixed",
+   "why": "skipped_numbering_or_ambiguous",
+   "candidate": {
+    "name": "Samurai Jack",
+    "year": "2001",
+    "tmdb_id": 2723,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "exact"
+  },
+  {
+   "status": "completed",
+   "progress": "s1 e24",
+   "title": "Sword Art Online: Alicization",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "skipped_numbering_or_ambiguous",
+   "candidate": {
+    "name": "Sword Art Online",
+    "year": "2012",
+    "tmdb_id": 45782,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  },
+  {
+   "status": "caught_up",
+   "progress": null,
+   "title": "JoJo's Bizarre Adventure - Golden Wind e39",
+   "category": "anime",
+   "year": null,
+   "liked": true,
+   "rating": null,
+   "note": null,
+   "why": "skipped_numbering_or_ambiguous",
+   "candidate": {
+    "name": "JoJo's Bizarre Adventure",
+    "year": "2012",
+    "tmdb_id": 45790,
+    "tmdb_type": "tv"
+   },
+   "match_confidence": "guess"
+  }
+ ]
+}

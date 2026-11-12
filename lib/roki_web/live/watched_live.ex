@@ -1104,6 +1104,7 @@ defmodule RokiWeb.WatchedLive do
                     kind={:watched}
                     item={Map.put(i, :badge, nil)}
                     cached_titles={@cached_titles}
+                    friends_seen={@friends_seen}
                     signed_in?={true}
                     no_card?={@select?}
                     keep_colour?={true}
@@ -1123,6 +1124,7 @@ defmodule RokiWeb.WatchedLive do
                       <.poster
                         item={Map.put(i, :badge, nil)}
                         cached_titles={@cached_titles}
+                        friends_seen={@friends_seen}
                         compact
                         title?={false}
                       />

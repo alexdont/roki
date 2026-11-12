@@ -84,6 +84,7 @@ defmodule RokiWeb.TitleLive do
         reviews: nil,
         similar: [],
         similar_seen: MapSet.new(),
+        friends: [],
         study: nil,
         study_eps: nil,
         page_title: "Watch",
@@ -655,6 +656,7 @@ defmodule RokiWeb.TitleLive do
      |> tap(fn _ ->
        Task.start(fn -> Roki.Social.remember_title(title.type, title.id, title.title) end)
      end)
+     |> start_async(:friends, fn -> Roki.Friends.on_title(uuid, title.type, title.id) end)
      |> start_async(:similar, fn ->
        # What this person has watched, saved and rated of them, worked out alongside.
        with {:ok, cards} <- Roki.Similar.for_title(uuid, title.type, title.id) do
@@ -675,6 +677,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, similar: cards, similar_seen: seen)}
 
   def handle_async(:similar, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:friends, {:ok, friends}, socket) when is_list(friends),
+    do: {:noreply, assign(socket, :friends, friends)}
+
+  def handle_async(:friends, _other, socket), do: {:noreply, socket}
 
   # TMDB lists a trailer's YouTube address; nothing here means the page simply has no button.
   def handle_async(:trailer, {:ok, key}, socket) when is_binary(key),
@@ -997,6 +1004,7 @@ defmodule RokiWeb.TitleLive do
             />
 
             <.facts_panel title={@title} credits={@credits} />
+            <.friends_line :if={@friends != []} friends={@friends} />
             <.cast_row cast={@credits.cast} />
             <.soundtrack_section ost={@ost} album={@ost_album} all?={@ost_all?} title={@title} />
 
@@ -1020,6 +1028,7 @@ defmodule RokiWeb.TitleLive do
               items={@similar}
               seen={@similar_seen}
               cached_titles={@cached_titles}
+              friends_seen={@friends_seen}
               signed_in?={@uuid != nil}
             />
 
@@ -1948,6 +1957,7 @@ defmodule RokiWeb.TitleLive do
   attr :items, :list, required: true
   attr :seen, :any, required: true
   attr :cached_titles, :any, default: nil
+  attr :friends_seen, :any, default: nil
   attr :signed_in?, :boolean, default: false
 
   defp similar_row(assigns) do
@@ -1964,6 +1974,7 @@ defmodule RokiWeb.TitleLive do
         item={i}
         seen={MapSet.member?(@seen, {i.type, i.id})}
         cached_titles={@cached_titles}
+        friends_seen={@friends_seen}
         upcoming={%{}}
         signed_in?={@signed_in?}
       />
@@ -3270,6 +3281,43 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp ghosts(items), do: List.duplicate(:ghost, max(6 - length(items), 0))
+
+  # Friends who have seen the title, each with the score they gave and what that says against
+  # their own usual (`Roki.Friends.on_title/3`): a line under the hero, before the cast.
+  attr :friends, :list, required: true
+
+  defp friends_line(assigns) do
+    ~H"""
+    <div class="px-4 sm:px-6 lg:px-12 xl:px-16">
+      <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70">
+        <span class="inline-flex items-center gap-1 font-semibold text-base-content">
+          <.icon name="hero-users-solid" class="h-4 w-4 text-info" /> Friends
+        </span>
+        <.link
+          :for={f <- @friends}
+          navigate={"/u/#{f.username}/profile"}
+          class="inline-flex items-center gap-1 rounded-full bg-base-200 px-2.5 py-0.5 hover:bg-base-300"
+          title={
+            if f.average,
+              do: "#{f.username} usually gives #{Float.round(f.average, 1)}",
+              else: f.username
+          }
+        >
+          <span class="font-medium text-base-content">{f.username}</span>
+          <span
+            :if={f.score}
+            class="font-semibold"
+            style={"color: #{RokiWeb.ScoreColor.color(f.score)}"}
+          >
+            ★ {fmt_rating(f.score)}
+          </span>
+          <span :if={f.verdict} class="text-xs text-base-content/60">· {Roki.Friends.words(f.verdict)}</span>
+          <span :if={!f.score} class="text-xs text-base-content/60">· seen</span>
+        </.link>
+      </p>
+    </div>
+    """
+  end
 
   defp rate_ghost(assigns) do
     ~H"""
