@@ -473,9 +473,10 @@ defmodule Roki.Watch.Resolver do
     indexed = Enum.with_index(page)
 
     # Starting to play (`quick?`) wants one release that works, so they are asked the way laev's
-    # own player asks (`Laev.Providers.resolve_best`): the best first, a second beside it only
-    # when the first is slow, never more than three at once, and the first to play wins. Asking
-    # all eight every time was eight torrents added to the debrid account for one film watched.
+    # own player asks (`Laev.Hedge`, what `resolve_best` is built on since 0.1.55): the best
+    # first, a second beside it only when the first is slow, never more than three at once, and
+    # the first to play wins. Asking all eight every time was eight torrents added to the debrid
+    # account for one film watched.
     # A list to choose from (the sources page) still checks a page at once.
     {task, hedged?} =
       if quick? do
@@ -517,8 +518,10 @@ defmodule Roki.Watch.Resolver do
      |> Enum.map(fn {_i, source, stream} -> {source, stream} end), late}
   end
 
-  # The hedged race over a page: the releases a browser reads as they are (1080p, not heavy) go
-  # first, the rest keep laev's order. Each is asked on its own, with the number it uses.
+  # The hedged race over a page (`Laev.Hedge.run/3`): the releases a browser reads as they are
+  # (1080p, not heavy) go first, the rest keep laev's order. Each is asked on its own, with the
+  # number it uses, through laev's probe, and settled here as it answers — the page's count,
+  # the check's mark, the trace — which is why this adapter stays beside laev's race.
   defp hedged(indexed, ctx, _notify, settle) do
     by_hash =
       for {c, group} <- by_numbering(indexed, ctx), {source, idx} <- group, into: %{} do
@@ -528,7 +531,7 @@ defmodule Roki.Watch.Resolver do
     {ideal, rest} = Enum.split_with(indexed, fn {source, _} -> ideal?(source) end)
     ordered = for {source, _} <- ideal ++ rest, do: source
 
-    resolver = fn source, _opts ->
+    probe = fn source ->
       {idx, c} = Map.fetch!(by_hash, source.hash)
       me = self()
 
@@ -556,7 +559,7 @@ defmodule Roki.Watch.Resolver do
       settle.(idx, source, result)
     end
 
-    Laev.Providers.resolve_best(ordered, resolver: resolver, notify: fn _ -> :ok end)
+    Laev.Hedge.run(ordered, probe, notify: fn _ -> :ok end)
   end
 
   # Waits for the hedged race; the releases it never needed to ask go back to the unchecked list.

@@ -248,9 +248,10 @@ connected user; visitors never get marks.
 
 ## Search throttling, spelling, lists
 
-`Roki.Search` ports laev's private search logic: spelling variants (gray/grey, color/colour, theater/
-theatre, harbor, armor, honor), the year hint (`heat 1995`, +-1 soft), exact-title-first ranking, IMDb
-ids. **Throttle:** results are cached 10 min in `Roki.TTLCache` (ETS, single-flight, hard cap 2000
+`Roki.Search` runs laev's search rules (`Laev.Search`, public since 0.1.55: `parse/1` — a title, a
+year hint, an IMDb id — `variants/1` for the spellings TMDB will not cross-match, `canonical/1`,
+`rank/3` exact-title-first with the year soft to one either side) in the site's scopes with the
+site's throttling; the port roki carried of them is gone (2026-11-12). **Throttle:** results are cached 10 min in `Roki.TTLCache` (ETS, single-flight, hard cap 2000
 entries, only `{:ok, _}` kept); a cache *miss* spends from `Roki.RateLimit` (Hammer ETS) — 20/min per
 client (`RokiWeb.Client`: user uuid, else the `X-Forwarded-For` IP, needing `:peer_data`/`:x_headers`
 in the endpoint `connect_info`) and 300/min site-wide. List posters have their own budget (6/min per
@@ -269,14 +270,12 @@ handles that. Search offers matching lists above the first page of results.
 `/:username/stats` (`StatsLive`, `Roki.Stats`), `/:username/calendar` (`CalendarLive`, `Roki.Calendar`);
 the three user pages share `RokiWeb.UserTabs` and are gated by `RokiWeb.UserGuard`.
 
-**Stats must never run without a TMDB key.** Laev times films/shows from TMDB runtimes cached in the
-scope's `runtimes.json`, and a failed lookup is cached as `"unknown"` *forever*. Run keyless (as the shelf
-once did before the user's keys had synced) and every film/show is remembered as zero-length: the owner's
-6,940h read as 2,500h. `Roki.Stats.build/0` therefore refuses without a key and `heal_runtimes/0` clears a
-cache that is >50% unknown (anime lengths, from MAL, are kept). Don't call `Laev.Stats.all_time/0` directly.
-Only `Roki.Stats.for_user/1` (rate limited, 4/min) should be used. The first measurement is ~1,450 TMDB
-lookups (about a minute for a big library); later ones are instant. The shelf loads stats and the pulse in
-separate async tasks after the shelf itself, so they never delay it.
+**Stats without a TMDB key** are refused (`Roki.Stats.build/0` → `{:error, :no_tmdb_key}`): laev
+times films/shows from TMDB runtimes, and a page of zeros is worse than a notice. The reason this used
+to matter more — laev cached a failed lookup as `"unknown"` forever, so one keyless run read the
+owner's 6,940h as 2,500h — is fixed in laev 0.1.55 (a failure is not remembered; `Laev.Stats.all_time/0`
+carries `unmeasurable:` and `tmdb:`), and the `heal_runtimes/0` roki carried for it is gone. Only
+`Roki.Stats.for_user/1` (rate limited, 4/min) should be used.
 
 **Charts at the foot of the stats page** (`RokiWeb.StatsCharts`): hours by month (last twelve), by
 year, by weekday — stacked by kind from `Roki.Spent.days_by_kind/4`, the per-kind form of the heatmap's
@@ -290,10 +289,9 @@ the gaps and legend as the second channel).
 
 **Watch dates go both ways with laev** (laev 0.1.48). A date set on the site (`Roki.Profile.set_watched_at/3`, the history page's backdating) is kept in `roki_watch_dates` and told to laev as a *claimed* date (`Laev.Position.set_watched_on/2`, a film by TMDB id, an anime by MAL id), so the terminal app and laev's own stats put the title on that day. Coming back, `Laev.Shelf.completed/0` dates every finished title by a session, else laev's play history, else a claimed date (one from `laev tmdb import-imdb`, say), and the watched-list rebuild (`replace_watched/2`) takes `at`/`dated?` from it, with the site's own dates laid over last. Laev's `forget` leaves the claimed date, so a title taken off the list and marked again comes back with its old date.
 
-**Day logs can be corrupt.** Synced `watched/*.log` files can have entries fused onto one line
-(`2026-10-22 12026-10-22 2`); laev's own `Laev.Days` parser reads that as 12,026 s and reported 245,000 h.
-`Roki.Stats.day_totals/0` re-parses with a lazy-digit regex that splits them and caps a day at 24 h.
-(Likely a laev sync bug: the log is rewritten without its trailing newline, so the next append fuses.)
+**Day logs** (`watched/*.log`) are read by `Laev.Days.totals/0` again (laev 0.1.55 writes the trailing
+newline that used to fuse lines, splits fused lines it meets and caps a day; lines compaction had
+already folded from fused ones are unrecoverable and read low). Roki's own re-parse is gone.
 
 **Calendar** = the user's *Saved* list (laev's rule), ported from `Laev.Calendar`: AniList for anime,
 TMDB seasons for TV, TMDB release dates for films. Laev's own keeps a 7-day look-back in the machine's
@@ -523,7 +521,7 @@ answered go back to `rest` ("Load more", shown as "slow, set aside"). In the bro
 watch page opens, which then reuses the running remux and plays at once — one wait, not two. A failure to prepare
 stays on the sources page with a message and the list.
 
-**Hedged finding (2026-11-06).** When a release is being found to start playing (`quick?` in `Resolver.probe_page`), the page is raced the way laev's `resolve_best` does it (`hedged/4`, `await_hedged/6`): browser-ready releases (1080p, not heavy) first, one at a time, a second beside it only if the first has not answered in 2.5 s, three at most, the first that plays wins; the rest go back to "Load more" ("not needed"). `resolve_best` is public but takes a `resolver:` function, which is how each release is still asked with its own numbering and checked (`scene_retry`, re-encode). A list to choose from (the sources page) asks three at a time in laev's order and stops at three that play (or four seconds after the first), the rest left for "Load more". Not exercised by the tests (needs a debrid account).
+**Hedged finding (2026-11-06).** When a release is being found to start playing (`quick?` in `Resolver.probe_page`), the page is raced through `Laev.Hedge.run/3` (what laev's `resolve_best` is built on since 0.1.55; roki's `hedged/4` is the adapter that asks each release with its own numbering and settles the answers into the page, `await_hedged/6` the wait): browser-ready releases (1080p, not heavy) first, one at a time, a second beside it only if the first has not answered in 2.5 s, three at most, the first that plays wins; the rest go back to "Load more" ("not needed"). Each release is still asked with its own numbering and checked (`scene_retry`, re-encode) in the probe roki passes. A list to choose from (the sources page) asks three at a time in laev's order and stops at three that play (or four seconds after the first), the rest left for "Load more". Not exercised by the tests (needs a debrid account).
 
 **Completed is the person's call for anything recent** (`Watch.settled?/1`: TMDB Ended/Canceled and nothing aired for two years). Finishing a show, marking a season or rating it only completes it when settled; otherwise every episode is marked and it is *caught up*. Anime was completed the moment an MAL entry's last episode was marked (`follow_episodes`), which made a one-season anime "Completed". The button under the poster still completes (and marks every episode); pressing it again only takes the mark off the show — the episodes stay watched (`Watch.toggle_completed/4`).
 
@@ -609,7 +607,7 @@ Hex once published (the user publishes; Hex asks for a 2FA code).
 
 ## Video conversions (ffmpeg)
 - A non-h264 release is re-encoded on the server by laev (`libx264`, software). A 4K one never keeps up and takes every core, so `Watch.start` refuses a heavy release above 1080p (`:too_heavy`) and caps concurrent encoders (`:busy`).
-- laev keeps a conversion running for two hours whatever happens to the page. `Roki.Watch.Reaper` stops the ones the stream controller has not served in ten minutes, and `ready_or_stop` stops one that did not get going.
+- Conversions nobody is fetching are stopped by **laev's own reaper** (`Laev.Remux.Reaper`, started with laev: ten minutes idle, two minutes without a playable playlist; `config :laev, remux_idle_seconds:` / `remux_never_ready_seconds:` / `remux_sweep_ms:` to change). The stream controller calls `Laev.Remux.touch/1` on every fetch, which reaches a `direct` conversion too. Roki once had its own `Roki.Watch.Reaper`; it went with laev 0.1.44.
 
 ## The saved manga (`/manga`)
 - `RokiWeb.MangaShelfLive` (in the `:site` live session), replacing `MangaController.home/home2` and its templates; `/manga/home2` forwards with its query. The rules — what each chip keeps, caught up, the sorts, the chip click cycle (on → excluded → off; a category comes back on from excluded) — are `Roki.Manga.Shelf`, tested on their own.

@@ -1,9 +1,10 @@
 defmodule Roki.Search do
   @moduledoc """
-  Title search, the way laev's `watch` does it.
+  Title search, the way laev's `watch` does it — the rules are laev's own (`Laev.Search`,
+  public since 0.1.55: what a query asks for, the spelling variants TMDB will not cross-match,
+  the year hint, the ranking), run here in the site's scopes with the site's throttling.
 
-  * **Spelling variants.** TMDB does not cross-match British and American
-    spellings — "In the Grey" is invisible to a "gray" query — so every variant is
+  * **Spelling variants.** "In the Grey" is invisible to a "gray" query, so every variant is
     searched and the results merged.
   * **Year hint.** `heat 1995` ranks 1995 first, 1994 and 1996 next.
   * **IMDb ids.** `tt0113277` resolves to exactly one title.
@@ -28,15 +29,6 @@ defmodule Roki.Search do
 
   alias Roki.{Lists, RateLimit, TTLCache}
 
-  @pairs [
-    {"gray", "grey"},
-    {"color", "colour"},
-    {"theater", "theatre"},
-    {"harbor", "harbour"},
-    {"armor", "armour"},
-    {"honor", "honour"}
-  ]
-
   @max_query 120
   @cache_ttl 10 * 60
   @client_limit 20
@@ -45,8 +37,6 @@ defmodule Roki.Search do
   # Two films of one series is evidence by itself; one is only evidence when it
   # is the best result and a widely-seen one (laev's rule, same number).
   @hint_votes 2_000
-
-  @imdb ~r/^tt\d{6,}$/
 
   @doc """
   `{:ok, items, more?, franchises, seen}` — `franchises` are list summaries with
@@ -148,7 +138,10 @@ defmodule Roki.Search do
   end
 
   defp lookup(uuid, q, page) do
-    if Regex.match?(@imdb, q), do: imdb(uuid, q), else: text(uuid, q, page)
+    case Laev.Search.parse(q) do
+      %{imdb_id: id} when is_binary(id) -> imdb(uuid, id)
+      parsed -> text(uuid, parsed, page)
+    end
   end
 
   defp imdb(uuid, id) do
@@ -159,10 +152,8 @@ defmodule Roki.Search do
     end
   end
 
-  defp text(uuid, q, page) do
-    {text, year} = split_year(q)
-
-    answers = Enum.map(spelling_variants(text), &Laev.Tmdb.search(&1, page))
+  defp text(uuid, %{title: text, year: year}, page) do
+    answers = Enum.map(Laev.Search.variants(text), &Laev.Tmdb.search(&1, page))
 
     case Enum.filter(answers, &match?({:ok, _, _}, &1)) do
       [] ->
@@ -171,67 +162,13 @@ defmodule Roki.Search do
       oks ->
         results = oks |> Enum.flat_map(&elem(&1, 1)) |> Enum.uniq_by(&{&1.type, &1.id})
         more? = Enum.any?(oks, &elem(&1, 2))
-        titles = rank_titles(results, text, year)
+        titles = Laev.Search.rank(results, text, year)
         {:ok, {titles, more?, if(page == 1, do: franchises(uuid, text, titles), else: [])}}
     end
   end
 
-  # ── ported from laev (private there) ───────────────────────────────
-
-  @doc false
-  def split_year(query) do
-    case Regex.run(~r/^(.*?)\s+((?:19|20)\d{2})\s*$/, String.trim(query)) do
-      [_, rest, year] when rest != "" -> {rest, String.to_integer(year)}
-      _ -> {query, nil}
-    end
-  end
-
-  @doc false
-  def spelling_variants(q) do
-    d = String.downcase(q)
-
-    extra =
-      Enum.flat_map(@pairs, fn {a, b} ->
-        cond do
-          String.contains?(d, a) -> [String.replace(d, a, b)]
-          String.contains?(d, b) -> [String.replace(d, b, a)]
-          true -> []
-        end
-      end)
-
-    Enum.uniq([q | extra])
-  end
-
-  @doc false
-  def canonical(s) do
-    d = s |> String.trim() |> String.downcase()
-    Enum.reduce(@pairs, d, fn {a, b}, acc -> String.replace(acc, b, a) end)
-  end
-
-  # Exact-title matches first (newest first), then the rest by popularity. A
-  # requested year trumps both, softly (±1: release dates shift between regions).
-  @doc false
-  def rank_titles(titles, query, year) do
-    q = canonical(query)
-
-    Enum.sort_by(titles, fn t ->
-      yr = t.year && String.to_integer(t.year)
-
-      year_rank =
-        cond do
-          year == nil -> 0
-          yr == year -> 0
-          is_integer(yr) and abs(yr - year) <= 1 -> 1
-          true -> 2
-        end
-
-      if canonical(t.title || "") == q do
-        {year_rank, 0, -(yr || 0)}
-      else
-        {year_rank, 1, -(t.popularity || 0)}
-      end
-    end)
-  end
+  @doc "A title reduced to one spelling and one case (`Laev.Search.canonical/1`): the cache's key."
+  defdelegate canonical(title), to: Laev.Search
 
   # ── franchises ─────────────────────────────────────────────────────
 

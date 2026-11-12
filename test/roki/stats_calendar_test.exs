@@ -3,30 +3,20 @@ defmodule Roki.StatsCalendarTest do
 
   alias Roki.{Calendar, Stats, TTLCache}
 
-  describe "day log parsing" do
-    test "plain lines add up per day" do
-      acc = Stats.add_log(%{}, "2026-10-22 5\n2026-10-22 5\n2026-10-21 60\n")
-      assert acc[~D[2026-10-22]] == 10
-      assert acc[~D[2026-10-21]] == 60
-    end
+  describe "day logs" do
+    # Laev reads them itself since 0.1.55, fused lines split; roki's own re-parse is gone.
+    @tag :tmp_dir
+    test "laev's totals split a fused line", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "watched"))
 
-    test "a fused line is split, not read as one huge number" do
-      acc = Stats.add_log(%{}, "2026-10-22 12026-10-22 2\n2026-10-22 5\n")
-      assert acc[~D[2026-10-22]] == 1 + 2 + 5
-    end
+      File.write!(
+        Path.join(dir, "watched/other.log"),
+        "2026-10-22 12026-10-22 2\n2026-10-22 5\n2026-10-21 60\n"
+      )
 
-    test "several entries fused together" do
-      acc = Stats.add_log(%{}, "2026-10-16 52026-10-16 52026-10-16 5")
-      assert acc[~D[2026-10-16]] == 15
-    end
-
-    test "folded per-day totals and junk lines" do
-      acc = Stats.add_log(%{}, "2026-09-26 11007\nnot a log line\n2026-09-27 1477\n")
-      assert acc == %{~D[2026-09-26] => 11007, ~D[2026-09-27] => 1477}
-    end
-
-    test "an impossible single value is dropped" do
-      assert Stats.add_log(%{}, "2026-10-22 99999999") == %{}
+      totals = Laev.Scope.run(Laev.Scope.new(dir), &Laev.Days.totals/0)
+      assert totals[~D[2026-10-22]] == 1 + 2 + 5
+      assert totals[~D[2026-10-21]] == 60
     end
   end
 
@@ -64,37 +54,7 @@ defmodule Roki.StatsCalendarTest do
     end
   end
 
-  describe "runtime cache repair" do
-    @tag :tmp_dir
-    test "a cache that is mostly 'unknown' is cleared of them; anime lengths and real ones stay",
-         %{tmp_dir: dir} do
-      path = Path.join(dir, "runtimes.json")
-
-      File.write!(
-        path,
-        Jason.encode!(%{
-          "movie-1" => "unknown",
-          "movie-2" => "unknown",
-          "movie-3" => 7200,
-          "tv-4" => "unknown",
-          "mal-5" => 1440
-        })
-      )
-
-      assert {:healed, 3} = Laev.Scope.run(Laev.Scope.new(dir), &Stats.heal_runtimes/0)
-      assert path |> File.read!() |> Jason.decode!() == %{"movie-3" => 7200, "mal-5" => 1440}
-    end
-
-    @tag :tmp_dir
-    test "a healthy cache — a few genuinely unlisted runtimes — is left alone", %{tmp_dir: dir} do
-      path = Path.join(dir, "runtimes.json")
-      cache = Map.new(1..20, &{"movie-#{&1}", 6000}) |> Map.put("movie-99", "unknown")
-      File.write!(path, Jason.encode!(cache))
-
-      assert :ok = Laev.Scope.run(Laev.Scope.new(dir), &Stats.heal_runtimes/0)
-      assert path |> File.read!() |> Jason.decode!() == cache
-    end
-
+  describe "measuring" do
     @tag :tmp_dir
     test "no TMDB key means no measuring (and so nothing to poison)", %{tmp_dir: dir} do
       scope = Laev.Scope.new(dir, %{tmdb_key: nil})

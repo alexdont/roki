@@ -57,7 +57,7 @@ defmodule RokiWeb.StudyLive do
         content =
           consume_uploaded_entry(socket, entry, fn %{path: path} -> {:ok, File.read!(path)} end)
 
-        vtt = Laev.Subtitles.to_vtt(entry.client_name, content)
+        vtt = Roki.Subtitles.to_vtt(entry.client_name, content)
 
         {:noreply,
          socket
