@@ -753,7 +753,8 @@ defmodule RokiWeb.TitleLive do
      socket
      |> update(:season_ratings, &Map.put(&1, season, score))
      |> reload_marks()
-     |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)}
+     |> start_async(:lib_reload, fn -> Watch.library(uuid, title) end)
+     |> load_rated_shelf()}
   end
 
   def handle_async(:season_rating, {:ok, {:clear, season, :ok}}, socket),
@@ -1045,6 +1046,7 @@ defmodule RokiWeb.TitleLive do
               />
               <.rate_sheet
                 :if={@linked? and @rating.provider != :mal and season_scope(assigns) != nil}
+                shelf={@rated_shelf}
                 title={@title}
                 rating={season_sheet_rating(assigns, @season)}
                 error={@rating_error}
@@ -2251,7 +2253,7 @@ defmodule RokiWeb.TitleLive do
         <button
           :if={@can_play? and @rating.state == :ok and @rating.provider == :mal}
           type="button"
-          phx-click={JS.show(to: "#rate-sheet", display: "flex")}
+          phx-click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
           class="btn h-12 shrink-0 gap-1.5 rounded-full px-5"
           title="Rate this season on MyAnimeList"
           aria-label="Rate this season"
@@ -2265,7 +2267,7 @@ defmodule RokiWeb.TitleLive do
         <button
           :if={@can_play? and @season_rating != false}
           type="button"
-          phx-click={JS.show(to: "#rate-sheet", display: "flex")}
+          phx-click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
           class="btn h-12 shrink-0 gap-1.5 rounded-full px-5"
           title={
             if match?({:seeded, _}, @season_rating),
@@ -2460,9 +2462,9 @@ defmodule RokiWeb.TitleLive do
 
   # ── the phone layout ───────────────────────────────────────────────
 
-  # The less used actions behind the dots, top right of the title: on hold (anime has none:
-  # MyAnimeList keeps that) and, for anime, the title's page on MyAnimeList. TMDB and IMDb
-  # are the buttons under About.
+  # The less used actions behind the dots, top right of the title: on hold (an anime's is its
+  # MyAnimeList status, so it needs a MyAnimeList login — `lib.hold?`) and, for anime, the
+  # title's page on MyAnimeList. TMDB and IMDb are the buttons under About.
   attr :id, :string, required: true
   attr :title, :map, required: true
   attr :linked?, :boolean, default: false
@@ -2476,7 +2478,10 @@ defmodule RokiWeb.TitleLive do
   defp more_menu(assigns) do
     assigns =
       assigns
-      |> assign(:hold?, assigns.linked? and not assigns.title.anime?)
+      |> assign(
+        :hold?,
+        assigns.linked? and Map.get(assigns.lib, :hold?, not assigns.title.anime?)
+      )
       |> assign(:links, external_links(assigns.title, assigns.mal))
 
     ~H"""
@@ -2533,7 +2538,10 @@ defmodule RokiWeb.TitleLive do
             name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
             class={["h-5 w-5", @lib.held? && "text-warning"]}
           />
-          {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}
+          {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}<span
+            :if={@title.anime?}
+            class="text-base-content/50"
+          > · MyAnimeList</span>
         </button>
         <button
           :if={@linked? and @lib[:progress?]}

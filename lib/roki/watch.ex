@@ -213,9 +213,10 @@ defmodule Roki.Watch do
   # ── the user's library: watched, saved for later, on hold ─────────────
 
   @doc """
-  Where this title stands for this user: `%{saved?, held?, watched?, all_watched?}`.
+  Where this title stands for this user: `%{saved?, held?, hold?, watched?, all_watched?}`.
   `watched?` is for a film; `all_watched?` for a series (every episode out so far has a mark).
-  Anime is kept on MyAnimeList, so it has no hold here.
+  An anime's hold is its MyAnimeList status (any of its entries `on_hold`), so `hold?` — whether
+  a hold can be set at all — needs a MyAnimeList login for anime; films and shows always can.
   """
   def library(uuid, title) do
     Roki.Laev.run(uuid, fn ->
@@ -226,7 +227,9 @@ defmodule Roki.Watch do
         # Anything that keeps it on the shelf as being watched: a place left (the resume record), a
         # film's saved spot, or a show's watched episodes. What "Remove watch progress" takes away.
         progress?: progress?(title, ctx),
-        held?: not title.anime? and Laev.Holds.held?(title.type, title.id),
+        held?:
+          if(title.anime?, do: anime_held?(title), else: Laev.Holds.held?(title.type, title.id)),
+        hold?: not title.anime? or Laev.MAL.authenticated?(),
         watched?: title.type == "movie" and Laev.Position.finished?(ctx),
         # "Completed": the series' own mark, which is what puts it in the Completed section.
         # Every episode watched without it is "caught up" — still on the watchlist.
@@ -652,11 +655,63 @@ defmodule Roki.Watch do
     library_changed(uuid)
   end
 
-  @doc "Put on hold (on the shelf's On hold row), or take it off. `:held | :released`."
+  @doc """
+  Put on hold (on the shelf's On hold row), or take it off. `:held | :released`. An anime is
+  held on MyAnimeList: the entries being watched go `on_hold` (with none started, the first);
+  taking it off puts every held entry back to `watching`. Without a MyAnimeList login nothing
+  changes (`:released`).
+  """
+  def toggle_hold(uuid, %{anime?: true} = title) do
+    result =
+      Roki.Laev.run(uuid, fn ->
+        entries = anime_entries(title)
+        held = Enum.filter(entries, &(anime_status(&1) == "on_hold"))
+
+        cond do
+          not Laev.MAL.authenticated?() ->
+            :released
+
+          held != [] ->
+            Enum.each(held, &set_anime_status(&1, "watching"))
+            :released
+
+          true ->
+            watching = Enum.filter(entries, &(anime_status(&1) == "watching"))
+            targets = if watching == [], do: Enum.take(entries, 1), else: watching
+            Enum.each(targets, &set_anime_status(&1, "on_hold"))
+            if targets == [], do: :released, else: :held
+        end
+      end)
+
+    library_changed(uuid)
+    result
+  end
+
   def toggle_hold(uuid, title) do
     result = Roki.Laev.run(uuid, fn -> Laev.Holds.toggle(title.type, title.id) end)
     library_changed(uuid)
     result
+  end
+
+  # The MyAnimeList entries of an anime (a show's seasons, a film's one), in laev's scope.
+  defp anime_entries(title), do: Laev.AnimeMap.mal_ids(title.type, title.id)
+
+  defp anime_held?(title), do: Enum.any?(anime_entries(title), &(anime_status(&1) == "on_hold"))
+
+  # The status laev's copy of the list has for an entry ("watching", "on_hold", …), or nil.
+  defp anime_status(mal) do
+    case Laev.Anime.get(mal) do
+      %{status: status} -> status
+      _ -> nil
+    end
+  end
+
+  # Told to MyAnimeList, then written to laev's copy so the page is right at once (an entry laev
+  # has not met yet — not on the list before — is learnt first, so the copy has a row to update).
+  defp set_anime_status(mal, status) do
+    Laev.MAL.set_status(mal, status)
+    if Laev.Anime.get(mal) == nil, do: Laev.Anime.learn(mal)
+    Laev.Anime.set_status(mal, status)
   end
 
   @doc "Mark a film or one episode watched, or clear the mark. Sent to the user's other devices."

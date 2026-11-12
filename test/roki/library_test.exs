@@ -106,11 +106,15 @@ defmodule Roki.Watch.LibraryTest do
     refute Enum.any?(Roki.Laev.run(@uuid, &Laev.Position.finished_titles/0), &(&1.type == "tv"))
   end
 
-  test "anime has no hold and no whole-series mark: its status lives on MyAnimeList" do
+  test "an anime's hold is its MyAnimeList status: without a login there is none, and no whole-series mark" do
     anime = %{show() | anime?: true}
-    Watch.toggle_hold(@uuid, anime)
+    lib = Watch.library(@uuid, anime)
+    refute lib.hold?
+    assert Watch.toggle_hold(@uuid, anime) == :released
     refute Watch.library(@uuid, anime).held?
-    refute Watch.library(@uuid, anime).all_watched?
+    refute lib.all_watched?
+    # A film or show can always be held.
+    assert Watch.library(@uuid, show()).hold?
   end
 
   describe "completing" do
