@@ -307,7 +307,18 @@ The header carries only Featured and (signed in) Shelf / Stats / Calendar. **Lis
 **Shows excludes anime** (`Roki.Featured`): a trending-TV title is dropped when `Laev.AnimeMap.anime?/2` (MyAnimeList has an entry) is true, except ids in `@keep_as_shows` (Cyberpunk: Edgerunners). Bump `@version` when what a cached page contains changes.
 Shows pages are exactly 20 (`Roki.Featured.shows_slice/3`): the anime-free stream is cut into pages and topped up from the next TMDB page; raw TMDB pages are memoised separately (`{:tv_raw, p}`); overlapping pages are de-duplicated by id.
 
-## Settings
+## Signing in with a phone (QR)
+
+PhoenixKit 2.54 ships QR device-handoff sign-in on the `keyfob` package (the user's own), and it is
+**on** here (`phoenix_kit_settings` row `qr_login_enabled = true`): the login page's "Sign in with QR
+code" → `/phoenix_kit/users/qr-login` shows a code encoding `https://roki.ee/phoenix_kit/users/qr-login/scan/<token>`
+(the endpoint `url:` in `runtime.exs` is https on 443 whenever `PHX_HOST` is not localhost, which is
+what makes that address public); a signed-in phone opens it, sees the asking device and approves;
+the waiting page is signed in through `/users/qr-login/finish/<login token>`. Nothing of it is roki
+code — except the endpoint's `connect_info` carrying `:user_agent` (2026-11-12), without which the
+confirm screen could not name the browser and system. Checked end to end with two Playwright
+contexts (`qr_e2e.js` in the session scratchpad: decode the QR with jsqr, approve on the "phone").
+
 
 `/:username/settings` (`SettingsLive`) is a form over `Laev.Settings` — laev describes every setting as
 data (`all/1`), checks each change (`put/2`) and can ask the real service whether a key works
