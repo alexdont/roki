@@ -2008,7 +2008,7 @@ defmodule Roki.Watch do
         {:ok,
          %{
            label: "#{language(lang)} · #{source}",
-           vtt: Roki.Subtitles.to_vtt(Path.basename(path), body)
+           vtt: Laev.Subtitles.to_vtt(Path.basename(path), body)
          }}
       else
         _ -> :none
@@ -2094,7 +2094,7 @@ defmodule Roki.Watch do
                {:error, "Add your OpenSubtitles username and password in Settings to download."},
            _ <- Roki.Keys.record(uuid, :subtitle),
            {:ok, srt} <- Laev.OpenSubtitles.download_srt(id) do
-        vtt = Roki.Subtitles.to_vtt("#{id}.srt", srt)
+        vtt = Laev.Subtitles.to_vtt("#{id}.srt", srt)
         Roki.SubCache.put_file(id, vtt)
         {:ok, vtt}
       else
@@ -2205,7 +2205,7 @@ defmodule Roki.Watch do
   defp jimaku_track(%{name: name, url: url}, i, play_id) do
     with {:ok, %{status: 200, body: body}} when is_binary(body) <-
            Req.get(url, receive_timeout: 15_000, retry: :transient, max_retries: 1),
-         vtt when is_binary(vtt) <- Roki.Subtitles.to_vtt(name, body) do
+         vtt when is_binary(vtt) <- Laev.Subtitles.to_vtt(name, body) do
       dir = Laev.Remux.dir(play_id)
       File.mkdir_p!(dir)
       file = if i == 0, do: "ext-ja.vtt", else: "ext-ja-#{i + 1}.vtt"
@@ -2365,7 +2365,7 @@ defmodule Roki.Watch do
     with {:ok, %{status: 200, body: body}}
          when is_binary(body) and byte_size(body) in 1..2_000_000 <-
            Req.get(url, receive_timeout: 10_000, retry: false, decode_body: false),
-         vtt when is_binary(vtt) <- Roki.Subtitles.to_vtt("pengu-#{i}.srt", body),
+         vtt when is_binary(vtt) <- Laev.Subtitles.to_vtt("pengu-#{i}.srt", body),
          true <- String.contains?(vtt, "-->") do
       place_auto(
         play_id,

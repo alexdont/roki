@@ -1,7 +1,7 @@
 defmodule Roki.SubtitlesTest do
   use ExUnit.Case, async: true
 
-  alias Roki.Subtitles
+  alias Laev.Subtitles
 
   @srt "1\n00:00:01,000 --> 00:00:03,500\nBonjour\n\n2\n00:00:04,000 --> 00:00:06,000\nÀ bientôt\n"
 
@@ -41,17 +41,15 @@ defmodule Roki.SubtitlesTest do
     test "Latin-1, as older French subtitle files are" do
       latin1 = :unicode.characters_to_binary(@srt, :utf8, :latin1)
       refute String.valid?(latin1)
+      # Laev 0.1.55's guess read this short Western file as Shift-JIS (a lone 0xC0 is a
+      # half-width katakana there); 0.1.56 fixed the walk, so laev is trusted again.
       assert Subtitles.to_vtt("a.srt", latin1) =~ "À bientôt"
-      # Laev's own guess (0.1.55) reads this short Western file as Shift-JIS — a lone 0xC0 is a
-      # half-width katakana there; the site reads lone accents as a Western page first.
-      assert Subtitles.western(latin1) =~ "À bientôt"
     end
 
-    test "a real Shift-JIS file is left for laev's detector" do
+    test "a real Shift-JIS file is detected and converted" do
       # こんにちは in Shift-JIS: every high byte in a pair.
       sjis = <<0x82, 0xB1, 0x82, 0xF1, 0x82, 0xC9, 0x82, 0xBF, 0x82, 0xCD>>
       body = "1\n00:00:01,000 --> 00:00:02,000\n" <> sjis <> "\n"
-      assert Subtitles.western(body) == body
       assert Subtitles.to_vtt("a.srt", body) =~ "こんにちは"
     end
 

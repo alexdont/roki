@@ -333,7 +333,7 @@ avatar menu. The test config lifts PhoenixKit's registration rate limit (tests r
 The first piece of a language-learning player: a `<video>` on the left and, on the right, every
 subtitle line — the spoken line highlighted, kept centred while it plays, free to scroll, a click plays
 from that line. Prototype source: a file from the user's computer, a direct URL, or the built-in
-demo; subtitles: an uploaded .srt/.vtt/.ass/.ssa (converted to WebVTT by `Roki.Subtitles` using laev's
+demo; subtitles: an uploaded .srt/.vtt/.ass/.ssa (converted to WebVTT by `Laev.Subtitles`, laev's
 converters, encoding detected) or the demo. **No JS libraries** — plain DOM, no hls.js / kuromoji yet
 (those arrive with the real watch flow; the design to follow is `alexdont/debrid_theatre`).
 
@@ -347,8 +347,8 @@ converters, encoding detected) or the demo. **No JS libraries** — plain DOM, n
   resumes after 5 s idle or on click. While playing it runs on `requestAnimationFrame`, not `timeupdate`.
 - `allow_upload ... accept: :any` on purpose: LiveView refuses extensions the MIME database does not
   know, and it has never heard of .srt/.ass. The extension is checked in `handle_progress` instead.
-- Subtitle files that are neither Unicode nor Latin-1 (e.g. Shift-JIS Japanese) will be read as Latin-1
-  and garble; they need a real encoding detector.
+- Subtitle files that are not Unicode are read by laev's encoding detector (`Laev.Encoding`, 0.1.55; a
+  Latin-1 file with lone accents was read as Shift-JIS until 0.1.56 — roki carried a guard for a day).
 - Tests: `node --test assets/js/study/cues.test.mjs assets/js/study/loading.test.mjs` (logic), `mix test` (conversion + page), and
   `NODE_PATH=$(npm root -g) node test/e2e/study.js` (Chromium against the running dev server, 22 checks;
   `ROKI_URL` to point elsewhere, `SHOT=/path.jpg` for a screenshot).
