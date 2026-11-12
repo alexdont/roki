@@ -418,7 +418,7 @@ which every poster takes as `friends_seen` beside `cached_titles` and draws as a
 left (under the score badge or progress mark); the hover card's `/peek` answer carries `friends:`
 lines (`Roki.Friends.describe/1`), shown as `.peek-friends`; the title page has a "Friends" line
 before the cast (`friends_line`, `Roki.Friends.on_title/3` loaded async). A grid that draws posters
-through `grid_card`/`tile` must pass `friends_seen={@friends_seen}` or it shows nothing.
+through `grid_card`/`tile` must pass `friends_seen={@friends_seen}` or it shows nothing — the profile's shelves leave it out on purpose (ALEX-122: someone's favourites are theirs, not a count of your friends).
 
 ### Imports from the settings page
 
