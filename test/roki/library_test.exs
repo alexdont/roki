@@ -81,6 +81,19 @@ defmodule Roki.Watch.LibraryTest do
     assert Roki.Laev.import_from_mal(@uuid) == {:error, :not_linked}
   end
 
+  test "a hold does not date the anime as watched now (its MAL entry keeps its time)" do
+    Roki.Laev.run(@uuid, fn ->
+      Laev.Anime.put_many(%{
+        5114 => %{title: "FMA", episodes: 64, status: "watching", updated: 1_700_000_000}
+      })
+
+      Watch.set_anime_status(5114, "on_hold")
+      assert %{status: "on_hold", updated: 1_700_000_000} = Laev.Anime.get(5114)
+      Watch.set_anime_status(5114, "watching")
+      assert %{status: "watching", updated: 1_700_000_000} = Laev.Anime.get(5114)
+    end)
+  end
+
   test "saving writes the title laev's saved list reads back" do
     Watch.toggle_saved(@uuid, movie())
 

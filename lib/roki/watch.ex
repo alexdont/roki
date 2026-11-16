@@ -729,10 +729,23 @@ defmodule Roki.Watch do
 
   # Told to MyAnimeList, then written to laev's copy so the page is right at once (an entry laev
   # has not met yet — not on the list before — is learnt first, so the copy has a row to update).
-  defp set_anime_status(mal, status) do
+  # `Laev.Anime.set_status/2` also stamps the entry as watched now — what dates it in the history
+  # and orders the watchlist — and putting something on hold (or taking it off) is not watching
+  # it, so the entry keeps the time it had (ALEX-125).
+  @doc false
+  def set_anime_status(mal, status) do
     Laev.MAL.set_status(mal, status)
     if Laev.Anime.get(mal) == nil, do: Laev.Anime.learn(mal)
+    before = Laev.Anime.get(mal)
     Laev.Anime.set_status(mal, status)
+
+    case {before, Laev.Anime.get(mal)} do
+      {%{} = was, %{} = now} ->
+        Laev.Anime.put_many(%{mal => Map.put(now, :updated, was[:updated])})
+
+      _ ->
+        :ok
+    end
   end
 
   @doc "Mark a film or one episode watched, or clear the mark. Sent to the user's other devices."

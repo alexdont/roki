@@ -1407,8 +1407,8 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
 }
 .study-immersive[data-look="sleek"] .study-timeline .study-clock:last-child { text-align: right; }
 .study-immersive[data-look="sleek"] .study-timeline .study-seek,
-.study-immersive[data-look="sleek"] .study-timeline .study-seek:hover { display: block; flex: 1 1 auto; width: auto; min-width: 0; height: 0.28rem; border-radius: 9999px; transition: height 0.15s; }
-.study-immersive[data-look="sleek"] .study-timeline .study-seek:hover { height: 0.45rem; }
+.study-immersive[data-look="sleek"] .study-timeline .study-seek:hover { display: block; flex: 1 1 auto; width: auto; min-width: 0; height: 0.5rem; border-radius: 9999px; transition: height 0.15s; }
+.study-immersive[data-look="sleek"] .study-timeline .study-seek:hover { height: 0.75rem; }
 
 /* Sleek: the list of lines (headed "Subtitles") is frosted glass too, its rows soft pills. */
 .study-immersive[data-look="sleek"] .study-box {
@@ -1452,7 +1452,7 @@ html[data-vt="open"]::view-transition-new(root) { clip-path: var(--vt-from); }
 /* The invisible strip round the timeline that takes the pointer (transport.js): pointing anywhere in
    it swells the hairline rail, pressing in it seeks. Away from it, the rail is the fine line. */
 .study-seek-zone { position: absolute; z-index: 2; cursor: pointer; touch-action: none; }
-.study-immersive[data-look="sleek"] .study-timeline[data-near] .study-seek { height: 0.45rem; }
+.study-immersive[data-look="sleek"] .study-timeline[data-near] .study-seek { height: 0.75rem; }
 
 /* How much is loaded ahead, above the current time. */
 .study-ahead { position: absolute; left: 0.2rem; bottom: 100%; z-index: 1; font-size: 0.72rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; color: rgb(255 255 255 / 0.62); pointer-events: none; font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; text-shadow: 0 1px 3px rgb(0 0 0 / 0.6); }

@@ -90,8 +90,12 @@ defmodule Roki.Titles do
           do: {type, id, name, i[:year], poster_path(i[:poster_path] || i[:poster]), i[:overview]}
 
     # One row per title: a show listed once per season would be the same row twice in one
-    # statement, which Postgres refuses.
-    rows = Enum.uniq_by(rows, fn {type, id, _, _, _, _} -> {type, id} end)
+    # statement, which Postgres refuses. Sorted, so that two lists remembered at once lock
+    # their shared rows in the same order: unsorted, they deadlocked (2026-11-12 to -14).
+    rows =
+      rows
+      |> Enum.uniq_by(fn {type, id, _, _, _, _} -> {type, id} end)
+      |> Enum.sort_by(fn {type, id, _, _, _, _} -> {type, id} end)
 
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 

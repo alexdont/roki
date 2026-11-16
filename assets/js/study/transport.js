@@ -181,7 +181,8 @@ export function bindTransport(root, video, stage, study) {
   const placeZone = () => {
     const box = seek.getBoundingClientRect()
     const r = row.getBoundingClientRect()
-    const h = Math.max(box.height, 36)
+    // 44 px: a finger's width, and plenty for a mouse (ALEX-146: the rail was hard to land on).
+    const h = Math.max(box.height, 44)
     Object.assign(zone.style, {
       left: `${box.left - r.left}px`, width: `${box.width}px`,
       top: `${box.top - r.top + box.height / 2 - h / 2}px`, height: `${h}px`,

@@ -2370,12 +2370,6 @@ defmodule RokiWeb.TitleLive do
                   {e.local}. {e.name}
                 </.link>
                 <span :if={not (@can_play? and e.aired?)} class="font-medium">{e.local}. {e.name}</span>
-                <span
-                  :if={MapSet.member?(@cached, {"tv", @title_id, @season, e.number})}
-                  class="badge badge-sm badge-success badge-outline"
-                >
-                  ⚡ cached
-                </span>
               </div>
               <div class="text-xs text-base-content/60">
                 {[e.air_date, e.minutes && "#{e.minutes} min"]
@@ -2415,12 +2409,29 @@ defmodule RokiWeb.TitleLive do
                 class="h-8 w-8"
               />
             </button>
+            <%!-- A source already found for this episode: the bolt in place of the play mark, as
+                  on the film's own Play (no separate "cached" chip). --%>
             <.link
               navigate={~p"/sources/tv/#{@title_id}/#{@season}/#{e.number}?#{[auto: 1]}"}
               class="btn btn-primary h-12 w-12 rounded-full px-0 text-base sm:w-auto sm:px-6"
-              aria-label="Play"
+              aria-label={
+                if MapSet.member?(@cached, {"tv", @title_id, @season, e.number}),
+                  do: "Play (source ready)",
+                  else: "Play"
+              }
+              title={
+                if MapSet.member?(@cached, {"tv", @title_id, @season, e.number}),
+                  do: "A source is ready: plays at once"
+              }
             >
-              <.icon name="hero-play-solid" class="h-7 w-7" />
+              <.icon
+                name={
+                  if MapSet.member?(@cached, {"tv", @title_id, @season, e.number}),
+                    do: "hero-bolt-solid",
+                    else: "hero-play-solid"
+                }
+                class="h-7 w-7"
+              />
               <span class="hidden sm:inline">Play</span>
             </.link>
           </div>
