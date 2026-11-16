@@ -425,7 +425,7 @@ through `grid_card`/`tile` must pass `friends_seen={@friends_seen}` or it shows 
 A **Recommend** button (thumbs-up glass button in the title page's hero, any signed-in account,
 films and shows) toggles a row in `roki_recommendations` (user, type, id, with the title's name,
 year and poster kept so nothing is looked up; `Roki.Recommendations.toggle/2`). The home page
-(`FeaturedLive`) opens its rows with **"Recommended by Roki users"** for every signed-in person —
+(`FeaturedLive`) has **"Recommended by Roki users"** under the Seasonal row for every signed-in person —
 everyone on the site, not only friends: a recommendation is meant for the others here — newest
 vouch first, each title once, its poster's badge saying who (`👍 alex +2`; `row/1`, `badge/1`);
 the row is absent while nothing is recommended and has no "See All". The title page names who

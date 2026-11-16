@@ -1063,19 +1063,19 @@ defmodule RokiWeb.FeaturedLive do
       assign(
         assigns,
         :rows,
-        if(recommended && recommended.items != [],
-          do: [{:recommended, "Recommended by Roki users", nil}],
-          else: []
-        ) ++
-          [
-            {:movies, "Trending Movies", "/movies"},
-            {:shows, "Trending Shows", "/shows"},
-            {:anime, "Anime Airing Now", "/anime"}
-          ] ++
+        [
+          {:movies, "Trending Movies", "/movies"},
+          {:shows, "Trending Shows", "/shows"},
+          {:anime, "Anime Airing Now", "/anime"}
+        ] ++
           if(assigns.season && seasonal && (seasonal.items != [] or seasonal.loading?),
             do: [
               {:seasonal, "Seasonal · #{assigns.season.label}", "/mood/#{assigns.season.slug}"}
             ],
+            else: []
+          ) ++
+          if(recommended && recommended.items != [],
+            do: [{:recommended, "Recommended by Roki users", nil}],
             else: []
           )
       )
