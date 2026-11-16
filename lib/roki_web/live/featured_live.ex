@@ -30,6 +30,9 @@ defmodule RokiWeb.FeaturedLive do
       |> Map.new(&{&1, shelf})
       # The Seasonal row: what suits the time of year (`Roki.Seasonal`), twenty titles like the rest.
       |> Map.put(:seasonal, shelf)
+      # "Recommended by Roki users" (`Roki.Recommendations`): what people here vouch for, first of
+      # all, for anyone signed in; it does not show while it has nothing.
+      |> Map.put(:recommended, %{shelf | loading?: false})
 
     socket =
       socket
@@ -166,6 +169,15 @@ defmodule RokiWeb.FeaturedLive do
     socket = Enum.reduce(Featured.kinds(), socket, &fetch(&2, &1, 1))
     socket = fetch_seasonal(socket)
 
+    socket =
+      if uuid,
+        do:
+          start_async(socket, :recommended, fn ->
+            items = Roki.Recommendations.row()
+            {Roki.Laev.annotate(uuid, items), Roki.Laev.seen_keys(uuid, items)}
+          end),
+        else: socket
+
     if uuid do
       Phoenix.PubSub.subscribe(Roki.PubSub, Roki.Activity.topic())
       Phoenix.PubSub.subscribe(Roki.PubSub, Roki.NowWatching.topic())
@@ -223,6 +235,19 @@ defmodule RokiWeb.FeaturedLive do
   end
 
   @impl true
+  def handle_async(:recommended, {:ok, {items, seen}}, socket) when is_list(items) do
+    {:noreply,
+     socket
+     |> update(:seen, &MapSet.union(&1, seen))
+     |> put_shelf(:recommended, %{
+       socket.assigns.shelves.recommended
+       | items: items,
+         loading?: false
+     })}
+  end
+
+  def handle_async(:recommended, _other, socket), do: {:noreply, socket}
+
   def handle_async(:seasonal, {:ok, {:ok, items, seen}}, socket) do
     uuid = socket.assigns.uuid
 
@@ -1032,15 +1057,21 @@ defmodule RokiWeb.FeaturedLive do
   def shelf_rows(assigns) do
     seasonal = assigns.shelves[:seasonal]
 
+    recommended = assigns.shelves[:recommended]
+
     assigns =
       assign(
         assigns,
         :rows,
-        [
-          {:movies, "Trending Movies", "/movies"},
-          {:shows, "Trending Shows", "/shows"},
-          {:anime, "Anime Airing Now", "/anime"}
-        ] ++
+        if(recommended && recommended.items != [],
+          do: [{:recommended, "Recommended by Roki users", nil}],
+          else: []
+        ) ++
+          [
+            {:movies, "Trending Movies", "/movies"},
+            {:shows, "Trending Shows", "/shows"},
+            {:anime, "Anime Airing Now", "/anime"}
+          ] ++
           if(assigns.season && seasonal && (seasonal.items != [] or seasonal.loading?),
             do: [
               {:seasonal, "Seasonal · #{assigns.season.label}", "/mood/#{assigns.season.slug}"}
@@ -1069,7 +1100,7 @@ defmodule RokiWeb.FeaturedLive do
 
   attr :kind, :atom, required: true
   attr :title, :string, required: true
-  attr :href, :string, required: true
+  attr :href, :string, default: nil
   attr :shelf, :map, required: true
   attr :seen, :any, required: true
   attr :upcoming, :map, default: %{}
@@ -1096,6 +1127,7 @@ defmodule RokiWeb.FeaturedLive do
       <div class="relative z-10 mb-3 flex items-baseline justify-between gap-4 px-4 sm:px-6 lg:px-12 xl:px-16">
         <h2 class="text-2xl font-semibold tracking-tight">{@title}</h2>
         <.link
+          :if={@href}
           navigate={@href}
           class="pointer-events-none flex items-center gap-0.5 text-sm font-medium text-base-content/60 opacity-0 transition hover:text-base-content group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-data-[touched]/row:pointer-events-auto group-data-[touched]/row:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
         >

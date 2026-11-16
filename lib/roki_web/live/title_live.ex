@@ -67,6 +67,8 @@ defmodule RokiWeb.TitleLive do
         mode: mode_param(socket),
         cached: MapSet.new(),
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
+        recommended?: false,
+        recommended_by: [],
         lib_busy: false,
         solo?: false,
         link_state: :none,
@@ -558,6 +560,24 @@ defmodule RokiWeb.TitleLive do
 
   def handle_event("clear_rating", _params, socket), do: {:noreply, socket}
 
+  # Recommend it to the others on the site (the home page's "Recommended by Roki users" row).
+  def handle_event(
+        "toggle_recommend",
+        _params,
+        %{assigns: %{uuid: uuid, title: %{} = title}} = socket
+      )
+      when is_binary(uuid) do
+    on? = Roki.Recommendations.toggle(uuid, title) == :added
+
+    {:noreply,
+     assign(socket,
+       recommended?: on?,
+       recommended_by: Roki.Recommendations.by(title.type, title.id)
+     )}
+  end
+
+  def handle_event("toggle_recommend", _params, socket), do: {:noreply, socket}
+
   def handle_event("toggle_saved", _params, socket) do
     %{uuid: uuid, title: title, lib: lib} = socket.assigns
     saved? = Watch.toggle_saved(uuid, title) == :added
@@ -662,6 +682,10 @@ defmodule RokiWeb.TitleLive do
        Task.start(fn -> Roki.Social.remember_title(title.type, title.id, title.title) end)
      end)
      |> start_async(:friends, fn -> Roki.Friends.on_title(uuid, title.type, title.id) end)
+     |> start_async(:recommend, fn ->
+       {uuid && Roki.Recommendations.recommended?(uuid, title.type, title.id),
+        Roki.Recommendations.by(title.type, title.id)}
+     end)
      |> start_async(:similar, fn ->
        # What this person has watched, saved and rated of them, worked out alongside.
        with {:ok, cards} <- Roki.Similar.for_title(uuid, title.type, title.id) do
@@ -687,6 +711,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :friends, friends)}
 
   def handle_async(:friends, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:recommend, {:ok, {mine, by}}, socket),
+    do: {:noreply, assign(socket, recommended?: mine == true, recommended_by: by)}
+
+  def handle_async(:recommend, _other, socket), do: {:noreply, socket}
 
   # TMDB lists a trailer's YouTube address; nothing here means the page simply has no button.
   def handle_async(:trailer, {:ok, key}, socket) when is_binary(key),
@@ -960,6 +989,8 @@ defmodule RokiWeb.TitleLive do
               season={@season}
               mode={@mode}
               linked?={@linked?}
+              signed_in?={@uuid != nil}
+              recommended?={@recommended?}
               lib={@lib}
               lib_busy={@lib_busy}
               cached?={@type == "movie" and MapSet.member?(@cached, {"movie", @id, nil, nil})}
@@ -1009,6 +1040,19 @@ defmodule RokiWeb.TitleLive do
             />
 
             <.facts_panel title={@title} credits={@credits} />
+            <div
+              :if={@recommended_by != []}
+              class="px-4 text-sm text-base-content/70 sm:px-6 lg:px-12 xl:px-16"
+            >
+              <span class="inline-flex items-center gap-1 font-semibold text-base-content">
+                <.icon name="hero-hand-thumb-up-solid" class="h-4 w-4 text-success" /> Recommended by
+              </span>
+              <.link
+                :for={{name, i} <- Enum.with_index(@recommended_by)}
+                navigate={"/u/#{name}/profile"}
+                class="link-hover font-medium"
+              >{name}{if i < length(@recommended_by) - 1, do: ","}</.link>
+            </div>
             <.friends_line :if={@friends != []} friends={@friends} />
             <.cast_row cast={@credits.cast} />
             <.soundtrack_section ost={@ost} album={@ost_album} all?={@ost_all?} title={@title} />
@@ -1269,6 +1313,8 @@ defmodule RokiWeb.TitleLive do
   attr :trailer, :any, default: nil
   attr :logo, :any, default: nil
   attr :study, :map, default: nil
+  attr :signed_in?, :boolean, default: false
+  attr :recommended?, :boolean, default: false
 
   # The title at the top of the page on a wide screen. The backdrop runs edge to edge under the
   # floating header; after a couple of seconds the trailer plays in its place, muted, with
@@ -1464,6 +1510,18 @@ defmodule RokiWeb.TitleLive do
               tone={:amber}
               text={if @rating.value, do: fmt_rating(@rating.value)}
               label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
+            />
+            <.glass_btn
+              :if={@signed_in? && @title.type in ["movie", "tv"]}
+              click="toggle_recommend"
+              icon={if @recommended?, do: "hero-hand-thumb-up-solid", else: "hero-hand-thumb-up"}
+              on={@recommended?}
+              tone={:success}
+              label={
+                if @recommended?,
+                  do: "You recommend this to everyone on Roki (click to take it back)",
+                  else: "Recommend it to everyone on Roki"
+              }
             />
             <.glass_btn
               :if={@linked? and @title.type == "tv"}

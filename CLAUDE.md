@@ -420,6 +420,17 @@ lines (`Roki.Friends.describe/1`), shown as `.peek-friends`; the title page has 
 before the cast (`friends_line`, `Roki.Friends.on_title/3` loaded async). A grid that draws posters
 through `grid_card`/`tile` must pass `friends_seen={@friends_seen}` or it shows nothing — the profile's shelves leave it out on purpose (ALEX-122: someone's favourites are theirs, not a count of your friends).
 
+### Recommended by Roki users
+
+A **Recommend** button (thumbs-up glass button in the title page's hero, any signed-in account,
+films and shows) toggles a row in `roki_recommendations` (user, type, id, with the title's name,
+year and poster kept so nothing is looked up; `Roki.Recommendations.toggle/2`). The home page
+(`FeaturedLive`) opens its rows with **"Recommended by Roki users"** for every signed-in person —
+everyone on the site, not only friends: a recommendation is meant for the others here — newest
+vouch first, each title once, its poster's badge saying who (`👍 alex +2`; `row/1`, `badge/1`);
+the row is absent while nothing is recommended and has no "See All". The title page names who
+recommends it under the hero (`by/2`).
+
 ### Imports from the settings page
 
 Accounts tab: "Import my ratings as watched" (TMDB, linked) and "Import my list" (MyAnimeList,
