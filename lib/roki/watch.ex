@@ -674,9 +674,9 @@ defmodule Roki.Watch do
 
   @doc """
   Put on hold (on the shelf's On hold row), or take it off. `:held | :released`. An anime is
-  held on MyAnimeList: every entry of it not finished or dropped goes `on_hold` — the shelf
-  lists an anime by whichever entry has marks and is unfinished, so all of them must say it —
-  (with none, the first); taking it off puts every held entry back to `watching`. Without a
+  held on MyAnimeList: every entry of it on the person's list and not finished or dropped there
+  goes `on_hold` — the shelf lists an anime by whichever entry has marks and is unfinished, so all
+  of them must say it — but an entry never added is not put on the list (with none, the first); taking it off puts every held entry back to `watching`. Without a
   MyAnimeList login nothing changes (`:released`). The shelf's copy is forgotten either way,
   so the corner moves the title at once.
   """
@@ -695,7 +695,15 @@ defmodule Roki.Watch do
             :released
 
           true ->
-            open = Enum.reject(entries, &(anime_status(&1) in ["completed", "dropped"]))
+            # Only entries already on the person's list, and not finished or dropped there: an
+            # entry they never added (a special, a later season not started) is not put on their
+            # list by a hold. With none on the list, the first entry is held.
+            open =
+              Enum.filter(
+                entries,
+                &(anime_status(&1) in ["watching", "plan_to_watch", "on_hold"])
+              )
+
             targets = if open == [], do: Enum.take(entries, 1), else: open
             Enum.each(targets, &set_anime_status(&1, "on_hold"))
             if targets == [], do: :released, else: :held
