@@ -1438,7 +1438,8 @@ defmodule RokiWeb.TitleLive do
 
         <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>
 
-        <div class="flex flex-wrap items-center gap-2 pt-3 sm:gap-3">
+        <%!-- One row on a desktop (no wrapping): Play, the ways to watch, then your record of it, Recommend last. --%>
+        <div class="flex flex-wrap items-center gap-2 pt-3 sm:gap-3 lg:flex-nowrap">
           <.play_button
             title={@title}
             play={@play}
@@ -1512,6 +1513,13 @@ defmodule RokiWeb.TitleLive do
               label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
             />
             <.glass_btn
+              :if={@linked? and @title.type == "tv"}
+              click={JS.show(to: "#link-sheet", display: "flex")}
+              icon={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
+              on={@link_state not in [:none, :pending]}
+              label={link_title(@link_state)}
+            />
+            <.glass_btn
               :if={@signed_in? && @title.type in ["movie", "tv"]}
               click="toggle_recommend"
               icon={if @recommended?, do: "hero-hand-thumb-up-solid", else: "hero-hand-thumb-up"}
@@ -1522,13 +1530,6 @@ defmodule RokiWeb.TitleLive do
                   do: "You recommend this to everyone on Roki (click to take it back)",
                   else: "Recommend it to everyone on Roki"
               }
-            />
-            <.glass_btn
-              :if={@linked? and @title.type == "tv"}
-              click={JS.show(to: "#link-sheet", display: "flex")}
-              icon={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
-              on={@link_state not in [:none, :pending]}
-              label={link_title(@link_state)}
             />
           </div>
         </div>
