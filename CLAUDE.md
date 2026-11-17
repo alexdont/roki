@@ -420,6 +420,15 @@ lines (`Roki.Friends.describe/1`), shown as `.peek-friends`; the title page has 
 before the cast (`friends_line`, `Roki.Friends.on_title/3` loaded async). A grid that draws posters
 through `grid_card`/`tile` must pass `friends_seen={@friends_seen}` or it shows nothing — the profile's shelves leave it out on purpose (ALEX-122: someone's favourites are theirs, not a count of your friends).
 
+### Titles TMDB no longer has
+
+A synced mark from another device can name a TMDB id that TMDB answers 404 for (removed there, or a
+bad id: `movie/1781322`, 2026-11-17) — no name, no poster, the title page errored. `Watch.title/3`
+now records such an answer (`Roki.Titles.mark_gone/2`, a `roki_kept` row of kind `tmdb_gone`;
+`gone?/2`, `gone_keys/0` cached ten minutes), `Profile.history/1` and `history_all/1` leave those
+titles out, and the title page shows "This title is no longer on TMDB" with **Remove it from my
+lists** (`Watch.forget_gone/3`: marks, Watchlist/History, saved, hold; synced) instead of the error.
+
 ### Recommended by Roki users
 
 A **Recommend** button (thumbs-up glass button in the title page's hero, any signed-in account,
@@ -428,7 +437,7 @@ year and poster kept so nothing is looked up; `Roki.Recommendations.toggle/2`). 
 (`FeaturedLive`) has **"Recommended by Roki users"** under the Seasonal row for every signed-in person —
 everyone on the site, not only friends: a recommendation is meant for the others here — newest
 vouch first, each title once, its poster's badge saying who (`👍 alex +2`; `row/1`, `badge/1`);
-the row is absent while nothing is recommended and has no "See All". The title page names who
+the row is absent while nothing is recommended and has no "See All". The profile's rating bars are links to the watch history at that score (`?rating=7`, plus `kind=` for the breakdown's tab; ALEX-152). The title page names who
 recommends it under the hero (`by/2`).
 
 ### Imports from the settings page

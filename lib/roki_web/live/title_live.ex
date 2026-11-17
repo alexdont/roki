@@ -69,6 +69,7 @@ defmodule RokiWeb.TitleLive do
         lib: %{saved?: false, held?: false, watched?: false, all_watched?: false},
         recommended?: false,
         recommended_by: [],
+        gone_removed?: false,
         lib_busy: false,
         solo?: false,
         link_state: :none,
@@ -578,6 +579,15 @@ defmodule RokiWeb.TitleLive do
 
   def handle_event("toggle_recommend", _params, socket), do: {:noreply, socket}
 
+  # A title TMDB no longer has: off this account's lists entirely.
+  def handle_event("forget_gone", _params, %{assigns: %{uuid: uuid, type: type, id: id}} = socket)
+      when is_binary(uuid) do
+    Watch.forget_gone(uuid, type, id)
+    {:noreply, assign(socket, :gone_removed?, true)}
+  end
+
+  def handle_event("forget_gone", _params, socket), do: {:noreply, socket}
+
   def handle_event("toggle_saved", _params, socket) do
     %{uuid: uuid, title: title, lib: lib} = socket.assigns
     saved? = Watch.toggle_saved(uuid, title) == :added
@@ -906,7 +916,39 @@ defmodule RokiWeb.TitleLive do
     >
       <div class={if @full?, do: "", else: "px-4 py-8 sm:px-6 lg:px-8"}>
         <div class={["mx-auto space-y-4", if(@full?, do: "max-w-none", else: "max-w-6xl")]}>
-          <p :if={@title_error} class="alert alert-error">
+          <%!-- TMDB has no such title any more (removed there, or a bad id synced from a device):
+                say so, and offer to take it off this account's lists. --%>
+          <div
+            :if={match?({:tmdb, 404, _}, @title_error)}
+            class="mx-auto max-w-xl space-y-4 rounded-box border border-base-300 bg-base-200/60 p-6 text-center"
+          >
+            <.icon name="hero-film" class="mx-auto h-10 w-10 text-base-content/40" />
+            <h1 class="text-xl font-semibold">This title is no longer on TMDB</h1>
+            <p class="text-sm text-base-content/70">
+              TMDB, where the site reads its titles, has nothing under this {if @type == "movie",
+                do: "film",
+                else: "show"} any more — it was removed there, or
+              the number is wrong. There is no name, picture or source to show.
+            </p>
+            <button
+              :if={@uuid && @linked?}
+              type="button"
+              phx-click="forget_gone"
+              data-confirm="Take it off your watch history, Watchlist and saved list? Your other devices drop it too."
+              class="btn btn-sm btn-error btn-outline"
+            >
+              Remove it from my lists
+            </button>
+            <p :if={@gone_removed?} class="text-sm text-success">
+              Removed from your lists.
+              <.link
+                :if={assigns[:phoenix_kit_current_user]}
+                navigate={"/u/#{@phoenix_kit_current_user.username}/watched"}
+                class="link"
+              >Back to your history</.link>
+            </p>
+          </div>
+          <p :if={@title_error && !match?({:tmdb, 404, _}, @title_error)} class="alert alert-error">
             {if @uuid,
               do: "Couldn't load this title just now. Try again in a minute.",
               else: "Log in to open titles — they are read with your own TMDB key."}

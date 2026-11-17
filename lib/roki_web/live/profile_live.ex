@@ -610,7 +610,12 @@ defmodule RokiWeb.ProfileLive do
             </div>
             <%!-- On a wide screen it sits on the banner's right, level with the numbers; below that
                   it follows them. --%>
-            <.rating_breakdown :if={@rating_counts} counts={@rating_counts} kind={@rating_kind} />
+            <.rating_breakdown
+              :if={@rating_counts}
+              counts={@rating_counts}
+              kind={@rating_kind}
+              username={@username}
+            />
           </div>
         </section>
 
@@ -821,12 +826,30 @@ defmodule RokiWeb.ProfileLive do
     """
   end
 
+  # The watch history with what got this score: the whole number (the history's filter takes a
+  # 7 as 7 to 7.9), of the kind the breakdown's tabs stand at.
+  defp bar_href(username, score, kind) do
+    query =
+      [rating: trunc(score)] ++
+        case kind do
+          "movie" -> [kind: "movie"]
+          "tv" -> [kind: "tv"]
+          "mal" -> [kind: "anime"]
+          _ -> []
+        end
+
+    "/u/#{username}/watched?" <> URI.encode_query(query)
+  end
+
   attr :counts, :map, required: true
   attr :kind, :string, required: true
+  attr :username, :string, required: true
 
   # How the account rates: a column per score, as tall as the number of titles given it, in the
   # score's own colour, with the average and the total. Films, shows and anime on their own or
-  # together. Nothing at all when there is nothing rated.
+  # together. Nothing at all when there is nothing rated. Each column with titles is a link to
+  # the watch history showing what got that score (`?rating=7` takes 7 to 7.9, so a 7.5 column
+  # opens the sevens), of the kind the tabs stand at (ALEX-152).
   defp rating_breakdown(assigns) do
     kinds = if assigns.kind == "all", do: nil, else: [assigns.kind]
     breakdown = Profile.rating_breakdown(assigns.counts, kinds)
@@ -884,10 +907,26 @@ defmodule RokiWeb.ProfileLive do
             class="group relative flex h-full min-w-0 flex-1 flex-col justify-end"
             title={"#{Roki.Profile.score_text(score)}: #{n} #{if n == 1, do: "title", else: "titles"}"}
           >
-            <span class="mb-0.5 text-center text-[0.6rem] tabular-nums text-white/70">
+            <.link
+              :if={n > 0 and score >= 1}
+              navigate={bar_href(@username, score, @kind)}
+              class="flex h-full flex-col justify-end rounded-t-sm transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+              aria-label={"Rated #{Roki.Profile.score_text(score)}: #{n} #{if n == 1, do: "title", else: "titles"} — open them in the watch history"}
+            >
+              <span class="mb-0.5 text-center text-[0.6rem] tabular-nums text-white/70">{n}</span>
+              <span
+                class="block w-full rounded-t-sm"
+                style={"height: #{max(n / @max * 100, 3)}%; background: #{RokiWeb.ScoreColor.color(score)}"}
+              ></span>
+            </.link>
+            <span
+              :if={n == 0 or score < 1}
+              class="mb-0.5 text-center text-[0.6rem] tabular-nums text-white/70"
+            >
               {if n > 0, do: n}
             </span>
             <span
+              :if={n == 0 or score < 1}
               class="block w-full rounded-t-sm"
               style={"height: #{if n == 0, do: "2px", else: "#{max(n / @max * 100, 3)}%"}; background: #{RokiWeb.ScoreColor.color(score)}; opacity: #{if n == 0, do: "0.25", else: "1"}"}
             ></span>

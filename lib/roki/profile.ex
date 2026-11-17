@@ -178,7 +178,7 @@ defmodule Roki.Profile do
   """
   def history(uuid) when is_binary(uuid) do
     sync_watched(uuid)
-    Enum.filter(read_watched(uuid), &(&1.status == "finished"))
+    uuid |> read_watched() |> Enum.filter(&(&1.status == "finished")) |> without_gone()
   end
 
   @doc """
@@ -189,7 +189,16 @@ defmodule Roki.Profile do
   """
   def history_all(uuid) when is_binary(uuid) do
     sync_watched(uuid)
-    read_watched(uuid)
+    uuid |> read_watched() |> without_gone()
+  end
+
+  # Titles TMDB no longer has (`Roki.Titles.gone_keys/0`) have no name, poster or page: left out.
+  defp without_gone(items) do
+    gone = Roki.Titles.gone_keys()
+
+    if MapSet.size(gone) == 0,
+      do: items,
+      else: Enum.reject(items, &MapSet.member?(gone, {&1[:type], &1[:id]}))
   end
 
   @doc """

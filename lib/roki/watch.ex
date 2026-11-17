@@ -65,13 +65,39 @@ defmodule Roki.Watch do
   # TMDB's answer, kept for everyone.
   defp read_title(type, id, uuid) do
     Roki.Laev.public(uuid, fn ->
-      with {:ok, d} <- fetch_details(type, id) do
-        Laev.AnimeMap.ensure()
-        title = normalize(type, d)
-        Roki.Titles.put(title)
-        {:ok, title}
+      case fetch_details(type, id) do
+        {:ok, d} ->
+          Laev.AnimeMap.ensure()
+          title = normalize(type, d)
+          Roki.Titles.put(title)
+          {:ok, title}
+
+        # TMDB has no such title (removed there, or an id that never was).
+        {:error, {:tmdb, 404, _}} = error ->
+          Roki.Titles.mark_gone(type, id)
+          error
+
+        error ->
+          error
       end
     end)
+  end
+
+  @doc """
+  Take a title TMDB no longer has off this account entirely: its watched marks, its place on the
+  Watchlist and History, the saved list and a hold — what a "no longer on TMDB" page offers. The
+  change is synced, so the other devices drop it too.
+  """
+  def forget_gone(uuid, type, id) when type in ["movie", "tv"] and is_integer(id) do
+    Roki.Laev.run(uuid, fn ->
+      Laev.Position.forget(type, id)
+      Laev.Resume.delete(type, id)
+      Laev.Watchlist.remove(type, id)
+      if Laev.Holds.held?(type, id), do: Laev.Holds.toggle(type, id)
+    end)
+
+    Roki.Laev.forget_shelf(uuid)
+    library_changed(uuid)
   end
 
   # An old copy is read again behind the page, once an hour at most.

@@ -40,6 +40,50 @@ defmodule Roki.Titles do
     end
   end
 
+  @doc """
+  A title TMDB answers "not found" for (removed there, or an id that never was): remembered so
+  the pages can say so and the lists can leave it out (`gone_keys/0`). A synced mark from another
+  device can carry such an id, and it has no name, no poster and no page.
+  """
+  def mark_gone(type, id) when is_binary(type) and is_integer(id) do
+    Roki.Kept.put(
+      "tmdb_gone",
+      "#{type}:#{id}",
+      %{"at" => DateTime.utc_now() |> DateTime.to_iso8601()},
+      true
+    )
+
+    Roki.TTLCache.delete(:tmdb_gone)
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  @doc "Whether TMDB has said it has no such title."
+  def gone?(type, id), do: MapSet.member?(gone_keys(), {type, id})
+
+  @doc "Every `{type, id}` TMDB has said it has no such title for, kept ten minutes in memory."
+  def gone_keys do
+    case Roki.TTLCache.fetch(:tmdb_gone, 600, fn ->
+           %{rows: rows} = Repo.query!("select key from roki_kept where kind = 'tmdb_gone'")
+
+           keys =
+             Enum.flat_map(rows, fn [key] ->
+               with [type, id] <- String.split(key, ":", parts: 2),
+                    {n, ""} <- Integer.parse(id),
+                    do: [{type, n}],
+                    else: (_ -> [])
+             end)
+
+           {:ok, MapSet.new(keys)}
+         end) do
+      {:ok, set} -> set
+      _ -> MapSet.new()
+    end
+  rescue
+    _ -> MapSet.new()
+  end
+
   @doc "Keep a whole title (as `Roki.Watch.title/3` returns it)."
   def put(%{type: type, id: id} = title) when is_binary(type) and is_integer(id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
