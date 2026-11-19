@@ -1483,10 +1483,11 @@ defmodule RokiWeb.TitleLive do
             resume_secs={@resume_secs}
             busy?={match?({:working, _}, @phase)}
             cached?={@cached?}
+            start_only?
             class={
               if(@title.type == "movie",
                 do: "h-12 min-w-0 flex-1 rounded-full px-4 text-lg",
-                else: "h-12 w-full rounded-full text-lg"
+                else: "h-12 min-w-0 flex-1 rounded-full px-3 text-base"
               )
             }
           />
@@ -1517,6 +1518,16 @@ defmodule RokiWeb.TitleLive do
               button_class="h-10 min-h-0 w-10 border-0 bg-transparent text-white hover:bg-white/15"
             />
           </div>
+          <%!-- A show (the show-phone lab's C): the first line is a film's — Start and the chip —
+                and the episodes are a glass bar of their own under it. --%>
+          <.link
+            :if={@title.type != "movie"}
+            navigate={~p"/title/tv/#{@title.id}/episodes"}
+            class="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-black/25 text-[15px] font-semibold text-white backdrop-blur-md transition hover:border-white/50 hover:bg-black/40"
+          >
+            <.icon name="hero-queue-list" class="h-5 w-5" />
+            Episodes<span :if={seasons_text(@title)} class="text-white/70">· {seasons_text(@title)}</span>
+          </.link>
         </div>
         <div class="hidden items-center gap-3 pt-3 lg:flex">
           <div class="flex h-14 items-stretch">
@@ -2206,6 +2217,7 @@ defmodule RokiWeb.TitleLive do
 
   attr :busy?, :boolean, default: false
   attr :split?, :boolean, default: false
+  attr :start_only?, :boolean, default: false, doc: "a series: only the Start half (a phone)"
   attr :cached?, :boolean, default: false
   attr :class, :string, default: nil
 
@@ -2243,6 +2255,25 @@ defmodule RokiWeb.TitleLive do
       <.icon name={if @cached?, do: "hero-bolt-solid", else: "hero-play-solid"} class="h-6 w-6" />
       {play_label(@resume_secs)}
     </button>
+    """
+  end
+
+  defp play_button(%{start_only?: true, title: %{type: type}} = assigns) when type != "movie" do
+    ~H"""
+    <.link
+      navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
+      class={[
+        "btn btn-primary btn-lg min-h-0 gap-1.5 border-0 shadow-md text-[length:inherit]",
+        @busy? && "btn-disabled",
+        @class
+      ]}
+    >
+      <.icon
+        name={if @cached?, do: "hero-bolt-solid", else: "hero-play-solid"}
+        class="h-5 w-5 shrink-0"
+      />
+      <span class="truncate">{@play.verb} {@play.label}</span>
+    </.link>
     """
   end
 
