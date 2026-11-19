@@ -103,6 +103,16 @@
   .e-desk .rate-e.on { background: #f59e0b40; }
   .e-desk .rate-e.on .ico svg { fill: #fcd34d; color: #fcd34d; }
   .hint { font-size: 12px; color: #ffffff80; }
+  /* The trailer's own controls, desktop only: bottom right of the picture, hidden until the
+     pointer is over the top section (or a key lands on one), so the page opens calm. */
+  .tctl { display: none; }
+  @container (min-width: 700px) {
+    .tctl { display: flex; gap: 10px; position: absolute; right: 48px; bottom: 44px; z-index: 5;
+            opacity: 0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease; pointer-events: none; }
+    .hero:hover .tctl, .tctl:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+  }
+  .tctl .glass { width: 46px; height: 46px; background: #00000055; }
+  .tctl .glass:hover { background: #ffffff30; }
 
   /* D: the record below the hero */
   .record { padding: 18px 16px 28px; display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid #ffffff14; background: var(--page); }
@@ -165,6 +175,8 @@
     <symbol id="i-down" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" d="m6 9.5 6 6 6-6"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.8" fill="none"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4" stroke-linecap="round"/></g></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" fill="none" d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5ZM10 20h4"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" fill="none" d="M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5ZM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
     <symbol id="i-mute" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none" d="M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5ZM16 9.5l5 5M21 9.5l-5 5"/></symbol>
   </defs>
 </svg>
@@ -206,9 +218,9 @@ function intro() {
     <p class="tagline">${T.tagline}</p>
     <p class="overview">${T.overview}</p>`
 }
-function hero(inner, after = "") {
+function hero(inner, after = "", overlay = "") {
   return `<div class="hero"><div class="bg" style="background-image:url(${T.backdrop})"></div><div class="wash"></div>
-    ${head()}<div class="body">${intro()}${inner}</div></div>${after}
+    ${head()}<div class="body">${intro()}${inner}</div>${overlay}</div>${after}
     <div class="after">… the cast, facts, soundtrack and the rest of the page go on here.</div>`
 }
 
@@ -227,7 +239,7 @@ const moreItems = (opts = {}) => `
 const V = {
   e: {
     name: "E · The pick: A on a phone, C on a desktop",
-    why: "Phone: Play, then My list, Watched, Rate and More — Watched is never in a menu. Desktop: the split Play (its ▾ holds Choose release, Study, Trailer) and one pill with My list, Watched, Rate, More. Rate something (tap the star; it steps 8 → 7.5 → 10 → none): on the phone the number takes the star's place in the same circle, so nothing moves; on the desktop the star and the number sit side by side.",
+    why: "Phone: Play, then My list, Watched, Rate and More — Watched is never in a menu. Desktop: the split Play (its ▾ holds Choose release, Study, Trailer) and one pill with My list, Watched, Rate, More. Rate something (tap the star; it steps 8 → 7.5 → 10 → none): on the phone the number takes the star's place in the same circle, so nothing moves; on the desktop the star and the number sit side by side. On the desktop the trailer's own controls (pause, sound, full screen) wait at the bottom right and only appear while the pointer is over the top section.",
     html: () => hero(`
       <div class="row e-phone" style="flex-wrap:nowrap">
         <button class="play">${ic("play")} Play</button>
@@ -253,7 +265,13 @@ const V = {
         <button data-do="Study">${ic("cap")} Study: watch in other languages</button>
         <button data-do="Trailer">${ic("film")} Watch the trailer</button>
       </div>
-      <div class="menu" data-for="more-d">${moreItems({ trailer: false, sources: false, study: false, recommend: true })}</div>`),
+      <div class="menu" data-for="more-d">${moreItems({ trailer: false, sources: false, study: false, recommend: true })}</div>`,
+      "",
+      `<div class="tctl">
+        <button class="glass" data-tctl="pause" title="Pause the trailer">${ic("pause")}</button>
+        <button class="glass" data-tctl="sound" title="Sound on">${ic("mute")}</button>
+        <button class="glass" data-do="Trailer, full screen" title="Full screen">${ic("full")}</button>
+      </div>`),
   },
   a: {
     name: "A · Play + 3",
@@ -423,6 +441,18 @@ document.addEventListener("click", (e) => {
     const s = state[frame.dataset.key] ||= {}
     s.rating = s.rating == null ? 8 : s.rating === 8 ? 7.5 : s.rating === 7.5 ? 10 : null
     paint(frame); toast(s.rating == null ? "Rating removed" : `Rated ${s.rating} (the rating sheet opens here)`); return
+  }
+  const tc = e.target.closest("[data-tctl]")
+  if (tc && frame) {
+    if (tc.dataset.tctl === "pause") {
+      const bg = frame.querySelector(".hero .bg"), paused = bg.style.animationPlayState === "paused"
+      bg.style.animationPlayState = paused ? "running" : "paused"
+      tc.innerHTML = ic(paused ? "pause" : "play"); tc.title = paused ? "Pause the trailer" : "Play the trailer"
+    } else {
+      const on = tc.dataset.on === "1"; tc.dataset.on = on ? "" : "1"
+      tc.innerHTML = ic(on ? "mute" : "sound"); tc.title = on ? "Sound on" : "Sound off"
+    }
+    return
   }
   const act = e.target.closest("[data-do]")
   if (act) { closeMenus(); toast(`${act.dataset.do} — opens as it does today`); return }
