@@ -1404,20 +1404,6 @@ defmodule RokiWeb.TitleLive do
       </div>
 
       <div
-        class="absolute right-4 top-16 z-20 sm:right-6 lg:right-12 lg:top-20 xl:right-16"
-        data-hero-content
-      >
-        <.more_menu
-          id="more-menu-cinema"
-          title={@title}
-          linked?={@linked?}
-          lib={@lib}
-          mal={@mal}
-          button_class="h-11 min-h-0 w-11 border border-white/25 bg-black/35 text-white backdrop-blur-md hover:border-white/60 hover:bg-black/55"
-        />
-      </div>
-
-      <div
         data-hero-content
         class="relative z-10 flex max-w-4xl flex-col gap-3 px-4 pb-7 pt-32 sm:px-6 lg:gap-4 lg:px-12 lg:pb-14 xl:px-16"
       >
@@ -1449,12 +1435,15 @@ defmodule RokiWeb.TitleLive do
             :if={is_number(@title.vote) and @title.vote > 0}
             type="button"
             phx-click={JS.show(to: "#reviews-sheet", display: "flex") |> JS.push("reviews_open")}
-            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 font-semibold backdrop-blur transition hover:bg-black/70"
+            class="-mx-2 flex items-center gap-1 rounded-md px-2 py-1 font-semibold transition group-hover/hero:bg-black/50 group-hover/hero:backdrop-blur hover:!bg-black/70 focus-visible:bg-black/50"
             title="TMDB's score — every service's, and what the critics said"
             aria-label="Reviews and scores"
           >
             <span class="text-amber-300" aria-hidden="true">★</span>{avg_text(@title)}
-            <.icon name="hero-chevron-down-micro" class="h-3.5 w-3.5 text-white/60" />
+            <.icon
+              name="hero-chevron-down-micro"
+              class="h-3.5 w-3.5 text-white/60 opacity-0 transition group-hover/hero:opacity-100"
+            />
           </button>
           <span :if={@title.year}>{@title.year}</span>
           <span :if={@title.minutes}>{@title.minutes} min</span>
@@ -1480,8 +1469,11 @@ defmodule RokiWeb.TitleLive do
 
         <p :if={@title.tagline} class="italic text-white/65">{@title.tagline}</p>
 
-        <%!-- One row on a desktop (no wrapping): Play, the ways to watch, then your record of it, Recommend last. --%>
-        <div class="flex flex-wrap items-center gap-2 pt-3 sm:gap-3 lg:flex-nowrap">
+        <%!-- The buttons (the hero lab's variant E, 2026-11-19): what you press on every visit beside
+              Play — save, watched, rate — and the rest one tap away in More. A phone: Play, then
+              the four circles in one row (a show's two-part Play takes its own line above them).
+              A desktop: Play with a ▾ for the other ways to watch, then one pill. --%>
+        <div class="flex flex-wrap items-center gap-2 pt-3 lg:hidden">
           <.play_button
             title={@title}
             play={@play}
@@ -1489,89 +1481,85 @@ defmodule RokiWeb.TitleLive do
             resume_secs={@resume_secs}
             busy?={match?({:working, _}, @phase)}
             cached?={@cached?}
-            class="h-14 w-full rounded-full text-xl sm:w-auto sm:min-w-[14rem]"
+            class={
+              if(@title.type == "movie",
+                do: "h-14 min-w-0 flex-1 rounded-full px-4 text-lg",
+                else: "h-14 w-full rounded-full text-lg"
+              )
+            }
           />
-          <%!-- On a phone the buttons under Start are two capsules side by side: ways to watch it, and
-                what you do with it. From `sm` up the wrappers vanish and they are one row, as before. --%>
-          <div class="flex items-center justify-around gap-1 max-sm:min-w-0 max-sm:flex-1 max-sm:rounded-full max-sm:border max-sm:border-white/20 max-sm:bg-black/25 max-sm:p-1.5 max-sm:backdrop-blur-md sm:contents">
-            <.glass_btn
-              :if={@trailer}
-              click={open_trailer()}
-              icon="hero-play-circle"
-              label="Watch the trailer"
-              text="Trailer"
-              text_class="max-sm:hidden"
-              class="lg:hidden"
+          <div class={[
+            "flex items-center gap-2",
+            @title.type != "movie" && "w-full"
+          ]}>
+            <.record_btns
+              :if={@linked?}
+              title={@title}
+              lib={@lib}
+              lib_busy={@lib_busy}
+              rating={@rating}
+              compact
             />
-            <.glass_btn
-              :if={@linked? and @title.type == "movie"}
-              href={~p"/sources/movie/#{@title.id}"}
-              icon="hero-queue-list"
-              label="Choose which release to play"
-            />
-            <.glass_btn
-              :if={@linked? and @study}
-              click={JS.show(to: "#study-sheet", display: "flex") |> JS.push("study_open")}
-              icon="hero-academic-cap"
-              label="Study: watch in languages you choose"
+            <.more_menu
+              id="more-menu-phone"
+              title={@title}
+              linked?={@linked?}
+              lib={@lib}
+              mal={@mal}
+              up
+              trailer={@trailer}
+              sources?={@linked? and @title.type == "movie"}
+              study?={@linked? and @study != nil}
+              link?={@linked? and @title.type == "tv"}
+              link_state={@link_state}
+              recommend={@signed_in? && @recommended?}
+              signed_in?={@signed_in?}
+              button_class={glass_class(false, :white, nil)}
             />
           </div>
-          <%!-- Your record of it, apart from watching it: a gap sets it off from the buttons before. --%>
+        </div>
+        <div class="hidden items-center gap-3 pt-3 lg:flex">
+          <div class="flex h-14 items-stretch">
+            <.play_button
+              title={@title}
+              play={@play}
+              resume={@resume}
+              resume_secs={@resume_secs}
+              busy?={match?({:working, _}, @phase)}
+              cached?={@cached?}
+              class="h-14 min-w-[14rem] rounded-full rounded-r-none text-xl [&>*:last-child]:rounded-r-none"
+            />
+            <.watch_ways
+              id="watch-ways"
+              title={@title}
+              trailer={@trailer}
+              sources?={@linked? and @title.type == "movie"}
+              study?={@linked? and @study != nil}
+            />
+          </div>
           <div
-            :if={@linked?}
-            class="flex items-center justify-around gap-1 max-sm:min-w-0 max-sm:flex-1 max-sm:rounded-full max-sm:border max-sm:border-white/20 max-sm:bg-black/25 max-sm:p-1.5 max-sm:backdrop-blur-md sm:ml-3 sm:gap-3 lg:ml-5"
+            :if={@linked? or @signed_in?}
+            class="flex items-center gap-1 rounded-full border border-white/20 bg-black/25 p-1 backdrop-blur-md"
           >
-            <.glass_btn
+            <.record_btns
               :if={@linked?}
-              click="toggle_saved"
-              icon={if @lib.saved?, do: "hero-check", else: "hero-plus"}
-              on={@lib.saved?}
-              label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
+              title={@title}
+              lib={@lib}
+              lib_busy={@lib_busy}
+              rating={@rating}
             />
-            <.glass_btn
-              :if={@linked?}
-              click="toggle_watched"
-              icon={
-                if watched_state?(@title, @lib),
-                  do: "hero-eye-solid",
-                  else: "hero-eye"
-              }
-              on={watched_state?(@title, @lib)}
-              tone={:success}
-              busy={@lib_busy}
-              label={
-                if watched_state?(@title, @lib),
-                  do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
-                  else: watched_label(@title, @lib)
-              }
-            />
-            <.glass_btn
-              :if={@linked?}
-              click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
-              icon={if @rating.value, do: "hero-star-solid", else: "hero-star"}
-              on={@rating.value != nil}
-              tone={:amber}
-              text={if @rating.value, do: fmt_rating(@rating.value)}
-              label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
-            />
-            <.glass_btn
-              :if={@linked? and @title.type == "tv"}
-              click={JS.show(to: "#link-sheet", display: "flex")}
-              icon={if @link_state in [:none, :pending], do: "hero-link", else: "hero-link-solid"}
-              on={@link_state not in [:none, :pending]}
-              label={link_title(@link_state)}
-            />
-            <.glass_btn
-              :if={@signed_in? && @title.type in ["movie", "tv"]}
-              click="toggle_recommend"
-              icon={if @recommended?, do: "hero-hand-thumb-up-solid", else: "hero-hand-thumb-up"}
-              on={@recommended?}
-              tone={:success}
-              label={
-                if @recommended?,
-                  do: "You recommend this to everyone on Roki (click to take it back)",
-                  else: "Recommend it to everyone on Roki"
-              }
+            <.more_menu
+              id="more-menu-desk"
+              title={@title}
+              linked?={@linked?}
+              lib={@lib}
+              mal={@mal}
+              up
+              link?={@linked? and @title.type == "tv"}
+              link_state={@link_state}
+              recommend={@signed_in? && @recommended?}
+              signed_in?={@signed_in?}
+              button_class="h-11 min-h-0 w-11 border-0 bg-transparent text-white hover:bg-white/15"
             />
           </div>
         </div>
@@ -1579,7 +1567,9 @@ defmodule RokiWeb.TitleLive do
 
       <%!-- Where Play opens it, and the trailer's controls: pause (it plays once, it does not loop),
             sound, full screen. --%>
-      <div class="relative z-20 flex items-center gap-3 px-4 sm:px-6 max-lg:hidden lg:absolute lg:bottom-14 lg:right-12 lg:h-14 lg:justify-end lg:p-0 xl:right-16">
+      <%!-- Hidden until the pointer is over the top section (or a key reaches one), so the page
+            opens calm. --%>
+      <div class="relative z-20 flex items-center gap-3 px-4 opacity-0 transition duration-300 focus-within:opacity-100 group-hover/hero:opacity-100 sm:px-6 max-lg:hidden lg:absolute lg:bottom-14 lg:right-12 lg:h-14 lg:justify-end lg:p-0 xl:right-16">
         <button
           :if={@trailer}
           type="button"
@@ -2601,7 +2591,12 @@ defmodule RokiWeb.TitleLive do
   attr :link?, :boolean, default: false
   attr :link_state, :any, default: :none
   attr :trailer, :any, default: nil
-  attr :button_class, :string, default: ""
+  attr :button_class, :any, default: ""
+  attr :up, :boolean, default: false, doc: "opens above the button (at the foot of the hero)"
+  attr :sources?, :boolean, default: false, doc: "Choose which release to play (a film)"
+  attr :study?, :boolean, default: false
+  attr :recommend, :any, default: nil, doc: "nil: no item; true/false: recommended now"
+  attr :signed_in?, :boolean, default: false
 
   defp more_menu(assigns) do
     assigns =
@@ -2631,11 +2626,33 @@ defmodule RokiWeb.TitleLive do
       </button>
       <div
         id={@id}
-        class="absolute right-0 top-full z-40 mt-1 hidden w-56 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+        class={[
+          "absolute right-0 z-40 hidden w-64 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl",
+          if(@up, do: "bottom-full mb-2", else: "top-full mt-1")
+        ]}
         phx-click-away={JS.hide(to: "##{@id}")}
         phx-window-keydown={JS.hide(to: "##{@id}")}
         phx-key="escape"
       >
+        <.link
+          :if={@sources?}
+          navigate={~p"/sources/movie/#{@title.id}"}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-queue-list" class="h-5 w-5" /> Choose which release to play
+        </.link>
+        <button
+          :if={@study?}
+          type="button"
+          phx-click={
+            JS.show(to: "#study-sheet", display: "flex")
+            |> JS.push("study_open")
+            |> JS.hide(to: "##{@id}")
+          }
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-academic-cap" class="h-5 w-5" /> Study: watch in languages you choose
+        </button>
         <button
           :if={@trailer}
           type="button"
@@ -2655,6 +2672,20 @@ defmodule RokiWeb.TitleLive do
             class={["h-5 w-5", @link_state not in [:none, :pending] && "text-primary"]}
           />
           <span class="truncate">{link_label(@link_state)}</span>
+        </button>
+        <button
+          :if={@signed_in? and @title.type in ["movie", "tv"] and @recommend != nil}
+          type="button"
+          phx-click={JS.push("toggle_recommend") |> JS.hide(to: "##{@id}")}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon
+            name={if @recommend, do: "hero-hand-thumb-up-solid", else: "hero-hand-thumb-up"}
+            class={["h-5 w-5", @recommend && "text-success"]}
+          />
+          {if @recommend,
+            do: "Recommended to everyone — take it back",
+            else: "Recommend to everyone on Roki"}
         </button>
         <button
           :if={@hold?}
@@ -2690,6 +2721,133 @@ defmodule RokiWeb.TitleLive do
           <.icon name="hero-arrow-top-right-on-square" class="h-5 w-5" />
           {label}
         </a>
+      </div>
+    </div>
+    """
+  end
+
+  attr :title, :map, required: true
+  attr :lib, :map, required: true
+  attr :lib_busy, :boolean, default: false
+  attr :rating, :map, required: true
+
+  attr :compact, :boolean,
+    default: false,
+    doc: "a phone: the rating's number takes the star's place in the same circle"
+
+  # Save, watched, rate: what you press on every visit, beside Play. A rating's number sits in
+  # the star's circle on a phone (so rating something moves nothing) and beside the star on a
+  # desktop, where the pill has room to grow.
+  defp record_btns(assigns) do
+    ~H"""
+    <.glass_btn
+      click="toggle_saved"
+      icon={if @lib.saved?, do: "hero-check", else: "hero-plus"}
+      on={@lib.saved?}
+      label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
+      class={!@compact && "sm:h-11 sm:w-11 !border-transparent"}
+    />
+    <.glass_btn
+      click="toggle_watched"
+      icon={if watched_state?(@title, @lib), do: "hero-eye-solid", else: "hero-eye"}
+      on={watched_state?(@title, @lib)}
+      tone={:success}
+      busy={@lib_busy}
+      label={
+        if watched_state?(@title, @lib),
+          do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
+          else: watched_label(@title, @lib)
+      }
+      class={!@compact && "sm:h-11 sm:w-11 !border-transparent"}
+    />
+    <button
+      :if={@compact}
+      type="button"
+      phx-click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
+      class={glass_class(@rating.value != nil, :amber, nil)}
+      title={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
+      aria-label={
+        if @rating.value, do: "Your rating, #{fmt_rating(@rating.value)}: change it", else: "Rate it"
+      }
+    >
+      <.icon :if={!@rating.value} name="hero-star" class="h-5 w-5" />
+      <span :if={@rating.value} class="font-[Outfit] text-base font-bold tracking-tight">
+        {fmt_rating(@rating.value)}
+      </span>
+    </button>
+    <.glass_btn
+      :if={!@compact}
+      click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
+      icon={if @rating.value, do: "hero-star-solid", else: "hero-star"}
+      on={@rating.value != nil}
+      tone={:amber}
+      text={if @rating.value, do: fmt_rating(@rating.value)}
+      label={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
+      class="sm:h-11 sm:min-w-11 !border-transparent"
+    />
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :title, :map, required: true
+  attr :trailer, :any, default: nil
+  attr :sources?, :boolean, default: false
+  attr :study?, :boolean, default: false
+
+  # The ▾ beside Play on a desktop: the other ways to watch it — choose the release, study it,
+  # the trailer. Nothing to offer, no ▾ (Play keeps its round end).
+  defp watch_ways(assigns) do
+    assigns = assign(assigns, :any?, assigns.sources? or assigns.study? or assigns.trailer != nil)
+
+    ~H"""
+    <div :if={@any?} class="relative">
+      <button
+        type="button"
+        phx-click={JS.toggle(to: "##{@id}", display: "block")}
+        class="btn btn-primary h-14 min-h-0 rounded-l-none rounded-r-full border-0 border-l border-white/40 px-4 shadow-md"
+        aria-label="Other ways to watch"
+        aria-controls={@id}
+        title="Other ways to watch"
+      >
+        <.icon name="hero-chevron-down" class="h-5 w-5" />
+      </button>
+      <div
+        id={@id}
+        class="absolute bottom-full left-0 z-40 mb-2 hidden w-72 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+        phx-click-away={JS.hide(to: "##{@id}")}
+        phx-window-keydown={JS.hide(to: "##{@id}")}
+        phx-key="escape"
+      >
+        <p class="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Other ways to watch
+        </p>
+        <.link
+          :if={@sources?}
+          navigate={~p"/sources/movie/#{@title.id}"}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-queue-list" class="h-5 w-5" /> Choose which release to play
+        </.link>
+        <button
+          :if={@study?}
+          type="button"
+          phx-click={
+            JS.show(to: "#study-sheet", display: "flex")
+            |> JS.push("study_open")
+            |> JS.hide(to: "##{@id}")
+          }
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-academic-cap" class="h-5 w-5" /> Study: watch in languages you choose
+        </button>
+        <button
+          :if={@trailer}
+          type="button"
+          phx-click={open_trailer() |> JS.hide(to: "##{@id}")}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon name="hero-play-circle" class="h-5 w-5" /> Watch the trailer
+        </button>
       </div>
     </div>
     """
@@ -3138,11 +3296,6 @@ defmodule RokiWeb.TitleLive do
   defp link_label(:invited), do: "Link request"
   defp link_label(:pending), do: "Link pending"
   defp link_label({:linked, names}), do: "Linked with " <> Enum.join(names, ", ")
-
-  defp link_title(:none), do: "Link this show's progress with friends"
-  defp link_title(:invited), do: "A friend asked to link progress on this show"
-  defp link_title(:pending), do: "Invitation sent: nothing is shared until they accept"
-  defp link_title({:linked, _}), do: "Progress linked: open to pause, add someone or unlink"
 
   attr :uuid, :string, required: true
   attr :title, :map, required: true

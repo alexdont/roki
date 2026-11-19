@@ -393,6 +393,18 @@ Header (`RokiWeb.Layouts.app`): logo (= Featured `/home`), then Movies / Shows /
 
 The section grids keep to whole rows while more can be loaded (`assets/js/fill_grid.js`, the `FillGrid` hook): the incomplete last row is hidden until the next page fills it, and shown in full once the list ends.
 
+### Title page: the buttons under the title (2026-11-19, the hero lab's variant E — `/lab/hero.html#e`)
+
+A phone (below `lg`): Play, then **Save · Watched · Rate · More** in one row (`record_btns compact` +
+`more_menu`); a show's two-part Play (Episodes · Start) takes its own line above the circles. A rating's
+number takes the star's place inside the same circle there, so rating moves nothing. More holds
+Choose which release (a film), Study, Trailer, Link progress (a show), Recommend, On hold, Remove watch
+progress and the MyAnimeList link; it opens upwards (`up`, the hero clips below). A desktop: Play with a
+▾ (`watch_ways`: Choose release, Study, Trailer) and one pill — Save · Watched · Rate (★ and the number
+side by side) · More (the rest). The ⋯ that sat at the hero's top right is gone (it is More). The
+trailer's pause / sound / full-screen and the ▾ beside the TMDB score show only while the pointer is
+over the hero (`group-hover/hero`); the score stays a button that opens the Reviews sheet.
+
 ### Title page: library actions
 
 Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`), Put on hold (`Laev.Holds`; an anime is held on MyAnimeList instead — `Watch.toggle_hold/2` sets its entries being watched `on_hold` through `Laev.MAL.set_status` + `Laev.Anime.set_status`, and `library/2`'s `held?` reads any entry `on_hold`; `hold?` says whether a hold is possible, false for anime without a MyAnimeList login; a hold forgets the shelf copy so the corner moves the title at once), and Mark watched / Mark all watched (`Laev.Position.set_watched`: a film's one mark, or every episode that is out for a series; the same button unmarks). Each episode row has its own mark/unmark toggle and the season header has Mark/Unmark season. All go through `Roki.Watch` (`library/2`, `toggle_saved/2`, `toggle_hold/2`, `set_watched/5`, `set_many_watched/4`, `set_series_watched/3`), clear the stats cache and push to the user's other devices. Above Play: the Browser / External player switch, and Play itself is the big button.
