@@ -1430,7 +1430,9 @@ defmodule RokiWeb.TitleLive do
           <span :if={is_nil(@logo)}>{@title.title}</span>
         </h1>
 
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/85">
+        <%!-- One line on a phone, scrolled sideways when the genres run long (a second line made the
+              hero taller than it needs); wraps from `sm` up as before. --%>
+        <div class="-mx-4 flex items-center gap-x-3 gap-y-2 overflow-x-auto whitespace-nowrap px-4 text-sm text-white/85 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:whitespace-normal sm:px-0">
           <button
             :if={is_number(@title.vote) and @title.vote > 0}
             type="button"
@@ -1442,7 +1444,7 @@ defmodule RokiWeb.TitleLive do
             <span class="text-amber-300" aria-hidden="true">★</span>{avg_text(@title)}
             <.icon
               name="hero-chevron-down-micro"
-              class="h-3.5 w-3.5 text-white/60 opacity-0 transition group-hover/hero:opacity-100"
+              class="hidden h-3.5 w-3.5 text-white/60 opacity-0 transition group-hover/hero:opacity-100 lg:block"
             />
           </button>
           <span :if={@title.year}>{@title.year}</span>
@@ -1483,13 +1485,13 @@ defmodule RokiWeb.TitleLive do
             cached?={@cached?}
             class={
               if(@title.type == "movie",
-                do: "h-14 min-w-0 flex-1 rounded-full px-4 text-lg",
-                else: "h-14 w-full rounded-full text-lg"
+                do: "h-12 min-w-0 flex-1 rounded-full px-4 text-lg",
+                else: "h-12 w-full rounded-full text-lg"
               )
             }
           />
           <%!-- The four in one chip, as on a desktop. --%>
-          <div class="flex shrink-0 items-center gap-0.5 rounded-full border border-white/20 bg-black/25 p-1 backdrop-blur-md">
+          <div class="flex h-12 shrink-0 items-center gap-0.5 rounded-full border border-white/20 bg-black/25 p-[3px] backdrop-blur-md">
             <.record_btns
               :if={@linked?}
               title={@title}
@@ -1537,7 +1539,7 @@ defmodule RokiWeb.TitleLive do
           </div>
           <div
             :if={@linked? or @signed_in?}
-            class="flex items-center gap-1 rounded-full border border-white/20 bg-black/25 p-1 backdrop-blur-md"
+            class="flex h-14 items-center gap-1 rounded-full border border-white/20 bg-black/25 p-[5px] backdrop-blur-md"
           >
             <.record_btns
               :if={@linked?}
