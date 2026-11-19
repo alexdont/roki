@@ -202,6 +202,40 @@ defmodule Roki.Profile do
   end
 
   @doc """
+  Where what this person finished was made: `%{"US" => 412, "JP" => 330, …}` — every finished
+  title counts once for each of its production countries (TMDB's), from the site's own copy of
+  the titles; a title the site holds no copy of is not counted. For the profile's world map.
+  """
+  def country_counts(uuid) when is_binary(uuid) do
+    keys =
+      uuid
+      |> history()
+      |> Enum.map(&{&1[:type], &1[:id]})
+      |> Enum.filter(fn {t, id} -> t in ["movie", "tv"] and is_integer(id) end)
+      |> Enum.uniq()
+
+    if keys == [] do
+      %{}
+    else
+      {types, ids} = Enum.unzip(keys)
+
+      %{rows: rows} =
+        Repo.query!(
+          """
+          select c from roki_titles t
+          join unnest($1::text[], $2::int[]) as k(type, id) on k.type = t.type and k.id = t.id
+          cross join lateral jsonb_array_elements_text(coalesce(t.data->'countries', '[]'::jsonb)) as c
+          """,
+          [types, ids]
+        )
+
+      rows
+      |> Enum.flat_map(fn [name] -> List.wrap(Roki.Countries.code(name)) end)
+      |> Enum.frequencies()
+    end
+  end
+
+  @doc """
   The numbers on a profile, counted from what is finished: `%{watched:, films:}` at once from
   the site's table; see `hours/1` for the rest.
   """

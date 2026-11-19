@@ -27,6 +27,7 @@ import topbar from "../vendor/topbar"
 import {StudySidebar} from "./study/sidebar"
 import {setupPeek} from "./peek"
 import {FillGrid, KeepPlace, placeParam} from "./fill_grid"
+import {WorldMap} from "./world_map"
 import {InfiniteScroll} from "./infinite_scroll"
 import {MoodCarousel} from "./mood_carousel"
 // Each mood's animation over the home page's carousel.
@@ -303,7 +304,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   // Marks the page's scripts put on elements (a picture that has arrived, a section shown) survive
   // the server's patches.
   dom: {onBeforeElUpdated: (from, to) => { keep(from, to); return true }},
-  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, MoodFx, ShelfRow, KeynavToggle, GridCards, EuDate, TrailerSheet, HeroTrailer},
+  hooks: {...window.PhoenixKitHooks, ...(window.FrescoHooks || {}), ...(window.EtcherHooks || {}), ...colocatedHooks, CommentBridge, CommentModalScrollLock, CommentModalScroll, StudySidebar, FillGrid, KeepPlace, InfiniteScroll, MoodCarousel, MoodFx, ShelfRow, KeynavToggle, GridCards, EuDate, TrailerSheet, HeroTrailer, WorldMap},
 })
 
 // Whether this page was reached by moving around inside the site without a reload: the manga

@@ -429,6 +429,19 @@ now records such an answer (`Roki.Titles.mark_gone/2`, a `roki_kept` row of kind
 titles out, and the title page shows "This title is no longer on TMDB" with **Remove it from my
 lists** (`Watch.forget_gone/3`: marks, Watchlist/History, saved, hold; synced) instead of the error.
 
+### Around the world (profile map)
+
+Beside the profile's Ratings card, **Around the world**: a map where each country is darker the more of
+what the person finished was made there (ALEX-157). `Profile.country_counts/1` counts every finished
+title once per production country (the stored title's `countries`, TMDB names → ISO codes by
+`Roki.Countries`, whose table is TMDB's `/configuration/countries` in `priv/data/tmdb_countries.json`);
+the outlines are `priv/static/data/world-110m.svg` (Natural Earth 110m via `world-atlas`, public domain,
+Equal Earth projection, Antarctica left out, one `<path data-c="US">` each, ~120 KB, made once with
+d3-geo + topojson-client — not a dependency of the app), fetched and coloured in the browser by the
+`WorldMap` hook (assets/js/world_map.js, a log scale of `--color-primary`). The two cards float on
+the banner from 1400 px up and follow the numbers below that (side by side on a desktop, ratings first
+on a phone).
+
 ### Recommended by Roki users
 
 A **Recommend** button (thumbs-up glass button in the title page's hero, any signed-in account,

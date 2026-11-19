@@ -61,6 +61,7 @@ defmodule RokiWeb.ProfileLive do
           stats: nil,
           watched: nil,
           rating_counts: nil,
+          country_counts: nil,
           rating_kind: "all",
           films: nil,
           favorites: nil,
@@ -97,6 +98,7 @@ defmodule RokiWeb.ProfileLive do
     |> start_async(:favorites, fn -> Profile.favorites(uuid) end)
     |> start_async(:watched, fn -> Profile.counts(uuid) end)
     |> start_async(:ratings, fn -> Profile.rating_counts(uuid) end)
+    |> start_async(:countries, fn -> Profile.country_counts(uuid) end)
     |> then(fn s ->
       if Roki.Laev.connected?(uuid),
         do: start_async(s, :stats, fn -> Profile.hours(uuid) end),
@@ -434,6 +436,11 @@ defmodule RokiWeb.ProfileLive do
     do: {:noreply, assign(socket, :rating_counts, counts)}
 
   def handle_async(:ratings, _other, socket), do: {:noreply, socket}
+
+  def handle_async(:countries, {:ok, counts}, socket) when is_map(counts),
+    do: {:noreply, assign(socket, :country_counts, counts)}
+
+  def handle_async(:countries, _other, socket), do: {:noreply, socket}
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
 
@@ -610,12 +617,17 @@ defmodule RokiWeb.ProfileLive do
             </div>
             <%!-- On a wide screen it sits on the banner's right, level with the numbers; below that
                   it follows them. --%>
-            <.rating_breakdown
-              :if={@rating_counts}
-              counts={@rating_counts}
-              kind={@rating_kind}
-              username={@username}
-            />
+            <%!-- On a wide screen the two cards sit on the banner's right, level with the numbers
+                  (the map left of the ratings); below that they follow them. --%>
+            <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-end min-[1400px]:absolute min-[1400px]:bottom-6 min-[1400px]:right-16 min-[1400px]:w-auto min-[1400px]:items-end">
+              <.world_map :if={@country_counts && @country_counts != %{}} counts={@country_counts} />
+              <.rating_breakdown
+                :if={@rating_counts}
+                counts={@rating_counts}
+                kind={@rating_kind}
+                username={@username}
+              />
+            </div>
           </div>
         </section>
 
@@ -826,6 +838,44 @@ defmodule RokiWeb.ProfileLive do
     """
   end
 
+  attr :counts, :map, required: true
+
+  # Where what they watched was made: the world, each country darker the more of it they watched
+  # (`Profile.country_counts/1`). The outlines are a static file (`/data/world-110m.svg`, Natural
+  # Earth), fetched and coloured in the browser by the `WorldMap` hook, so the page carries only
+  # the numbers. The three biggest are named under it.
+  defp world_map(assigns) do
+    top = assigns.counts |> Enum.sort_by(fn {_c, n} -> -n end) |> Enum.take(3)
+    assigns = assign(assigns, top: top, total: length(Map.keys(assigns.counts)))
+
+    ~H"""
+    <section
+      class="order-2 w-full space-y-2 rounded-box border border-white/15 bg-black/35 p-3 backdrop-blur-md sm:p-4 lg:order-none lg:w-[19rem] lg:shrink-0"
+      aria-label="Where it was made"
+    >
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-white/70">
+        Around the world
+        <span class="font-normal normal-case text-white/50">· {@total} countries</span>
+      </h2>
+      <div
+        id="world-map"
+        phx-hook="WorldMap"
+        phx-update="ignore"
+        data-src="/data/world-110m.svg"
+        data-counts={Jason.encode!(@counts)}
+        class="aspect-[960/470] w-full [&_svg]:h-full [&_svg]:w-full"
+      >
+      </div>
+      <p class="truncate text-xs text-white/60">
+        <span :for={{{code, n}, i} <- Enum.with_index(@top)}>
+          {if i > 0, do: " · "}{Roki.Countries.name(code) || code}
+          <span class="tabular-nums text-white/80">{n}</span>
+        </span>
+      </p>
+    </section>
+    """
+  end
+
   # The watch history with what got this score: the whole number (the history's filter takes a
   # 7 as 7 to 7.9), of the kind the breakdown's tabs stand at.
   defp bar_href(username, score, kind) do
@@ -869,7 +919,7 @@ defmodule RokiWeb.ProfileLive do
     ~H"""
     <section
       :if={@counts != %{}}
-      class="w-full space-y-2 rounded-box border border-white/15 bg-black/35 p-3 backdrop-blur-md sm:space-y-3 sm:p-4 lg:absolute lg:bottom-6 lg:right-12 lg:w-[26rem] xl:right-16"
+      class="w-full space-y-2 rounded-box border border-white/15 bg-black/35 p-3 backdrop-blur-md sm:space-y-3 sm:p-4 lg:w-[26rem] lg:shrink-0"
       aria-label="Ratings"
     >
       <div class="flex flex-wrap items-end justify-between gap-2">
