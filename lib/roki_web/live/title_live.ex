@@ -2612,7 +2612,7 @@ defmodule RokiWeb.TitleLive do
     <div class="relative shrink-0">
       <button
         type="button"
-        phx-click={JS.toggle(to: "##{@id}", display: "block")}
+        phx-click={JS.toggle(to: "##{@id}", display: if(@up, do: "flex", else: "block"))}
         class={["btn btn-ghost btn-circle btn-sm relative", @button_class]}
         aria-label="More actions"
         aria-controls={@id}
@@ -2626,10 +2626,14 @@ defmodule RokiWeb.TitleLive do
       </button>
       <div
         id={@id}
-        class={[
-          "absolute right-0 z-40 hidden w-64 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl",
-          if(@up, do: "bottom-full mb-2", else: "top-full mt-1")
-        ]}
+        class={
+          [
+            "absolute right-0 z-40 hidden w-64 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl",
+            # Opened upwards the list runs from the button up: the first item (the one used most) is
+            # the nearest to the thumb, "On hold" the farthest.
+            if(@up, do: "bottom-full mb-2 flex-col-reverse", else: "top-full mt-1")
+          ]
+        }
         phx-click-away={JS.hide(to: "##{@id}")}
         phx-window-keydown={JS.hide(to: "##{@id}")}
         phx-key="escape"
@@ -2688,21 +2692,6 @@ defmodule RokiWeb.TitleLive do
             else: "Recommend to everyone on Roki"}
         </button>
         <button
-          :if={@hold?}
-          type="button"
-          phx-click={JS.push("toggle_hold") |> JS.hide(to: "##{@id}")}
-          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
-        >
-          <.icon
-            name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
-            class={["h-5 w-5", @lib.held? && "text-warning"]}
-          />
-          {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}<span
-            :if={@title.anime?}
-            class="text-base-content/50"
-          > · MyAnimeList</span>
-        </button>
-        <button
           :if={@linked? and @lib[:progress?]}
           type="button"
           phx-click={JS.push("forget_progress") |> JS.hide(to: "##{@id}")}
@@ -2721,6 +2710,21 @@ defmodule RokiWeb.TitleLive do
           <.icon name="hero-arrow-top-right-on-square" class="h-5 w-5" />
           {label}
         </a>
+        <button
+          :if={@hold?}
+          type="button"
+          phx-click={JS.push("toggle_hold") |> JS.hide(to: "##{@id}")}
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-base-200"
+        >
+          <.icon
+            name={if @lib.held?, do: "hero-pause-circle-solid", else: "hero-pause-circle"}
+            class={["h-5 w-5", @lib.held? && "text-warning"]}
+          />
+          {if @lib.held?, do: "On hold — take it off", else: "Put on hold"}<span
+            :if={@title.anime?}
+            class="text-base-content/50"
+          > · MyAnimeList</span>
+        </button>
       </div>
     </div>
     """
@@ -2803,7 +2807,7 @@ defmodule RokiWeb.TitleLive do
     <div :if={@any?} class="relative">
       <button
         type="button"
-        phx-click={JS.toggle(to: "##{@id}", display: "block")}
+        phx-click={JS.toggle(to: "##{@id}", display: "flex")}
         class="btn btn-primary h-14 min-h-0 rounded-l-none rounded-r-full border-0 border-l border-white/40 px-4 shadow-md"
         aria-label="Other ways to watch"
         aria-controls={@id}
@@ -2813,14 +2817,11 @@ defmodule RokiWeb.TitleLive do
       </button>
       <div
         id={@id}
-        class="absolute bottom-full left-0 z-40 mb-2 hidden w-72 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+        class="absolute bottom-full left-0 z-40 mb-2 hidden w-72 flex-col-reverse rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
         phx-click-away={JS.hide(to: "##{@id}")}
         phx-window-keydown={JS.hide(to: "##{@id}")}
         phx-key="escape"
       >
-        <p class="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
-          Other ways to watch
-        </p>
         <.link
           :if={@sources?}
           navigate={~p"/sources/movie/#{@title.id}"}
@@ -2848,6 +2849,10 @@ defmodule RokiWeb.TitleLive do
         >
           <.icon name="hero-play-circle" class="h-5 w-5" /> Watch the trailer
         </button>
+        <%!-- Last in the source, first on screen (the column runs upwards from the ▾). --%>
+        <p class="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+          Other ways to watch
+        </p>
       </div>
     </div>
     """
