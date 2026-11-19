@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Show buttons lab · Roki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* A lab for a show's buttons on a phone (2026-11-19). The show's Play is two halves of one pill
+     (Episodes | Start) and takes the whole width, so the Save · Watched · Rate · More chip under it
+     sat at the left with a gap on the right. Five ways to fill that line. Every variant is drawn at
+     390 px and at 360 px, once fresh and once part-way through (Continue). The star toggles a rating
+     of 8, the eye and + toggle, so the "nothing moves" rule can be tried. */
+  :root { --orange: #ff6a13; --orange2: #ff8a3d; --page: #0f0d10; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #17141a; color: #eee; font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header.lab { padding: 28px 24px 8px; max-width: 1500px; margin: 0 auto; }
+  header.lab h1 { font: 700 28px "Outfit", sans-serif; margin: 0 0 6px; }
+  header.lab p { margin: 0; color: #b9b3bd; max-width: 900px; }
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 24px; max-width: 1500px; margin: 0 auto; position: sticky; top: 0; background: #17141acc; backdrop-filter: blur(10px); z-index: 50; }
+  nav.tabs a { color: #ddd; text-decoration: none; border: 1px solid #ffffff2a; border-radius: 999px; padding: 6px 14px; font-weight: 600; }
+  nav.tabs a:hover { border-color: #fff8; }
+  section.variant { max-width: 1500px; margin: 0 auto; padding: 24px; scroll-margin-top: 70px; }
+  section.variant > h2 { font: 700 22px "Outfit", sans-serif; margin: 6px 0 4px; }
+  section.variant > p.why { margin: 0 0 16px; color: #b9b3bd; max-width: 900px; }
+  .frames { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  .frame-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #8f8894; margin: 0 0 6px; }
+  .phone { border-radius: 36px; border: 9px solid #000; overflow: hidden; position: relative; background: var(--page); box-shadow: 0 30px 60px #0008; }
+  .w390 { width: 408px; } .w360 { width: 378px; }
+
+  .hero { position: relative; color: #fff; isolation: isolate; overflow: hidden; height: 520px; display: flex; flex-direction: column; }
+  .hero .bg { position: absolute; inset: 0; z-index: -2; background: center 20% / cover no-repeat url("/phoenix_kit/file/01a1987e-8c48-742e-9ff0-6a468569412f/original/85d8"); }
+  .hero .wash { position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, #000000d0 0%, #00000060 45%, #00000070 100%), linear-gradient(to right, #000000b0, transparent 70%); }
+  .body { margin-top: auto; padding: 0 16px 26px; display: flex; flex-direction: column; gap: 10px; }
+  .kind { font-size: 12px; font-weight: 600; letter-spacing: .25em; color: #ffffffb3; text-transform: uppercase; }
+  .logo { height: 64px; width: auto; align-self: flex-start; filter: drop-shadow(0 2px 12px #0009); }
+  .facts { display: flex; gap: 10px; align-items: center; color: #ffffffd9; font-size: 14px; white-space: nowrap; overflow: hidden; }
+  .facts .score { font-weight: 600; } .facts .score b { color: #fcd34d; }
+  .chip { border: 1px solid #ffffff4d; border-radius: 999px; padding: 1px 11px; }
+  .tagline { font-style: italic; color: #ffffffa6; margin: 0; }
+  .rows { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+  .line { display: flex; gap: 8px; align-items: center; }
+
+  /* the orange pill, halves joined by a hairline */
+  .pill { display: flex; height: 48px; border-radius: 999px; overflow: hidden; box-shadow: 0 10px 30px #ff6a1340; }
+  .pill > * { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; color: #fff; font: 600 17px ui-sans-serif, system-ui, sans-serif; background: linear-gradient(90deg, var(--orange), var(--orange2)); cursor: pointer; white-space: nowrap; padding: 0 12px; min-width: 0; }
+  .pill > * + * { border-left: 1px solid #ffffff66; }
+  .pill .eps { flex: 2; } .pill .start { flex: 3; }
+  .pill .ico-only { flex: none; width: 52px; padding: 0; }
+
+  /* the glass chip (as on the site: border white/20, bg black/25, blur) */
+  .glasschip { display: flex; align-items: center; gap: 2px; height: 48px; padding: 3px; border-radius: 999px; border: 1px solid #ffffff33; background: #00000040; backdrop-filter: blur(12px); }
+  .glasschip.full { width: 100%; justify-content: space-between; }
+  .g { width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 0; background: transparent; color: #fff; cursor: pointer; font: 700 16px "Outfit", sans-serif; }
+  .g:hover { background: #ffffff1f; }
+  .g.on { background: #ffffff38; }
+  .g.on.green { background: #047857; }
+  .g.on.amber { background: #7c5a10; color: #fde68a; box-shadow: inset 0 0 0 1px #fcd34d80; }
+  .g.lab { width: auto; flex: 1; gap: 6px; padding: 0 6px; font: 600 13px ui-sans-serif, system-ui, sans-serif; }
+  .g.lab.on.amber { color: #fde68a; }
+  .g.stack { width: auto; flex: 1; height: 40px; flex-direction: column; gap: 1px; font: 600 10.5px ui-sans-serif, system-ui, sans-serif; color: #ffffffd0; }
+  .g.stack svg { width: 18px; height: 18px; }
+  svg.i { width: 21px; height: 21px; flex: none; }
+  .note { font-size: 13px; color: #ffffffb3; display: flex; flex-direction: column; justify-content: center; min-width: 0; flex: 1; line-height: 1.25; }
+  .note span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note b { color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note .bar { height: 3px; border-radius: 3px; background: #ffffff33; margin-top: 5px; overflow: hidden; }
+  .note .bar i { display: block; height: 100%; width: 38%; background: var(--orange); }
+  .verdict { margin: 20px 0 0; color: #b9b3bd; font-size: 14px; }
+</style>
+</head>
+<body>
+<header class="lab">
+  <h1>A show's buttons on a phone</h1>
+  <p>The two-part Play (Episodes | Start) takes the whole width, so the chip under it left a gap on the right. Each variant is shown at 390 px and 360 px, fresh and part-way through. The +, eye and star toggle (the star rates 8). Desktop stays as it is.</p>
+</header>
+<nav class="tabs" id="tabs"></nav>
+<main id="lab"></main>
+
+<script>
+const I = {
+  list: '<path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>',
+  play: '<path fill="currentColor" stroke="none" d="M6 4.5v15a.75.75 0 0 0 1.14.64l12.4-7.5a.75.75 0 0 0 0-1.28L7.14 3.86A.75.75 0 0 0 6 4.5Z"/>',
+  plus: '<path d="M12 4.5v15m7.5-7.5h-15"/>',
+  check: '<path d="m4.5 12.75 6 6 9-13.5"/>',
+  eye: '<path d="M2.04 12.32a1 1 0 0 1 0-.64C3.42 7.51 7.36 4.5 12 4.5s8.57 3 9.96 7.18a1 1 0 0 1 0 .64C20.58 16.49 16.64 19.5 12 19.5s-8.57-3-9.96-7.18Z"/><circle cx="12" cy="12" r="3"/>',
+  star: '<path d="M11.48 3.5a.56.56 0 0 1 1.04 0l2.12 5.11a.56.56 0 0 0 .48.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 0 0-.18.56l1.28 5.39a.56.56 0 0 1-.84.61l-4.72-2.88a.56.56 0 0 0-.59 0l-4.72 2.88a.56.56 0 0 1-.84-.6l1.28-5.4a.56.56 0 0 0-.18-.56l-4.2-3.6a.56.56 0 0 1 .32-.99l5.52-.44a.56.56 0 0 0 .47-.35l2.13-5.11Z"/>',
+  dots: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+}
+const svg = (k, fill) => `<svg class="i" viewBox="0 0 24 24" fill="${fill ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${I[k]}</svg>`
+
+// One button of the record. kind: circle | lab (icon + word) | stack (icon over word)
+function rec(kind) {
+  const cls = kind === "circle" ? "g" : `g ${kind}`
+  const words = kind !== "circle"
+  return `
+    <button class="${cls}" data-t="save" title="Save for later">${svg("plus")}${words ? "<span>Save</span>" : ""}</button>
+    <button class="${cls}" data-t="watched" data-tone="green" title="Mark watched">${svg("eye")}${words ? "<span>Watched</span>" : ""}</button>
+    <button class="${cls}" data-t="rate" data-tone="amber" data-kind="${kind}" title="Rate">${svg("star")}${words ? "<span>Rate</span>" : ""}</button>
+    <button class="${cls}" title="More">${svg("dots")}${words ? "<span>More</span>" : ""}</button>`
+}
+const eps = (txt = "Episodes") => `<button class="eps">${svg("list")} ${txt}</button>`
+const start = (cont) => `<button class="start">${svg("play")} ${cont ? "S3.E4" : "Start S1.E1"}</button>`
+
+const V = [
+  { id: "a", name: "A · The chip as wide as the pill",
+    why: "The least change: the chip stretches to the pill's width and the four circles spread evenly across it. Two bars of the same width, one orange, one glass.",
+    draw: (c) => `<div class="pill">${eps()}${start(c)}</div><div class="glasschip full">${rec("circle")}</div>` },
+  { id: "b", name: "B · The chip as wide, with words",
+    why: "Same width, and the room says what each one is: + Save, eye Watched, star Rate, ⋯ More. A rating shows as \"★ 8\" in Rate's place (the word gives way, so nothing moves).",
+    draw: (c) => `<div class="pill">${eps()}${start(c)}</div><div class="glasschip full">${rec("lab")}</div>` },
+  { id: "c", name: "C · Start beside the chip, as a film; Episodes below",
+    why: "The first line is exactly the film's: Start (or the episode to continue) and the chip. Episodes takes the second line as the full-width glass bar it now has room to be. Every title page then opens with the same line.",
+    draw: (c) => `<div class="line"><div class="pill" style="flex:1;min-width:0">${start(c)}</div><div class="glasschip">${rec("circle")}</div></div>
+      <div class="glasschip full" style="justify-content:center"><button class="g lab" style="font-size:14px">${svg("list")}<span>Episodes · 8 seasons</span></button></div>` },
+  { id: "d", name: "D · Start first, Episodes as an orange ☰ end",
+    why: "One line like a film: the pill is ☰ | Start — Episodes shrinks to its icon at the pill's left end — and the chip beside it. Shortest, but Episodes loses its word.",
+    draw: (c) => `<div class="line"><div class="pill" style="flex:1;min-width:0"><button class="ico-only" title="Episodes">${svg("list")}</button>${start(c)}</div><div class="glasschip">${rec("circle")}</div></div>` },
+  { id: "e", name: "E · Where you are, beside the chip",
+    why: "The gap carries something worth reading: the episode Start leads to (and how far you are), at the left; the chip at the right. Tells you what Start will play before you press it.",
+    draw: (c) => `<div class="pill">${eps()}${start(c)}</div>
+      <div class="line"><div class="note">${c ? `<b>S3.E4 · Breaker of Chains</b><span>23 min left</span><div class="bar"><i></i></div>` : `<b>S1.E1 · Winter Is Coming</b><span>8 seasons · 73 episodes</span>`}</div><div class="glasschip">${rec("circle")}</div></div>` },
+  { id: "now", name: "Now · what the site does today",
+    why: "For comparison: the chip sits at the left under the full-width pill.",
+    draw: (c) => `<div class="pill">${eps()}${start(c)}</div><div class="line"><div class="glasschip">${rec("circle")}</div></div>` },
+]
+
+function hero(inner) {
+  return `<div class="hero"><div class="bg"></div><div class="wash"></div><div class="body">
+    <div class="kind">Series</div>
+    <img class="logo" src="https://image.tmdb.org/t/p/w500/6pObznbCoxVpY1lPQwJxETd7Phe.png" alt="Game of Thrones">
+    <div class="facts"><span class="score"><b>★</b> 8.5</span><span>2011</span><span>8 seasons</span><span>73 episodes</span><span class="chip">Sci-Fi &amp; Fantasy</span><span class="chip">Drama</span><span class="chip">Action &amp; Adventure</span></div>
+    <p class="tagline">Winter is coming.</p>
+    <div class="rows">${inner}</div></div></div>`
+}
+
+document.getElementById("tabs").innerHTML = V.map(v => `<a href="#${v.id}">${v.name.split(" · ")[0]}</a>`).join("")
+document.getElementById("lab").innerHTML = V.map(v => `
+  <section class="variant" id="${v.id}">
+    <h2>${v.name}</h2><p class="why">${v.why}</p>
+    <div class="frames">
+      ${[["w390", "390 px", false], ["w360", "360 px", false], ["w390", "390 px · continuing", true]].map(([w, l, c]) =>
+        `<div><p class="frame-label">${l}</p><div class="phone ${w}">${hero(v.draw(c))}</div></div>`).join("")}
+    </div>
+  </section>`).join("")
+
+// toggles; the rating's number takes the star's place (in the circle, or in place of the word)
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-t]"); if (!b) return
+  const on = b.classList.toggle("on")
+  if (b.dataset.tone) b.classList.toggle(b.dataset.tone, on)
+  if (b.dataset.t === "save") b.querySelector("svg").outerHTML = svg(on ? "check" : "plus")
+  if (b.dataset.t === "watched") b.querySelector("svg").outerHTML = svg("eye", on)
+  if (b.dataset.t === "rate") {
+    const k = b.dataset.kind
+    if (k === "circle") b.innerHTML = on ? "8" : svg("star")
+    else b.innerHTML = svg("star", on) + `<span>${on ? "8" : "Rate"}</span>`
+  }
+})
+</script>
+</body>
+</html>
