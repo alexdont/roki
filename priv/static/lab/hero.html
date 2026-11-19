@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hero lab · Roki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* A lab for the title page's top section (2026-11-19): four ways of thinning out the buttons
+     under Play. Each variant is drawn twice, in a phone frame and in a desktop frame; the layout
+     follows the frame's width (container queries), so the two are the same markup. The backdrop
+     drifts slowly to stand in for the trailer that plays behind it on the real page. Menus work. */
+  :root { --orange: #ff6a13; --orange2: #ff8a3d; --ink: #fff; --page: #0f0d10; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #17141a; color: #eee; font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header.lab { padding: 28px 24px 8px; max-width: 1500px; margin: 0 auto; }
+  header.lab h1 { font: 700 28px "Outfit", sans-serif; margin: 0 0 6px; }
+  header.lab p { margin: 0; color: #b9b3bd; max-width: 900px; }
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 24px; max-width: 1500px; margin: 0 auto; position: sticky; top: 0; background: #17141acc; backdrop-filter: blur(10px); z-index: 50; }
+  nav.tabs a { color: #ddd; text-decoration: none; border: 1px solid #ffffff2a; border-radius: 999px; padding: 6px 14px; font-weight: 600; }
+  nav.tabs a:hover { border-color: #fff8; }
+  section.variant { max-width: 1500px; margin: 0 auto; padding: 24px; }
+  section.variant > h2 { font: 700 22px "Outfit", sans-serif; margin: 6px 0 4px; }
+  section.variant > p.why { margin: 0 0 16px; color: #b9b3bd; max-width: 980px; }
+  .frames { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .frame-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #8f8894; margin: 0 0 6px; }
+  .phone { width: 390px; height: 760px; border-radius: 42px; border: 10px solid #000; overflow: hidden; position: relative; background: var(--page); box-shadow: 0 30px 60px #0008; }
+  .desk { width: 1000px; max-width: 100%; height: 680px; border-radius: 14px; border: 1px solid #ffffff22; overflow: hidden; position: relative; background: var(--page); box-shadow: 0 30px 60px #0008; }
+  .scroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; }
+
+  /* ── the hero ─────────────────────────────────────────────────────── */
+  .hero { container-type: inline-size; position: relative; min-height: 88%; display: flex; flex-direction: column; color: var(--ink); isolation: isolate; overflow: hidden; }
+  .hero .bg { position: absolute; inset: 0; z-index: -2; background: center 20% / cover no-repeat; animation: drift 24s ease-in-out infinite alternate; }
+  @keyframes drift { from { transform: scale(1.08) translate(0, 0); } to { transform: scale(1.18) translate(-2%, 1%); } }
+  .hero .wash { position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, var(--page) 4%, #0f0d10e0 34%, #0f0d1066 62%, #0f0d1033 100%), linear-gradient(to right, #0f0d10cc, transparent 60%); }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; }
+  .logo { font: 800 22px "Outfit", sans-serif; letter-spacing: -.02em; }
+  .logo b { color: var(--orange); }
+  .topbar .icons { display: flex; gap: 14px; opacity: .85; }
+  .body { margin-top: auto; padding: 60px 16px 22px; display: flex; flex-direction: column; gap: 10px; }
+  .name { font: 800 44px/1 "Outfit", sans-serif; letter-spacing: -.02em; margin: 0; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: #ffffffcc; font-size: 14px; }
+  .facts .score { color: #ffb648; font-weight: 700; }
+  .chip { border: 1px solid #ffffff4d; border-radius: 999px; padding: 1px 10px; font-size: 13px; color: #ffffffcc; }
+  .tagline { font-style: italic; color: #ffffffa6; margin: 0; }
+  .overview { color: #ffffffb3; font-size: 14px; max-width: 46ch; margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  @container (min-width: 700px) {
+    .body { padding: 80px 48px 40px; max-width: 760px; gap: 12px; }
+    .name { font-size: 72px; }
+    .topbar { padding: 18px 48px; }
+  }
+
+  /* buttons */
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; }
+  .play { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 54px; padding: 0 26px; border: 0; border-radius: 999px; font: 700 19px "Outfit", sans-serif; color: #fff; background: linear-gradient(90deg, var(--orange), var(--orange2)); box-shadow: 0 10px 30px #ff6a1355; cursor: pointer; }
+  .play.wide { width: 100%; }
+  @container (min-width: 700px) { .play.wide { width: auto; min-width: 230px; } }
+  .glass { width: 48px; height: 48px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 1px solid #ffffff40; background: #ffffff18; backdrop-filter: blur(10px); color: #fff; cursor: pointer; position: relative; }
+  .glass:hover { background: #ffffff30; border-color: #ffffffa0; }
+  .glass.on { background: #ffffff38; border-color: #ffffffb0; }
+  .glass.on.green { background: #10b98160; border-color: #6ee7b7b0; }
+  .glass.on.amber { background: #f59e0b50; border-color: #fcd34db0; }
+  .glass .num { position: absolute; bottom: -6px; right: -6px; background: #f59e0b; color: #111; font: 700 11px/1 ui-sans-serif; padding: 3px 5px; border-radius: 999px; }
+  .ghost { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 18px; border-radius: 999px; border: 1px solid #ffffff40; background: #ffffff14; backdrop-filter: blur(10px); color: #fff; font-weight: 600; font-size: 15px; cursor: pointer; }
+  .ghost:hover { background: #ffffff28; }
+  svg.i { width: 22px; height: 22px; flex: none; }
+  .sub { font-size: 13px; color: #ffffffa6; }
+  .sub a { color: #fff; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+  /* B: the labelled action bar */
+  .bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
+  .bar button { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px; border: 0; background: transparent; color: #ffffffd9; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 12px; }
+  .bar button:hover { background: #ffffff14; }
+  .bar button.on { color: #fff; }
+  .bar button.on svg { color: var(--orange2); }
+  @container (min-width: 700px) { .bar { display: flex; gap: 18px; } .bar button { flex-direction: row; font-size: 14px; padding: 8px 10px; } }
+
+  /* C: split play */
+  .split { display: inline-flex; height: 54px; border-radius: 999px; overflow: hidden; box-shadow: 0 10px 30px #ff6a1355; flex: 1 1 auto; }
+  .split .play { border-radius: 0; box-shadow: none; flex: 1 1 auto; }
+  .split .caret { width: 52px; border: 0; border-left: 1px solid #ffffff55; background: linear-gradient(90deg, var(--orange2), #ff9a55); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  @container (min-width: 700px) { .split { flex: none; } .split .play { min-width: 210px; } }
+  .pill { display: inline-flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; border: 1px solid #ffffff33; background: #00000040; backdrop-filter: blur(10px); }
+  .pill .glass { width: 42px; height: 42px; border-color: transparent; background: transparent; }
+  .pill .glass:hover { background: #ffffff22; }
+  .pill .glass.on { background: #ffffff2a; }
+
+  /* D: the record below the hero */
+  .record { padding: 18px 16px 28px; display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid #ffffff14; background: var(--page); }
+  .record h3 { width: 100%; margin: 0 0 2px; font: 600 13px ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: #8f8894; }
+  .rchip { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid #ffffff26; background: #ffffff0d; color: #eee; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .rchip.on { border-color: #ff8a3d99; background: #ff6a1322; color: #fff; }
+  .rchip svg { width: 18px; height: 18px; }
+  @container (min-width: 700px) { .record { padding: 20px 48px 40px; } }
+  .after { padding: 18px 16px 40px; color: #8f8894; font-size: 13px; }
+  @container (min-width: 700px) { .after { padding: 18px 48px 40px; } }
+
+  /* the menu / sheet */
+  .menu { position: absolute; z-index: 40; min-width: 250px; padding: 6px; border-radius: 16px; background: #1c1a1ff2; border: 1px solid #ffffff1f; box-shadow: 0 20px 50px #000a; backdrop-filter: blur(16px); display: none; }
+  .menu.open { display: block; }
+  .menu button { display: flex; width: 100%; align-items: center; gap: 12px; padding: 11px 12px; border: 0; border-radius: 10px; background: transparent; color: #eee; font-size: 15px; text-align: left; cursor: pointer; }
+  .menu button:hover { background: #ffffff12; }
+  .menu hr { border: 0; border-top: 1px solid #ffffff14; margin: 4px 6px; }
+  .menu .muted { color: #9a93a0; font-size: 12px; padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .07em; }
+  .sheet-veil { position: absolute; inset: 0; background: #0008; z-index: 39; display: none; }
+  .sheet-veil.open { display: block; }
+  /* On a phone frame the menu is a bottom sheet. */
+  .phone .menu { left: 8px !important; right: 8px; bottom: 8px; top: auto !important; min-width: 0; border-radius: 22px; padding: 10px 8px 14px; }
+  .phone .menu::before { content: ""; display: block; width: 38px; height: 4px; border-radius: 9px; background: #ffffff40; margin: 0 auto 8px; }
+  .toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: #fff; color: #111; font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: 999px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+  .count { color: #8f8894; font-size: 13px; margin-left: 4px; }
+  footer.notes { max-width: 1500px; margin: 0 auto; padding: 8px 24px 60px; color: #b9b3bd; }
+  footer.notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<header class="lab">
+  <h1>Title page — the top section, thinned out</h1>
+  <p>Today the row under Play holds up to ten round buttons (Trailer, Choose release, Study, Save, Watched, Rate, Link, Recommend, ⋯, plus the trailer's own controls). Four ways to keep what you press every visit next to Play and put the rest one tap away. Each is drawn on a phone and on a desktop; the picture drifts where the trailer would play. Menus and toggles work — tap around.</p>
+</header>
+<nav class="tabs">
+  <a href="#a">A · Play + 3</a>
+  <a href="#b">B · Action bar</a>
+  <a href="#c">C · Split Play</a>
+  <a href="#d">D · Clean hero</a>
+  <a href="#now">Today, for comparison</a>
+</nav>
+
+<!-- Icons, defined once. -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.8v14.4a1 1 0 0 0 1.5.86l11.6-7.2a1 1 0 0 0 0-1.72L8.5 3.94A1 1 0 0 0 7 4.8Z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none" d="m12 3.6 2.6 5.3 5.8.85-4.2 4.1 1 5.8L12 16.9l-5.2 2.75 1-5.8-4.2-4.1 5.8-.85L12 3.6Z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.6" fill="none"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></g></symbol>
+    <symbol id="i-thumb" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none" d="M7 10.5v9H4.5v-9H7Zm0 0 3.6-6.3c.4-.7 1.3-.9 1.9-.4.5.4.7 1 .5 1.6L12 9.5h6.1c1.2 0 2.1 1.1 1.8 2.3l-1.6 6.4c-.2.8-.9 1.3-1.7 1.3H7"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 4.5v15M17 4.5v15M3 9h4M3 15h4M17 9h4M17 15h4"/></g></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none" d="M8 6.5h12M8 12h12M8 17.5h12M4 6.5h.01M4 12h.01M4 17.5h.01"/></symbol>
+    <symbol id="i-cap" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none" d="m2.5 9.5 9.5-5 9.5 5-9.5 5-9.5-5Zm4 2.2v4.3c0 1.4 2.5 3 5.5 3s5.5-1.6 5.5-3v-4.3M21.5 9.5v5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" d="M9 6v12M15 6v12"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" d="m6 9.5 6 6 6-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.8" fill="none"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4" stroke-linecap="round"/></g></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" fill="none" d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15L6 16.5ZM10 20h4"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none" d="M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5ZM16 9.5l5 5M21 9.5l-5 5"/></symbol>
+  </defs>
+</svg>
+
+<main id="variants"></main>
+
+<footer class="notes">
+  <h2 style="font:700 18px Outfit">What each one gives up</h2>
+  <ul>
+    <li><b>A · Play + 3</b> — the fewest changes from today: the three you use on every title stay round buttons, everything else (choose release, study, link, recommend, hold) is in More. Watched is in More too: on a film you mostly mark it by watching it.</li>
+    <li><b>B · Action bar</b> — the streaming-app look: one wide Play, then four labelled actions. Labels make it clear on a phone; it takes one more line of height.</li>
+    <li><b>C · Split Play</b> — the ways to watch (choose release, study, trailer) belong to Play, so they sit in its ▾; what you do with the title is one small pill. Most compact on a phone: a single row.</li>
+    <li><b>D · Clean hero</b> — only Play and Trailer over the picture; your record of the title (saved, watched, rating, recommended) moves just under the hero as chips that say their state in words. The calmest hero; the record is one scroll down.</li>
+  </ul>
+  <p>In all of them the trailer's own pause/sound controls move to a small pair in the picture's corner (as on desktop today), and the ⋯ menu that holds "On hold" and "Remove watch progress" merges into More.</p>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Heat (1995), from the site's own copy of the title.
+const T = {
+  title: "Heat", year: "1995", minutes: 170, vote: 7.9, genres: ["Crime", "Drama", "Action"],
+  tagline: "A Los Angeles crime saga.",
+  overview: "Obsessive master thief Neil McCauley leads a top-notch crew on various daring heists throughout Los Angeles while determined detective Vincent Hanna pursues him without rest.",
+  backdrop: "https://image.tmdb.org/t/p/w1280/uI22JkEMediWyiRqhllNqeeGtW0.jpg",
+}
+const ic = (n, cls = "i") => `<svg class="${cls}"><use href="#i-${n}"/></svg>`
+const state = {} // per frame: saved, watched, rating, recommended
+
+function head() {
+  return `<div class="topbar"><span class="logo">R<b>o</b>ki</span><span class="icons">${ic("search")}${ic("bell")}</span></div>`
+}
+function intro() {
+  return `
+    <h1 class="name">${T.title}</h1>
+    <div class="facts"><span>${T.year}</span><span>·</span><span>2h 50m</span><span>·</span><span class="score">★ ${T.vote}</span>
+      ${T.genres.map((g) => `<span class="chip">${g}</span>`).join("")}</div>
+    <p class="tagline">${T.tagline}</p>
+    <p class="overview">${T.overview}</p>`
+}
+function hero(inner, after = "") {
+  return `<div class="hero"><div class="bg" style="background-image:url(${T.backdrop})"></div><div class="wash"></div>
+    ${head()}<div class="body">${intro()}${inner}</div></div>${after}
+    <div class="after">… the cast, facts, soundtrack and the rest of the page go on here.</div>`
+}
+
+const moreItems = (opts = {}) => `
+  ${opts.trailer !== false ? `<button data-do="Trailer">${ic("film")} Watch the trailer</button>` : ""}
+  ${opts.sources !== false ? `<button data-do="Choose release">${ic("list")} Choose which release to play</button>` : ""}
+  ${opts.study !== false ? `<button data-do="Study">${ic("cap")} Study: watch in other languages</button>` : ""}
+  <hr/>
+  ${opts.watched ? `<button data-toggle="watched">${ic("eye")} <span data-label="watched">Mark watched</span></button>` : ""}
+  ${opts.recommend ? `<button data-toggle="recommended">${ic("thumb")} <span data-label="recommended">Recommend to everyone</span></button>` : ""}
+  <button data-do="Link progress">${ic("link")} Link progress with friends</button>
+  <button data-do="On hold">${ic("pause")} Put on hold</button>
+  <hr/>
+  <button data-do="Remove watch progress" style="color:#f87171">↺ Remove watch progress</button>`
+
+const V = {
+  a: {
+    name: "A · Play + 3",
+    why: "Play, then the three you reach for on every title — My list, Rate, More. Everything used once in a while (choose release, study, watched, recommend, link, hold) is in More.",
+    html: () => hero(`
+      <div class="row">
+        <button class="play">${ic("play")} Play</button>
+        <button class="glass" data-toggle="saved" title="My list">${ic("plus")}</button>
+        <button class="glass amber" data-rate title="Rate">${ic("star")}</button>
+        <button class="glass" data-menu title="More">${ic("dots")}</button>
+      </div>
+      <div class="menu">${moreItems({ watched: true, recommend: true })}</div>`),
+  },
+  b: {
+    name: "B · Action bar",
+    why: "One wide Play, a line saying what else there is to play, then four labelled actions in a bar — the streaming-app pattern. More (for study, link, hold) is a fifth item.",
+    html: () => hero(`
+      <div class="row"><button class="play wide">${ic("play")} Play</button></div>
+      <div class="sub">or <a data-do="Trailer">watch the trailer</a> · <a data-do="Choose release">choose a release</a></div>
+      <div class="bar">
+        <button data-toggle="saved">${ic("plus")}<span data-label="saved">My list</span></button>
+        <button data-toggle="watched">${ic("eye")}<span data-label="watched">Watched</span></button>
+        <button data-rate>${ic("star")}<span data-label="rating">Rate</span></button>
+        <button data-menu>${ic("dots")}<span>More</span></button>
+      </div>
+      <div class="menu">${moreItems({ trailer: false, sources: false, recommend: true })}</div>`),
+  },
+  c: {
+    name: "C · Split Play",
+    why: "The ways to watch belong to Play: its ▾ opens Choose release, Study and Trailer. What you do with the title is one small pill — My list, Watched, Rate, More. One row on a phone.",
+    html: () => hero(`
+      <div class="row" style="flex-wrap:nowrap">
+        <div class="split"><button class="play">${ic("play")} Play</button><button class="caret" data-menu="play" title="Other ways to watch">${ic("down")}</button></div>
+        <div class="pill">
+          <button class="glass" data-toggle="saved" title="My list">${ic("plus")}</button>
+          <button class="glass green" data-toggle="watched" title="Watched">${ic("eye")}</button>
+          <button class="glass amber" data-rate title="Rate">${ic("star")}</button>
+          <button class="glass" data-menu="more" title="More">${ic("dots")}</button>
+        </div>
+      </div>
+      <div class="menu" data-for="play">
+        <div class="muted">Other ways to watch</div>
+        <button data-do="Choose release">${ic("list")} Choose which release to play</button>
+        <button data-do="Study">${ic("cap")} Study: watch in other languages</button>
+        <button data-do="Trailer">${ic("film")} Watch the trailer</button>
+      </div>
+      <div class="menu" data-for="more">${moreItems({ trailer: false, sources: false, study: false, recommend: true })}</div>`),
+  },
+  d: {
+    name: "D · Clean hero",
+    why: "Only Play and Trailer over the picture. Your record of the title moves just under the hero as chips that say their state in words (Saved, Watched, Rated 8, Recommended) — tap one to change it.",
+    html: () => hero(`
+      <div class="row">
+        <button class="play">${ic("play")} Play</button>
+        <button class="ghost" data-do="Trailer">${ic("film")} Trailer</button>
+        <button class="glass" data-menu title="More">${ic("dots")}</button>
+      </div>
+      <div class="menu">${moreItems({ trailer: false })}</div>`,
+      `<div class="record"><h3>You and this film</h3>
+        <button class="rchip" data-toggle="saved">${ic("plus")}<span data-label="saved">Save for later</span></button>
+        <button class="rchip" data-toggle="watched">${ic("eye")}<span data-label="watched">Mark watched</span></button>
+        <button class="rchip" data-rate>${ic("star")}<span data-label="rating">Rate it</span></button>
+        <button class="rchip" data-toggle="recommended">${ic("thumb")}<span data-label="recommended">Recommend</span></button>
+      </div>`),
+  },
+  now: {
+    name: "Today, for comparison",
+    why: "Roughly what the page has now (on a phone the real one wraps them into two capsules): Play, then up to nine round buttons in two groups, and the ⋯ menu at the top right.",
+    html: () => hero(`
+      <div class="row">
+        <button class="play wide">${ic("play")} Play</button>
+        <button class="glass" title="Trailer">${ic("film")}</button>
+        <button class="glass" title="Choose release">${ic("list")}</button>
+        <button class="glass" title="Study">${ic("cap")}</button>
+        <span style="width:8px"></span>
+        <button class="glass" data-toggle="saved">${ic("plus")}</button>
+        <button class="glass green" data-toggle="watched">${ic("eye")}</button>
+        <button class="glass amber" data-rate>${ic("star")}</button>
+        <button class="glass" data-toggle="recommended">${ic("thumb")}</button>
+      </div>`),
+  },
+}
+
+const labels = {
+  saved: [ "My list", "On my list" ],
+  watched: [ "Mark watched", "Watched" ],
+  recommended: [ "Recommend to everyone", "Recommended" ],
+}
+const dLabels = { saved: ["Save for later", "Saved"], watched: ["Mark watched", "Watched"], recommended: ["Recommend", "Recommended"] }
+const bLabels = { saved: ["My list", "On my list"], watched: ["Watched", "Watched ✓"] }
+
+function render() {
+  const main = document.getElementById("variants")
+  main.innerHTML = Object.entries(V).map(([k, v]) => `
+    <section class="variant" id="${k}">
+      <h2>${v.name}</h2><p class="why">${v.why}</p>
+      <div class="frames">
+        <div><p class="frame-label">Phone</p><div class="phone" data-key="${k}-p"><div class="scroll">${v.html()}</div><div class="sheet-veil"></div></div></div>
+        <div style="flex:1 1 600px; min-width:0"><p class="frame-label">Desktop</p><div class="desk" data-key="${k}-d"><div class="scroll">${v.html()}</div><div class="sheet-veil"></div></div></div>
+      </div>
+    </section>`).join("")
+}
+
+function frameOf(el) { return el.closest(".phone, .desk") }
+function paint(frame) {
+  const s = state[frame.dataset.key] ||= { saved: false, watched: false, rating: null, recommended: false }
+  const variant = frame.dataset.key.split("-")[0]
+  for (const b of frame.querySelectorAll("[data-toggle]")) {
+    const k = b.dataset.toggle
+    b.classList.toggle("on", !!s[k])
+    if (b.classList.contains("glass") && k === "saved") b.innerHTML = ic(s.saved ? "check" : "plus")
+    const l = b.querySelector("[data-label]")
+    if (l) {
+      const set = variant === "d" ? dLabels : variant === "b" ? bLabels : labels
+      if (set[k]) l.textContent = set[k][s[k] ? 1 : 0]
+    }
+  }
+  for (const b of frame.querySelectorAll("[data-rate]")) {
+    b.classList.toggle("on", s.rating != null)
+    const l = b.querySelector("[data-label]")
+    if (l) l.textContent = s.rating != null ? (variant === "d" ? `Rated ${s.rating}` : `You ${s.rating}`) : (variant === "d" ? "Rate it" : "Rate")
+    let n = b.querySelector(".num")
+    if (b.classList.contains("glass")) {
+      if (s.rating != null) { if (!n) { n = document.createElement("span"); n.className = "num"; b.append(n) } n.textContent = s.rating }
+      else if (n) n.remove()
+    }
+  }
+}
+function toast(msg) {
+  const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show")
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1400)
+}
+function closeMenus(except) {
+  for (const m of document.querySelectorAll(".menu.open")) if (m !== except) m.classList.remove("open")
+  for (const v of document.querySelectorAll(".sheet-veil.open")) v.classList.remove("open")
+}
+
+document.addEventListener("click", (e) => {
+  const frame = frameOf(e.target)
+  const opener = e.target.closest("[data-menu]")
+  if (opener && frame) {
+    const which = opener.dataset.menu
+    const menu = which ? frame.querySelector(`.menu[data-for="${which}"]`) : opener.closest(".body").querySelector(".menu:not([data-for])")
+    const was = menu.classList.contains("open")
+    closeMenus()
+    if (!was) {
+      // Under the button on a desktop; a bottom sheet in a phone frame (CSS).
+      const fr = frame.getBoundingClientRect(), br = opener.getBoundingClientRect(), sc = frame.querySelector(".scroll")
+      menu.style.left = `${Math.min(br.left - fr.left, fr.width - 270)}px`
+      menu.style.top = `${br.bottom - fr.top + sc.scrollTop + 8}px`
+      if (frame.classList.contains("desk")) menu.parentElement.style.position = "static"
+      menu.classList.add("open")
+      if (frame.classList.contains("phone")) frame.querySelector(".sheet-veil").classList.add("open")
+    }
+    e.stopPropagation(); return
+  }
+  const tog = e.target.closest("[data-toggle]")
+  if (tog && frame) {
+    const s = state[frame.dataset.key] ||= {}
+    s[tog.dataset.toggle] = !s[tog.dataset.toggle]
+    paint(frame); closeMenus(); return
+  }
+  const rate = e.target.closest("[data-rate]")
+  if (rate && frame) {
+    const s = state[frame.dataset.key] ||= {}
+    s.rating = s.rating == null ? 8 : s.rating === 8 ? 9 : null
+    paint(frame); toast(s.rating == null ? "Rating removed" : `Rated ${s.rating} (the rating sheet opens here)`); return
+  }
+  const act = e.target.closest("[data-do]")
+  if (act) { closeMenus(); toast(`${act.dataset.do} — opens as it does today`); return }
+  if (e.target.closest(".play")) { toast("Play"); return }
+  if (!e.target.closest(".menu")) closeMenus()
+})
+
+render()
+for (const f of document.querySelectorAll(".phone, .desk")) paint(f)
+</script>
+</body>
+</html>
