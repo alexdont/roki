@@ -86,6 +86,24 @@
   .pill .glass:hover { background: #ffffff22; }
   .pill .glass.on { background: #ffffff2a; }
 
+  /* E: A on a phone (Play + My list, Watched, Rate, More), C on a desktop (split Play + a pill).
+     The rating: on a phone the number takes the star's place inside the same 48 px circle, so
+     rating something moves nothing; on a desktop the star and the number sit side by side in the
+     pill, which has room to grow. */
+  .e-phone { display: flex; gap: 8px; }
+  .e-phone .play { flex: 1 1 auto; min-width: 0; padding: 0 14px; }
+  .e-desk { display: none; }
+  @container (min-width: 700px) { .e-phone { display: none; } .e-desk { display: flex; } }
+  .rate-e .val { display: none; font: 700 16px/1 "Outfit", sans-serif; letter-spacing: -.02em; }
+  .e-phone .rate-e.on .ico { display: none; }
+  .e-phone .rate-e.on .val { display: inline; color: #fff; }
+  .e-phone .rate-e.on { background: #f59e0b55; border-color: #fcd34dcc; }
+  .e-desk .rate-e { width: auto; min-width: 42px; padding: 0 10px; gap: 6px; }
+  .e-desk .rate-e.on .val { display: inline; color: #ffd27a; }
+  .e-desk .rate-e.on { background: #f59e0b40; }
+  .e-desk .rate-e.on .ico svg { fill: #fcd34d; color: #fcd34d; }
+  .hint { font-size: 12px; color: #ffffff80; }
+
   /* D: the record below the hero */
   .record { padding: 18px 16px 28px; display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid #ffffff14; background: var(--page); }
   .record h3 { width: 100%; margin: 0 0 2px; font: 600 13px ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; color: #8f8894; }
@@ -121,6 +139,7 @@
   <p>Today the row under Play holds up to ten round buttons (Trailer, Choose release, Study, Save, Watched, Rate, Link, Recommend, ⋯, plus the trailer's own controls). Four ways to keep what you press every visit next to Play and put the rest one tap away. Each is drawn on a phone and on a desktop; the picture drifts where the trailer would play. Menus and toggles work — tap around.</p>
 </header>
 <nav class="tabs">
+  <a href="#e"><b>E · The pick (A on a phone, C on a desktop)</b></a>
   <a href="#a">A · Play + 3</a>
   <a href="#b">B · Action bar</a>
   <a href="#c">C · Split Play</a>
@@ -206,6 +225,36 @@ const moreItems = (opts = {}) => `
   <button data-do="Remove watch progress" style="color:#f87171">↺ Remove watch progress</button>`
 
 const V = {
+  e: {
+    name: "E · The pick: A on a phone, C on a desktop",
+    why: "Phone: Play, then My list, Watched, Rate and More — Watched is never in a menu. Desktop: the split Play (its ▾ holds Choose release, Study, Trailer) and one pill with My list, Watched, Rate, More. Rate something (tap the star; it steps 8 → 7.5 → 10 → none): on the phone the number takes the star's place in the same circle, so nothing moves; on the desktop the star and the number sit side by side.",
+    html: () => hero(`
+      <div class="row e-phone" style="flex-wrap:nowrap">
+        <button class="play">${ic("play")} Play</button>
+        <button class="glass" data-toggle="saved" title="My list">${ic("plus")}</button>
+        <button class="glass green" data-toggle="watched" title="Watched">${ic("eye")}</button>
+        <button class="glass amber rate-e" data-rate title="Rate"><span class="ico">${ic("star")}</span><span class="val"></span></button>
+        <button class="glass" data-menu="more-p" title="More">${ic("dots")}</button>
+      </div>
+      <div class="row e-desk" style="flex-wrap:nowrap">
+        <div class="split"><button class="play">${ic("play")} Play</button><button class="caret" data-menu="play" title="Other ways to watch">${ic("down")}</button></div>
+        <div class="pill">
+          <button class="glass" data-toggle="saved" title="My list">${ic("plus")}</button>
+          <button class="glass green" data-toggle="watched" title="Watched">${ic("eye")}</button>
+          <button class="glass amber rate-e" data-rate title="Rate"><span class="ico">${ic("star")}</span><span class="val"></span></button>
+          <button class="glass" data-menu="more-d" title="More">${ic("dots")}</button>
+        </div>
+      </div>
+      <div class="hint">Tap ★ to try a rating.</div>
+      <div class="menu" data-for="more-p">${moreItems({ recommend: true })}</div>
+      <div class="menu" data-for="play">
+        <div class="muted">Other ways to watch</div>
+        <button data-do="Choose release">${ic("list")} Choose which release to play</button>
+        <button data-do="Study">${ic("cap")} Study: watch in other languages</button>
+        <button data-do="Trailer">${ic("film")} Watch the trailer</button>
+      </div>
+      <div class="menu" data-for="more-d">${moreItems({ trailer: false, sources: false, study: false, recommend: true })}</div>`),
+  },
   a: {
     name: "A · Play + 3",
     why: "Play, then the three you reach for on every title — My list, Rate, More. Everything used once in a while (choose release, study, watched, recommend, link, hold) is in More.",
@@ -324,6 +373,8 @@ function paint(frame) {
   }
   for (const b of frame.querySelectorAll("[data-rate]")) {
     b.classList.toggle("on", s.rating != null)
+    const val = b.querySelector(".val")
+    if (val) { val.textContent = s.rating ?? ""; continue }
     const l = b.querySelector("[data-label]")
     if (l) l.textContent = s.rating != null ? (variant === "d" ? `Rated ${s.rating}` : `You ${s.rating}`) : (variant === "d" ? "Rate it" : "Rate")
     let n = b.querySelector(".num")
@@ -370,7 +421,7 @@ document.addEventListener("click", (e) => {
   const rate = e.target.closest("[data-rate]")
   if (rate && frame) {
     const s = state[frame.dataset.key] ||= {}
-    s.rating = s.rating == null ? 8 : s.rating === 8 ? 9 : null
+    s.rating = s.rating == null ? 8 : s.rating === 8 ? 7.5 : s.rating === 7.5 ? 10 : null
     paint(frame); toast(s.rating == null ? "Rating removed" : `Rated ${s.rating} (the rating sheet opens here)`); return
   }
   const act = e.target.closest("[data-do]")
