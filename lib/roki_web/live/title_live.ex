@@ -1488,10 +1488,8 @@ defmodule RokiWeb.TitleLive do
               )
             }
           />
-          <div class={[
-            "flex items-center gap-2",
-            @title.type != "movie" && "w-full"
-          ]}>
+          <%!-- The four in one chip, as on a desktop. --%>
+          <div class="flex shrink-0 items-center gap-0.5 rounded-full border border-white/20 bg-black/25 p-1 backdrop-blur-md">
             <.record_btns
               :if={@linked?}
               title={@title}
@@ -1514,7 +1512,7 @@ defmodule RokiWeb.TitleLive do
               link_state={@link_state}
               recommend={@signed_in? && @recommended?}
               signed_in?={@signed_in?}
-              button_class={glass_class(false, :white, nil)}
+              button_class="h-10 min-h-0 w-10 border-0 bg-transparent text-white hover:bg-white/15"
             />
           </div>
         </div>
@@ -2745,7 +2743,7 @@ defmodule RokiWeb.TitleLive do
       icon={if @lib.saved?, do: "hero-check", else: "hero-plus"}
       on={@lib.saved?}
       label={if @lib.saved?, do: "Saved for later (click to remove)", else: "Save for later"}
-      class={!@compact && "sm:h-11 sm:w-11 !border-transparent"}
+      class={if(@compact, do: "!border-transparent", else: "sm:h-11 sm:w-11 !border-transparent")}
     />
     <.glass_btn
       click="toggle_watched"
@@ -2758,13 +2756,13 @@ defmodule RokiWeb.TitleLive do
           do: "#{watched_label(@title, @lib)} (click to mark as not watched)",
           else: watched_label(@title, @lib)
       }
-      class={!@compact && "sm:h-11 sm:w-11 !border-transparent"}
+      class={if(@compact, do: "!border-transparent", else: "sm:h-11 sm:w-11 !border-transparent")}
     />
     <button
       :if={@compact}
       type="button"
       phx-click={JS.push("rate_open") |> JS.show(to: "#rate-sheet", display: "flex")}
-      class={glass_class(@rating.value != nil, :amber, nil)}
+      class={[glass_class(@rating.value != nil, :amber, nil), "!border-transparent"]}
       title={if @rating.value, do: "Your rating: click to change it", else: "Rate it"}
       aria-label={
         if @rating.value, do: "Your rating, #{fmt_rating(@rating.value)}: change it", else: "Rate it"

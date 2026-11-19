@@ -395,7 +395,7 @@ The section grids keep to whole rows while more can be loaded (`assets/js/fill_g
 
 ### Title page: the buttons under the title (2026-11-19, the hero lab's variant E — `/lab/hero.html#e`)
 
-A phone (below `lg`): Play, then **Save · Watched · Rate · More** in one row (`record_btns compact` +
+A phone (below `lg`): Play, then **Save · Watched · Rate · More** in one chip (the same pill as on a desktop) in one row (`record_btns compact` +
 `more_menu`); a show's two-part Play (Episodes · Start) takes its own line above the circles. A rating's
 number takes the star's place inside the same circle there, so rating moves nothing. More holds
 Choose which release (a film), Study, Trailer, Link progress (a show), Recommend, On hold, Remove watch
