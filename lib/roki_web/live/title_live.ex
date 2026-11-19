@@ -2209,9 +2209,9 @@ defmodule RokiWeb.TitleLive do
   attr :cached?, :boolean, default: false
   attr :class, :string, default: nil
 
-  # The big button. A film: one button, Start / Continue mm:ss. A series: two halves — the left
-  # picks a season and episode, the right goes straight to the sources of S1.E1 (or wherever you
-  # were) and starts the best one.
+  # The big button. A film: one button, Start / Continue mm:ss. A series: two halves of one pill
+  # (a hairline between them, as before the ▾) — the left picks a season and episode, the right
+  # goes straight to the sources of S1.E1 (or wherever you were) and starts the best one.
   defp play_button(%{title: %{type: "movie"}, split?: true} = assigns) do
     ~H"""
     <div class={["flex gap-2", @class]}>
@@ -2248,17 +2248,17 @@ defmodule RokiWeb.TitleLive do
 
   defp play_button(assigns) do
     ~H"""
-    <div class={["flex gap-2", @class]}>
+    <div class={["flex", @class]}>
       <.link
         navigate={~p"/title/tv/#{@title.id}/episodes"}
-        class="btn btn-primary btn-lg h-full min-h-0 flex-[2] gap-2 px-3 shadow-md text-[length:inherit]"
+        class="btn btn-primary btn-lg h-full min-h-0 flex-[2] gap-2 rounded-l-full rounded-r-none border-0 px-3 shadow-md text-[length:inherit]"
       >
         <.icon name="hero-queue-list" class="h-6 w-6" /> Episodes
       </.link>
       <.link
         navigate={~p"/sources/tv/#{@title.id}/#{@play.season}/#{@play.episode}?#{[auto: 1]}"}
         class={[
-          "btn btn-primary btn-lg h-full min-h-0 flex-[3] gap-2 px-3 shadow-md text-[length:inherit]",
+          "btn btn-primary btn-lg h-full min-h-0 flex-[3] gap-2 rounded-l-none rounded-r-full border-0 border-l !border-l-white/40 px-3 shadow-md text-[length:inherit]",
           @busy? && "btn-disabled"
         ]}
       >
@@ -2808,7 +2808,7 @@ defmodule RokiWeb.TitleLive do
       <button
         type="button"
         phx-click={JS.toggle(to: "##{@id}", display: "flex")}
-        class="btn btn-primary h-14 min-h-0 rounded-l-none rounded-r-full border-0 border-l border-white/40 px-4 shadow-md"
+        class="btn btn-primary h-14 min-h-0 rounded-l-none rounded-r-full border-0 border-l !border-l-white/40 px-4 shadow-md"
         aria-label="Other ways to watch"
         aria-controls={@id}
         title="Other ways to watch"
