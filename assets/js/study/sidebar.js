@@ -486,15 +486,34 @@ export const StudySidebar = {
     this.video.currentTime = this.lastAsk.rel
   },
 
+  // A seek that lands at 0:00 although it was asked to go far in is asked again — whoever asked:
+  // this page (`landAt`), or the browser's own controls, which on a phone are the fullscreen
+  // player's and never pass through this page (ALEX-158: on a phone, skipping forward kept
+  // throwing the film back to the start). A phone on a slower connection can take a few tries
+  // before the place is loaded, so it is asked again up to four times, waiting longer each time.
   guardSeeks() {
     const v = this.video
+    const waits = [400, 1000, 2000, 3500]
+    // A seek this page did not ask for: remember where it was going, as `landAt` does.
+    v.addEventListener("seeking", () => {
+      if (this.local) return
+      const a = this.lastAsk
+      const mine = a && Math.abs(v.currentTime - a.rel) < 1 && Date.now() - a.at < 20000
+      // Safari's own throw back to 0:00 can come as a seek of its own: within a few seconds of a
+      // seek far in, a "seek" to the start is that, not the person, and the guard keeps its aim.
+      const snap = a && v.currentTime < 2 && a.rel > 5 && Date.now() - a.at < 4000
+      // Anyone else's seek replaces what was asked before; one to the start is meant (no guard).
+      if (!mine && !snap) this.lastAsk = v.currentTime > 5 ? {rel: v.currentTime, at: Date.now(), tries: 0} : null
+    })
     v.addEventListener("seeked", () => {
       const a = this.lastAsk
-      if (!a || this.local || a.tries >= 2 || Date.now() - a.at > 10000) return
+      if (!a || this.local || a.tries >= waits.length || Date.now() - a.at > 20000) return
       if (a.rel > 5 && v.currentTime < 2) {
-        a.tries++
-        setTimeout(() => { if (this.lastAsk === a && v.currentTime < 2) v.currentTime = a.rel }, 400)
-      } else if (Math.abs(v.currentTime - a.rel) < 3) this.lastAsk = null
+        const wait = waits[a.tries++]
+        setTimeout(() => { if (this.lastAsk === a && v.currentTime < 2) v.currentTime = a.rel }, wait)
+      }
+      // Landed: the aim is kept a few seconds more, for a throw back that follows the landing
+      // (the remembered seek is dropped by age, or replaced by the next one).
     })
   },
 
