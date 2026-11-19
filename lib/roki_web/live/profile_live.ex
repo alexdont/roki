@@ -840,7 +840,7 @@ defmodule RokiWeb.ProfileLive do
         left={places_left(@favorites, @picking)}
       />
       <.world_sheet
-        :if={@country_counts && @country_counts != %{}}
+        :if={assigns[:country_counts] not in [nil, %{}]}
         counts={@country_counts}
         username={@username}
       />
