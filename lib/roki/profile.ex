@@ -207,33 +207,18 @@ defmodule Roki.Profile do
   the titles; a title the site holds no copy of is not counted. For the profile's world map.
   """
   def country_counts(uuid) when is_binary(uuid) do
-    keys =
-      uuid
-      |> history()
-      |> Enum.map(&{&1[:type], &1[:id]})
-      |> Enum.filter(fn {t, id} -> t in ["movie", "tv"] and is_integer(id) end)
-      |> Enum.uniq()
-
-    if keys == [] do
-      %{}
-    else
-      {types, ids} = Enum.unzip(keys)
-
-      %{rows: rows} =
-        Repo.query!(
-          """
-          select c from roki_titles t
-          join unnest($1::text[], $2::int[]) as k(type, id) on k.type = t.type and k.id = t.id
-          cross join lateral jsonb_array_elements_text(coalesce(t.data->'countries', '[]'::jsonb)) as c
-          """,
-          [types, ids]
-        )
-
-      rows
-      |> Enum.flat_map(fn [name] -> List.wrap(Roki.Countries.code(name)) end)
-      |> Enum.frequencies()
-    end
+    uuid
+    |> history()
+    |> Enum.filter(&(&1[:type] in ["movie", "tv"] and is_integer(&1[:id])))
+    |> Enum.uniq_by(&{&1.type, &1.id})
+    |> Enum.flat_map(&(&1[:countries] || []))
+    |> Enum.frequencies()
   end
+
+  defp country_codes(names) when is_list(names),
+    do: names |> Enum.flat_map(&List.wrap(Roki.Countries.code(&1))) |> Enum.uniq()
+
+  defp country_codes(_), do: []
 
   @doc """
   The numbers on a profile, counted from what is finished: `%{watched:, films:}` at once from
@@ -708,12 +693,26 @@ defmodule Roki.Profile do
 
     %{rows: rows} =
       Repo.query!(
-        "select w.type, w.id, w.tmdb_type, w.tmdb_id, w.season, w.title, w.anime, w.at, w.dated, w.status, w.note, t.genres from roki_watched w left join roki_titles t on t.type = w.tmdb_type and t.id = w.tmdb_id where w.user_uuid = $1 order by w.dated desc, w.at desc",
+        "select w.type, w.id, w.tmdb_type, w.tmdb_id, w.season, w.title, w.anime, w.at, w.dated, w.status, w.note, t.genres, t.data->'countries' from roki_watched w left join roki_titles t on t.type = w.tmdb_type and t.id = w.tmdb_id where w.user_uuid = $1 order by w.dated desc, w.at desc",
         [bin]
       )
 
     items =
-      Enum.map(rows, fn [type, id, tt, tid, season, title, anime, at, dated, status, note, genres] ->
+      Enum.map(rows, fn [
+                          type,
+                          id,
+                          tt,
+                          tid,
+                          season,
+                          title,
+                          anime,
+                          at,
+                          dated,
+                          status,
+                          note,
+                          genres,
+                          countries
+                        ] ->
         %{
           key: "#{type}:#{id}",
           type: tt,
@@ -728,7 +727,9 @@ defmodule Roki.Profile do
           status: status,
           note: note,
           # TMDB's genre ids, once read (`Roki.Genres`); nil until then.
-          genres: genres
+          genres: genres,
+          # Where it was made, as ISO codes (`Roki.Countries`); [] when the stored title has none.
+          countries: country_codes(countries)
         }
       end)
 

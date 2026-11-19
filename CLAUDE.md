@@ -454,6 +454,18 @@ d3-geo + topojson-client — not a dependency of the app), fetched and coloured 
 the banner from 1400 px up and follow the numbers below that (side by side on a desktop, ratings first
 on a phone).
 
+
+**Opened out** (`world_sheet`, a click on the card or its ⤢): a big map in a sheet — the country under
+the pointer outlined (a copy drawn on top, `.world-ring`; moving the country itself to the top took its
+focus away) and named with its count in a label (`.world-tip`); a click on one with titles opens the
+watch history at `?country=<ISO>` (`WatchedLive`, a "Made in X ✕" chip; history items carry
+`countries`, read with them from `roki_titles`); countries with titles are links for the keyboard; on
+touch the first tap names, the second opens (`pointerleave` fires on every lift, so it is ignored for
+touch). Under the map, every country as a list, most first — how a phone reaches the small ones.
+**Placeholders:** both cards (map and ratings) are drawn from the first paint, the map as bare outlines
+and the ratings as skeleton bars with the kind tabs' pill, sized so nothing below moves when the numbers
+come (checked against a JavaScript-off render at 390/1024/1440 px); a card with nothing to show, or a
+failed count, goes.
 ### Recommended by Roki users
 
 A **Recommend** button (thumbs-up glass button in the title page's hero, any signed-in account,

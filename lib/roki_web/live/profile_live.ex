@@ -435,12 +435,14 @@ defmodule RokiWeb.ProfileLive do
   def handle_async(:ratings, {:ok, counts}, socket) when is_map(counts),
     do: {:noreply, assign(socket, :rating_counts, counts)}
 
-  def handle_async(:ratings, _other, socket), do: {:noreply, socket}
+  def handle_async(:ratings, _other, socket), do: {:noreply, assign(socket, :rating_counts, %{})}
 
   def handle_async(:countries, {:ok, counts}, socket) when is_map(counts),
     do: {:noreply, assign(socket, :country_counts, counts)}
 
-  def handle_async(:countries, _other, socket), do: {:noreply, socket}
+  def handle_async(:countries, _other, socket),
+    do: {:noreply, assign(socket, :country_counts, %{})}
+
   def handle_async(:stats, {:ok, {:ok, s}}, socket), do: {:noreply, assign(socket, :stats, s)}
   def handle_async(:stats, _other, socket), do: {:noreply, socket}
 
@@ -620,7 +622,10 @@ defmodule RokiWeb.ProfileLive do
             <%!-- On a wide screen the two cards sit on the banner's right, level with the numbers
                   (the map left of the ratings); below that they follow them. --%>
             <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-end min-[1400px]:absolute min-[1400px]:bottom-6 min-[1400px]:right-16 min-[1400px]:w-auto min-[1400px]:items-end">
-              <.world_map :if={@country_counts && @country_counts != %{}} counts={@country_counts} />
+              <%!-- Both cards hold their place from the first paint (nil = still counting), so
+                    nothing below them moves when the numbers arrive; one with nothing to show goes. --%>
+              <.world_map :if={@country_counts != %{}} counts={@country_counts} />
+              <.ratings_placeholder :if={@rating_counts == nil} />
               <.rating_breakdown
                 :if={@rating_counts}
                 counts={@rating_counts}
@@ -834,45 +839,161 @@ defmodule RokiWeb.ProfileLive do
         error={@shelf_error}
         left={places_left(@favorites, @picking)}
       />
+      <.world_sheet
+        :if={@country_counts && @country_counts != %{}}
+        counts={@country_counts}
+        username={@username}
+      />
     </Layouts.app>
     """
   end
 
-  attr :counts, :map, required: true
+  attr :counts, :any, required: true, doc: "%{code => n}; nil while counting"
 
   # Where what they watched was made: the world, each country darker the more of it they watched
   # (`Profile.country_counts/1`). The outlines are a static file (`/data/world-110m.svg`, Natural
   # Earth), fetched and coloured in the browser by the `WorldMap` hook, so the page carries only
   # the numbers. The three biggest are named under it.
   defp world_map(assigns) do
-    top = assigns.counts |> Enum.sort_by(fn {_c, n} -> -n end) |> Enum.take(3)
-    assigns = assign(assigns, top: top, total: length(Map.keys(assigns.counts)))
+    counts = assigns.counts || %{}
+    top = counts |> Enum.sort_by(fn {_c, n} -> -n end) |> Enum.take(3)
+
+    assigns =
+      assign(assigns, top: top, total: map_size(counts), loading?: is_nil(assigns.counts))
 
     ~H"""
     <section
       class="order-2 w-full space-y-2 rounded-box border border-white/15 bg-black/35 p-3 backdrop-blur-md sm:p-4 lg:order-none lg:w-[19rem] lg:shrink-0"
       aria-label="Where it was made"
     >
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-white/70">
-        Around the world
-        <span class="font-normal normal-case text-white/50">· {@total} countries</span>
+      <h2 class="flex h-6 items-center gap-1 text-sm font-semibold uppercase tracking-wide text-white/70">
+        <span class="min-w-0 flex-1 truncate">
+          Around the world
+          <span :if={!@loading?} class="font-normal normal-case text-white/50">
+            · {@total} countries
+          </span>
+        </span>
+        <button
+          :if={!@loading?}
+          type="button"
+          phx-click={open_world()}
+          class="btn btn-ghost btn-xs btn-circle text-white/70 hover:bg-white/15 hover:text-white"
+          aria-label="Open the map"
+          title="Open the map"
+        >
+          <.icon name="hero-arrows-pointing-out-micro" class="h-4 w-4" />
+        </button>
       </h2>
-      <div
-        id="world-map"
-        phx-hook="WorldMap"
-        phx-update="ignore"
-        data-src="/data/world-110m.svg"
-        data-counts={Jason.encode!(@counts)}
-        class="aspect-[960/470] w-full [&_svg]:h-full [&_svg]:w-full"
+      <%!-- The small map is a picture of the big one: a click anywhere on it opens the sheet. --%>
+      <button
+        type="button"
+        phx-click={!@loading? && open_world()}
+        disabled={@loading?}
+        class="block w-full cursor-zoom-in disabled:cursor-default rounded-lg transition hover:bg-white/5"
+        aria-label="Open the map: every country, its count, and the titles made there"
       >
-      </div>
-      <p class="truncate text-xs text-white/60">
+        <%!-- While counting: the bare outlines (a new element once the numbers come, so the hook
+              colours it afresh). --%>
+        <div
+          id={if @loading?, do: "world-map-loading", else: "world-map"}
+          phx-hook="WorldMap"
+          phx-update="ignore"
+          data-src="/data/world-110m.svg"
+          data-counts={Jason.encode!(@counts || %{})}
+          class="pointer-events-none aspect-[960/470] w-full [&_svg]:h-full [&_svg]:w-full"
+        >
+        </div>
+      </button>
+      <p :if={@loading?} class="flex h-4 items-center" aria-hidden="true">
+        <span class="h-2.5 w-2/3 animate-pulse rounded-full bg-white/15"></span>
+      </p>
+      <p :if={!@loading?} class="h-4 truncate text-xs leading-4 text-white/60">
         <span :for={{{code, n}, i} <- Enum.with_index(@top)}>
           {if i > 0, do: " · "}{Roki.Countries.name(code) || code}
           <span class="tabular-nums text-white/80">{n}</span>
         </span>
       </p>
     </section>
+    """
+  end
+
+  defp open_world,
+    do: JS.show(to: "#world-sheet", display: "flex") |> JS.focus(to: "#world-sheet-close")
+
+  attr :counts, :map, required: true
+  attr :username, :string, required: true
+
+  # The map opened out: big, a country named with its count under the pointer, a click on one
+  # opens their watch history filtered to what was made there (`?country=`), and every country
+  # as a list under it, most first — the list is how a phone (no pointer) reaches the small ones.
+  defp world_sheet(assigns) do
+    rows = Enum.sort_by(assigns.counts, fn {c, n} -> {-n, Roki.Countries.name(c) || c} end)
+    max = rows |> List.first() |> elem(1)
+    assigns = assign(assigns, rows: rows, max: max)
+
+    ~H"""
+    <div
+      id="world-sheet"
+      class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/60 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Around the world"
+      phx-window-keydown={JS.hide(to: "#world-sheet")}
+      phx-key="escape"
+    >
+      <div
+        class="flex max-h-[92svh] w-full flex-col overflow-hidden rounded-t-2xl bg-base-100 shadow-2xl sm:max-w-5xl sm:rounded-2xl"
+        phx-click-away={JS.hide(to: "#world-sheet")}
+      >
+        <div class="flex items-start gap-3 border-b border-base-300 p-4 sm:p-5">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-lg font-bold leading-tight">Around the world</h2>
+            <p class="text-sm text-base-content/60">
+              Where what {@username} finished was made — {length(@rows)} countries. Pick one to see those titles.
+            </p>
+          </div>
+          <button
+            id="world-sheet-close"
+            type="button"
+            phx-click={JS.hide(to: "#world-sheet")}
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="h-5 w-5" />
+          </button>
+        </div>
+        <div class="overflow-y-auto">
+          <div
+            id="world-map-big"
+            phx-hook="WorldMap"
+            phx-update="ignore"
+            data-src="/data/world-110m.svg"
+            data-counts={Jason.encode!(@counts)}
+            data-href={"/u/#{@username}/watched?country="}
+            data-interactive
+            class="world-map relative aspect-[960/470] w-full bg-base-200/50 p-2 sm:p-4 [&_svg]:h-full [&_svg]:w-full"
+          >
+          </div>
+          <ul class="grid gap-x-6 gap-y-0.5 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
+            <li :for={{code, n} <- @rows}>
+              <.link
+                navigate={"/u/#{@username}/watched?country=#{code}"}
+                class="group flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-base-200"
+              >
+                <span class="min-w-0 flex-1 truncate">{Roki.Countries.name(code) || code}</span>
+                <span class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-base-300">
+                  <span
+                    class="block h-full rounded-full bg-primary"
+                    style={"width: #{max(4, round(n / @max * 100))}%"}
+                  ></span>
+                </span>
+                <span class="w-10 shrink-0 text-right tabular-nums text-base-content/70">{n}</span>
+              </.link>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
     """
   end
 
@@ -889,6 +1010,46 @@ defmodule RokiWeb.ProfileLive do
         end
 
     "/u/#{username}/watched?" <> URI.encode_query(query)
+  end
+
+  # The ratings card while it is counted: the same box, heading and height of bars, so the page
+  # does not move when the numbers come.
+  defp ratings_placeholder(assigns) do
+    assigns = assign(assigns, :bars, [18, 10, 14, 22, 34, 52, 78, 100, 62, 30])
+
+    ~H"""
+    <section
+      class="w-full space-y-2 rounded-box border border-white/15 bg-black/35 p-3 backdrop-blur-md sm:space-y-3 sm:p-4 lg:w-[26rem] lg:shrink-0"
+      aria-label="Ratings"
+      aria-busy="true"
+    >
+      <%!-- The same wrapping row as the card: the kind tabs go under the average on a phone. --%>
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-white/70">Ratings</h2>
+          <p class="flex h-8 items-center" aria-hidden="true">
+            <span class="h-3 w-40 animate-pulse rounded-full bg-white/15"></span>
+          </p>
+        </div>
+        <span class="h-[29px] w-[168px] animate-pulse rounded-box bg-white/10" aria-hidden="true"></span>
+      </div>
+      <div aria-hidden="true">
+        <ol class="flex h-20 items-end gap-0.5 sm:h-28 sm:gap-1">
+          <li :for={h <- @bars} class="flex h-full min-w-0 flex-1 flex-col justify-end">
+            <span class="block w-full animate-pulse rounded-t-sm bg-white/15" style={"height: #{h}%"}></span>
+          </li>
+        </ol>
+        <ol class="mt-1 flex gap-0.5 sm:gap-1">
+          <li
+            :for={i <- 1..10}
+            class="min-w-0 flex-1 text-center text-[0.6rem] tabular-nums text-white/30"
+          >
+            {i}
+          </li>
+        </ol>
+      </div>
+    </section>
+    """
   end
 
   attr :counts, :map, required: true

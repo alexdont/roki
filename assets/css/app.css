@@ -1491,3 +1491,16 @@ html[data-keynav] :is([role="tab"], .overflow-x-auto a, .overflow-x-auto button)
 }
 /* On the dark mood banner the ring is white whatever the theme. */
 html[data-keynav] [data-mood-chip]:focus-visible, html[data-keynav] #mood-picker a:focus-visible { outline-color: #fff; }
+
+/* The profile's world map opened out (WorldMap, data-interactive): the country under the pointer
+   outlined in ink, the ones with titles clickable, and the label that follows the pointer. */
+.world-map { color: var(--color-base-content); }
+.world-map path[data-c] { transition: fill .15s; }
+.world-map path[data-c]:not([data-n="0"]) { cursor: pointer; }
+.world-map path[data-c]:focus { outline: none; }
+.world-map .world-ring { fill: none; stroke: var(--color-base-content); stroke-width: 1.2; pointer-events: none; }
+.world-map path.is-hot:not([data-n="0"]) { filter: brightness(1.12); }
+.world-tip { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: 10px; background: var(--color-base-content); color: var(--color-base-100); font-size: 13px; line-height: 1.25; white-space: nowrap; box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
+.world-tip[hidden] { display: none; }
+.world-tip b { font-weight: 600; }
+.world-tip span { opacity: .75; font-variant-numeric: tabular-nums; }

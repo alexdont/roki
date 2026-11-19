@@ -2,7 +2,7 @@ defmodule RokiWeb.WatchedLive do
   @moduledoc """
   `/:username/watched` — everything a user finished, as a grid of posters or as rows (title,
   kind, year, their rating, when), newest first or by their own ratings (`?sort=top`,
-  `?kind=anime`, `?genre=horror` for one genre, `?status=progress` (or `up_to_date`, `on_hold`, `finished`) for one kind of entry, `?months=0` for one list without month headings, `?dated=no` for the titles with no watch date (the owner's), `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?q=` to search, `?view=rows`). Open to
+  `?kind=anime`, `?genre=horror` for one genre, `?status=progress` (or `up_to_date`, `on_hold`, `finished`) for one kind of entry, `?months=0` for one list without month headings, `?dated=no` for the titles with no watch date (the owner's), `?rating=9` for the titles rated 9 (`?tens=1` still means 10), `?country=JP` for the films and shows made there (the profile's map), `?q=` to search, `?view=rows`). Open to
   everyone, like the profile; everything is read from this server (`Roki.Profile`).
 
   The owner has a button that turns on *select mode* (and off again): tick any number of
@@ -58,6 +58,7 @@ defmodule RokiWeb.WatchedLive do
           rating: nil,
           status: nil,
           genre: nil,
+          country: nil,
           undated?: false,
           genre_waits: 0,
           months?: true,
@@ -97,6 +98,7 @@ defmodule RokiWeb.WatchedLive do
        months?: params["months"] != "0",
        status: status_param(params["status"]),
        genre: Roki.Genres.parse(params["genre"]),
+       country: country_param(params["country"]),
        undated?: params["dated"] == "no",
        rating: Profile.rating_param(params["rating"] || if(params["tens"] == "1", do: "10"))
      )
@@ -154,6 +156,11 @@ defmodule RokiWeb.WatchedLive do
     list = if a.undated?, do: Enum.reject(list, & &1.dated?), else: list
 
     list =
+      if a.country,
+        do: Enum.filter(list, &(a.country in (&1[:countries] || []))),
+        else: list
+
+    list =
       if a.genre,
         do: Enum.filter(list, &Roki.Genres.match?(a.genre, &1.type, &1.genres)),
         else: list
@@ -178,6 +185,14 @@ defmodule RokiWeb.WatchedLive do
   defp rating_note(:none), do: " without a rating"
   defp rating_note(nil), do: ""
   defp rating_note(n), do: " rated #{n}"
+
+  # A country the map can name (`Roki.Countries`), as its ISO code; anything else is no filter.
+  defp country_param(c) when is_binary(c) do
+    c = String.upcase(c)
+    if Roki.Countries.name(c), do: c
+  end
+
+  defp country_param(_), do: nil
 
   defp filters_on(status, rating, genre, undated?),
     do: Enum.count([status, rating, genre, undated? || nil], &(&1 != nil))
@@ -667,6 +682,7 @@ defmodule RokiWeb.WatchedLive do
         rating: a.rating,
         status: a.status,
         genre: a.genre,
+        country: a.country,
         undated?: a.undated?,
         months: a.months?,
         q: a.q,
@@ -675,38 +691,44 @@ defmodule RokiWeb.WatchedLive do
       |> Map.merge(Map.new(overrides))
 
     query =
-      Enum.flat_map([:sort, :kind, :rating, :status, :genre, :undated, :months, :q, :view], fn
-        :sort ->
-          case v.sort do
-            :top -> [sort: "top"]
-            :oldest -> [sort: "oldest"]
-            _ -> []
-          end
+      Enum.flat_map(
+        [:sort, :kind, :rating, :status, :genre, :country, :undated, :months, :q, :view],
+        fn
+          :sort ->
+            case v.sort do
+              :top -> [sort: "top"]
+              :oldest -> [sort: "oldest"]
+              _ -> []
+            end
 
-        :kind ->
-          if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
+          :kind ->
+            if v.kind != :all, do: [kind: Atom.to_string(v.kind)], else: []
 
-        :rating ->
-          if v.rating, do: [rating: v.rating], else: []
+          :rating ->
+            if v.rating, do: [rating: v.rating], else: []
 
-        :status ->
-          if v.status, do: [status: v.status], else: []
+          :status ->
+            if v.status, do: [status: v.status], else: []
 
-        :genre ->
-          if v.genre, do: [genre: v.genre], else: []
+          :genre ->
+            if v.genre, do: [genre: v.genre], else: []
 
-        :undated ->
-          if v.undated?, do: [dated: "no"], else: []
+          :country ->
+            if v.country, do: [country: v.country], else: []
 
-        :months ->
-          if v.months, do: [], else: [months: "0"]
+          :undated ->
+            if v.undated?, do: [dated: "no"], else: []
 
-        :q ->
-          if v.q != "", do: [q: v.q], else: []
+          :months ->
+            if v.months, do: [], else: [months: "0"]
 
-        :view ->
-          if v.view == :rows, do: [view: "rows"], else: []
-      end)
+          :q ->
+            if v.q != "", do: [q: v.q], else: []
+
+          :view ->
+            if v.view == :rows, do: [view: "rows"], else: []
+        end
+      )
 
     base = "/u/#{a.username}/watched"
     if query == [], do: base, else: base <> "?" <> URI.encode_query(query)
@@ -1044,6 +1066,18 @@ defmodule RokiWeb.WatchedLive do
         <p :if={@notice} class="rounded-box bg-success/10 px-4 py-3 text-sm text-success">
           {@notice}
         </p>
+        <%!-- Come from the profile's map: which country, and the way back to everything. --%>
+        <div :if={@country} class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="text-base-content/60">Made in</span>
+          <.link
+            patch={address(assigns, country: nil)}
+            class="btn btn-sm btn-primary gap-1.5 rounded-full"
+            aria-label={"Made in #{Roki.Countries.name(@country)}: show every country"}
+          >
+            {Roki.Countries.name(@country)}
+            <.icon name="hero-x-mark-micro" class="h-4 w-4" />
+          </.link>
+        </div>
         <p :if={@genre && genres_pending(@history) > 0} class="text-sm text-base-content/60">
           Still reading the genres of {genres_pending(@history)} titles. They join the list as they arrive.
         </p>
@@ -1070,7 +1104,8 @@ defmodule RokiWeb.WatchedLive do
         >
           {if @q != "",
             do: "Nothing watched matches \"#{@q}\".",
-            else: "Nothing of that kind#{rating_note(@rating)}."}
+            else:
+              "Nothing of that kind#{rating_note(@rating)}#{if @country, do: " made in #{Roki.Countries.name(@country)}"}."}
         </p>
 
         <div
