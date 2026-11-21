@@ -30,6 +30,18 @@ defmodule Roki.Laev do
 
   def run(uuid, fun), do: run_with(uuid, %{}, fun)
 
+  @doc """
+  Run `fun` (a laev sync: `Sync.sync/0`, `Sync.live_push/0`) with this account's sync lock held,
+  inside its scope. Two syncs of one account must never overlap: laev writes each file it pulls by
+  emptying it and filling it again, and a second sync reading the marks at that moment took an
+  emptied "seen" for a change — newer than the real one — and pushed it, so an old episode came
+  back unwatched on every device. Waits for the other sync to finish; re-entrant for the process
+  that holds it.
+  """
+  def serial(fun) when is_function(fun, 0) do
+    :global.trans({{__MODULE__, :sync, Laev.Scope.dir()}, self()}, fun, [node()], :infinity)
+  end
+
   # `run/2` with settings laid over this one call only (never written anywhere).
   defp run_with(uuid, extra, fun) do
     dir = dir(uuid)
@@ -660,7 +672,7 @@ defmodule Roki.Laev do
   """
   def sync(uuid) do
     before = run(uuid, &finished_marks/0)
-    result = hiding_site_keys(fn -> run(uuid, &Sync.sync/0) end)
+    result = hiding_site_keys(fn -> run(uuid, fn -> serial(&Sync.sync/0) end) end)
     now = run(uuid, &finished_marks/0)
     Roki.Stats.forget(uuid)
     Roki.Profile.forget_history(uuid)
@@ -768,7 +780,7 @@ defmodule Roki.Laev do
     hiding_site_keys(fn ->
       run(uuid, fn ->
         Settings.put("LAEV_SYNC_KEYS", if(on?, do: "on", else: "off"))
-        Sync.sync()
+        serial(&Sync.sync/0)
       end)
     end)
   end
@@ -960,7 +972,7 @@ defmodule Roki.Laev do
     result =
       run(uuid, fn ->
         if Laev.Tmdb.account?(),
-          do: {:ok, Laev.Ratings.import_from_tmdb()},
+          do: {:ok, serial(&Laev.Ratings.import_from_tmdb/0)},
           else: {:error, :not_linked}
       end)
 
@@ -978,7 +990,7 @@ defmodule Roki.Laev do
     result =
       run(uuid, fn ->
         if MAL.authenticated?() do
-          case Laev.Ratings.import_from_mal() do
+          case serial(&Laev.Ratings.import_from_mal/0) do
             %{} = counts -> {:ok, counts}
             {:error, why} -> {:error, why}
             other -> {:error, other}
@@ -998,7 +1010,7 @@ defmodule Roki.Laev do
     Roki.Stats.forget(uuid)
     Roki.Profile.forget_history(uuid)
     Roki.Profile.refresh_ratings(uuid)
-    Task.start(fn -> run(uuid, &Laev.Sync.live_push/0) end)
+    Task.start(fn -> run(uuid, fn -> serial(&Laev.Sync.live_push/0) end) end)
     :ok
   end
 
@@ -1403,8 +1415,9 @@ defmodule Roki.Laev do
   Anime is left as laev has it (MyAnimeList decides where an anime is), and so is anything on hold.
   """
   def shelf_rows do
+    # Laev pushes from inside (a show over for good marks itself): under the sync lock.
     {fixed, moved} =
-      Shelf.rows()
+      serial(&Shelf.rows/0)
       |> Enum.filter(&is_map/1)
       |> Enum.map_reduce(0, fn row, moved ->
         case still_airing(row) do

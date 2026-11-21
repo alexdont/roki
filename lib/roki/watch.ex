@@ -1047,7 +1047,7 @@ defmodule Roki.Watch do
     Roki.Stats.forget(uuid)
     # What was watched changed: the profile reads it again at its next look, not in five minutes.
     Roki.Profile.forget_history(uuid)
-    Task.start(fn -> Roki.Laev.run(uuid, &Laev.Sync.live_push/0) end)
+    Task.start(fn -> Roki.Laev.run(uuid, fn -> Roki.Laev.serial(&Laev.Sync.live_push/0) end) end)
     :ok
   end
 
@@ -1618,7 +1618,7 @@ defmodule Roki.Watch do
           )
       end
 
-      Laev.Sync.live_push()
+      Roki.Laev.serial(&Laev.Sync.live_push/0)
     end)
 
     library_changed(uuid)
@@ -1652,7 +1652,7 @@ defmodule Roki.Watch do
   def mark_watched(uuid, ctx) do
     Roki.Laev.run(uuid, fn ->
       Laev.Position.set_watched(ctx, true)
-      Laev.Sync.live_push()
+      Roki.Laev.serial(&Laev.Sync.live_push/0)
     end)
     |> tap(fn _ ->
       Roki.Activity.record(uuid, ctx)
@@ -2503,7 +2503,11 @@ defmodule Roki.Watch do
       when is_number(position) do
     # Stopped: send the position to the user's other devices now (the terminal app picks it up
     # on its next sync), without making the player wait for the network.
-    if paused?, do: Task.start(fn -> Roki.Laev.run(uuid, &Laev.Sync.live_push/0) end)
+    if paused?,
+      do:
+        Task.start(fn ->
+          Roki.Laev.run(uuid, fn -> Roki.Laev.serial(&Laev.Sync.live_push/0) end)
+        end)
 
     watched = seconds(opts[:watched])
 
@@ -2517,7 +2521,7 @@ defmodule Roki.Watch do
       end
 
       finished? = Laev.Position.finished?(ctx)
-      if finished? and not before?, do: Laev.Sync.live_push()
+      if finished? and not before?, do: Roki.Laev.serial(&Laev.Sync.live_push/0)
       {:finished, finished? and not before?}
     end)
     |> tap(fn _ -> note_started(uuid, ctx, position) end)
@@ -2553,7 +2557,7 @@ defmodule Roki.Watch do
           false
         else
           Laev.Position.set_watched(ctx, true)
-          Laev.Sync.live_push()
+          Roki.Laev.serial(&Laev.Sync.live_push/0)
           true
         end
       end)
