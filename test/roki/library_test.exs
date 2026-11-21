@@ -81,6 +81,33 @@ defmodule Roki.Watch.LibraryTest do
     assert Roki.Laev.import_from_mal(@uuid) == {:error, :not_linked}
   end
 
+  test "an anime's hold lands on the season being watched, not a finished one or one never started" do
+    Roki.Laev.run(@uuid, fn ->
+      Laev.Anime.put_many(%{
+        # Season 1: every episode marked, though MyAnimeList still says watching.
+        60371 => %{title: "S1", episodes: 2, status: "watching", updated: 1},
+        # A special nobody started, open on the list as plan to watch.
+        70000 => %{title: "OVA", episodes: 1, status: "plan_to_watch", updated: 1}
+      })
+
+      dir = Path.join(Laev.Scope.dir(), "positions")
+      File.mkdir_p!(dir)
+      for e <- 1..2, do: File.write!(Path.join(dir, "mal-60371-e#{e}"), "seen")
+
+      title = %{type: "tv", id: 278_043}
+      # Season 2, just started: not on the MyAnimeList list, but the resume points at it.
+      Laev.Resume.put("tv", 278_043, %{mal_id: 63832, episode: 1, season: 2})
+      assert Watch.hold_targets(title, [60371, 63832]) == [63832]
+
+      # Nothing being watched: an open entry not watched through is held, the finished one not.
+      Laev.Resume.delete("tv", 278_043)
+      assert Watch.hold_targets(title, [60371, 70000]) == [70000]
+
+      # Nothing open at all: the first entry, as before.
+      assert Watch.hold_targets(title, [60371]) == [60371]
+    end)
+  end
+
   test "a hold does not date the anime as watched now (its MAL entry keeps its time)" do
     Roki.Laev.run(@uuid, fn ->
       Laev.Anime.put_many(%{

@@ -721,16 +721,7 @@ defmodule Roki.Watch do
             :released
 
           true ->
-            # Only entries already on the person's list, and not finished or dropped there: an
-            # entry they never added (a special, a later season not started) is not put on their
-            # list by a hold. With none on the list, the first entry is held.
-            open =
-              Enum.filter(
-                entries,
-                &(anime_status(&1) in ["watching", "plan_to_watch", "on_hold"])
-              )
-
-            targets = if open == [], do: Enum.take(entries, 1), else: open
+            targets = hold_targets(title, entries)
             Enum.each(targets, &set_anime_status(&1, "on_hold"))
             if targets == [], do: :released, else: :held
         end
@@ -746,6 +737,36 @@ defmodule Roki.Watch do
     Roki.Laev.forget_shelf(uuid)
     library_changed(uuid)
     result
+  end
+
+  # What a hold puts on hold: the entry being watched — the one the resume points at (a season
+  # just started may not be on the person's MyAnimeList list yet; it is the row the corner shows),
+  # and the entries open on their list (watching / plan to watch) that are not watched through. A
+  # season with every episode marked is not held, even when MyAnimeList still says "watching" —
+  # and an entry never started (a special, a later season) is not put on the list by a hold.
+  # Nothing of that, the first entry.
+  @doc false
+  def hold_targets(title, entries) do
+    current =
+      case Laev.Resume.get(title.type, title.id) do
+        %{} = r -> r[:mal_id] || r["mal_id"]
+        _ -> nil
+      end
+
+    marks = Laev.Position.anime_marks()
+
+    through? = fn mal ->
+      total = Laev.Anime.episodes(mal)
+      is_integer(total) and total > 0 and Map.get(marks, mal, 0) >= total
+    end
+
+    open =
+      Enum.filter(entries, fn mal ->
+        mal == current or
+          (anime_status(mal) in ["watching", "plan_to_watch"] and not through?.(mal))
+      end)
+
+    if open == [], do: Enum.take(entries, 1), else: open
   end
 
   # The MyAnimeList entries of an anime (a show's seasons, a film's one), in laev's scope.
