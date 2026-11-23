@@ -756,6 +756,16 @@ defmodule RokiWeb.WatchedLive do
 
   defp groups(items, _sort, _months), do: [{nil, items}]
 
+  # How many titles each month holds, counted over the whole list (filters applied), not only
+  # the part loaded so far — a month cut by "load more" still says its full number.
+  defp month_counts(items, sort, true) when sort in [:latest, :oldest] do
+    items
+    |> Enum.group_by(&group_label/1)
+    |> Map.new(fn {label, list} -> {label, title_count(list)} end)
+  end
+
+  defp month_counts(_items, _sort, _months), do: %{}
+
   # How many titles a list holds: a show listed once per season is still one.
   defp title_count(items), do: items |> Enum.uniq_by(& &1.key) |> length()
 
@@ -779,6 +789,7 @@ defmodule RokiWeb.WatchedLive do
       assign(assigns,
         items: items,
         groups: groups(shown, assigns.sort, assigns.months?),
+        month_counts: month_counts(items, assigns.sort, assigns.months?),
         today: Date.utc_today() |> Date.to_iso8601(),
         shown_date: Date.from_iso8601!(assigns.date_value || Date.to_iso8601(Date.utc_today()))
       )
@@ -1118,7 +1129,11 @@ defmodule RokiWeb.WatchedLive do
         >
           <div :for={{label, group} <- @groups} class="space-y-3">
             <h2 :if={label} class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
-              {label}
+              {label}<span
+                :if={@month_counts[label]}
+                class="ml-2 font-normal tabular-nums normal-case text-base-content/40"
+                title={"#{@month_counts[label]} #{if @month_counts[label] == 1, do: "title", else: "titles"} this month"}
+              >{@month_counts[label]}</span>
             </h2>
 
             <%!-- Grid: the posters, a tick in the corner while selecting. --%>
