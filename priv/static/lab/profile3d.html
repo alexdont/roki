@@ -17,8 +17,16 @@
   a { color: inherit; }
   .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
   .lab-note { position: fixed; right: 12px; bottom: 12px; z-index: 50; padding: 6px 10px; border-radius: 999px; background: #000a; border: 1px solid #ffffff22; color: #ffffffa0; }
-  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px; }
-  @media (max-width: 700px) { .wrap { padding: 0 14px; } }
+  /* The site's gutters (px-4 / sm:px-6 / lg:px-12 / xl:px-16), no centred column: the 3D stages run
+     edge to edge like the site's rows, only the words are inset. */
+  .wrap { padding: 0 16px; }
+  @media (min-width: 640px) { .wrap { padding: 0 24px; } }
+  @media (min-width: 1024px) { .wrap { padding: 0 48px; } }
+  @media (min-width: 1280px) { .wrap { padding: 0 64px; } }
+  .bleed { margin: 0 -16px; }
+  @media (min-width: 640px) { .bleed { margin: 0 -24px; } }
+  @media (min-width: 1024px) { .bleed { margin: 0 -48px; } }
+  @media (min-width: 1280px) { .bleed { margin: 0 -64px; } }
 
   /* the top: banner, name, numbers, and the pedestal at the right */
   .top { position: relative; overflow: hidden; background: radial-gradient(90% 120% at 80% 0%, #3a1f2e 0%, #1a1220 45%, var(--page) 80%); }
@@ -43,7 +51,7 @@
   section.shelf { margin: 28px 0 0; }
   section.shelf h2 { margin: 0 0 2px; font: 700 22px "Outfit"; display: flex; align-items: baseline; gap: 10px; }
   section.shelf h2 small { font: 500 11px "JetBrains Mono"; color: #ffffff70; letter-spacing: .06em; text-transform: uppercase; }
-  .stage { position: relative; height: 360px; border-radius: 18px; overflow: hidden; transition: background-color .8s; background: #ffffff05; }
+  .stage { position: relative; height: 360px; overflow: hidden; transition: background-color .8s; background: transparent; }
   .stage canvas, .wallstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
   .stage.ring { height: 430px; }
   @media (max-width: 700px) { .stage { height: 300px; } .stage.ring { height: 360px; } .who h1 { font-size: 48px; } }
@@ -99,7 +107,7 @@
   <div class="wrap" style="margin:34px auto 60px">
     <section class="shelf">
       <h2>Recently watched <small>the carousel</small></h2>
-      <div class="stage ring" id="ring"></div>
+      <div class="stage ring bleed" id="ring"></div>
     </section>
   </div>
 </div>
@@ -530,7 +538,7 @@ for (const [k, name] of KINDS) {
   const items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
   if (!items.length) continue
   const sec = document.createElement("section"); sec.className = "shelf"
-  sec.innerHTML = `<h2>${name} <small>the carousel</small></h2><div class="stage ring"></div>`
+  sec.innerHTML = `<h2>${name} <small>the carousel</small></h2><div class="stage ring bleed"></div>`
   shelvesEl.appendChild(sec)
   carousel(sec.querySelector(".stage"), items, name.toLowerCase())
 }
