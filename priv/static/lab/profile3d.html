@@ -98,7 +98,7 @@
   <main class="wrap" id="shelves"></main>
   <div class="wrap" style="margin:34px auto 60px">
     <section class="shelf">
-      <h2>Recently watched <small>trial · the carousel</small></h2>
+      <h2>Recently watched <small>the carousel</small></h2>
       <div class="stage ring" id="ring"></div>
     </section>
   </div>
@@ -425,11 +425,11 @@ function pedestalStage(el, picks, onPick) {
 }
 
 // ── the carousel (recently watched) ────────────────────────────────────────────────────────
-function carousel(el, items) {
+function carousel(el, items, label = "recently watched") {
   let ring = 0, ringV = 0
   const n = items.length, stepA = Math.PI * 2 / n, R = n * (W + 0.3) / (Math.PI * 2)
   const st = new Stage(el, {
-    label: "recently watched", floorY: 0, outDist: 5.2,
+    label, floorY: 0, outDist: 5.2,
     place() {
       ring += ringV; ringV *= 0.92
       if (Math.abs(ringV) < 0.0008 && !this.pointer.in) ring += (Math.round(ring / stepA) * stepA - ring) * 0.06
@@ -439,7 +439,8 @@ function carousel(el, items) {
         const a = i * stepA + ring, r = R + 0.4 * c.hover
         c.tpos.set(Math.sin(a) * r, H / 2 + 0.04, Math.cos(a) * r - R); c.trot.set(0, a, 0)
       })
-      this.tPos.set(0, 1.5, fit(this, 9, H + 1) * 0.85); this.tLook.set(0, 1.0, -1)
+      // Framed to the ring's front half: a small ring comes closer instead of floating in the middle.
+      this.tPos.set(0, 1.45, fit(this, Math.min(9, 2 * R + W * 0.6), H + 0.7) * 0.8 + 0.3); this.tLook.set(0, 1.0, -Math.min(1, R * 0.35))
     },
     drag(mx) { ringV = mx * 0.0025 },
     wheel(e) { ringV += (e.deltaX || 0) * -0.0003 },
@@ -529,9 +530,9 @@ for (const [k, name] of KINDS) {
   const items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
   if (!items.length) continue
   const sec = document.createElement("section"); sec.className = "shelf"
-  sec.innerHTML = `<h2>${name} <small>the leaning shelf</small></h2><div class="stage"></div>`
+  sec.innerHTML = `<h2>${name} <small>the carousel</small></h2><div class="stage ring"></div>`
   shelvesEl.appendChild(sec)
-  leaningShelf(sec.querySelector(".stage"), items, name.toLowerCase())
+  carousel(sec.querySelector(".stage"), items, name.toLowerCase())
 }
 
 // The pedestal: the first of each shelf, chosen by the chips.
