@@ -1504,3 +1504,38 @@ html[data-keynav] [data-mood-chip]:focus-visible, html[data-keynav] #mood-picker
 .world-tip[hidden] { display: none; }
 .world-tip b { font-weight: 600; }
 .world-tip span { opacity: .75; font-variant-numeric: tabular-nums; }
+
+/* ── A title page in its poster's colours (Roki.Palette; the shelf lab's A) ──────────────────
+   `[data-tint]` carries the poster's main hue/chroma (--th --tc) and its liveliest (--ah --ac);
+   the lightnesses are set here, per theme, so the page stays legible whatever the poster. Dark:
+   a deep ground of the main colour, text tinted toward the accent. Light: a pale wash of it, ink
+   darkened from it. Set on the page's wrapper for the first paint and copied to <html> by the
+   TitleTint hook (the header and the page behind it), taken off when the page is left. */
+:root {
+  --tint-ground: #000;
+  --tint-star: var(--color-amber-300, #fcd34d);
+}
+[data-tint] {
+  --tint-ground: oklch(19% min(var(--tc), 0.07) var(--th));
+  --tint-star: oklch(82% clamp(0.1, var(--ac), 0.17) var(--ah));
+  --color-base-100: oklch(97.5% min(var(--tc), 0.022) var(--th));
+  --color-base-200: oklch(94.5% min(var(--tc), 0.03) var(--th));
+  --color-base-300: oklch(89% min(var(--tc), 0.04) var(--th));
+  --color-base-content: oklch(25% min(var(--tc), 0.045) var(--th));
+}
+[data-theme=dark][data-tint],
+[data-theme=dark] [data-tint] {
+  --color-base-100: oklch(20% min(var(--tc), 0.07) var(--th));
+  --color-base-200: oklch(24.5% min(var(--tc), 0.075) var(--th));
+  --color-base-300: oklch(31% min(var(--tc), 0.08) var(--th));
+  --color-base-content: oklch(94% min(var(--ac), 0.04) var(--ah));
+}
+html[data-tint] body { transition: background-color .7s; }
+
+/* A title's name, when TMDB has no picture of it: set the way Stripe Press sets its books. */
+.title-serif {
+  font-family: "Instrument Serif", ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}

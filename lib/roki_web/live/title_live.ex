@@ -104,7 +104,9 @@ defmodule RokiWeb.TitleLive do
         episodes: nil,
         watched: MapSet.new(),
         season_counts: %{},
-        phase: :idle
+        phase: :idle,
+        # The poster's colours, which the page is drawn in (`Roki.Palette`); nil until worked out.
+        palette: Roki.Palette.get(type, id)
       )
 
     if connected?(socket) do
@@ -690,6 +692,7 @@ defmodule RokiWeb.TitleLive do
 
     {:noreply,
      socket
+     |> load_palette()
      |> tap(fn _ ->
        Task.start(fn -> Roki.Social.remember_title(title.type, title.id, title.title) end)
      end)
@@ -785,6 +788,9 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :ep_scores, seasons)}
 
   def handle_async(:ep_scores, _other, socket), do: {:noreply, assign(socket, :ep_scores, :error)}
+
+  def handle_async(:palette, {:ok, {:ok, p}}, socket), do: {:noreply, assign(socket, :palette, p)}
+  def handle_async(:palette, _other, socket), do: {:noreply, socket}
 
   def handle_async(:rating_load, {:ok, rating}, socket),
     do: {:noreply, assign(socket, :rating, rating_state(rating))}
@@ -921,7 +927,18 @@ defmodule RokiWeb.TitleLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       current_path={"/title/#{@type}/#{@id}"}
     >
-      <div class={if @full?, do: "", else: "px-4 py-8 sm:px-6 lg:px-8"}>
+      <%!-- The page in its poster's colours (`Roki.Palette`, `[data-tint]` in app.css): set here for
+            the first paint, and on the whole document by the hook so the header matches. --%>
+      <div
+        id="title-tint"
+        phx-hook={@full? && @palette && "TitleTint"}
+        data-tint={@full? && @palette && "on"}
+        style={@full? && Roki.Palette.style(@palette)}
+        class={[
+          if(@full?, do: "", else: "px-4 py-8 sm:px-6 lg:px-8"),
+          @full? && @palette && "bg-base-100 text-base-content transition-colors duration-700"
+        ]}
+      >
         <div class={["mx-auto space-y-4", if(@full?, do: "max-w-none", else: "max-w-6xl")]}>
           <%!-- TMDB has no such title any more (removed there, or a bad id synced from a device):
                 say so, and offer to take it off this account's lists. --%>
@@ -1214,8 +1231,9 @@ defmodule RokiWeb.TitleLive do
           alt=""
           class="h-full w-full object-cover opacity-70"
         />
-        <div class="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-black/10"></div>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50">
+        <div class="absolute inset-0 bg-gradient-to-r from-(--tint-ground)/85 via-(--tint-ground)/50 to-(--tint-ground)/10">
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-(--tint-ground)/80 via-transparent to-(--tint-ground)/50">
         </div>
       </div>
 
@@ -1401,12 +1419,12 @@ defmodule RokiWeb.TitleLive do
       </div>
       <div
         data-hero-fade
-        class="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/45 to-transparent"
+        class="absolute inset-0 -z-10 bg-gradient-to-r from-(--tint-ground)/85 via-(--tint-ground)/45 to-transparent"
       >
       </div>
       <div
         data-hero-fade
-        class="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-transparent to-black/45"
+        class="absolute inset-0 -z-10 bg-gradient-to-t from-(--tint-ground)/75 via-transparent to-(--tint-ground)/45"
       >
       </div>
 
@@ -1434,7 +1452,7 @@ defmodule RokiWeb.TitleLive do
             alt={@title.title}
             class="max-h-24 w-auto max-w-[min(80vw,28rem)] object-contain object-left drop-shadow-[0_2px_12px_rgb(0_0_0/0.55)] sm:max-h-32 xl:max-h-40 xl:max-w-[36rem]"
           />
-          <span :if={is_nil(@logo)}>{@title.title}</span>
+          <span :if={is_nil(@logo)} class="title-serif">{@title.title}</span>
         </h1>
 
         <%!-- One line on a phone, scrolled sideways when the genres run long (a second line made the
@@ -1448,7 +1466,7 @@ defmodule RokiWeb.TitleLive do
             title="TMDB's score — every service's, and what the critics said"
             aria-label="Reviews and scores"
           >
-            <span class="text-amber-300" aria-hidden="true">★</span>{avg_text(@title)}
+            <span class="text-(--tint-star)" aria-hidden="true">★</span>{avg_text(@title)}
             <.icon
               name="hero-chevron-down-micro"
               class="hidden h-3.5 w-3.5 text-white/60 opacity-0 transition group-hover/hero:opacity-100 lg:block"
@@ -1641,6 +1659,14 @@ defmodule RokiWeb.TitleLive do
   end
 
   defp load_ep_scores(socket), do: socket
+
+  # A title met for the first time has its poster's colours worked out (~60 ms, then kept for good).
+  defp load_palette(%{assigns: %{palette: nil, title: %{poster: poster} = t}} = socket)
+       when is_binary(poster) do
+    start_async(socket, :palette, fn -> Roki.Palette.fetch(t.type, t.id, poster) end)
+  end
+
+  defp load_palette(socket), do: socket
 
   defp hero_ctl,
     do:
