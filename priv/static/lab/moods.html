@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mood weather lab · Roki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Playfair+Display:ital,wght@1,700&family=Creepster&display=swap" rel="stylesheet" />
+<style>
+  /* A lab (2026-11-24) for reworking two of the home carousel's weathers: "Have a good cry" (rain
+     on glass) and "Be scared" (red rain). Each box runs the real MoodFx hook (mood_fx.js) on a copy of
+     that mood's slide; the trial effects are in assets/js/lab/mood_lab.js, built to mood-lab.js. */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0a0d; color: #ece8ef; font: 15px/1.45 "Outfit", system-ui, sans-serif; }
+  header.lab { padding: 26px 24px 6px; max-width: 1400px; margin: 0 auto; }
+  header.lab h1 { font: 700 28px "Outfit"; margin: 0 0 6px; }
+  header.lab p { margin: 0; color: #b6aeba; max-width: 900px; }
+  nav { position: sticky; top: 0; z-index: 20; display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 24px; max-width: 1400px; margin: 0 auto; background: #0b0a0dd9; backdrop-filter: blur(10px); }
+  nav a { color: #ddd; text-decoration: none; border: 1px solid #ffffff26; border-radius: 999px; padding: 5px 12px; font-weight: 600; font-size: 13px; }
+  nav a.cry { border-color: #6b8fd6aa; } nav a.scared { border-color: #d6536baa; }
+  section.v { max-width: 1400px; margin: 0 auto; padding: 18px 24px 26px; scroll-margin-top: 56px; }
+  section.v h2 { font: 700 22px "Outfit"; margin: 0 0 4px; }
+  section.v p.why { margin: 0 0 12px; color: #b6aeba; max-width: 900px; }
+  .box { position: relative; border-radius: 18px; overflow: hidden; }
+  .box canvas { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; }
+  .slide { position: relative; min-height: clamp(30rem, 62svh, 40rem); display: flex; background: #070608; overflow: hidden; }
+  .slide .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .5; filter: blur(4px); transform: scale(1.05); }
+  .slide .wash { position: absolute; inset: 0; background: radial-gradient(ellipse at 75% 40%, transparent 0%, hsl(var(--hue) 25% 6%) 78%), linear-gradient(0deg, hsl(var(--hue) 25% 5%) 0%, transparent 35%), linear-gradient(180deg, rgb(0 0 0 / .55) 0%, transparent 20%); }
+  .slide .inner { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 32px; width: 100%; padding: 72px 56px 80px; }
+  .slide .kicker { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .25em; text-transform: uppercase; color: hsl(var(--hue) 90% 62%); }
+  .slide h1 { margin: 12px 0 0; font-size: 72px; line-height: 1; font-weight: 700; color: #fff; }
+  .slide .tag { margin: 14px 0 0; color: #ffffffc0; font-size: 18px; max-width: 32ch; }
+  .slide .btn { display: inline-block; margin-top: 22px; padding: 12px 22px; border-radius: 999px; background: #fff; color: #111; font-weight: 700; }
+  .fan { position: relative; width: 30rem; height: 22rem; }
+  .fan img { position: absolute; top: 0; left: 50%; height: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: 16px; box-shadow: 0 20px 50px #000a; outline: 1px solid #ffffff1a; }
+  .fan .p0 { z-index: 2; transform: translateX(-50%); }
+  .fan .p1 { transform: translateX(-95%) rotate(-8deg) scale(.9); }
+  .fan .p2 { transform: translateX(-5%) rotate(8deg) scale(.9); }
+  @media (max-width: 900px) {
+    .slide .inner { grid-template-columns: 1fr; padding: 56px 18px 64px; text-align: center; }
+    .fan { order: -1; width: 18rem; height: 13rem; margin: 0 auto; }
+    .slide h1 { font-size: 48px; } .slide .tag { margin-inline: auto; }
+    section.v { padding: 14px 0 22px; } section.v h2, section.v p.why { padding: 0 16px; } .box { border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="lab">
+  <h1>Mood weather lab</h1>
+  <p>Reworking two of the home carousel's weathers. Each box runs the site's own effect engine on a copy of that mood's slide. Move the pointer over a box (or drag a finger) and click: every effect answers the hand. A is what the site does today.</p>
+</header>
+<nav><a href="#cry" class="cry">Sad A</a><a href="#cry-mist" class="cry">Sad B</a><a href="#cry-drizzle" class="cry">Sad C</a><a href="#cry-ripples" class="cry">Sad D</a><a href="#scared" class="scared">Scared A</a><a href="#scared-flashlight" class="scared">Scared B</a><a href="#scared-bulb" class="scared">Scared C</a><a href="#scared-tape" class="scared">Scared D</a><a href="#scared-reach" class="scared">Scared E</a></nav>
+
+<section class="v" id="cry">
+  <h2>A · Now — rain on glass</h2><p class="why">What the site does today: rain streaks from the top, drops land, sit, swell and run down in fits; the hand wipes them away.</p>
+  <div class="box" data-lab-fx data-mood="cry" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:215">
+      <img class="bg" src="/phoenix_kit/file/01a18436-9c61-7f81-acdd-90333b23ce3c/medium/52a2" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Playfair Display', serif">Have a good cry</h1>
+          <p class="tag">Tissues within reach. You'll be fine.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a1bb06-223d-7896-8063-a630c0c3b250/medium/fd14" alt="" class="p0"><img src="/phoenix_kit/file/01a179c0-b5ec-786f-a3f1-1914cad7f430/medium/9812" alt="" class="p1"><img src="/phoenix_kit/file/01a1ab6b-80d7-7a51-b3b4-d91cc29bb0c5/medium/c927" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="cry-mist">
+  <h2>B · Misted window</h2><p class="why">The glass fogged with a cold breath. A few heavy drops run down slowly and leave clear tracks that mist over again; the hand wipes a clear stroke that fogs back in a few seconds. Quiet — few things move.</p>
+  <div class="box" data-lab-fx data-mood="cry-mist" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:215">
+      <img class="bg" src="/phoenix_kit/file/01a18436-9c61-7f81-acdd-90333b23ce3c/medium/52a2" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Playfair Display', serif">Have a good cry</h1>
+          <p class="tag">Tissues within reach. You'll be fine.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a1bb06-223d-7896-8063-a630c0c3b250/medium/fd14" alt="" class="p0"><img src="/phoenix_kit/file/01a179c0-b5ec-786f-a3f1-1914cad7f430/medium/9812" alt="" class="p1"><img src="/phoenix_kit/file/01a1ab6b-80d7-7a51-b3b4-d91cc29bb0c5/medium/c927" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="cry-drizzle">
+  <h2>C · Drizzle beyond the window</h2><p class="why">Fine slanted rain far off, in three depths, a cold cast over the room, and now and then the slow sweep of a passing car's lights. The pointer is an umbrella: no rain under it.</p>
+  <div class="box" data-lab-fx data-mood="cry-drizzle" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:215">
+      <img class="bg" src="/phoenix_kit/file/01a18436-9c61-7f81-acdd-90333b23ce3c/medium/52a2" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Playfair Display', serif">Have a good cry</h1>
+          <p class="tag">Tissues within reach. You'll be fine.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a1bb06-223d-7896-8063-a630c0c3b250/medium/fd14" alt="" class="p0"><img src="/phoenix_kit/file/01a179c0-b5ec-786f-a3f1-1914cad7f430/medium/9812" alt="" class="p1"><img src="/phoenix_kit/file/01a1ab6b-80d7-7a51-b3b4-d91cc29bb0c5/medium/c927" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="cry-ripples">
+  <h2>D · Ripples</h2><p class="why">Drops land on dark water along the foot of the slide and rings open out and fade; the top stays clear for the words. Passing low draws rings; a click makes a big one.</p>
+  <div class="box" data-lab-fx data-mood="cry-ripples" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:215">
+      <img class="bg" src="/phoenix_kit/file/01a18436-9c61-7f81-acdd-90333b23ce3c/medium/52a2" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Playfair Display', serif">Have a good cry</h1>
+          <p class="tag">Tissues within reach. You'll be fine.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a1bb06-223d-7896-8063-a630c0c3b250/medium/fd14" alt="" class="p0"><img src="/phoenix_kit/file/01a179c0-b5ec-786f-a3f1-1914cad7f430/medium/9812" alt="" class="p1"><img src="/phoenix_kit/file/01a1ab6b-80d7-7a51-b3b4-d91cc29bb0c5/medium/c927" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="scared">
+  <h2>A · Now — red rain</h2><p class="why">What the site does today: the rain effect in red.</p>
+  <div class="box" data-lab-fx data-mood="scared" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:350">
+      <img class="bg" src="/phoenix_kit/file/01a1f079-954a-7566-8ffe-135a0fd011eb/medium/fff8" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Creepster', cursive">Be scared</h1>
+          <p class="tag">Lights off. Something is in the hallway.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a17a99-2a8c-7eae-b691-0dfdff6be81c/medium/017a" alt="" class="p0"><img src="/phoenix_kit/file/01a17d19-545f-7073-b74e-131aa76b08c9/medium/ffa1" alt="" class="p1"><img src="/phoenix_kit/file/01a1a237-33ed-72a3-8c72-4c613bfa059c/medium/d9af" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="scared-flashlight">
+  <h2>B · Flashlight</h2><p class="why">The room is dark and a torch shows a round of it. Over the slide the torch is in your hand; otherwise it searches the room by itself. Now and then it stutters out; a click switches it off and on.</p>
+  <div class="box" data-lab-fx data-mood="scared-flashlight" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:350">
+      <img class="bg" src="/phoenix_kit/file/01a1f079-954a-7566-8ffe-135a0fd011eb/medium/fff8" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Creepster', cursive">Be scared</h1>
+          <p class="tag">Lights off. Something is in the hallway.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a17a99-2a8c-7eae-b691-0dfdff6be81c/medium/017a" alt="" class="p0"><img src="/phoenix_kit/file/01a17d19-545f-7073-b74e-131aa76b08c9/medium/ffa1" alt="" class="p1"><img src="/phoenix_kit/file/01a1a237-33ed-72a3-8c72-4c613bfa059c/medium/d9af" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="scared-bulb">
+  <h2>C · Failing bulb</h2><p class="why">The light dips and flickers in uneven runs, the edges always darker — and sometimes, in a dip, a shape crosses behind the slide. Hovering steadies it; a click sets it flickering.</p>
+  <div class="box" data-lab-fx data-mood="scared-bulb" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:350">
+      <img class="bg" src="/phoenix_kit/file/01a1f079-954a-7566-8ffe-135a0fd011eb/medium/fff8" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Creepster', cursive">Be scared</h1>
+          <p class="tag">Lights off. Something is in the hallway.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a17a99-2a8c-7eae-b691-0dfdff6be81c/medium/017a" alt="" class="p0"><img src="/phoenix_kit/file/01a17d19-545f-7073-b74e-131aa76b08c9/medium/ffa1" alt="" class="p1"><img src="/phoenix_kit/file/01a1a237-33ed-72a3-8c72-4c613bfa059c/medium/d9af" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="scared-tape">
+  <h2>D · Old tape</h2><p class="why">Grain, scanlines, a slow roll of brightness, and a tracking band that tears up the picture now and then. The pointer drags the band; a click glitches the whole picture.</p>
+  <div class="box" data-lab-fx data-mood="scared-tape" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:350">
+      <img class="bg" src="/phoenix_kit/file/01a1f079-954a-7566-8ffe-135a0fd011eb/medium/fff8" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Creepster', cursive">Be scared</h1>
+          <p class="tag">Lights off. Something is in the hallway.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a17a99-2a8c-7eae-b691-0dfdff6be81c/medium/017a" alt="" class="p0"><img src="/phoenix_kit/file/01a17d19-545f-7073-b74e-131aa76b08c9/medium/ffa1" alt="" class="p1"><img src="/phoenix_kit/file/01a1a237-33ed-72a3-8c72-4c613bfa059c/medium/d9af" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="v" id="scared-reach">
+  <h2>E · It reaches in</h2><p class="why">Darkness creeps in from the edges in long fingers that sway and stretch toward the middle as if breathing, and pull back from the pointer; a click makes them all flinch.</p>
+  <div class="box" data-lab-fx data-mood="scared-reach" data-amount="1">
+    <canvas id="mood-fx-canvas"></canvas>
+    <div class="slide" data-fx-stage style="--hue:350">
+      <img class="bg" src="/phoenix_kit/file/01a1f079-954a-7566-8ffe-135a0fd011eb/medium/fff8" alt="">
+      <div class="wash"></div>
+      <div class="inner">
+        <div class="words">
+          <p class="kicker">What are you in the mood for?</p>
+          <h1 style="font-family:'Creepster', cursive">Be scared</h1>
+          <p class="tag">Lights off. Something is in the hallway.</p>
+          <span class="btn">See all</span>
+        </div>
+        <div class="fan"><img src="/phoenix_kit/file/01a17a99-2a8c-7eae-b691-0dfdff6be81c/medium/017a" alt="" class="p0"><img src="/phoenix_kit/file/01a17d19-545f-7073-b74e-131aa76b08c9/medium/ffa1" alt="" class="p1"><img src="/phoenix_kit/file/01a1a237-33ed-72a3-8c72-4c613bfa059c/medium/d9af" alt="" class="p2"></div>
+      </div>
+    </div>
+  </div>
+</section>
+<script src="mood-lab.js"></script>
+</body>
+</html>

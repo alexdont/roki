@@ -1357,7 +1357,7 @@ function warmed(fx, effect, slug) {
   return effect
 }
 
-const EFFECTS = {
+export const EFFECTS = {
   cry: (fx) => rain(fx, RAIN.cry),
   scared: (fx) => rain(fx, RAIN.scared),
   laugh: confetti,
