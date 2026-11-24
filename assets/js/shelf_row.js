@@ -378,7 +378,6 @@ export const cardMethods = {
       if (d.recAvatar) { face.src = d.recAvatar; face.classList.remove("hidden"); initial.textContent = "" }
       else { face.removeAttribute("src"); face.classList.add("hidden"); initial.textContent = (d.recName || "").slice(0, 1) }
       rec.querySelector("[data-card-rec-more]").textContent = +d.recMore > 0 ? `+${d.recMore}` : ""
-      if (+d.recMore > 0) rec.dataset.more = ""; else delete rec.dataset.more
     }
     const img = p.querySelector("[data-card-img]")
     if (img) {

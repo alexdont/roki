@@ -388,15 +388,20 @@ defmodule RokiWeb.PosterComponents do
             </p>
             <%!-- Recommended by Roki users: who vouched, only once the card is open — their picture
                   (or initial), "+2" when others did too. Filled by the hook from `data-rec-*`. --%>
+            <%!-- The ring is the circle's own, the same all round; "+N" is a bubble of its own, only
+                  when there is a number. --%>
             <span
               data-card-rec
-              class="absolute right-2 top-2 hidden items-center gap-1 rounded-full bg-black/45 p-0.5 pr-1.5 text-[11px] font-semibold text-white ring-1 ring-white/20 backdrop-blur-sm [&:not([data-more])]:pr-0.5"
+              class="absolute right-2 top-2 hidden flex-row-reverse items-center gap-1 text-[11px] font-semibold text-white"
             >
-              <span class="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-primary text-xs font-bold uppercase text-primary-content">
+              <span class="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-primary text-xs font-bold uppercase text-primary-content shadow-md ring-2 ring-white/80">
                 <img data-card-rec-img alt="" class="hidden h-full w-full object-cover" />
                 <span data-card-rec-initial></span>
               </span>
-              <span data-card-rec-more class="tabular-nums"></span>
+              <span
+                data-card-rec-more
+                class="rounded-full bg-black/55 px-1.5 py-0.5 tabular-nums backdrop-blur-sm empty:hidden"
+              ></span>
             </span>
           </a>
 
