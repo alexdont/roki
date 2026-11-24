@@ -896,7 +896,7 @@ const stillMix = (fx) => {
   }
 }
 Object.assign(EFFECTS, {
-  "cry-amix": stillMix,
+  "cry-amix": EFFECTS.cry,
   "cry-a1": plusWith(TEARS, cloud), "cry-a2": slowMo, "cry-a3": plusWith(TEARS, harder),
   "cry-a4": plusWith(TEARS, drain), "cry-a5": plusWith(TEARS, streetlight), "cry-a6": plusWith(TEARS, headlights),
   "cry-a7": plusWith(TEARS, boats), "cry-a8": plusWith(TEARS, petals), "cry-a9": plusWith(TEARS, candles),

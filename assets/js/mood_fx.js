@@ -1564,6 +1564,69 @@ export function plusWith(m, ...extras) {
   }
 }
 
+// ── Have a good cry: the rain on glass without the wipe; hold the pointer still and time slows to
+// a hush (the drops hang, the room a little bluer) while the colour drains from the slide in a
+// circle spreading from you; move and both come back. (Worked out in /lab/moods.html.)
+//
+// The draining is a greyed copy of the slide shown now, laid over it and masked to the circle: the
+// canvas holds only the weather, so it cannot grey the picture itself. Copied afresh each time it
+// starts (the carousel turns underneath), removed when it is gone.
+function drain(fx) {
+  let still = 0, R = 0, x = 0, y = 0, copy = null
+  const slide = () => fx.picker && (fx.picker.querySelector('[data-mood][aria-hidden="false"]') || fx.picker)
+  const drop = () => { copy?.remove(); copy = null }
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (active && P.on && P.speed < 20) { still += dt; x = P.x; y = P.y } else still = 0
+      const want = still > 0.4 ? Math.min(Math.max(fx.W, fx.H) * 1.2, (still - 0.4) * 280) : 0
+      R += (want - R) * Math.min(1, dt * (want > R ? 2 : 4))
+      if (R < 3 || !active) return drop()
+      const src = slide()
+      if (!src) return
+      if (!copy || copy.dataset.of !== (src.dataset.mood || "")) {
+        drop()
+        copy = src.cloneNode(true)
+        copy.removeAttribute("id"); copy.removeAttribute("data-fx-stage"); copy.removeAttribute("phx-hook")
+        copy.setAttribute("aria-hidden", "true"); copy.dataset.of = src.dataset.mood || ""
+        for (const el of copy.querySelectorAll("[id]")) el.removeAttribute("id")
+        const box = fx.el.getBoundingClientRect(), r = src.getBoundingClientRect()
+        Object.assign(copy.style, {position: "absolute", left: `${r.left - box.left}px`, top: `${r.top - box.top}px`, width: `${r.width}px`, height: `${r.height}px`,
+          margin: "0", zIndex: 1, pointerEvents: "none", opacity: "1", filter: "grayscale(1) brightness(0.85)"})
+        copy.classList.remove("opacity-0", "pointer-events-none")
+        fx.el.appendChild(copy)
+        this.offX = r.left - box.left; this.offY = r.top - box.top
+      }
+      const cx = x - (this.offX || 0), cy = y - (this.offY || 0)
+      const m = `radial-gradient(circle ${R}px at ${cx}px ${cy}px, #000 ${R * 0.65}px, transparent ${R}px)`
+      copy.style.maskImage = m; copy.style.webkitMaskImage = m
+    },
+    gone: drop,
+  }
+}
+
+// The rain slowed while the pointer is held still (its time runs at `k`), the draining beside it on
+// real time, and a faint blue over the slowed room.
+function hush(fx) {
+  const r = rain(fx, {...RAIN.cry, noWipe: true}), d = drain(fx)
+  let k = 1
+  return {
+    busy: () => r.busy() || k < 0.99,
+    stats: r.stats,
+    step(dt, amount, active) {
+      const P = fx.pointer, want = active && P.on && P.speed < 20 ? 0.12 : 1
+      k += (want - k) * Math.min(1, dt * (want < k ? 1.2 : 3))
+      r.step(dt * k, amount, active)
+      d.step(dt, amount, active)
+    },
+    draw(g, alpha) {
+      r.draw(g, alpha)
+      if (k < 0.95) { g.globalAlpha = (1 - k) * 0.18 * alpha; g.fillStyle = "rgb(20,30,55)"; g.fillRect(0, 0, fx.W, fx.H) }
+      if (alpha < 0.02) d.gone()
+    },
+  }
+}
+
 const WARM = {cry: 3, scared: 3, laugh: 16, love: 12, action: 3, mystery: 12, adventure: 8, kid: 10}
 
 function warmed(fx, effect, slug) {
@@ -1573,7 +1636,7 @@ function warmed(fx, effect, slug) {
 }
 
 export const EFFECTS = {
-  cry: (fx) => rain(fx, RAIN.cry),
+  cry: hush,
   scared: plusWith({...RAIN.scared, noWipe: true, palm: "rgba(118,0,10,0.92)"}, crawl, inside),
   laugh: confetti,
   love: bokeh,
