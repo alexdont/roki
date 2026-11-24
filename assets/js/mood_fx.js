@@ -1480,6 +1480,89 @@ function viewfinder(fx) {
 // How many seconds of an effect are run ahead, unseen, when its mood comes up, so it fades in
 // already under way (confetti over the whole carousel, the fog rolled in) instead of starting
 // from an empty sky. Run in steps of a tenth of a second, without drawing.
+// ── Be scared: the red rain with no wipe; the drops crawl to the pointer and pool; bloody hands
+// slap the glass from inside and slide down — left and right in turn, each its own, answering a
+// pointer held still and a print of your own. (Worked out in /lab/moods.html.)
+// The drops crawl to you: still drops near the pointer slide toward it, like something drawn
+// to warmth, and pool under it; move off, and the pool runs.
+export function crawl(fx, api) {
+  let poolDrop = null
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (!active || !P.on) { if (poolDrop) { poolDrop.sliding = true; poolDrop = null } return }
+      if (P.speed > 60) { if (poolDrop) { poolDrop.sliding = true; poolDrop = null } return }
+      for (const d of api.drops()) {
+        if (d.dead || d.sliding || d === poolDrop) continue
+        const dx = P.x - d.x, dy = P.y - d.y, dist = Math.hypot(dx, dy)
+        if (dist > 240) continue
+        const v = 40 * (1 - dist / 240) + 6
+        d.x += dx / dist * v * dt; d.y += dy / dist * v * dt; d.life = Math.max(d.life, 2)
+        if (dist < 12) {
+          poolDrop ||= api.spawn(P.x, P.y, 2.5, false)
+          poolDrop.r = Math.min(13, Math.hypot(poolDrop.r, d.r)); d.dead = true
+        }
+      }
+      if (poolDrop) { poolDrop.x = P.x; poolDrop.y = P.y; poolDrop.life = Math.max(poolDrop.life, 3); poolDrop.sliding = false }
+    },
+  }
+}
+
+// A handprint from inside: now and then, by itself, a bloody hand slaps onto the glass
+// somewhere and slowly slides down, dragging five streaks.
+export function inside(fx, api) {
+  let next = rand(2.5, 4), left = Math.random() < 0.5, still = 0, clickT = -1, near = 0
+  // One hand: left and right in turn, each its own; mostly sliding straight down, but now and then
+  // dragged off to one side, or stopping part way and staying.
+  const slap = (x, y, scale) => {
+    left = !left
+    const r = Math.random()
+    api.stamp(x, y, {
+      vy: rand(14, 28), life: 13, tilt: rand(-0.25, 0.25), mirror: left, vary: true, scale,
+      vx: r < 0.3 ? rand(14, 34) * (Math.random() < 0.5 ? -1 : 1) : 0,
+      stopAt: r > 0.78 ? rand(25, 70) : null,
+    })
+  }
+  const clampX = (x) => Math.max(fx.W * 0.05, Math.min(fx.W * 0.95, x))
+  const clampY = (y) => Math.max(fx.carTop + 50, Math.min(fx.carBottom - 90, y))
+  return {
+    step(dt, amount, active) {
+      if (!active) return
+      const P = fx.pointer
+      next -= dt; near -= dt
+      // It notices you: hold still for a while and a hand comes down near where you are (not
+      // every time, and never too often).
+      if (P.on && P.speed < 30) still += dt; else still = 0
+      if (still > 2.2 && near < 0 && Math.random() < 0.55) {
+        const side = Math.random() < 0.5 ? -1 : 1
+        slap(clampX(P.x + side * rand(90, 170)), clampY(P.y + rand(-60, 20)), rand(0.95, 1.25))
+        near = rand(7, 11); still = -3; next = Math.max(next, 4)
+      } else if (still > 2.2) still = -1.5
+      // A beat after your own print, a smaller one answers close by — sometimes.
+      for (const k of fx.pokes.filter((q) => q.fresh)) if (Math.random() < 0.5) clickT = rand(0.7, 1.2), this.at = k
+      if (clickT > 0) {
+        clickT -= dt
+        if (clickT <= 0 && this.at) { const k = this.at; slap(clampX(k.x + rand(-110, 110)), clampY(k.y + rand(-80, 40)), rand(0.65, 0.85)); next = Math.max(next, 3) }
+      }
+      if (next < 0) {
+        next = rand(6, 11)
+        slap(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + 60, fx.carTop + (fx.carBottom - fx.carTop) * 0.4), rand(0.78, 1.32))
+      }
+    },
+  }
+}
+
+function plusWith(m, ...extras) {
+  return (fx) => {
+    const base = rain(fx, m), xs = extras.map((e) => e(fx, base.api))
+    return {
+      busy: () => true, stats: base.stats,
+      step(dt, amount, active) { base.step(dt, amount, active); for (const x of xs) x.step(dt, amount, active) },
+      draw(g, alpha) { for (const x of xs) { g.save(); x.under?.(g, alpha); g.restore() } base.draw(g, alpha); for (const x of xs) { g.save(); x.over?.(g, alpha); g.restore() } },
+    }
+  }
+}
+
 const WARM = {cry: 3, scared: 3, laugh: 16, love: 12, action: 3, mystery: 12, adventure: 8, kid: 10}
 
 function warmed(fx, effect, slug) {
@@ -1490,7 +1573,7 @@ function warmed(fx, effect, slug) {
 
 export const EFFECTS = {
   cry: (fx) => rain(fx, RAIN.cry),
-  scared: (fx) => rain(fx, RAIN.scared),
+  scared: plusWith({...RAIN.scared, noWipe: true, palm: "rgba(118,0,10,0.92)"}, crawl, inside),
   laugh: confetti,
   love: bokeh,
   thrill: heartbeat,
