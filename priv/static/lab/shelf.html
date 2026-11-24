@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=Oswald:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* A lab (2026-11-24) after stripe.press: A — a title page that takes its poster's colours;
-     B — films as Blu-ray cases on a shelf (CSS 3D, no library); C — the same shelf as VHS tapes.
+     B — films as plain cases on a shelf (CSS 3D, no library); C — the same shelf as VHS tapes.
      Data: alex's 32 most recently watched films (shelf-data.json). Colours are read from each
      poster in the browser (TMDB serves them with CORS). Keys: ← → along the shelf, Enter to take
      one out, Esc to put it back. */
@@ -71,7 +71,9 @@
   /* The scroller holds the perspective; the row inside it is one 3D space, so every case's sides
      sort behind its neighbours (a scroller cannot itself keep 3D: overflow flattens it). */
   .shelf { --h: 300px; overflow-x: auto; overflow-y: hidden; perspective: 1400px; perspective-origin: 50% 30%; scroll-behavior: smooth; scrollbar-width: none; outline: none; }
-  .shelf .row { display: flex; align-items: flex-end; gap: 3px; padding: 120px 40vw 56px 40px; width: max-content; min-height: 520px; transform-style: preserve-3d; }
+  /* Centred when it fits, scrolled when it does not; room at both ends for the outer spines, which
+     perspective spreads a little past the shelf. */
+  .shelf .row { display: flex; align-items: flex-end; gap: 3px; padding: 120px 90px 56px; width: max-content; margin-inline: auto; min-height: 520px; transform-style: preserve-3d; }
   .shelf::-webkit-scrollbar { display: none; }
   .ledge { position: absolute; left: 0; right: 0; bottom: 38px; height: 18px; background: linear-gradient(#3a3238, #1c171c); box-shadow: 0 -1px 0 #ffffff14, 0 18px 30px #000a; pointer-events: none; }
   .case { --w: 26px; --d: 200px; --hh: var(--h); position: relative; flex: none; width: var(--w); height: var(--hh); transform-style: preserve-3d; cursor: pointer;
@@ -79,6 +81,8 @@
   .case .f { position: absolute; left: 50%; top: 50%; backface-visibility: hidden; }
   /* Only the spine is picked out by the pointer (and the cover once a case is out): in one 3D space
      a neighbour's deep sides lie over the spines next to it. */
+  .case { pointer-events: none; }
+  .case .spine { pointer-events: auto; }
   .case .f:not(.spine) { pointer-events: none; }
   .case.out .front { pointer-events: auto; }
   .case .spine { width: var(--w); height: var(--hh); transform: translate(-50%,-50%) translateZ(calc(var(--d) / 2)); }
@@ -103,7 +107,7 @@
   .opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
   @media (max-width: 700px) {
     .shelf { --h: 230px; perspective: 1000px; }
-    .shelf .row { padding: 90px 45vw 50px 20px; min-height: 400px; }
+    .shelf .row { padding: 90px 48px 50px; min-height: 400px; }
     .case { --d: 154px; }
     .case.out { transform: translateX(var(--dx, 0px)) translateZ(150px) translateY(-40px) rotateY(-90deg); }
     /* Under the shelf, not over it: on a phone the card would hide the case it describes. */
@@ -112,18 +116,15 @@
     .marquee span { font-size: 32px; }
   }
 
-  /* Blu-ray: thin blue-capped plastic case, spine label in the poster's colour */
-  .bd .spine { display: flex; flex-direction: column; align-items: center; overflow: hidden; background: linear-gradient(90deg, #0000 0 6%, #ffffff10 6% 8%, #0000 8% 92%, #00000040 92%), var(--c1); border-radius: 2px; }
-  .bd .spine .cap { width: 100%; height: 34px; background: linear-gradient(#1d5fd6, #0d3a91); display: grid; place-items: center; }
-  .bd .spine .cap b { font: 700 7px/1 "Outfit"; color: #fff; writing-mode: vertical-rl; letter-spacing: .08em; }
-  .bd .spine .t { flex: 1; writing-mode: vertical-rl; transform: rotate(180deg); font: 600 12px/1 "Outfit"; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 0; max-height: calc(var(--hh) - 70px); }
+  /* A plain case: the spine wholly the poster's colour (a light edge and a shadow for the plastic),
+     the title down it and the year at its foot; the cover the poster under a clear sleeve. */
+  .bd .spine { display: flex; flex-direction: column; align-items: center; overflow: hidden; background: linear-gradient(90deg, #ffffff22 0 1px, #0000 1px 6%, #ffffff12 6% 8%, #0000 8% 90%, #00000045 90%), var(--c1); border-radius: 2px; padding-top: 10px; }
+  .bd .spine .t { flex: 1; writing-mode: vertical-rl; transform: rotate(180deg); font: 600 12px/1 "Outfit"; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 0; max-height: calc(var(--hh) - 44px); }
   .bd .spine .y { font: 500 9px "JetBrains Mono"; color: var(--ink); opacity: .75; padding-bottom: 8px; writing-mode: vertical-rl; }
-  .bd .front { border-radius: 3px; box-shadow: inset 0 0 0 3px #0e3c9666; }
-  .bd .front::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 22px; background: linear-gradient(#1d5fd6, #0d3a91); }
-  .bd .front::after { content: "BLU-RAY"; position: absolute; top: 5px; left: 0; right: 0; text-align: center; font: 700 10px "Outfit"; letter-spacing: .25em; color: #fff; }
+  .bd .front { border-radius: 3px; box-shadow: inset 0 0 0 1px #ffffff30, inset 0 0 0 4px #00000030; }
   .bd .front .sheen, .vhs .front .sheen { position: absolute; inset: 0; background: linear-gradient(115deg, #ffffff00 30%, #ffffff30 45%, #ffffff00 60%); mix-blend-mode: screen; }
   .bd .back { background: var(--c1); }
-  .bd .top { background: #0d3a91; }
+  .bd .top { background: var(--c1); filter: brightness(.8); }
 
   /* VHS: a thick cardboard sleeve, worn; a paper label down the spine */
   .vhs .case { --w: 44px; --d: 190px; }
@@ -145,11 +146,11 @@
 <body>
 <header class="lab">
   <h1>Shelf lab</h1>
-  <p>After stripe.press. <b>A</b>: the title page takes its poster's colours. <b>B</b>: films as Blu-ray cases on a shelf. <b>C</b>: the same as VHS tapes. The films are alex's 32 most recently watched; colours are read from each poster here in the browser. On the shelves: hover (or ← →) to pull a case forward, click (or Enter) to take it out and turn it to the cover, Esc or click again to put it back.</p>
+  <p>After stripe.press. <b>A</b>: the title page takes its poster's colours. <b>B</b>: films as plain cases on a shelf. <b>C</b>: the same as VHS tapes. The films are alex's 32 most recently watched; colours are read from each poster here in the browser. On the shelves: hover (or ← →) to pull a case forward, click (or Enter) to take it out and turn it to the cover, Esc or click again to put it back.</p>
 </header>
 <nav class="tabs" role="tablist">
   <button role="tab" data-v="a" aria-selected="true">A · Poster colours</button>
-  <button role="tab" data-v="b" aria-selected="false">B · Blu-ray shelf</button>
+  <button role="tab" data-v="b" aria-selected="false">B · Case shelf</button>
   <button role="tab" data-v="c" aria-selected="false">C · VHS shelf</button>
 </nav>
 
@@ -165,11 +166,11 @@
 </section>
 
 <section class="v bd" id="b">
-  <h2>B · Blu-ray shelf</h2>
-  <p class="why">Each film a case standing spine-out: the blue Blu-ray cap, the title down a spine in the poster's own colour. Hover pulls one forward; a click takes it out and turns it to its cover, the page washing into its colour, with the details beside it. The serif marquee above lights the film under the pointer.</p>
+  <h2>B · Case shelf</h2>
+  <p class="why">Each film a plain case standing spine-out, the title down a spine in the poster's own colour. Hover pulls one forward; a click takes it out and turns it to its cover, the page washing into its colour, with the details beside it. The serif marquee above lights the film under the pointer.</p>
   <div class="opts"><label><input type="checkbox" class="byRating"> Height by your rating</label></div>
   <div class="marquee"><div class="track"></div></div>
-  <div class="stage"><div class="shelf" tabindex="0" aria-label="Blu-ray shelf"></div><div class="ledge"></div><div class="detail"></div><div class="hint mono">← → move · enter take out · esc put back</div></div>
+  <div class="stage"><div class="shelf" tabindex="0" aria-label="Case shelf"></div><div class="ledge"></div><div class="detail"></div><div class="hint mono">← → move · enter take out · esc put back</div></div>
 </section>
 
 <section class="v vhs" id="c">
@@ -285,7 +286,7 @@ function buildShelf(section, kind) {
 
   shelf.innerHTML = `<div class="row">` + films.map((f, i) => {
     const spine = kind === "bd"
-      ? `<div class="cap"><b>BLU-RAY</b></div><div class="t">${esc(f.title)}</div><div class="y">${esc(f.year)}</div>`
+      ? `<div class="t">${esc(f.title)}</div><div class="y">${esc(f.year)}</div>`
       : `<div class="band"></div><div class="label"><span>${esc(f.title)}</span></div><div class="sticker ${f.score ? "" : "none"}">${f.score ? "★" + f.score : ""}</div>`
     const rent = kind === "vhs" && top.includes(f.id) ? `<div class="rent">BE KIND · REWIND</div>` : ""
     return `<div class="case" tabindex="-1" data-i="${i}" role="button" aria-label="${esc(f.title)} (${esc(f.year)})">
@@ -328,14 +329,21 @@ function buildShelf(section, kind) {
     out = cases[i]; cur = i
     // Where the shelf will have scrolled to, and how far the case must still slide to stand in the
     // middle (one near either end cannot be scrolled there).
-    const want = out.offsetLeft - shelf.clientWidth / 2 + out.offsetWidth / 2
+    // Measured on screen: where the shelf will scroll to (centring the case, as far as it can),
+    // and the slide still needed to bring the case to the middle of the room the details card
+    // leaves (beside it on a wide screen, the whole width on a phone, where the card is below).
+    const sr = shelf.getBoundingClientRect(), cr = out.getBoundingClientRect()
+    const caseX = cr.left + cr.width / 2
+    const want = shelf.scrollLeft + caseX - (sr.left + sr.width / 2)
     const to = Math.max(0, Math.min(want, shelf.scrollWidth - shelf.clientWidth))
-    out.style.setProperty("--dx", `${Math.round(to - want)}px`)
-    center(out)
+    const room = innerWidth > 700 ? sr.width - detail.offsetWidth - 48 : sr.width
+    const target = sr.left + room / 2
+    out.style.setProperty("--dx", `${Math.round(target - (caseX - (to - shelf.scrollLeft)))}px`)
+    shelf.scrollTo({ left: to, behavior: "smooth" })
     out.classList.add("out"); shelf.classList.add("has-out")
     const f = films[i], p = await palette(f)
     if (p && out === cases[i]) stage.style.background = `radial-gradient(120% 90% at 50% 10%, ${p.bg2} 0%, ${p.bg} 70%)`
-    detail.innerHTML = `<div class="mono" style="opacity:.7">[ ${kind === "bd" ? "Blu-ray" : "VHS"} · watched ]</div><h4>${esc(f.title)}</h4>
+    detail.innerHTML = `<div class="mono" style="opacity:.7">[ ${kind === "bd" ? "On the shelf" : "VHS"} · watched ]</div><h4>${esc(f.title)}</h4>
       <div class="meta mono"><span>${esc(f.year)}</span>${f.minutes ? `<span>${f.minutes} min</span>` : ""}${f.score ? `<span>★ ${f.score}</span>` : ""}</div>
       <p>${esc(f.overview)}</p><a class="mono" href="/title/movie/${f.id}">Open on Roki →</a>`
     detail.classList.add("on")
@@ -355,9 +363,9 @@ function buildShelf(section, kind) {
   shelf.addEventListener("keydown", (e) => {
     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault()
-      const n = cur + (e.key === "ArrowRight" ? 1 : -1)
+      const n = cur < 0 ? 0 : cur + (e.key === "ArrowRight" ? 1 : -1)
       if (out) takeOut(Math.max(0, Math.min(cases.length - 1, n))); else { peek(n); center(cases[cur]) }
-    } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); out ? putBack() : takeOut(cur) }
+    } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); out ? putBack() : takeOut(Math.max(cur, 0)) }
     else if (e.key === "Escape") putBack()
   })
   // The shelf turns a little toward the pointer, the way a real one does as you walk past it.
@@ -366,7 +374,8 @@ function buildShelf(section, kind) {
     const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5
     shelf.style.perspectiveOrigin = `${50 + x * 30}% 30%`
   })
-  requestAnimationFrame(() => { peek(0); shelf.scrollLeft = 0 })
+  // At rest on arrival: the first case only comes forward once the keys are used.
+  requestAnimationFrame(() => { cur = -1; shelf.scrollLeft = 0 })
 }
 </script>
 </body>
