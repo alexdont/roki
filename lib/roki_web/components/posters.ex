@@ -386,6 +386,18 @@ defmodule RokiWeb.PosterComponents do
               class="absolute inset-x-3 bottom-2 truncate text-lg font-bold leading-tight text-shadow-sm"
             >
             </p>
+            <%!-- Recommended by Roki users: who vouched, only once the card is open — their picture
+                  (or initial), "+2" when others did too. Filled by the hook from `data-rec-*`. --%>
+            <span
+              data-card-rec
+              class="absolute right-2 top-2 hidden items-center gap-1 rounded-full bg-black/45 p-0.5 pr-1.5 text-[11px] font-semibold text-white ring-1 ring-white/20 backdrop-blur-sm [&:not([data-more])]:pr-0.5"
+            >
+              <span class="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-primary text-xs font-bold uppercase text-primary-content">
+                <img data-card-rec-img alt="" class="hidden h-full w-full object-cover" />
+                <span data-card-rec-initial></span>
+              </span>
+              <span data-card-rec-more class="tabular-nums"></span>
+            </span>
           </a>
 
           <div class="flex shrink-0 flex-col justify-start gap-3 p-3">

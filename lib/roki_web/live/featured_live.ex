@@ -1296,6 +1296,9 @@ defmodule RokiWeb.FeaturedLive do
       data-vote={@vote}
       data-title-href={@title_href}
       data-play-href={@play_href}
+      data-rec-name={@item[:rec_name]}
+      data-rec-more={@item[:rec_more]}
+      data-rec-avatar={@item[:rec_avatar]}
       data-picture={@picture}
       data-srcset={@srcset}
       class="space-y-1"
@@ -1362,6 +1365,9 @@ defmodule RokiWeb.FeaturedLive do
       data-vote={@vote}
       data-title-href={@title_href}
       data-play-href={@play_href}
+      data-rec-name={@item[:rec_name]}
+      data-rec-more={@item[:rec_more]}
+      data-rec-avatar={@item[:rec_avatar]}
       data-picture={@picture}
       data-srcset={@srcset}
       class="group/card relative h-[calc(var(--card-w)*1.5)] w-[var(--card-w)] shrink-0 snap-start hover:z-20"

@@ -367,6 +367,19 @@ export const cardMethods = {
     for (const el of p.querySelectorAll("[data-guest-only]")) el.style.display = signed ? "none" : ""
     const watched = p.querySelector("[data-card-watched]")
     if (watched) { const l = (d.key || "").startsWith("tv/") ? "Mark as completed" : "Mark as watched"; watched.setAttribute("aria-label", l); watched.title = l }
+    // Who recommended it (the home page's Recommended row): their picture top right, else the
+    // initial of their name; nothing on any other poster.
+    const rec = p.querySelector("[data-card-rec]")
+    if (rec) {
+      rec.style.display = d.recName ? "flex" : "none"
+      rec.title = d.recName ? `Recommended by ${d.recName}${+d.recMore > 0 ? ` and ${d.recMore} more` : ""}` : ""
+      rec.setAttribute("aria-label", rec.title)
+      const face = rec.querySelector("[data-card-rec-img]"), initial = rec.querySelector("[data-card-rec-initial]")
+      if (d.recAvatar) { face.src = d.recAvatar; face.classList.remove("hidden"); initial.textContent = "" }
+      else { face.removeAttribute("src"); face.classList.add("hidden"); initial.textContent = (d.recName || "").slice(0, 1) }
+      rec.querySelector("[data-card-rec-more]").textContent = +d.recMore > 0 ? `+${d.recMore}` : ""
+      if (+d.recMore > 0) rec.dataset.more = ""; else delete rec.dataset.more
+    }
     const img = p.querySelector("[data-card-img]")
     if (img) {
       delete img.dataset.loaded

@@ -490,7 +490,7 @@ films and shows) toggles a row in `roki_recommendations` (user, type, id, with t
 year and poster kept so nothing is looked up; `Roki.Recommendations.toggle/2`). The home page
 (`FeaturedLive`) has **"Recommended by Roki users"** under the Seasonal row for every signed-in person —
 everyone on the site, not only friends: a recommendation is meant for the others here — newest
-vouch first, each title once, its poster's badge saying who (`👍 alex +2`; `row/1`, `badge/1`);
+vouch first, each title once — a plain poster; who vouched shows only on the opened card, as their picture (or initial) top right with "+N" for others (`row/1` gives `rec_name`/`rec_more`/`rec_avatar`, the poster carries `data-rec-*`, `shelf_row.js` fills `[data-card-rec]`; no Gravatar, it would publish a hash of the email);
 the row is absent while nothing is recommended and has no "See All". The profile's rating bars are links to the watch history at that score (`?rating=7`, plus `kind=` for the breakdown's tab; ALEX-152). The title page names who
 recommends it under the hero (`by/2`).
 

@@ -54,7 +54,8 @@ defmodule Roki.Recommendations do
       Repo.query!(
         """
         select r.type, r.id, max(r.title), max(r.year), max(r.poster), max(r.recommended_at) as last,
-               array_agg(u.username order by r.recommended_at desc)
+               array_agg(u.username order by r.recommended_at desc),
+               (array_agg(u.custom_fields order by r.recommended_at desc))[1]
         from roki_recommendations r
         join phoenix_kit_users u on u.uuid = r.user_uuid
         group by r.type, r.id
@@ -64,7 +65,7 @@ defmodule Roki.Recommendations do
         [limit]
       )
 
-    for [type, id, title, year, poster, _last, by] <- rows do
+    for [type, id, title, year, poster, _last, by, fields] <- rows do
       %{
         type: type,
         id: id,
@@ -72,7 +73,10 @@ defmodule Roki.Recommendations do
         year: year,
         poster: poster,
         by: by,
-        badge: badge(by)
+        # Who vouched, shown only on the opened card: the latest one's picture (or initial).
+        rec_name: List.first(by),
+        rec_more: length(by) - 1,
+        rec_avatar: avatar(fields)
       }
     end
   end
@@ -91,8 +95,18 @@ defmodule Roki.Recommendations do
     List.flatten(rows)
   end
 
+  # The avatar as PhoenixKit's `user_avatar` finds it — an upload, else the sign-in provider's
+  # picture — or nil (the card shows the name's initial). Not Gravatar: that would put a hash of
+  # the person's email on the page.
   @doc false
-  # What the poster says: who vouched — "👍 alex", "👍 alex +2".
+  def avatar(%{"avatar_file_uuid" => uuid}) when is_binary(uuid) and uuid != "",
+    do: PhoenixKit.Modules.Storage.URLSigner.signed_url(uuid, "thumbnail")
+
+  def avatar(%{"oauth_avatar_url" => "http" <> _ = url}), do: url
+  def avatar(_), do: nil
+
+  # Who vouched, in words — "👍 alex", "👍 alex +2" (no longer on the posters; kept for tests/tools).
+  @doc false
   def badge([one]), do: "👍 #{one}"
   def badge([first | rest]), do: "👍 #{first} +#{length(rest)}"
   def badge(_), do: nil
