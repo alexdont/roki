@@ -411,7 +411,7 @@ Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`)
 
 ### Episode ratings (seriesgraph-like, ALEX-160)
 
-A show's Reviews sheet (the ★ score in the hero) opens with **Episode ratings**: a column per season,
+A show's Reviews sheet (the ★ score in the hero) has **Episode ratings** under the services' scores: a column per season,
 a row per episode, each cell TMDB's score for that episode with the number written in it, the
 season's average over its column (`RokiWeb.TitleLive.episode_graph/1`). Data: `Roki.EpisodeScores.for_show/2`
 — one TMDB season read each (four at a time, specials and unaired episodes left out, newest 40

@@ -3288,8 +3288,11 @@ defmodule RokiWeb.TitleLive do
           <p :if={@reviews == :error} class="text-sm text-base-content/70">
             Couldn't reach the review sites just now. Close this and try again in a minute.
           </p>
-
-          <.episode_graph :if={@title.type == "tv"} seasons={@ep_scores} title_id={@title.id} />
+          <.episode_graph
+            :if={@title.type == "tv" and @reviews == :error}
+            seasons={@ep_scores}
+            title_id={@title.id}
+          />
 
           <%= if is_map(@reviews) do %>
             <section :if={@reviews.scores != []} class="space-y-2">
@@ -3305,6 +3308,9 @@ defmodule RokiWeb.TitleLive do
                 open the title there.
               </p>
             </section>
+
+            <%!-- Under the services' scores: the show's own episodes, scored. --%>
+            <.episode_graph :if={@title.type == "tv"} seasons={@ep_scores} title_id={@title.id} />
 
             <section :if={@reviews.critics} class="space-y-2">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
