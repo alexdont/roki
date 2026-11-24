@@ -624,191 +624,302 @@ Object.assign(EFFECTS, {
   "scared-hush": plus(hush), "scared-lightning": plus(lightning),
 })
 
-// ══ Have a good cry: the hand, six ways ═════════════════════════════════════════════════════
-// The rain on glass without the wipe, and something gentler answering the hand. Fog is a layer at
-// a quarter size: misted white, a finger clears it, it mists back.
-function fogLayer(fx) {
-  const L = layer(fx, 2), MIST = "rgb(206,216,232)"
-  return {
-    L,
-    // Breathe on a spot: fog there (a soft round).
-    breathe(x, y, r, a) {
-      const g = L.g, k = L.k, gr = g.createRadialGradient(x / k, y / k, 0, x / k, y / k, r / k)
-      gr.addColorStop(0, `rgba(206,216,232,${a})`); gr.addColorStop(1, "rgba(206,216,232,0)")
-      g.fillStyle = gr; g.beginPath(); g.arc(x / k, y / k, r / k, 0, Math.PI * 2); g.fill()
-    },
-    clear(x, y, r) {
-      const g = L.g, k = L.k, gr = g.createRadialGradient(x / k, y / k, 0, x / k, y / k, r / k)
-      gr.addColorStop(0, "rgba(0,0,0,1)"); gr.addColorStop(0.6, "rgba(0,0,0,0.85)"); gr.addColorStop(1, "rgba(0,0,0,0)")
-      g.globalCompositeOperation = "destination-out"; g.fillStyle = gr
-      g.beginPath(); g.arc(x / k, y / k, r / k, 0, Math.PI * 2); g.fill(); g.globalCompositeOperation = "source-over"
-    },
-    // Everything fogged fades (the glass dries) at `rate` a second.
-    dry(dt, rate) {
-      const g = L.g; g.globalCompositeOperation = "destination-out"; g.globalAlpha = Math.min(1, dt * rate)
-      g.fillRect(0, 0, L.c.width, L.c.height); g.globalAlpha = 1; g.globalCompositeOperation = "source-over"
-    },
-    fit: () => L.fit(),
-    // Drawn through a blur, so the fog has no edge and no pixels; light, as breath on glass is.
-    draw(g, a) { g.save(); g.globalAlpha = a; g.filter = "blur(6px)"; g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(L.c, 0, 0, fx.W, fx.H); g.restore() },
-    MIST,
+// ══ Have a good cry: tissues ═══════════════════════════════════════════════════════════════
+// "Tissues within reach. You'll be fine." The rain on glass without the wipe; tissues and comfort
+// answer the hand.
+
+// A tissue, drawn: a soft off-white sheet, a few folds, a little shadow; `crumple` 0 flat .. 1 a
+// ball; `wet` 0..1 greys and darkens it where it has soaked up tears.
+function tissue(g, x, y, size, rot, crumple = 0, wet = 0, alpha = 1, seed = 1) {
+  const r = (k) => { const v = Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v) }
+  g.save(); g.translate(x, y); g.rotate(rot); g.globalAlpha = alpha
+  const base = 250 - wet * 38, ink = (d) => `rgb(${base - d},${base - d + 1},${base - d + 5})`
+  if (crumple > 0.5) {
+    // A used tissue screwed into a ball: a few overlapping lumps, each lit from the top left, with
+    // creases between them.
+    g.shadowColor = "rgba(0,0,0,0.4)"; g.shadowBlur = 8; g.shadowOffsetY = 3
+    const lumps = 7
+    for (let i = 0; i < lumps; i++) {
+      const a = r(i) * Math.PI * 2, d = size * 0.32 * r(i + 9), R = size * (0.32 + r(i + 20) * 0.22)
+      const cx = Math.cos(a) * d, cy = Math.sin(a) * d * 0.85
+      const gr = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R)
+      gr.addColorStop(0, ink(-4)); gr.addColorStop(0.7, ink(18)); gr.addColorStop(1, ink(48))
+      g.fillStyle = gr; g.beginPath()
+      for (let k = 0; k <= 9; k++) { const t = (k / 9) * Math.PI * 2, rr = R * (0.82 + r(i * 13 + k) * 0.3); k ? g.lineTo(cx + Math.cos(t) * rr, cy + Math.sin(t) * rr) : g.moveTo(cx + Math.cos(t) * rr, cy + Math.sin(t) * rr) }
+      g.closePath(); g.fill()
+      if (i === 0) g.shadowColor = "transparent"
+    }
+    g.strokeStyle = `rgba(110,120,140,0.45)`; g.lineWidth = 0.9
+    for (let k = 0; k < 6; k++) { const a = r(40 + k) * Math.PI * 2, l = size * 0.45; g.beginPath(); g.moveTo(Math.cos(a) * l * 0.1, Math.sin(a) * l * 0.1); g.lineTo(Math.cos(a + 0.3) * l, Math.sin(a + 0.3) * l); g.stroke() }
+  } else {
+    // A tissue pinched at the top, as one is pulled from a box: a soft wavy sheet narrowing to a
+    // gathered tuft, lit from the top left, with a few soft creases.
+    const w = size * 1.15, h = size * 1.3, sway = (k) => (r(k) - 0.5) * size * 0.12
+    g.shadowColor = "rgba(0,0,0,0.35)"; g.shadowBlur = 14; g.shadowOffsetY = 6
+    const path = new Path2D()
+    path.moveTo(-size * 0.08, -h / 2)
+    path.bezierCurveTo(-w * 0.2, -h * 0.25, -w * 0.55, -h * 0.05 + sway(1), -w * 0.5, h * 0.3)
+    // The lower edge in soft scallops.
+    const sc = 4
+    for (let k = 0; k < sc; k++) {
+      const x0 = -w * 0.5 + (w / sc) * k, x1 = x0 + w / sc
+      path.quadraticCurveTo((x0 + x1) / 2 + sway(10 + k), h * 0.5 + sway(20 + k) + 6, x1, h * 0.32 + sway(30 + k))
+    }
+    path.bezierCurveTo(w * 0.55, -h * 0.05 + sway(2), w * 0.2, -h * 0.25, size * 0.08, -h / 2)
+    path.closePath()
+    const gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2)
+    gr.addColorStop(0, ink(-5)); gr.addColorStop(0.6, ink(8)); gr.addColorStop(1, ink(30))
+    g.fillStyle = gr; g.fill(path); g.shadowColor = "transparent"
+    g.save(); g.clip(path)
+    // Creases fanning down from the pinch.
+    for (let k = 0; k < 5 + crumple * 4; k++) {
+      const a = -0.9 + (k / 5) * 1.8 + (r(50 + k) - 0.5) * 0.3
+      const fgr = g.createLinearGradient(0, -h / 2, Math.sin(a) * h, h / 2)
+      fgr.addColorStop(0, "rgba(120,130,150,0.35)"); fgr.addColorStop(1, "rgba(120,130,150,0)")
+      g.strokeStyle = fgr; g.lineWidth = 2.5 + r(60 + k) * 2
+      g.beginPath(); g.moveTo(0, -h / 2); g.quadraticCurveTo(Math.sin(a) * h * 0.3, 0, Math.sin(a) * h * 0.55, h / 2); g.stroke()
+    }
+    // A highlight down the lit side.
+    const hl = g.createLinearGradient(-w / 2, 0, 0, 0)
+    hl.addColorStop(0, "rgba(255,255,255,0)"); hl.addColorStop(0.6, "rgba(255,255,255,0.35)"); hl.addColorStop(1, "rgba(255,255,255,0)")
+    g.fillStyle = hl; g.fillRect(-w / 2, -h / 2, w / 2, h)
+    g.restore()
+    // The gathered tuft where it is held.
+    g.fillStyle = ink(4)
+    g.beginPath(); g.ellipse(0, -h / 2, size * 0.13, size * 0.09, 0, 0, Math.PI * 2); g.fill()
   }
-}
-
-// 1 · Write in the fog: hold the pointer still and your breath fogs a patch; move, and your finger
-// writes a clear line through the fog, which slowly mists back over and then dries away.
-function fogWrite(fx) {
-  const F = fogLayer(fx)
-  let still = 0, lastP = null, wrote = 0
-  return {
-    step(dt, amount, active) {
-      F.fit()
-      const P = fx.pointer
-      if (active && P.on) {
-        if (P.speed < 25) { still += dt; if (still > 0.25) {
-          // Breath spreads unevenly: a few soft puffs around the pointer, not one round.
-          for (let i = 0; i < 3; i++) { const a = rand(0, Math.PI * 2), d = rand(0, 60); F.breathe(P.x + Math.cos(a) * d, P.y + Math.sin(a) * d * 0.8, rand(45, 85) * (fx.phone ? 0.8 : 1), Math.min(0.05, dt * 0.6)) }
-        } }
-        else {
-          still = 0
-          // A finger through the fog — only where there is fog to write in (it clears what is there).
-          const pts = P.path && P.path.length ? P.path : [{x: P.x, y: P.y}]
-          for (const q of pts) { F.clear(q.x, q.y, 9); if (lastP) for (let i = 1; i < 4; i++) F.clear(lastP.x + (q.x - lastP.x) * i / 4, lastP.y + (q.y - lastP.y) * i / 4, 9); lastP = q }
-          wrote = 2
-        }
-      } else { still = 0; lastP = null }
-      if (!P.on || P.speed >= 25) lastP = P.on ? lastP : null
-      // The writing mists back over in a few seconds; the fog itself dries slowly.
-      wrote -= dt
-      F.dry(dt, wrote > 0 ? 0.015 : 0.05)
-    },
-    over(g, alpha) { F.draw(g, alpha * 0.5) },
+  // Damp patches, where it has soaked up tears.
+  if (wet > 0.05) {
+    for (let k = 0; k < 3; k++) {
+      const cx = (r(60 + k) - 0.5) * size * 0.6, cy = (r(70 + k) - 0.5) * size * 0.6
+      const gr = g.createRadialGradient(cx, cy, 0, cx, cy, size * 0.35)
+      gr.addColorStop(0, `rgba(140,158,188,${0.45 * wet})`); gr.addColorStop(1, "rgba(140,158,188,0)")
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, size * 0.35, 0, Math.PI * 2); g.fill()
+    }
   }
+  g.restore()
 }
 
-// 2 · Tears gather to your hand: like the drops crawling in Be scared, but slower and softer —
-// drops drift to a pointer held still and become one big tear that rolls when you move off.
-const tearsGather = (fx, api) => {
-  const c = crawl(fx, api)
-  return { step(dt, amount, active) { c.step(dt * 0.6, amount, active) } }
-}
-
-// 3 · Rain parts around you: the pointer is shelter — streaks fall round it, drops slide aside,
-// a calm clear circle follows you, slowly.
-function shelter(fx, api) {
-  let sx = 0, sy = 0, on = 0
+// The pointer as a tissue, dabbing: drops under it shrink and are soaked up; the tissue darkens.
+function dabber(fx, api, opts = {}) {
+  const st = {x: 0, y: 0, on: 0, wet: 0, bob: 0, rot: rand(-0.3, 0.3), seed: rand(1, 99), held: !opts.needsTake}
   return {
+    st,
     step(dt, amount, active) {
       const P = fx.pointer
-      on += ((active && P.on ? 1 : 0) - on) * Math.min(1, dt * 2)
-      sx += (P.x - sx) * Math.min(1, dt * 2.5); sy += (P.y - sy) * Math.min(1, dt * 2.5)
-      if (on < 0.05) return
-      const R = (fx.phone ? 80 : 120) * on
+      const want = active && P.on && st.held ? 1 : 0
+      st.on += (want - st.on) * Math.min(1, dt * 6)
+      st.x += (P.x - st.x) * Math.min(1, dt * 14); st.y += (P.y - st.y) * Math.min(1, dt * 14)
+      if (st.on < 0.3) return
+      // Held still, it dabs: a little press up and down.
+      st.bob = P.speed < 20 ? st.bob + dt * 7 : st.bob * 0.9
+      const R = fx.phone ? 26 : 34
       for (const d of api.drops()) {
         if (d.dead) continue
-        const dx = d.x - sx, dy = d.y - sy, dist = Math.hypot(dx, dy)
-        if (dist < R && dist > 0.1) { const push = (R - dist) * Math.min(1, dt * 3); d.x += dx / dist * push; d.y += dy / dist * push * 0.6 }
+        if (Math.hypot(d.x - st.x, d.y - st.y) < R + d.r) {
+          d.r -= dt * 22; d.sliding = false
+          if (d.r < 1) { d.dead = true; st.wet = Math.min(1, st.wet + 0.02) }
+        }
       }
-      for (const st of api.streaks()) {
-        const dx = st.x - sx, dy = st.y - sy, dist = Math.hypot(dx, dy)
-        if (dist < R * 1.2 && dist > 0.1) st.x += dx / dist * (R * 1.2 - dist) * Math.min(1, dt * 6)
-      }
+      st.wet = Math.max(0, st.wet - dt * 0.01)
     },
-    under(g, alpha) {
-      if (on < 0.05) return
-      const R = (fx.phone ? 80 : 120) * on
-      const gr = g.createRadialGradient(sx, sy, R * 0.3, sx, sy, R * 1.1)
-      gr.addColorStop(0, `rgba(200,215,240,${0.05 * on * alpha})`); gr.addColorStop(0.75, `rgba(200,215,240,${0.03 * on * alpha})`); gr.addColorStop(1, "rgba(200,215,240,0)")
-      g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, R * 1.1, 0, Math.PI * 2); g.fill()
-      // The edge of the shelter: a faint wet rim where the rain turns aside.
-      g.globalAlpha = 0.22 * on * alpha; g.strokeStyle = "rgb(210,224,248)"; g.lineWidth = 1.2
-      g.beginPath(); g.arc(sx, sy, R, 0, Math.PI * 2); g.stroke()
+    over(g, alpha) {
+      if (st.on < 0.05) return
+      const press = 1 - Math.max(0, Math.sin(st.bob)) * 0.08
+      tissue(g, st.x, st.y + (fx.phone ? 20 : 26), (fx.phone ? 40 : 52) * press, st.rot + Math.sin(st.bob * 0.5) * 0.05, 0.25, st.wet, st.on * alpha, st.seed)
     },
   }
 }
 
-// 4 · A hand on the glass from your side: a click leaves a soft, warm, misty print — a palm laid on
-// a cold window — that fogs over slowly; a couple of drops run from it.
-const MISTY = "rgba(214,224,240,0.55)"
-function warmPrint(fx, api) {
-  let left = Math.random() < 0.5
+// 1 · The pointer is a tissue: over the slide the cursor is a small tissue that dabs the tears dry.
+function tissueHand(fx, api) { return dabber(fx, api) }
+
+// 2 · Pull a tissue from the box: a box in the corner; click it and a tissue rises from it and
+// follows your hand; click again (away from the box) and it is crumpled and tossed.
+function tissueBox(fx, api) {
+  const d = dabber(fx, api, {needsTake: true})
+  let rise = 0, tossed = []
+  const box = () => ({x: fx.W - (fx.phone ? 70 : 110), y: fx.carBottom - (fx.phone ? 60 : 80), w: fx.phone ? 80 : 110, h: fx.phone ? 46 : 60})
   return {
     step(dt, amount, active) {
+      const b = box()
       for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
-        left = !left
-        api.stamp(k.x, k.y, {color: MISTY, soft: true, mirror: left, vary: true, scale: rand(0.95, 1.1), life: 9, drip: false})
-        for (let i = 0; i < 2; i++) api.spawn(k.x + rand(-18, 18), k.y + rand(18, 32), rand(3, 4.4), true)
+        const onBox = k.x > b.x - b.w / 2 && k.x < b.x + b.w / 2 && k.y > b.y - b.h && k.y < b.y + b.h / 2
+        if (onBox && !d.st.held) { d.st.held = true; rise = 1; d.st.wet = 0; d.st.x = b.x; d.st.y = b.y - b.h }
+        else if (d.st.held && !onBox) { d.st.held = false; tossed.push({x: d.st.x, y: d.st.y, vx: rand(-120, 120), vy: -180, rot: 0, life: 2.5, wet: d.st.wet, seed: d.st.seed}); d.st.seed = rand(1, 99) }
       }
+      rise = Math.max(0, rise - dt * 2)
+      for (const t of tossed) { t.vy += 600 * dt; t.x += t.vx * dt; t.y += t.vy * dt; t.rot += t.vx * dt * 0.02; t.life -= dt }
+      tossed = tossed.filter((t) => t.life > 0 && t.y < fx.H + 40)
+      d.step(dt, amount, active)
+    },
+    over(g, alpha) {
+      const b = box()
+      // The box: a soft pastel box with an oval opening and a tissue sticking up out of it.
+      g.save(); g.globalAlpha = alpha
+      g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(b.x, b.y + b.h * 0.5, b.w * 0.55, 8, 0, 0, Math.PI * 2); g.fill()
+      const gr = g.createLinearGradient(0, b.y - b.h / 2, 0, b.y + b.h / 2)
+      gr.addColorStop(0, "rgb(170,190,225)"); gr.addColorStop(1, "rgb(120,140,185)")
+      g.fillStyle = gr; g.beginPath(); g.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 6); g.fill()
+      g.fillStyle = "rgba(255,255,255,0.18)"; g.fillRect(b.x - b.w / 2 + 6, b.y - b.h / 2 + 6, b.w - 12, 5)
+      g.fillStyle = "rgb(60,70,95)"; g.beginPath(); g.ellipse(b.x, b.y - b.h / 2 + 2, b.w * 0.28, 6, 0, 0, Math.PI * 2); g.fill()
+      g.restore()
+      if (!d.st.held) tissue(g, b.x, b.y - b.h / 2 - 14, 26, 0.08, 0.15, 0, alpha, 7)
+      for (const t of tossed) tissue(g, t.x, t.y, 16, t.rot, 0.9, t.wet, alpha * Math.min(1, t.life), t.seed)
+      d.over(g, alpha)
     },
   }
 }
 
-// 5 · Someone on the other side: now and then, after your print, a second faint hand comes to the
-// glass from outside against yours — slowly, softly — and fades.
-function reachBack(fx, api) {
-  const due = []
+// 3 · Crumpled tissues pile up: each click throws a used tissue that tumbles down and lands at the
+// foot of the slide; a little pile builds there, fading after a minute.
+function tissuePile(fx) {
+  const pile = [], flying = []
   return {
     step(dt, amount, active) {
-      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) if (Math.random() < 0.5) due.push({x: k.x + rand(-14, 14), y: k.y + rand(-10, 10), t: rand(1.2, 2)})
-      for (const d of due) d.t -= dt
-      for (const d of due.filter((d) => d.t <= 0)) api.stamp(d.x, d.y, {color: "rgba(255,226,200,0.32)", soft: true, mirror: true, vary: true, scale: rand(0.85, 0.98), life: 6, drip: false})
-      for (let i = due.length - 1; i >= 0; i--) if (due[i].t <= 0) due.splice(i, 1)
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) flying.push({x: k.x, y: k.y, vx: rand(-60, 60), vy: rand(-160, -60), rot: rand(0, 6), vr: rand(-6, 6), seed: rand(1, 99), wet: rand(0.2, 0.7)})
+      const floor = fx.H - 26
+      for (const f of flying) {
+        f.vy += 900 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt
+        // Lands on the floor, or on the pile where it is high.
+        const top = pile.filter((p) => Math.abs(p.x - f.x) < 18).reduce((m, p) => Math.min(m, p.y - 12), floor)
+        if (f.y >= top) { pile.push({x: f.x, y: top, rot: f.rot, seed: f.seed, wet: f.wet, age: 0}); f.done = true }
+      }
+      for (let i = flying.length - 1; i >= 0; i--) if (flying[i].done) flying.splice(i, 1)
+      for (const p of pile) p.age += dt
+      for (let i = pile.length - 1; i >= 0; i--) if (pile[i].age > 60) pile.splice(i, 1)
+    },
+    over(g, alpha) {
+      for (const p of pile) tissue(g, p.x, p.y, 17, p.rot, 0.95, p.wet, alpha * Math.min(1, (60 - p.age) / 5), p.seed)
+      for (const f of flying) tissue(g, f.x, f.y, 17, f.rot, 0.95, f.wet, alpha, f.seed)
     },
   }
 }
 
-// 6 · A heart in the fog: draw a loop and it becomes a heart misted on the glass, which drips and
-// fades.
-function fogHeart(fx, api) {
-  const hearts = []
-  let trail = [], turned = 0, lastA = null
+// 4 · A tissue floats down: now and then one drifts down through the rain, swaying like a leaf;
+// catch it (the pointer on it) and it becomes your tissue and dabs.
+function tissueFloat(fx, api) {
+  const d = dabber(fx, api, {needsTake: true})
+  let f = null, next = rand(2, 4)
+  return {
+    step(dt, amount, active) {
+      next -= dt
+      if (!f && !d.st.held && active && next < 0) f = {x: rand(fx.W * 0.15, fx.W * 0.85), y: -40, t: 0, seed: rand(1, 99)}
+      if (f) {
+        f.t += dt; f.y += 38 * dt; f.x += Math.cos(f.t * 1.4) * 40 * dt
+        const P = fx.pointer
+        if (P.on && Math.hypot(P.x - f.x, P.y - f.y) < 40) { d.st.held = true; d.st.x = f.x; d.st.y = f.y; d.st.seed = f.seed; d.st.wet = 0; f = null; next = rand(10, 16) }
+        else if (f.y > fx.H + 40) { f = null; next = rand(5, 9) }
+      }
+      // Let go when the pointer leaves the slide.
+      if (d.st.held && !fx.pointer.on) d.st.held = false
+      d.step(dt, amount, active)
+    },
+    over(g, alpha) {
+      if (f) tissue(g, f.x, f.y, 44, Math.sin(f.t * 1.4) * 0.5, 0.05, 0, alpha, f.seed)
+      d.over(g, alpha)
+    },
+  }
+}
+
+// 5 · Someone offers a tissue: hold still a while and a hand comes in from the side holding one
+// out; click it and the tissue is yours (the pointer becomes it), and the hand goes.
+function offered(fx, api) {
+  const d = dabber(fx, api, {needsTake: true})
+  let still = 0, hand = null
   return {
     step(dt, amount, active) {
       const P = fx.pointer
-      if (active && P.on && P.speed > 15) {
-        for (const q of (P.path && P.path.length ? P.path : [{x: P.x, y: P.y}])) {
-          const l = trail[trail.length - 1]
-          if (!l || Math.hypot(q.x - l.x, q.y - l.y) > 6) {
-            if (l && trail.length > 1) {
-              const a0 = trail[trail.length - 2], ang0 = Math.atan2(l.y - a0.y, l.x - a0.x), ang1 = Math.atan2(q.y - l.y, q.x - l.x)
-              let d = ang1 - ang0; d = Math.atan2(Math.sin(d), Math.cos(d)); turned += d
-            }
-            trail.push({x: q.x, y: q.y}); if (trail.length > 120) trail.shift()
-          }
+      if (active && P.on && P.speed < 20 && !d.st.held) still += dt; else still = 0
+      if (!hand && still > 1.6) hand = {side: P.x < fx.W / 2 ? -1 : 1, t: 0, y: P.y, out: false}
+      if (hand) {
+        hand.t += dt * (hand.out ? -1.5 : 1)
+        hand.y += (P.y - hand.y) * Math.min(1, dt * 2)
+        for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
+          const tx = hand.side < 0 ? this.tipX : this.tipX
+          if (Math.hypot(k.x - this.tipX, k.y - hand.y) < 60) { d.st.held = true; d.st.x = this.tipX; d.st.y = hand.y; d.st.wet = 0; hand.out = true }
         }
-        // Once round (either way): a heart where the loop was.
-        if (Math.abs(turned) > Math.PI * 1.6) {
-          const xs = trail.map((q) => q.x), ys = trail.map((q) => q.y)
-          const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2
-          const size = Math.max(40, Math.min(110, (Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)) / 4))
-          hearts.push({x: cx, y: cy, s: size, age: 0, life: 6, dripped: 0})
-          trail = []; turned = 0; lastA = null
-        }
-      } else { trail = []; turned = 0; lastA = null }
-      for (const h of hearts) {
-        h.age += dt
-        if (h.age > 1 && h.dripped < 3 && Math.random() < dt * 1.2) { api.spawn(h.x + rand(-0.6, 0.6) * h.s, h.y + h.s * 0.6, rand(2.6, 3.8), true); h.dripped++ }
+        if (!hand.out && still === 0 && hand.t > 1) hand.out = true
+        if (hand.out && hand.t <= 0) hand = null
       }
-      for (let i = hearts.length - 1; i >= 0; i--) if (hearts[i].age > hearts[i].life) hearts.splice(i, 1)
+      if (d.st.held && !P.on) d.st.held = false
+      d.step(dt, amount, active)
     },
     over(g, alpha) {
-      for (const h of hearts) {
-        const a = Math.min(1, h.age * 3) * Math.min(1, (h.life - h.age) / 2) * alpha
-        g.save(); g.translate(h.x, h.y); g.scale(h.s / 50, h.s / 50)
-        g.beginPath(); g.moveTo(0, 18)
-        g.bezierCurveTo(-34, -6, -26, -38, 0, -18); g.bezierCurveTo(26, -38, 34, -6, 0, 18)
-        g.lineWidth = 9; g.lineJoin = "round"; g.strokeStyle = MISTY; g.globalAlpha = a * 0.9; g.stroke()
+      if (hand) {
+        const reach = Math.min(1, hand.t / 0.9) ** 0.6, len = (fx.phone ? 150 : 230) * reach
+        const x0 = hand.side < 0 ? -20 : fx.W + 20, dir = hand.side < 0 ? 1 : -1
+        const tip = x0 + dir * len
+        this.tipX = tip
+        g.save(); g.globalAlpha = alpha
+        // A sleeve and a hand: soft, warm, simple.
+        g.lineCap = "round"; g.strokeStyle = "rgb(70,82,110)"; g.lineWidth = 34
+        g.beginPath(); g.moveTo(x0, hand.y + 20); g.lineTo(tip - dir * 40, hand.y + 6); g.stroke()
+        g.fillStyle = "rgb(226,186,160)"
+        g.beginPath(); g.ellipse(tip - dir * 22, hand.y + 4, 22, 15, 0, 0, Math.PI * 2); g.fill()
         g.restore()
+        if (!hand.out || !d.st.held) tissue(g, tip, hand.y - 8, 28, dir * 0.3, 0.1, 0, alpha, 3)
+      }
+      d.over(g, alpha)
+    },
+  }
+}
+
+// 6 · A hug of warm light: hold still and a soft warm glow gathers round the pointer, and for a
+// while the rain falls slower and quieter.
+function warmth(fx, api) {
+  let still = 0, k = 0, x = 0, y = 0
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (active && P.on && P.speed < 20) still += dt; else still = Math.max(0, still - dt * 2)
+      k += ((still > 0.8 ? 1 : 0) - k) * Math.min(1, dt * 0.8)
+      x += (P.x - x) * Math.min(1, dt * 3); y += (P.y - y) * Math.min(1, dt * 3)
+      api.rate(1 - 0.75 * k)
+    },
+    under(g, alpha) {
+      if (k < 0.02) return
+      const R = (fx.phone ? 160 : 260) * (0.7 + 0.3 * k)
+      const gr = g.createRadialGradient(x, y, 0, x, y, R)
+      gr.addColorStop(0, `rgba(255,196,140,${0.22 * k * alpha})`); gr.addColorStop(0.5, `rgba(255,170,120,${0.1 * k * alpha})`); gr.addColorStop(1, "rgba(255,170,120,0)")
+      g.globalCompositeOperation = "lighter"; g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2); g.globalCompositeOperation = "source-over"
+    },
+  }
+}
+
+// 7 · Tear tracks: every running drop leaves a faint tear-stain; the pointer passing over a stain
+// dries it to a faint salt line that fades.
+function tearTracks(fx, api) {
+  const marks = []
+  return {
+    step(dt, amount, active) {
+      for (const d of api.drops()) if (d.sliding && !d.dead && Math.random() < dt * 8) marks.push({x: d.x, y: d.y - d.r, r: d.r * 0.9, age: 0, dry: 0})
+      const P = fx.pointer
+      for (const m of marks) {
+        m.age += dt
+        if (active && P.on && Math.hypot(m.x - P.x, m.y - P.y) < 40) m.dry = Math.min(1, m.dry + dt * 3)
+      }
+      for (let i = marks.length - 1; i >= 0; i--) if (marks[i].age > (marks[i].dry > 0 ? 6 : 14)) marks.splice(i, 1)
+      if (marks.length > 1400) marks.splice(0, marks.length - 1400)
+    },
+    under(g, alpha) {
+      for (const m of marks) {
+        const life = m.dry > 0 ? 6 : 14, a = Math.min(1, (life - m.age) / 3) * alpha
+        if (m.dry > 0) { g.globalAlpha = a * 0.35 * m.dry; g.fillStyle = "rgb(235,238,245)"; g.fillRect(m.x - 0.6, m.y, 1.2, 3) }
+        else { g.globalAlpha = a * 0.1; g.fillStyle = "rgb(170,190,225)"; g.beginPath(); g.arc(m.x, m.y, m.r, 0, Math.PI * 2); g.fill() }
       }
     },
   }
 }
 
+// The mix: the pointer a tissue, tissues floating down to catch, a click throwing a used one on
+// the pile.
 const TEARS = {...RAIN.cry, noWipe: true}
 Object.assign(EFFECTS, {
-  "cry-1": plusWith(TEARS, fogWrite), "cry-2": plusWith(TEARS, tearsGather), "cry-3": plusWith(TEARS, shelter),
-  "cry-4": plusWith(TEARS, warmPrint), "cry-5": plusWith(TEARS, warmPrint, reachBack), "cry-6": plusWith(TEARS, fogHeart),
-  "cry-mix": plusWith(TEARS, tearsGather, warmPrint, fogWrite),
+  "cry-t1": plusWith(TEARS, tissueHand), "cry-t2": plusWith(TEARS, tissueBox), "cry-t3": plusWith(TEARS, tissuePile),
+  "cry-t4": plusWith(TEARS, tissueFloat), "cry-t5": plusWith(TEARS, offered), "cry-t6": plusWith(TEARS, warmth),
+  "cry-t7": plusWith(TEARS, tearTracks),
+  "cry-tmix": plusWith(TEARS, tissueHand, tissuePile, (fx, api) => { const f = tissueFloat(fx, api); return f }),
 })
 
 // The hand, reworked: what the finger wipes weeps down the glass (tears; a bleeding smear that
