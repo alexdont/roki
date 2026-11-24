@@ -1579,8 +1579,9 @@ function drain(fx) {
     step(dt, amount, active) {
       const P = fx.pointer
       if (active && P.on && P.speed < 20) { still += dt; x = P.x; y = P.y } else still = 0
-      const want = still > 0.4 ? Math.min(Math.max(fx.W, fx.H) * 1.2, (still - 0.4) * 280) : 0
-      R += (want - R) * Math.min(1, dt * (want > R ? 2 : 4))
+      // Begins a moment after the pointer settles and covers the slide in about a second and a half.
+      const want = still > 0.2 ? Math.min(Math.max(fx.W, fx.H) * 1.2, (still - 0.2) * 900) : 0
+      R += (want - R) * Math.min(1, dt * (want > R ? 5 : 5))
       if (R < 3 || !active) return drop()
       const src = slide()
       if (!src) return
@@ -1615,7 +1616,7 @@ function hush(fx) {
     stats: r.stats,
     step(dt, amount, active) {
       const P = fx.pointer, want = active && P.on && P.speed < 20 ? 0.12 : 1
-      k += (want - k) * Math.min(1, dt * (want < k ? 1.2 : 3))
+      k += (want - k) * Math.min(1, dt * (want < k ? 3.5 : 4))
       r.step(dt * k, amount, active)
       d.step(dt, amount, active)
     },

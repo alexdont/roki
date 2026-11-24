@@ -50,6 +50,15 @@ export const MoodCarousel = {
       this.arm()
     })
     this.el.addEventListener("mouseenter", () => { this.held = true; this.freeze() })
+    // On a touch screen there is no hovering: a finger resting on the slide holds it the same way
+    // (the weather answers a still pointer, and the turn should not cut it off), lifting lets go.
+    this.el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" || e.target.closest?.("a, button, [data-mood-chip]")) return
+      this.held = true; this.freeze()
+    }, {passive: true})
+    const release = (e) => { if (e.pointerType === "touch" && this.held) { this.held = false; this.arm() } }
+    this.el.addEventListener("pointerup", release, {passive: true})
+    this.el.addEventListener("pointercancel", release, {passive: true})
     this.el.addEventListener("mouseleave", () => { this.held = false; this.arm() })
     this.onVisibility = () => { this.visible = !document.hidden; this.visible ? this.arm() : this.freeze() }
     document.addEventListener("visibilitychange", this.onVisibility)
