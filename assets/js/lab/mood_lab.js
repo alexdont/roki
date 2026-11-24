@@ -5,7 +5,7 @@
 // `fx.sprites`), so the one chosen moves into mood_fx.js as it is.
 //
 // Built on its own (esbuild → priv/static/lab/mood-lab.js), never part of app.js.
-import {MoodFx, EFFECTS, rain, RAIN, crawl, inside} from "../mood_fx"
+import {MoodFx, EFFECTS, rain, RAIN, crawl, inside, plusWith} from "../mood_fx"
 
 const rand = (a, b) => a + Math.random() * (b - a)
 const near = (P, x, y, R) => { if (!P.on) return 0; const d = Math.hypot(x - P.x, y - P.y); return d < R ? 1 - d / R : 0 }
@@ -622,6 +622,193 @@ Object.assign(EFFECTS, {
   "scared-face": plus(otherSide), "scared-pressback": plus(pressBack), "scared-writing": plus(writing),
   "scared-crawl": plus(crawl), "scared-crack": plus(cracks), "scared-inside": plus(inside),
   "scared-hush": plus(hush), "scared-lightning": plus(lightning),
+})
+
+// ══ Have a good cry: the hand, six ways ═════════════════════════════════════════════════════
+// The rain on glass without the wipe, and something gentler answering the hand. Fog is a layer at
+// a quarter size: misted white, a finger clears it, it mists back.
+function fogLayer(fx) {
+  const L = layer(fx, 2), MIST = "rgb(206,216,232)"
+  return {
+    L,
+    // Breathe on a spot: fog there (a soft round).
+    breathe(x, y, r, a) {
+      const g = L.g, k = L.k, gr = g.createRadialGradient(x / k, y / k, 0, x / k, y / k, r / k)
+      gr.addColorStop(0, `rgba(206,216,232,${a})`); gr.addColorStop(1, "rgba(206,216,232,0)")
+      g.fillStyle = gr; g.beginPath(); g.arc(x / k, y / k, r / k, 0, Math.PI * 2); g.fill()
+    },
+    clear(x, y, r) {
+      const g = L.g, k = L.k, gr = g.createRadialGradient(x / k, y / k, 0, x / k, y / k, r / k)
+      gr.addColorStop(0, "rgba(0,0,0,1)"); gr.addColorStop(0.6, "rgba(0,0,0,0.85)"); gr.addColorStop(1, "rgba(0,0,0,0)")
+      g.globalCompositeOperation = "destination-out"; g.fillStyle = gr
+      g.beginPath(); g.arc(x / k, y / k, r / k, 0, Math.PI * 2); g.fill(); g.globalCompositeOperation = "source-over"
+    },
+    // Everything fogged fades (the glass dries) at `rate` a second.
+    dry(dt, rate) {
+      const g = L.g; g.globalCompositeOperation = "destination-out"; g.globalAlpha = Math.min(1, dt * rate)
+      g.fillRect(0, 0, L.c.width, L.c.height); g.globalAlpha = 1; g.globalCompositeOperation = "source-over"
+    },
+    fit: () => L.fit(),
+    // Drawn through a blur, so the fog has no edge and no pixels; light, as breath on glass is.
+    draw(g, a) { g.save(); g.globalAlpha = a; g.filter = "blur(6px)"; g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(L.c, 0, 0, fx.W, fx.H); g.restore() },
+    MIST,
+  }
+}
+
+// 1 · Write in the fog: hold the pointer still and your breath fogs a patch; move, and your finger
+// writes a clear line through the fog, which slowly mists back over and then dries away.
+function fogWrite(fx) {
+  const F = fogLayer(fx)
+  let still = 0, lastP = null, wrote = 0
+  return {
+    step(dt, amount, active) {
+      F.fit()
+      const P = fx.pointer
+      if (active && P.on) {
+        if (P.speed < 25) { still += dt; if (still > 0.25) {
+          // Breath spreads unevenly: a few soft puffs around the pointer, not one round.
+          for (let i = 0; i < 3; i++) { const a = rand(0, Math.PI * 2), d = rand(0, 60); F.breathe(P.x + Math.cos(a) * d, P.y + Math.sin(a) * d * 0.8, rand(45, 85) * (fx.phone ? 0.8 : 1), Math.min(0.05, dt * 0.6)) }
+        } }
+        else {
+          still = 0
+          // A finger through the fog — only where there is fog to write in (it clears what is there).
+          const pts = P.path && P.path.length ? P.path : [{x: P.x, y: P.y}]
+          for (const q of pts) { F.clear(q.x, q.y, 9); if (lastP) for (let i = 1; i < 4; i++) F.clear(lastP.x + (q.x - lastP.x) * i / 4, lastP.y + (q.y - lastP.y) * i / 4, 9); lastP = q }
+          wrote = 2
+        }
+      } else { still = 0; lastP = null }
+      if (!P.on || P.speed >= 25) lastP = P.on ? lastP : null
+      // The writing mists back over in a few seconds; the fog itself dries slowly.
+      wrote -= dt
+      F.dry(dt, wrote > 0 ? 0.015 : 0.05)
+    },
+    over(g, alpha) { F.draw(g, alpha * 0.5) },
+  }
+}
+
+// 2 · Tears gather to your hand: like the drops crawling in Be scared, but slower and softer —
+// drops drift to a pointer held still and become one big tear that rolls when you move off.
+const tearsGather = (fx, api) => {
+  const c = crawl(fx, api)
+  return { step(dt, amount, active) { c.step(dt * 0.6, amount, active) } }
+}
+
+// 3 · Rain parts around you: the pointer is shelter — streaks fall round it, drops slide aside,
+// a calm clear circle follows you, slowly.
+function shelter(fx, api) {
+  let sx = 0, sy = 0, on = 0
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      on += ((active && P.on ? 1 : 0) - on) * Math.min(1, dt * 2)
+      sx += (P.x - sx) * Math.min(1, dt * 2.5); sy += (P.y - sy) * Math.min(1, dt * 2.5)
+      if (on < 0.05) return
+      const R = (fx.phone ? 80 : 120) * on
+      for (const d of api.drops()) {
+        if (d.dead) continue
+        const dx = d.x - sx, dy = d.y - sy, dist = Math.hypot(dx, dy)
+        if (dist < R && dist > 0.1) { const push = (R - dist) * Math.min(1, dt * 3); d.x += dx / dist * push; d.y += dy / dist * push * 0.6 }
+      }
+      for (const st of api.streaks()) {
+        const dx = st.x - sx, dy = st.y - sy, dist = Math.hypot(dx, dy)
+        if (dist < R * 1.2 && dist > 0.1) st.x += dx / dist * (R * 1.2 - dist) * Math.min(1, dt * 6)
+      }
+    },
+    under(g, alpha) {
+      if (on < 0.05) return
+      const R = (fx.phone ? 80 : 120) * on
+      const gr = g.createRadialGradient(sx, sy, R * 0.3, sx, sy, R * 1.1)
+      gr.addColorStop(0, `rgba(200,215,240,${0.05 * on * alpha})`); gr.addColorStop(0.75, `rgba(200,215,240,${0.03 * on * alpha})`); gr.addColorStop(1, "rgba(200,215,240,0)")
+      g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, R * 1.1, 0, Math.PI * 2); g.fill()
+      // The edge of the shelter: a faint wet rim where the rain turns aside.
+      g.globalAlpha = 0.22 * on * alpha; g.strokeStyle = "rgb(210,224,248)"; g.lineWidth = 1.2
+      g.beginPath(); g.arc(sx, sy, R, 0, Math.PI * 2); g.stroke()
+    },
+  }
+}
+
+// 4 · A hand on the glass from your side: a click leaves a soft, warm, misty print — a palm laid on
+// a cold window — that fogs over slowly; a couple of drops run from it.
+const MISTY = "rgba(214,224,240,0.55)"
+function warmPrint(fx, api) {
+  let left = Math.random() < 0.5
+  return {
+    step(dt, amount, active) {
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
+        left = !left
+        api.stamp(k.x, k.y, {color: MISTY, soft: true, mirror: left, vary: true, scale: rand(0.95, 1.1), life: 9, drip: false})
+        for (let i = 0; i < 2; i++) api.spawn(k.x + rand(-18, 18), k.y + rand(18, 32), rand(3, 4.4), true)
+      }
+    },
+  }
+}
+
+// 5 · Someone on the other side: now and then, after your print, a second faint hand comes to the
+// glass from outside against yours — slowly, softly — and fades.
+function reachBack(fx, api) {
+  const due = []
+  return {
+    step(dt, amount, active) {
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) if (Math.random() < 0.5) due.push({x: k.x + rand(-14, 14), y: k.y + rand(-10, 10), t: rand(1.2, 2)})
+      for (const d of due) d.t -= dt
+      for (const d of due.filter((d) => d.t <= 0)) api.stamp(d.x, d.y, {color: "rgba(255,226,200,0.32)", soft: true, mirror: true, vary: true, scale: rand(0.85, 0.98), life: 6, drip: false})
+      for (let i = due.length - 1; i >= 0; i--) if (due[i].t <= 0) due.splice(i, 1)
+    },
+  }
+}
+
+// 6 · A heart in the fog: draw a loop and it becomes a heart misted on the glass, which drips and
+// fades.
+function fogHeart(fx, api) {
+  const hearts = []
+  let trail = [], turned = 0, lastA = null
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (active && P.on && P.speed > 15) {
+        for (const q of (P.path && P.path.length ? P.path : [{x: P.x, y: P.y}])) {
+          const l = trail[trail.length - 1]
+          if (!l || Math.hypot(q.x - l.x, q.y - l.y) > 6) {
+            if (l && trail.length > 1) {
+              const a0 = trail[trail.length - 2], ang0 = Math.atan2(l.y - a0.y, l.x - a0.x), ang1 = Math.atan2(q.y - l.y, q.x - l.x)
+              let d = ang1 - ang0; d = Math.atan2(Math.sin(d), Math.cos(d)); turned += d
+            }
+            trail.push({x: q.x, y: q.y}); if (trail.length > 120) trail.shift()
+          }
+        }
+        // Once round (either way): a heart where the loop was.
+        if (Math.abs(turned) > Math.PI * 1.6) {
+          const xs = trail.map((q) => q.x), ys = trail.map((q) => q.y)
+          const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2
+          const size = Math.max(40, Math.min(110, (Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)) / 4))
+          hearts.push({x: cx, y: cy, s: size, age: 0, life: 6, dripped: 0})
+          trail = []; turned = 0; lastA = null
+        }
+      } else { trail = []; turned = 0; lastA = null }
+      for (const h of hearts) {
+        h.age += dt
+        if (h.age > 1 && h.dripped < 3 && Math.random() < dt * 1.2) { api.spawn(h.x + rand(-0.6, 0.6) * h.s, h.y + h.s * 0.6, rand(2.6, 3.8), true); h.dripped++ }
+      }
+      for (let i = hearts.length - 1; i >= 0; i--) if (hearts[i].age > hearts[i].life) hearts.splice(i, 1)
+    },
+    over(g, alpha) {
+      for (const h of hearts) {
+        const a = Math.min(1, h.age * 3) * Math.min(1, (h.life - h.age) / 2) * alpha
+        g.save(); g.translate(h.x, h.y); g.scale(h.s / 50, h.s / 50)
+        g.beginPath(); g.moveTo(0, 18)
+        g.bezierCurveTo(-34, -6, -26, -38, 0, -18); g.bezierCurveTo(26, -38, 34, -6, 0, 18)
+        g.lineWidth = 9; g.lineJoin = "round"; g.strokeStyle = MISTY; g.globalAlpha = a * 0.9; g.stroke()
+        g.restore()
+      }
+    },
+  }
+}
+
+const TEARS = {...RAIN.cry, noWipe: true}
+Object.assign(EFFECTS, {
+  "cry-1": plusWith(TEARS, fogWrite), "cry-2": plusWith(TEARS, tearsGather), "cry-3": plusWith(TEARS, shelter),
+  "cry-4": plusWith(TEARS, warmPrint), "cry-5": plusWith(TEARS, warmPrint, reachBack), "cry-6": plusWith(TEARS, fogHeart),
+  "cry-mix": plusWith(TEARS, tearsGather, warmPrint, fogWrite),
 })
 
 // The hand, reworked: what the finger wipes weeps down the glass (tears; a bleeding smear that

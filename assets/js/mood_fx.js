@@ -277,6 +277,7 @@ export function rain(fx, m) {
     // rain's strength (0 stops it), one streak falling at x.
     api: {
       drops: () => drops,
+      streaks: () => streaks,
       spawn: (x, y, r, sliding = false) => { const d = drop(x, y, r, rand(...m.still) + 4); d.sliding = sliding; drops.push(d); return d },
       stamp, rate: (k) => { rateK = k },
       streak: (x) => { const v = rand(...m.speed); streaks.push({x, y: -20, v, vx: v * 0.06, len: rand(...m.len), hitY: rand(fx.carTop + 80, fx.carBottom - 20)}) },
@@ -1552,7 +1553,7 @@ export function inside(fx, api) {
   }
 }
 
-function plusWith(m, ...extras) {
+export function plusWith(m, ...extras) {
   return (fx) => {
     const base = rain(fx, m), xs = extras.map((e) => e(fx, base.api))
     return {
