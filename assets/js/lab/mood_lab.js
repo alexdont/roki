@@ -624,302 +624,270 @@ Object.assign(EFFECTS, {
   "scared-hush": plus(hush), "scared-lightning": plus(lightning),
 })
 
-// ══ Have a good cry: tissues ═══════════════════════════════════════════════════════════════
-// "Tissues within reach. You'll be fine." The rain on glass without the wipe; tissues and comfort
-// answer the hand.
-
-// A tissue, drawn: a soft off-white sheet, a few folds, a little shadow; `crumple` 0 flat .. 1 a
-// ball; `wet` 0..1 greys and darkens it where it has soaked up tears.
-function tissue(g, x, y, size, rot, crumple = 0, wet = 0, alpha = 1, seed = 1) {
-  const r = (k) => { const v = Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v) }
-  g.save(); g.translate(x, y); g.rotate(rot); g.globalAlpha = alpha
-  const base = 250 - wet * 38, ink = (d) => `rgb(${base - d},${base - d + 1},${base - d + 5})`
-  if (crumple > 0.5) {
-    // A used tissue screwed into a ball: a few overlapping lumps, each lit from the top left, with
-    // creases between them.
-    g.shadowColor = "rgba(0,0,0,0.4)"; g.shadowBlur = 8; g.shadowOffsetY = 3
-    const lumps = 7
-    for (let i = 0; i < lumps; i++) {
-      const a = r(i) * Math.PI * 2, d = size * 0.32 * r(i + 9), R = size * (0.32 + r(i + 20) * 0.22)
-      const cx = Math.cos(a) * d, cy = Math.sin(a) * d * 0.85
-      const gr = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R)
-      gr.addColorStop(0, ink(-4)); gr.addColorStop(0.7, ink(18)); gr.addColorStop(1, ink(48))
-      g.fillStyle = gr; g.beginPath()
-      for (let k = 0; k <= 9; k++) { const t = (k / 9) * Math.PI * 2, rr = R * (0.82 + r(i * 13 + k) * 0.3); k ? g.lineTo(cx + Math.cos(t) * rr, cy + Math.sin(t) * rr) : g.moveTo(cx + Math.cos(t) * rr, cy + Math.sin(t) * rr) }
-      g.closePath(); g.fill()
-      if (i === 0) g.shadowColor = "transparent"
-    }
-    g.strokeStyle = `rgba(110,120,140,0.45)`; g.lineWidth = 0.9
-    for (let k = 0; k < 6; k++) { const a = r(40 + k) * Math.PI * 2, l = size * 0.45; g.beginPath(); g.moveTo(Math.cos(a) * l * 0.1, Math.sin(a) * l * 0.1); g.lineTo(Math.cos(a + 0.3) * l, Math.sin(a + 0.3) * l); g.stroke() }
-  } else {
-    // A tissue pinched at the top, as one is pulled from a box: a soft wavy sheet narrowing to a
-    // gathered tuft, lit from the top left, with a few soft creases.
-    const w = size * 1.15, h = size * 1.3, sway = (k) => (r(k) - 0.5) * size * 0.12
-    g.shadowColor = "rgba(0,0,0,0.35)"; g.shadowBlur = 14; g.shadowOffsetY = 6
-    const path = new Path2D()
-    path.moveTo(-size * 0.08, -h / 2)
-    path.bezierCurveTo(-w * 0.2, -h * 0.25, -w * 0.55, -h * 0.05 + sway(1), -w * 0.5, h * 0.3)
-    // The lower edge in soft scallops.
-    const sc = 4
-    for (let k = 0; k < sc; k++) {
-      const x0 = -w * 0.5 + (w / sc) * k, x1 = x0 + w / sc
-      path.quadraticCurveTo((x0 + x1) / 2 + sway(10 + k), h * 0.5 + sway(20 + k) + 6, x1, h * 0.32 + sway(30 + k))
-    }
-    path.bezierCurveTo(w * 0.55, -h * 0.05 + sway(2), w * 0.2, -h * 0.25, size * 0.08, -h / 2)
-    path.closePath()
-    const gr = g.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2)
-    gr.addColorStop(0, ink(-5)); gr.addColorStop(0.6, ink(8)); gr.addColorStop(1, ink(30))
-    g.fillStyle = gr; g.fill(path); g.shadowColor = "transparent"
-    g.save(); g.clip(path)
-    // Creases fanning down from the pinch.
-    for (let k = 0; k < 5 + crumple * 4; k++) {
-      const a = -0.9 + (k / 5) * 1.8 + (r(50 + k) - 0.5) * 0.3
-      const fgr = g.createLinearGradient(0, -h / 2, Math.sin(a) * h, h / 2)
-      fgr.addColorStop(0, "rgba(120,130,150,0.35)"); fgr.addColorStop(1, "rgba(120,130,150,0)")
-      g.strokeStyle = fgr; g.lineWidth = 2.5 + r(60 + k) * 2
-      g.beginPath(); g.moveTo(0, -h / 2); g.quadraticCurveTo(Math.sin(a) * h * 0.3, 0, Math.sin(a) * h * 0.55, h / 2); g.stroke()
-    }
-    // A highlight down the lit side.
-    const hl = g.createLinearGradient(-w / 2, 0, 0, 0)
-    hl.addColorStop(0, "rgba(255,255,255,0)"); hl.addColorStop(0.6, "rgba(255,255,255,0.35)"); hl.addColorStop(1, "rgba(255,255,255,0)")
-    g.fillStyle = hl; g.fillRect(-w / 2, -h / 2, w / 2, h)
-    g.restore()
-    // The gathered tuft where it is held.
-    g.fillStyle = ink(4)
-    g.beginPath(); g.ellipse(0, -h / 2, size * 0.13, size * 0.09, 0, 0, Math.PI * 2); g.fill()
-  }
-  // Damp patches, where it has soaked up tears.
-  if (wet > 0.05) {
-    for (let k = 0; k < 3; k++) {
-      const cx = (r(60 + k) - 0.5) * size * 0.6, cy = (r(70 + k) - 0.5) * size * 0.6
-      const gr = g.createRadialGradient(cx, cy, 0, cx, cy, size * 0.35)
-      gr.addColorStop(0, `rgba(140,158,188,${0.45 * wet})`); gr.addColorStop(1, "rgba(140,158,188,0)")
-      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, size * 0.35, 0, Math.PI * 2); g.fill()
-    }
-  }
-  g.restore()
-}
-
-// The pointer as a tissue, dabbing: drops under it shrink and are soaked up; the tissue darkens.
-function dabber(fx, api, opts = {}) {
-  const st = {x: 0, y: 0, on: 0, wet: 0, bob: 0, rot: rand(-0.3, 0.3), seed: rand(1, 99), held: !opts.needsTake}
-  return {
-    st,
-    step(dt, amount, active) {
-      const P = fx.pointer
-      const want = active && P.on && st.held ? 1 : 0
-      st.on += (want - st.on) * Math.min(1, dt * 6)
-      st.x += (P.x - st.x) * Math.min(1, dt * 14); st.y += (P.y - st.y) * Math.min(1, dt * 14)
-      if (st.on < 0.3) return
-      // Held still, it dabs: a little press up and down.
-      st.bob = P.speed < 20 ? st.bob + dt * 7 : st.bob * 0.9
-      const R = fx.phone ? 26 : 34
-      for (const d of api.drops()) {
-        if (d.dead) continue
-        if (Math.hypot(d.x - st.x, d.y - st.y) < R + d.r) {
-          d.r -= dt * 22; d.sliding = false
-          if (d.r < 1) { d.dead = true; st.wet = Math.min(1, st.wet + 0.02) }
-        }
-      }
-      st.wet = Math.max(0, st.wet - dt * 0.01)
-    },
-    over(g, alpha) {
-      if (st.on < 0.05) return
-      const press = 1 - Math.max(0, Math.sin(st.bob)) * 0.08
-      tissue(g, st.x, st.y + (fx.phone ? 20 : 26), (fx.phone ? 40 : 52) * press, st.rot + Math.sin(st.bob * 0.5) * 0.05, 0.25, st.wet, st.on * alpha, st.seed)
-    },
-  }
-}
-
-// 1 · The pointer is a tissue: over the slide the cursor is a small tissue that dabs the tears dry.
-function tissueHand(fx, api) { return dabber(fx, api) }
-
-// 2 · Pull a tissue from the box: a box in the corner; click it and a tissue rises from it and
-// follows your hand; click again (away from the box) and it is crumpled and tossed.
-function tissueBox(fx, api) {
-  const d = dabber(fx, api, {needsTake: true})
-  let rise = 0, tossed = []
-  const box = () => ({x: fx.W - (fx.phone ? 70 : 110), y: fx.carBottom - (fx.phone ? 60 : 80), w: fx.phone ? 80 : 110, h: fx.phone ? 46 : 60})
-  return {
-    step(dt, amount, active) {
-      const b = box()
-      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
-        const onBox = k.x > b.x - b.w / 2 && k.x < b.x + b.w / 2 && k.y > b.y - b.h && k.y < b.y + b.h / 2
-        if (onBox && !d.st.held) { d.st.held = true; rise = 1; d.st.wet = 0; d.st.x = b.x; d.st.y = b.y - b.h }
-        else if (d.st.held && !onBox) { d.st.held = false; tossed.push({x: d.st.x, y: d.st.y, vx: rand(-120, 120), vy: -180, rot: 0, life: 2.5, wet: d.st.wet, seed: d.st.seed}); d.st.seed = rand(1, 99) }
-      }
-      rise = Math.max(0, rise - dt * 2)
-      for (const t of tossed) { t.vy += 600 * dt; t.x += t.vx * dt; t.y += t.vy * dt; t.rot += t.vx * dt * 0.02; t.life -= dt }
-      tossed = tossed.filter((t) => t.life > 0 && t.y < fx.H + 40)
-      d.step(dt, amount, active)
-    },
-    over(g, alpha) {
-      const b = box()
-      // The box: a soft pastel box with an oval opening and a tissue sticking up out of it.
-      g.save(); g.globalAlpha = alpha
-      g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(b.x, b.y + b.h * 0.5, b.w * 0.55, 8, 0, 0, Math.PI * 2); g.fill()
-      const gr = g.createLinearGradient(0, b.y - b.h / 2, 0, b.y + b.h / 2)
-      gr.addColorStop(0, "rgb(170,190,225)"); gr.addColorStop(1, "rgb(120,140,185)")
-      g.fillStyle = gr; g.beginPath(); g.roundRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h, 6); g.fill()
-      g.fillStyle = "rgba(255,255,255,0.18)"; g.fillRect(b.x - b.w / 2 + 6, b.y - b.h / 2 + 6, b.w - 12, 5)
-      g.fillStyle = "rgb(60,70,95)"; g.beginPath(); g.ellipse(b.x, b.y - b.h / 2 + 2, b.w * 0.28, 6, 0, 0, Math.PI * 2); g.fill()
-      g.restore()
-      if (!d.st.held) tissue(g, b.x, b.y - b.h / 2 - 14, 26, 0.08, 0.15, 0, alpha, 7)
-      for (const t of tossed) tissue(g, t.x, t.y, 16, t.rot, 0.9, t.wet, alpha * Math.min(1, t.life), t.seed)
-      d.over(g, alpha)
-    },
-  }
-}
-
-// 3 · Crumpled tissues pile up: each click throws a used tissue that tumbles down and lands at the
-// foot of the slide; a little pile builds there, fading after a minute.
-function tissuePile(fx) {
-  const pile = [], flying = []
-  return {
-    step(dt, amount, active) {
-      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) flying.push({x: k.x, y: k.y, vx: rand(-60, 60), vy: rand(-160, -60), rot: rand(0, 6), vr: rand(-6, 6), seed: rand(1, 99), wet: rand(0.2, 0.7)})
-      const floor = fx.H - 26
-      for (const f of flying) {
-        f.vy += 900 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt
-        // Lands on the floor, or on the pile where it is high.
-        const top = pile.filter((p) => Math.abs(p.x - f.x) < 18).reduce((m, p) => Math.min(m, p.y - 12), floor)
-        if (f.y >= top) { pile.push({x: f.x, y: top, rot: f.rot, seed: f.seed, wet: f.wet, age: 0}); f.done = true }
-      }
-      for (let i = flying.length - 1; i >= 0; i--) if (flying[i].done) flying.splice(i, 1)
-      for (const p of pile) p.age += dt
-      for (let i = pile.length - 1; i >= 0; i--) if (pile[i].age > 60) pile.splice(i, 1)
-    },
-    over(g, alpha) {
-      for (const p of pile) tissue(g, p.x, p.y, 17, p.rot, 0.95, p.wet, alpha * Math.min(1, (60 - p.age) / 5), p.seed)
-      for (const f of flying) tissue(g, f.x, f.y, 17, f.rot, 0.95, f.wet, alpha, f.seed)
-    },
-  }
-}
-
-// 4 · A tissue floats down: now and then one drifts down through the rain, swaying like a leaf;
-// catch it (the pointer on it) and it becomes your tissue and dabs.
-function tissueFloat(fx, api) {
-  const d = dabber(fx, api, {needsTake: true})
-  let f = null, next = rand(2, 4)
-  return {
-    step(dt, amount, active) {
-      next -= dt
-      if (!f && !d.st.held && active && next < 0) f = {x: rand(fx.W * 0.15, fx.W * 0.85), y: -40, t: 0, seed: rand(1, 99)}
-      if (f) {
-        f.t += dt; f.y += 38 * dt; f.x += Math.cos(f.t * 1.4) * 40 * dt
-        const P = fx.pointer
-        if (P.on && Math.hypot(P.x - f.x, P.y - f.y) < 40) { d.st.held = true; d.st.x = f.x; d.st.y = f.y; d.st.seed = f.seed; d.st.wet = 0; f = null; next = rand(10, 16) }
-        else if (f.y > fx.H + 40) { f = null; next = rand(5, 9) }
-      }
-      // Let go when the pointer leaves the slide.
-      if (d.st.held && !fx.pointer.on) d.st.held = false
-      d.step(dt, amount, active)
-    },
-    over(g, alpha) {
-      if (f) tissue(g, f.x, f.y, 44, Math.sin(f.t * 1.4) * 0.5, 0.05, 0, alpha, f.seed)
-      d.over(g, alpha)
-    },
-  }
-}
-
-// 5 · Someone offers a tissue: hold still a while and a hand comes in from the side holding one
-// out; click it and the tissue is yours (the pointer becomes it), and the hand goes.
-function offered(fx, api) {
-  const d = dabber(fx, api, {needsTake: true})
-  let still = 0, hand = null
-  return {
-    step(dt, amount, active) {
-      const P = fx.pointer
-      if (active && P.on && P.speed < 20 && !d.st.held) still += dt; else still = 0
-      if (!hand && still > 1.6) hand = {side: P.x < fx.W / 2 ? -1 : 1, t: 0, y: P.y, out: false}
-      if (hand) {
-        hand.t += dt * (hand.out ? -1.5 : 1)
-        hand.y += (P.y - hand.y) * Math.min(1, dt * 2)
-        for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
-          const tx = hand.side < 0 ? this.tipX : this.tipX
-          if (Math.hypot(k.x - this.tipX, k.y - hand.y) < 60) { d.st.held = true; d.st.x = this.tipX; d.st.y = hand.y; d.st.wet = 0; hand.out = true }
-        }
-        if (!hand.out && still === 0 && hand.t > 1) hand.out = true
-        if (hand.out && hand.t <= 0) hand = null
-      }
-      if (d.st.held && !P.on) d.st.held = false
-      d.step(dt, amount, active)
-    },
-    over(g, alpha) {
-      if (hand) {
-        const reach = Math.min(1, hand.t / 0.9) ** 0.6, len = (fx.phone ? 150 : 230) * reach
-        const x0 = hand.side < 0 ? -20 : fx.W + 20, dir = hand.side < 0 ? 1 : -1
-        const tip = x0 + dir * len
-        this.tipX = tip
-        g.save(); g.globalAlpha = alpha
-        // A sleeve and a hand: soft, warm, simple.
-        g.lineCap = "round"; g.strokeStyle = "rgb(70,82,110)"; g.lineWidth = 34
-        g.beginPath(); g.moveTo(x0, hand.y + 20); g.lineTo(tip - dir * 40, hand.y + 6); g.stroke()
-        g.fillStyle = "rgb(226,186,160)"
-        g.beginPath(); g.ellipse(tip - dir * 22, hand.y + 4, 22, 15, 0, 0, Math.PI * 2); g.fill()
-        g.restore()
-        if (!hand.out || !d.st.held) tissue(g, tip, hand.y - 8, 28, dir * 0.3, 0.1, 0, alpha, 3)
-      }
-      d.over(g, alpha)
-    },
-  }
-}
-
-// 6 · A hug of warm light: hold still and a soft warm glow gathers round the pointer, and for a
-// while the rain falls slower and quieter.
-function warmth(fx, api) {
-  let still = 0, k = 0, x = 0, y = 0
-  return {
-    step(dt, amount, active) {
-      const P = fx.pointer
-      if (active && P.on && P.speed < 20) still += dt; else still = Math.max(0, still - dt * 2)
-      k += ((still > 0.8 ? 1 : 0) - k) * Math.min(1, dt * 0.8)
-      x += (P.x - x) * Math.min(1, dt * 3); y += (P.y - y) * Math.min(1, dt * 3)
-      api.rate(1 - 0.75 * k)
-    },
-    under(g, alpha) {
-      if (k < 0.02) return
-      const R = (fx.phone ? 160 : 260) * (0.7 + 0.3 * k)
-      const gr = g.createRadialGradient(x, y, 0, x, y, R)
-      gr.addColorStop(0, `rgba(255,196,140,${0.22 * k * alpha})`); gr.addColorStop(0.5, `rgba(255,170,120,${0.1 * k * alpha})`); gr.addColorStop(1, "rgba(255,170,120,0)")
-      g.globalCompositeOperation = "lighter"; g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2); g.globalCompositeOperation = "source-over"
-    },
-  }
-}
-
-// 7 · Tear tracks: every running drop leaves a faint tear-stain; the pointer passing over a stain
-// dries it to a faint salt line that fades.
-function tearTracks(fx, api) {
-  const marks = []
-  return {
-    step(dt, amount, active) {
-      for (const d of api.drops()) if (d.sliding && !d.dead && Math.random() < dt * 8) marks.push({x: d.x, y: d.y - d.r, r: d.r * 0.9, age: 0, dry: 0})
-      const P = fx.pointer
-      for (const m of marks) {
-        m.age += dt
-        if (active && P.on && Math.hypot(m.x - P.x, m.y - P.y) < 40) m.dry = Math.min(1, m.dry + dt * 3)
-      }
-      for (let i = marks.length - 1; i >= 0; i--) if (marks[i].age > (marks[i].dry > 0 ? 6 : 14)) marks.splice(i, 1)
-      if (marks.length > 1400) marks.splice(0, marks.length - 1400)
-    },
-    under(g, alpha) {
-      for (const m of marks) {
-        const life = m.dry > 0 ? 6 : 14, a = Math.min(1, (life - m.age) / 3) * alpha
-        if (m.dry > 0) { g.globalAlpha = a * 0.35 * m.dry; g.fillStyle = "rgb(235,238,245)"; g.fillRect(m.x - 0.6, m.y, 1.2, 3) }
-        else { g.globalAlpha = a * 0.1; g.fillStyle = "rgb(170,190,225)"; g.beginPath(); g.arc(m.x, m.y, m.r, 0, Math.PI * 2); g.fill() }
-      }
-    },
-  }
-}
-
-// The mix: the pointer a tissue, tissues floating down to catch, a click throwing a used one on
-// the pile.
+// ══ Have a good cry: atmosphere ═══════════════════════════════════════════════════════════════
+// The rain on glass without the wipe; something quieter answering the hand.
 const TEARS = {...RAIN.cry, noWipe: true}
+
+// Wrap an effect so a function of the frame sets how fast its time runs (slow motion).
+function timed(make, speed) {
+  return (fx) => {
+    const e = make(fx), k = {v: 1}
+    return {
+      busy: () => true, stats: e.stats,
+      step(dt, amount, active) { k.v = speed(fx, dt, k.v, active); e.step(dt * k.v, amount, active) },
+      draw(g, alpha) { e.draw(g, alpha); if (k.v < 0.95) { g.globalAlpha = (1 - k.v) * 0.18 * alpha; g.fillStyle = "rgb(20,30,55)"; g.fillRect(0, 0, fx.W, fx.H) } },
+    }
+  }
+}
+
+// 1 · Your own raincloud: a small grey cloud gathers over the pointer and rains on that spot only.
+function cloud(fx) {
+  let x = 0, y = 0, on = 0, acc = 0
+  const lines = [], puffs = Array.from({length: 11}, (_, i) => ({dx: (i - 5) * 15 + rand(-6, 6), dy: rand(-14, 8) - (Math.abs(i - 5) < 3 ? 10 : 0), r: rand(22, 36)}))
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      on += ((active && P.on ? 1 : 0) - on) * Math.min(1, dt * 2)
+      x += (P.x - x) * Math.min(1, dt * 3); y += (P.y - 80 - y) * Math.min(1, dt * 3)
+      if (on > 0.3) { acc += dt * 90 * on; while (acc >= 1) { acc -= 1; lines.push({x: x + rand(-65, 65), y: y + 18, v: rand(420, 560)}) } }
+      for (const l of lines) l.y += l.v * dt
+      for (let i = lines.length - 1; i >= 0; i--) if (lines[i].y > y + 260 || lines[i].y > fx.H) lines.splice(i, 1)
+    },
+    over(g, alpha) {
+      if (on < 0.02) return
+      g.strokeStyle = "rgb(200,214,238)"; g.lineWidth = 1.3
+      for (const l of lines) { g.globalAlpha = 0.5 * on * alpha * Math.max(0, 1 - (l.y - y) / 260); g.beginPath(); g.moveTo(l.x, l.y); g.lineTo(l.x - 1.5, l.y - 14); g.stroke() }
+      for (const p of puffs) {
+        const gr = g.createRadialGradient(x + p.dx - 4, y + p.dy - 6, 2, x + p.dx, y + p.dy, p.r)
+        gr.addColorStop(0, `rgba(120,130,150,${0.95 * on * alpha})`); gr.addColorStop(0.7, `rgba(80,88,105,${0.7 * on * alpha})`); gr.addColorStop(1, `rgba(60,66,80,0)`)
+        g.globalAlpha = 1; g.fillStyle = gr; g.beginPath(); g.arc(x + p.dx, y + p.dy, p.r, 0, Math.PI * 2); g.fill()
+      }
+    },
+  }
+}
+
+// 2 · Slow motion: hold still and everything slows to a hush — drops hang and fall slowly; move and
+// time picks up again.
+const slowMo = timed((fx) => rain(fx, TEARS), (fx, dt, v, active) => {
+  const P = fx.pointer, want = active && P.on && P.speed < 20 ? 0.12 : 1
+  return v + (want - v) * Math.min(1, dt * (want < v ? 1.2 : 3))
+})
+
+// 3 · Your touch makes it rain harder: where the pointer goes the rain thickens for a moment.
+function harder(fx, api) {
+  let acc = 0
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (!active || !P.on) return
+      acc += dt * Math.min(40, 6 + P.speed * 0.05)
+      while (acc >= 1) { acc -= 1; api.streak(P.x + rand(-70, 70)) }
+    },
+  }
+}
+
+// 4 · The colour drains: hold still and the slide turns grey around the pointer, spreading; move
+// and the colour comes back. (The canvas holds only the weather, so the picture beneath is greyed
+// by a CSS filter on the slide, masked to a growing circle round the pointer.)
+function drain(fx) {
+  let still = 0, R = 0, x = 0, y = 0, layer2 = null
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (active && P.on && P.speed < 20) { still += dt; x = P.x; y = P.y } else still = 0
+      const want = still > 0.4 ? Math.min(Math.max(fx.W, fx.H) * 1.2, (still - 0.4) * 280) : 0
+      R += (want - R) * Math.min(1, dt * (want > R ? 2 : 4))
+      // A copy of the slide, greyed, shown inside the circle.
+      const stage = fx.picker
+      if (!layer2 && stage) {
+        layer2 = stage.cloneNode(true); layer2.removeAttribute("data-fx-stage")
+        Object.assign(layer2.style, {position: "absolute", inset: "0", zIndex: 2, pointerEvents: "none", filter: "grayscale(1) brightness(0.85)"})
+        stage.parentNode.appendChild(layer2)
+      }
+      if (layer2) {
+        const m = `radial-gradient(circle ${Math.max(1, R)}px at ${x}px ${y}px, #000 ${Math.max(0, R * 0.65)}px, transparent ${Math.max(1, R)}px)`
+        layer2.style.maskImage = m; layer2.style.webkitMaskImage = m
+        layer2.style.display = R < 3 || !active ? "none" : ""
+      }
+    },
+  }
+}
+
+// 5 · Streetlight: the pointer is a warm lamp seen through the wet glass — an orange glow, the rain
+// lit as it falls through it, the only warm thing on a blue night.
+function streetlight(fx, api) {
+  let x = 0, y = 0, on = 0, t = 0
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer; t += dt
+      on += ((active && P.on ? 1 : 0) - on) * Math.min(1, dt * 1.5)
+      x += (P.x - x) * Math.min(1, dt * 2); y += (P.y - y) * Math.min(1, dt * 2)
+    },
+    under(g, alpha) {
+      // The night a little bluer everywhere.
+      g.globalAlpha = 0.18 * alpha; g.fillStyle = "rgb(15,30,70)"; g.fillRect(0, 0, fx.W, fx.H)
+      if (on < 0.02) return
+      const R = fx.phone ? 170 : 260, flick = 0.94 + 0.06 * Math.sin(t * 13) * Math.sin(t * 3.1)
+      const gr = g.createRadialGradient(x, y, 0, x, y, R)
+      gr.addColorStop(0, `rgba(255,196,120,${0.5 * on * flick * alpha})`); gr.addColorStop(0.25, `rgba(255,170,90,${0.22 * on * alpha})`); gr.addColorStop(1, "rgba(255,150,70,0)")
+      g.globalAlpha = 1; g.globalCompositeOperation = "lighter"; g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2)
+      // The bulb itself, blurred by the wet glass.
+      const core = g.createRadialGradient(x, y, 0, x, y, 16)
+      core.addColorStop(0, `rgba(255,240,210,${0.9 * on * alpha})`); core.addColorStop(1, "rgba(255,220,170,0)")
+      g.fillStyle = core; g.beginPath(); g.arc(x, y, 16, 0, Math.PI * 2); g.fill()
+      g.globalCompositeOperation = "source-over"
+    },
+    over(g, alpha) {
+      if (on < 0.02) return
+      // Rain lit where it passes through the lamp's light.
+      const R = fx.phone ? 170 : 260
+      g.lineWidth = 1.3; g.globalCompositeOperation = "lighter"
+      for (const st of api.streaks()) {
+        const d = Math.hypot(st.x - x, st.y - y); if (d > R) continue
+        g.globalAlpha = (1 - d / R) * 0.7 * on * alpha; g.strokeStyle = "rgb(255,200,140)"
+        g.beginPath(); g.moveTo(st.x, st.y); g.lineTo(st.x - st.vx / st.v * st.len, st.y - st.len); g.stroke()
+      }
+      for (const dr of api.drops()) {
+        const d = Math.hypot(dr.x - x, dr.y - y); if (d > R * 0.8) continue
+        g.globalAlpha = (1 - d / (R * 0.8)) * 0.8 * on * alpha; g.fillStyle = "rgb(255,210,150)"
+        g.beginPath(); g.arc(dr.x - dr.r * 0.3, dr.y - dr.r * 0.3, Math.max(0.8, dr.r * 0.3), 0, Math.PI * 2); g.fill()
+      }
+      g.globalCompositeOperation = "source-over"
+    },
+  }
+}
+
+// 6 · Headlights passing: the pointer leaves soft blurred trails of light behind it, red and white,
+// as car lights seen through a rainy window.
+function headlights(fx) {
+  const trail = []
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (active && P.on && P.speed > 30) for (const q of (P.path && P.path.length ? P.path : [{x: P.x, y: P.y}])) trail.push({x: q.x, y: q.y, age: 0, warm: Math.random() < 0.5})
+      for (const b of trail) b.age += dt
+      while (trail.length && trail[0].age > 1.8) trail.shift()
+      if (trail.length > 400) trail.splice(0, trail.length - 400)
+    },
+    under(g, alpha) {
+      g.globalCompositeOperation = "lighter"
+      for (const b of trail) {
+        const a = Math.max(0, 1 - b.age / 1.8) * alpha, R = 10 + b.age * 14
+        const gr = g.createRadialGradient(b.x, b.y, 0, b.x, b.y, R)
+        const c = b.warm ? "255,70,60" : "255,230,190"
+        gr.addColorStop(0, `rgba(${c},${0.22 * a})`); gr.addColorStop(1, `rgba(${c},0)`)
+        g.fillStyle = gr; g.beginPath(); g.arc(b.x, b.y, R, 0, Math.PI * 2); g.fill()
+      }
+      g.globalCompositeOperation = "source-over"
+    },
+  }
+}
+
+// 7 · A paper boat: a click sets a little paper boat on the water at the foot of the slide; it
+// drifts, rocks, soaks through and sinks.
+function boats(fx) {
+  const list = []
+  const draw = (g, b, a) => {
+    g.save(); g.translate(b.x, b.y + b.sink * 22); g.rotate(Math.sin(b.t * 2.2) * 0.12 + b.sink * 0.6)
+    g.globalAlpha = a * (1 - b.sink * 0.8)
+    const s = fx.phone ? 0.8 : 1, w = 34 * s, h = 14 * s
+    const grey = 236 - b.wet * 60
+    g.fillStyle = `rgb(${grey},${grey},${grey + 4})`
+    g.beginPath(); g.moveTo(-w, -h * 0.2); g.lineTo(w, -h * 0.2); g.lineTo(w * 0.62, h); g.lineTo(-w * 0.62, h); g.closePath(); g.fill()
+    g.fillStyle = `rgb(${grey - 18},${grey - 18},${grey - 12})`
+    g.beginPath(); g.moveTo(-w * 0.55, -h * 0.2); g.lineTo(0, -h * 2.2); g.lineTo(w * 0.55, -h * 0.2); g.closePath(); g.fill()
+    g.strokeStyle = "rgba(90,100,120,0.5)"; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -h * 2.2); g.lineTo(0, -h * 0.2); g.stroke()
+    g.restore()
+  }
+  return {
+    step(dt, amount, active) {
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) list.push({x: k.x, y: fx.H - 34, t: rand(0, 6), v: rand(14, 26) * (Math.random() < 0.5 ? -1 : 1), wet: 0, sink: 0})
+      for (const b of list) { b.t += dt; b.x += b.v * dt; b.wet = Math.min(1, b.wet + dt / 9); if (b.wet >= 1) b.sink = Math.min(1, b.sink + dt / 3) }
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].sink >= 1 || list[i].x < -60 || list[i].x > fx.W + 60) list.splice(i, 1)
+    },
+    under(g, alpha) {
+      // A faint water line along the foot.
+      const gr = g.createLinearGradient(0, fx.H - 50, 0, fx.H)
+      gr.addColorStop(0, "rgba(30,45,75,0)"); gr.addColorStop(1, `rgba(30,45,75,${0.55 * alpha})`)
+      g.fillStyle = gr; g.fillRect(0, fx.H - 50, fx.W, 50)
+      for (const b of list) draw(g, b, alpha)
+    },
+  }
+}
+
+// 8 · Petals: moving through the slide shakes loose a few wet dark petals that fall slowly and stick
+// to the glass.
+function petals(fx) {
+  const list = []
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (active && P.on && P.speed > 60 && Math.random() < dt * Math.min(8, P.speed / 80) && list.length < 60)
+        list.push({x: P.x + rand(-20, 20), y: P.y + rand(-10, 10), vx: rand(-20, 20), vy: rand(10, 30), rot: rand(0, 6), vr: rand(-2, 2), stuck: false, age: 0, s: rand(0.8, 1.2)})
+      for (const p of list) {
+        p.age += dt
+        if (!p.stuck) { p.vy = Math.min(70, p.vy + dt * 40); p.x += (p.vx + Math.sin(p.age * 2) * 18) * dt; p.y += p.vy * dt; p.rot += p.vr * dt; if (Math.random() < dt * 0.5) p.stuck = true }
+        else p.y += dt * 2
+      }
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].age > 14 || list[i].y > fx.H + 20) list.splice(i, 1)
+    },
+    over(g, alpha) {
+      for (const p of list) {
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(p.s, p.s)
+        g.globalAlpha = alpha * Math.min(1, (14 - p.age) / 3) * 0.9
+        const gr = g.createLinearGradient(-7, 0, 7, 0); gr.addColorStop(0, "rgb(150,70,95)"); gr.addColorStop(1, "rgb(205,120,145)")
+        g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, 7, 4.5, 0, 0, Math.PI * 2); g.fill()
+        g.fillStyle = "rgba(255,255,255,0.25)"; g.beginPath(); g.ellipse(-2, -1.5, 2.5, 1.2, 0, 0, Math.PI * 2); g.fill()
+        g.restore()
+      }
+    },
+  }
+}
+
+// 9 · A candle: a click lights a small candle that flickers in the rain until the rain puts it out,
+// a curl of smoke rising.
+function candles(fx, api) {
+  const list = []
+  return {
+    step(dt, amount, active) {
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) list.push({x: k.x, y: Math.min(fx.H - 30, k.y + 30), t: 0, life: rand(6, 10), out: 0, smoke: []})
+      for (const c of list) {
+        c.t += dt
+        if (c.t > c.life) c.out = Math.min(1, c.out + dt * 2)
+        if (c.out > 0 && c.out < 1 && Math.random() < dt * 30) c.smoke.push({x: c.x, y: c.y - 30, age: 0, dx: rand(-6, 6)})
+        for (const s of c.smoke) { s.age += dt; s.y -= dt * 26; s.x += Math.sin(s.age * 2 + s.dx) * dt * 10 }
+        c.smoke = c.smoke.filter((s) => s.age < 3)
+      }
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].out >= 1 && !list[i].smoke.length) list.splice(i, 1)
+    },
+    over(g, alpha) {
+      for (const c of list) {
+        g.save(); g.globalAlpha = alpha
+        // The candle: a short pale stub.
+        g.fillStyle = "rgb(230,222,205)"; g.beginPath(); g.roundRect(c.x - 7, c.y - 22, 14, 26, 3); g.fill()
+        g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(c.x + 3, c.y - 22, 4, 26)
+        g.strokeStyle = "rgb(40,30,25)"; g.lineWidth = 1.4; g.beginPath(); g.moveTo(c.x, c.y - 22); g.lineTo(c.x, c.y - 27); g.stroke()
+        if (c.out < 1) {
+          const f = (1 - c.out) * (0.85 + 0.15 * Math.sin(c.t * 19) * Math.sin(c.t * 7.3)), sway = Math.sin(c.t * 5) * 2
+          const glow = g.createRadialGradient(c.x, c.y - 32, 0, c.x, c.y - 32, 70)
+          glow.addColorStop(0, `rgba(255,190,110,${0.35 * f})`); glow.addColorStop(1, "rgba(255,170,90,0)")
+          g.globalCompositeOperation = "lighter"; g.fillStyle = glow; g.fillRect(c.x - 70, c.y - 102, 140, 140)
+          const fl = g.createRadialGradient(c.x + sway, c.y - 34, 0, c.x + sway, c.y - 33, 9)
+          fl.addColorStop(0, `rgba(255,250,220,${f})`); fl.addColorStop(0.6, `rgba(255,180,80,${0.8 * f})`); fl.addColorStop(1, "rgba(255,120,40,0)")
+          g.fillStyle = fl; g.beginPath(); g.ellipse(c.x + sway * 0.6, c.y - 33, 5 * f, 10 * f, 0, 0, Math.PI * 2); g.fill()
+          g.globalCompositeOperation = "source-over"
+        }
+        for (const s of c.smoke) { g.globalAlpha = alpha * 0.25 * (1 - s.age / 3); g.fillStyle = "rgb(200,205,215)"; g.beginPath(); g.arc(s.x, s.y, 3 + s.age * 4, 0, Math.PI * 2); g.fill() }
+        g.restore()
+      }
+    },
+  }
+}
+
 Object.assign(EFFECTS, {
-  "cry-t1": plusWith(TEARS, tissueHand), "cry-t2": plusWith(TEARS, tissueBox), "cry-t3": plusWith(TEARS, tissuePile),
-  "cry-t4": plusWith(TEARS, tissueFloat), "cry-t5": plusWith(TEARS, offered), "cry-t6": plusWith(TEARS, warmth),
-  "cry-t7": plusWith(TEARS, tearTracks),
-  "cry-tmix": plusWith(TEARS, tissueHand, tissuePile, (fx, api) => { const f = tissueFloat(fx, api); return f }),
+  "cry-a1": plusWith(TEARS, cloud), "cry-a2": slowMo, "cry-a3": plusWith(TEARS, harder),
+  "cry-a4": plusWith(TEARS, drain), "cry-a5": plusWith(TEARS, streetlight), "cry-a6": plusWith(TEARS, headlights),
+  "cry-a7": plusWith(TEARS, boats), "cry-a8": plusWith(TEARS, petals), "cry-a9": plusWith(TEARS, candles),
 })
 
 // The hand, reworked: what the finger wipes weeps down the glass (tears; a bleeding smear that
