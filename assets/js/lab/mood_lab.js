@@ -578,16 +578,42 @@ function cracks(fx, api) {
 // 6 · A handprint from inside: now and then, by itself, a bloody hand slaps onto the glass
 // somewhere and slowly slides down, dragging five streaks.
 function inside(fx, api) {
-  let next = rand(2.5, 4), left = Math.random() < 0.5
+  let next = rand(2.5, 4), left = Math.random() < 0.5, still = 0, clickT = -1, near = 0
+  // One hand: left and right in turn, each its own; mostly sliding straight down, but now and then
+  // dragged off to one side, or stopping part way and staying.
+  const slap = (x, y, scale) => {
+    left = !left
+    const r = Math.random()
+    api.stamp(x, y, {
+      vy: rand(14, 28), life: 13, tilt: rand(-0.25, 0.25), mirror: left, vary: true, scale,
+      vx: r < 0.3 ? rand(14, 34) * (Math.random() < 0.5 ? -1 : 1) : 0,
+      stopAt: r > 0.78 ? rand(25, 70) : null,
+    })
+  }
+  const clampX = (x) => Math.max(fx.W * 0.05, Math.min(fx.W * 0.95, x))
+  const clampY = (y) => Math.max(fx.carTop + 50, Math.min(fx.carBottom - 90, y))
   return {
     step(dt, amount, active) {
       if (!active) return
-      next -= dt
+      const P = fx.pointer
+      next -= dt; near -= dt
+      // It notices you: hold still for a while and a hand comes down near where you are (not
+      // every time, and never too often).
+      if (P.on && P.speed < 30) still += dt; else still = 0
+      if (still > 2.2 && near < 0 && Math.random() < 0.55) {
+        const side = Math.random() < 0.5 ? -1 : 1
+        slap(clampX(P.x + side * rand(90, 170)), clampY(P.y + rand(-60, 20)), rand(0.95, 1.25))
+        near = rand(7, 11); still = -3; next = Math.max(next, 4)
+      } else if (still > 2.2) still = -1.5
+      // A beat after your own print, a smaller one answers close by — sometimes.
+      for (const k of fx.pokes.filter((q) => q.fresh)) if (Math.random() < 0.5) clickT = rand(0.7, 1.2), this.at = k
+      if (clickT > 0) {
+        clickT -= dt
+        if (clickT <= 0 && this.at) { const k = this.at; slap(clampX(k.x + rand(-110, 110)), clampY(k.y + rand(-80, 40)), rand(0.65, 0.85)); next = Math.max(next, 3) }
+      }
       if (next < 0) {
-        // Left hand, right hand, in turn; each a hand of its own, bigger or smaller.
-        next = rand(6, 11); left = !left
-        api.stamp(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + 60, fx.carTop + (fx.carBottom - fx.carTop) * 0.4),
-          {vy: rand(14, 28), life: 13, tilt: rand(-0.25, 0.25), mirror: left, vary: true, scale: rand(0.78, 1.32)})
+        next = rand(6, 11)
+        slap(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + 60, fx.carTop + (fx.carBottom - fx.carTop) * 0.4), rand(0.78, 1.32))
       }
     },
   }

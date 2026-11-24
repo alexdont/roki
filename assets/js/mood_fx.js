@@ -207,7 +207,7 @@ export function rain(fx, m) {
   // `m.weep`: what the finger wipes runs off the lower edge of its stroke as drops streaming down
   // (tears / a bleeding smear) instead of gathering into one bead. `m.palm`: a press leaves a
   // handprint that drips. (Both tried in /lab/moods.html.)
-  let pool = 0, palms = [], rateK = 1
+  let pool = 0, palms = [], rateK = 1, ownLeft = Math.random() < 0.5
   // A handprint pressed into the glass at (x, y): `color` (else m.palm), `soft` (seen through the
   // glass: bigger, blurred, fainter), `mirror` (a hand from the other side), `drip` (drops run from
   // the heel and fingertips), `vy` (it slides down, dragging streaks), `life`.
@@ -239,7 +239,7 @@ export function rain(fx, m) {
         dabs.push({x: x0 + Math.sin(ang) * L * p + rand(-1.2, 1.2), y: y0 - Math.cos(ang) * L * p + rand(-1.2, 1.2), r: rand(4, 6), sq: rand(0.7, 1), t: ang, a: (0.45 + 0.45 * p) * rand(0.6, 1)})
       }
     }
-    const h = {x, y, y0: y, s, tilt, life: o.life || 7, age: 0, dabs, tips, color: o.color || m.palm, soft: !!o.soft, mirror: !!o.mirror, vy: o.vy || 0}
+    const h = {x, y, y0: y, path: [{x, y}], vx: o.vx || 0, stopAt: o.stopAt ?? null, s, tilt, life: o.life || 7, age: 0, dabs, tips, color: o.color || m.palm, soft: !!o.soft, mirror: !!o.mirror, vy: o.vy || 0}
     palms.push(h)
     if (o.drip !== false) {
       // It drips from the heel of the hand and the fingertips' undersides.
@@ -400,12 +400,22 @@ export function rain(fx, m) {
       // The film the finger leaves lasts LIFE seconds wherever it was laid: the tail is what the
       // last second of movement left, long after a fast sweep, short after a slow one, and dries
       // from its far end in once the finger has stopped.
-      if (m.palm) for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) stamp(k.x, k.y)
+      // Your own print: left and right hand in turn, each a little different.
+      if (m.palm) for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) { ownLeft = !ownLeft; stamp(k.x, k.y, {mirror: ownLeft, vary: true, scale: rand(0.92, 1.1)}) }
       if (palms.length) {
         for (const h of palms) {
           h.age += dt; h.life -= dt
           // A print sliding down the glass (from inside, unprompted) drags five streaks after it.
-          if (h.vy) { h.y += h.vy * dt; h.vy = Math.max(4, h.vy - dt * 3) }
+          if (h.vy) {
+            // `vx`: dragged sideways as it goes; `stopAt`: it stops part of the way down and stays.
+            if (h.stopAt != null && h.y - h.y0 >= h.stopAt) { h.vy = 0; h.vx = 0 }
+            else {
+              h.y += h.vy * dt; h.vy = Math.max(4, h.vy - dt * 3)
+              if (h.vx) { h.x += h.vx * dt; h.vx *= 1 - dt * 0.25 }
+            }
+            const last = h.path[h.path.length - 1]
+            if (!last || Math.hypot(h.x - last.x, h.y - last.y) > 3) h.path.push({x: h.x, y: h.y})
+          }
         }
         palms = palms.filter((h) => h.life > 0)
       }
@@ -481,18 +491,20 @@ export function rain(fx, m) {
       for (const h of palms) {
         const a = Math.min(1, h.age * 8) * Math.min(1, h.life / 3) * alpha
         // The streaks a sliding print leaves above it, from the fingertips.
-        if (h.vy && h.y > h.y0 + 2) {
-          g.save(); g.translate(h.x, 0); g.strokeStyle = h.color; g.lineCap = "round"
+        if (h.path.length > 1) {
+          g.save(); g.strokeStyle = h.color; g.lineCap = "round"
           // Each a smear: full where the fingertip is now, thinning and paling up to where it
           // first touched, the edges wavering.
           const sx = h.mirror ? -1 : 1
+          const c = Math.cos(h.tilt), sn = Math.sin(h.tilt), P = h.path, n = P.length
           for (const [ti, tp] of h.tips.entries()) {
-            const x = tp.x * h.s * sx, top = h.y0 + tp.y * h.s, bot = h.y + tp.y * h.s, n = 10
-            for (let i = 0; i < n; i++) {
-              const p0 = i / n, p1 = (i + 1) / n
+            // The fingertip's place on the hand (turned with it), followed along the hand's path.
+            const ox = (tp.x * sx * c - tp.y * sn) * h.s, oy = (tp.x * sx * sn + tp.y * c) * h.s
+            for (let i = 1; i < n; i++) {
+              const p1 = i / (n - 1)
               g.globalAlpha = a * (0.12 + 0.38 * p1)
               g.lineWidth = (2 + 6 * p1) * h.s * (0.85 + 0.3 * Math.sin(ti * 3 + i * 1.7))
-              g.beginPath(); g.moveTo(x + Math.sin(i * 2.1 + ti) * 0.8, top + (bot - top) * p0); g.lineTo(x, top + (bot - top) * p1); g.stroke()
+              g.beginPath(); g.moveTo(P[i - 1].x + ox, P[i - 1].y + oy); g.lineTo(P[i].x + ox, P[i].y + oy); g.stroke()
             }
           }
           g.restore()
