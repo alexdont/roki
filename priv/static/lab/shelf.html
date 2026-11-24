@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Shelf lab · Roki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=Oswald:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* A lab (2026-11-24) after stripe.press: A — a title page that takes its poster's colours;
+     B — films as Blu-ray cases on a shelf (CSS 3D, no library); C — the same shelf as VHS tapes.
+     Data: alex's 32 most recently watched films (shelf-data.json). Colours are read from each
+     poster in the browser (TMDB serves them with CORS). Keys: ← → along the shelf, Enter to take
+     one out, Esc to put it back. */
+  :root { --orange: #ff6a13; --orange2: #ff8a3d; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0d0b0f; color: #ece8ef; font: 15px/1.45 "Outfit", ui-sans-serif, system-ui, sans-serif; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+  header.lab { padding: 28px 24px 4px; max-width: 1400px; margin: 0 auto; }
+  header.lab h1 { font: 700 28px "Outfit"; margin: 0 0 6px; }
+  header.lab p { margin: 0; color: #b6aeba; max-width: 880px; }
+  nav.tabs { position: sticky; top: 0; z-index: 60; display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 24px; max-width: 1400px; margin: 0 auto; background: #0d0b0fcc; backdrop-filter: blur(10px); }
+  nav.tabs button { font: 600 14px "Outfit"; color: #ddd; background: none; border: 1px solid #ffffff2a; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  nav.tabs button[aria-selected="true"] { background: #fff; color: #111; border-color: #fff; }
+  section.v { display: none; max-width: 1400px; margin: 0 auto; padding: 8px 24px 60px; }
+  section.v.on { display: block; }
+  section.v > h2 { font: 700 22px "Outfit"; margin: 10px 0 4px; }
+  section.v > p.why { margin: 0 0 18px; color: #b6aeba; max-width: 900px; }
+
+  /* ── A: the title page in its poster's colours ─────────────────────── */
+  .pick { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 14px; scrollbar-width: thin; }
+  .pick button { flex: none; width: 54px; aspect-ratio: 2/3; border-radius: 8px; overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; background: #222; }
+  .pick button[aria-pressed="true"] { border-color: #fff; }
+  .pick img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+  .frame-label { margin: 0 0 6px; color: #8d8592; }
+  .tp { --bg: #111; --ink: #fff; --muted: #ffffffb0; --accent: var(--orange); --line: #ffffff26; --chip: #ffffff14;
+        position: relative; border-radius: 16px; overflow: hidden; background: var(--bg); color: var(--ink); min-height: 560px; isolation: isolate;
+        transition: background .6s, color .6s; container-type: inline-size; }
+  .tp * { transition: background-color .6s, color .6s, border-color .6s; }
+  .tp .art { position: absolute; inset: 0 0 auto 0; height: 66%; background: center 25% / cover no-repeat; z-index: -2; }
+  .tp .wash { position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, var(--bg) 34%, color-mix(in oklab, var(--bg) 70%, transparent) 55%, color-mix(in oklab, var(--bg) 25%, transparent) 100%); transition: background .6s; }
+  .tp.now .wash { background: linear-gradient(to top, #111 34%, #111111b3 55%, #11111140 100%), linear-gradient(to right, #000000a0, transparent 70%); }
+  .tp .body { position: absolute; inset: auto 0 0 0; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 10px; }
+  .tp .kind { color: var(--muted); }
+  .tp h3 { margin: 0; font: italic 400 clamp(36px, 7cqi, 58px)/1 "Instrument Serif", serif; letter-spacing: -.01em; }
+  .tp.now h3 { font: 800 clamp(30px, 6cqi, 46px)/1.02 "Outfit"; font-style: normal; letter-spacing: -.02em; }
+  .tp .facts { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+  .tp .facts .chip { border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; }
+  .tp .facts .score { color: var(--accent); font-weight: 600; }
+  .tp.now .facts .score { color: #fcd34d; }
+  .tp .ov { margin: 0; color: var(--muted); font-size: 14px; max-width: 52ch; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .tp .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .tp .play { height: 48px; padding: 0 26px; border: 0; border-radius: 999px; font: 700 17px "Outfit"; color: #fff; background: linear-gradient(90deg, var(--orange), var(--orange2)); display: inline-flex; align-items: center; gap: 8px; }
+  .tp.tinted-play .play { background: var(--accent); color: var(--bg); }
+  .tp .pill { display: flex; gap: 2px; height: 48px; padding: 3px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); }
+  .tp .pill span { width: 40px; display: grid; place-items: center; border-radius: 999px; font-size: 17px; }
+  .tp .label { position: absolute; top: 14px; left: 16px; }
+  .swatches { display: flex; gap: 6px; margin-top: 10px; align-items: center; color: #8d8592; }
+  .swatches i { width: 22px; height: 22px; border-radius: 6px; display: inline-block; border: 1px solid #ffffff22; }
+  .toggle { display: inline-flex; gap: 6px; align-items: center; margin: 0 0 12px; color: #b6aeba; cursor: pointer; }
+
+  /* ── B / C: the shelf ──────────────────────────────────────────────── */
+  .marquee { overflow: hidden; white-space: nowrap; border-top: 1px solid #ffffff22; border-bottom: 1px solid #ffffff22; padding: 6px 0; margin-bottom: 8px; mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent); }
+  .marquee .track { display: inline-flex; gap: 48px; animation: slide 90s linear infinite; }
+  .marquee span { font: italic 400 46px/1.1 "Instrument Serif", serif; color: #ffffff4d; transition: color .3s; }
+  .marquee span.hot { color: #fff; }
+  @keyframes slide { to { transform: translateX(-50%); } }
+  .stage { position: relative; border-radius: 18px; overflow: hidden; background: radial-gradient(120% 80% at 50% 0%, #2a2430 0%, #120f14 60%); transition: background .7s; }
+  /* The scroller holds the perspective; the row inside it is one 3D space, so every case's sides
+     sort behind its neighbours (a scroller cannot itself keep 3D: overflow flattens it). */
+  .shelf { --h: 300px; overflow-x: auto; overflow-y: hidden; perspective: 1400px; perspective-origin: 50% 30%; scroll-behavior: smooth; scrollbar-width: none; outline: none; }
+  .shelf .row { display: flex; align-items: flex-end; gap: 3px; padding: 120px 40vw 56px 40px; width: max-content; min-height: 520px; transform-style: preserve-3d; }
+  .shelf::-webkit-scrollbar { display: none; }
+  .ledge { position: absolute; left: 0; right: 0; bottom: 38px; height: 18px; background: linear-gradient(#3a3238, #1c171c); box-shadow: 0 -1px 0 #ffffff14, 0 18px 30px #000a; pointer-events: none; }
+  .case { --w: 26px; --d: 200px; --hh: var(--h); position: relative; flex: none; width: var(--w); height: var(--hh); transform-style: preserve-3d; cursor: pointer;
+          transform: translateZ(0) rotateY(0); transition: transform .55s cubic-bezier(.2,.8,.2,1); outline: none; }
+  .case .f { position: absolute; left: 50%; top: 50%; backface-visibility: hidden; }
+  /* Only the spine is picked out by the pointer (and the cover once a case is out): in one 3D space
+     a neighbour's deep sides lie over the spines next to it. */
+  .case .f:not(.spine) { pointer-events: none; }
+  .case.out .front { pointer-events: auto; }
+  .case .spine { width: var(--w); height: var(--hh); transform: translate(-50%,-50%) translateZ(calc(var(--d) / 2)); }
+  .case .backspine { width: var(--w); height: var(--hh); transform: translate(-50%,-50%) rotateY(180deg) translateZ(calc(var(--d) / 2)); background: #111; }
+  .case .front { width: var(--d); height: var(--hh); transform: translate(-50%,-50%) rotateY(90deg) translateZ(calc(var(--w) / 2)); background: #222 center / cover; }
+  .case .back { width: var(--d); height: var(--hh); transform: translate(-50%,-50%) rotateY(-90deg) translateZ(calc(var(--w) / 2)); }
+  .case .top { width: var(--w); height: var(--d); transform: translate(-50%,-50%) rotateX(90deg) translateZ(calc(var(--hh) / 2)); }
+  .case:hover, .case:focus-visible, .case.peek { transform: translateZ(40px) translateY(-10px); }
+  .case.out { transform: translateX(var(--dx, 0px)) translateZ(260px) translateY(-44px) rotateY(-90deg); z-index: 5; }
+  /* At rest a case's sides are its dark plastic: the poster shows only once it is pulled forward. */
+  .case:not(.out):not(.peek):not(:hover) .front { background-image: none !important; background-color: #0c0b0d; }
+  .case:not(.out):not(.peek):not(:hover) .front > * { display: none; }
+  .shelf.has-out .case:not(.out) { opacity: .35; transition: transform .55s cubic-bezier(.2,.8,.2,1), opacity .4s; }
+  .detail { position: absolute; right: 24px; top: 24px; width: min(360px, 40%); padding: 18px; border-radius: 14px; background: #0009; backdrop-filter: blur(12px); border: 1px solid #ffffff1f; opacity: 0; transform: translateY(8px); transition: .4s; pointer-events: none; }
+  .detail.on { opacity: 1; transform: none; pointer-events: auto; }
+  .detail h4 { margin: 4px 0 6px; font: italic 400 34px/1.02 "Instrument Serif", serif; }
+  .detail p { margin: 0 0 12px; color: #ffffffb8; font-size: 14px; }
+  .detail .meta { display: flex; gap: 12px; color: #ffffffa0; margin-bottom: 10px; }
+  .detail a { color: #fff; }
+  .hint { position: absolute; left: 20px; bottom: 8px; color: #ffffff70; }
+  .opts { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 12px; color: #b6aeba; }
+  .opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  @media (max-width: 700px) {
+    .shelf { --h: 230px; perspective: 1000px; }
+    .shelf .row { padding: 90px 45vw 50px 20px; min-height: 400px; }
+    .case { --d: 154px; }
+    .case.out { transform: translateX(var(--dx, 0px)) translateZ(150px) translateY(-40px) rotateY(-90deg); }
+    /* Under the shelf, not over it: on a phone the card would hide the case it describes. */
+    .detail { position: relative; inset: auto; width: auto; margin: 0 12px 12px; transform: none; }
+    .detail:not(.on) { display: none; }
+    .marquee span { font-size: 32px; }
+  }
+
+  /* Blu-ray: thin blue-capped plastic case, spine label in the poster's colour */
+  .bd .spine { display: flex; flex-direction: column; align-items: center; overflow: hidden; background: linear-gradient(90deg, #0000 0 6%, #ffffff10 6% 8%, #0000 8% 92%, #00000040 92%), var(--c1); border-radius: 2px; }
+  .bd .spine .cap { width: 100%; height: 34px; background: linear-gradient(#1d5fd6, #0d3a91); display: grid; place-items: center; }
+  .bd .spine .cap b { font: 700 7px/1 "Outfit"; color: #fff; writing-mode: vertical-rl; letter-spacing: .08em; }
+  .bd .spine .t { flex: 1; writing-mode: vertical-rl; transform: rotate(180deg); font: 600 12px/1 "Outfit"; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 0; max-height: calc(var(--hh) - 70px); }
+  .bd .spine .y { font: 500 9px "JetBrains Mono"; color: var(--ink); opacity: .75; padding-bottom: 8px; writing-mode: vertical-rl; }
+  .bd .front { border-radius: 3px; box-shadow: inset 0 0 0 3px #0e3c9666; }
+  .bd .front::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 22px; background: linear-gradient(#1d5fd6, #0d3a91); }
+  .bd .front::after { content: "BLU-RAY"; position: absolute; top: 5px; left: 0; right: 0; text-align: center; font: 700 10px "Outfit"; letter-spacing: .25em; color: #fff; }
+  .bd .front .sheen, .vhs .front .sheen { position: absolute; inset: 0; background: linear-gradient(115deg, #ffffff00 30%, #ffffff30 45%, #ffffff00 60%); mix-blend-mode: screen; }
+  .bd .back { background: var(--c1); }
+  .bd .top { background: #0d3a91; }
+
+  /* VHS: a thick cardboard sleeve, worn; a paper label down the spine */
+  .vhs .case { --w: 44px; --d: 190px; }
+  .vhs .spine { background: #121012; display: flex; flex-direction: column; align-items: stretch; padding: 10px 5px; gap: 8px; box-shadow: inset 0 0 0 1px #ffffff10; }
+  .vhs .spine .band { height: 26px; background: var(--c1); border-radius: 1px; }
+  .vhs .spine .label { flex: 1; background: #efe6d2; border-radius: 1px; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: inset 0 0 6px #6b5a3a55; }
+  .vhs .spine .label span { writing-mode: vertical-rl; transform: rotate(180deg); font: 700 15px/1 "Oswald", sans-serif; text-transform: uppercase; color: #1b1612; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: calc(var(--hh) - 90px); }
+  .vhs .spine .sticker { height: 22px; border-radius: 50%; background: #f5c518; display: grid; place-items: center; font: 700 9px "Outfit"; color: #111; }
+  .vhs .spine .sticker.none { background: none; }
+  .vhs .front { filter: saturate(.85) contrast(1.05) sepia(.12); }
+  .vhs .front::after { content: ""; position: absolute; inset: 0; background: radial-gradient(130% 90% at 50% 40%, #0000 60%, #0007), repeating-linear-gradient(0deg, #ffffff06 0 1px, #0000 1px 3px); }
+  .vhs .front .rent { position: absolute; right: -6px; top: 18px; transform: rotate(8deg); background: #e03b2f; color: #fff; font: 700 10px "Oswald"; padding: 4px 10px; letter-spacing: .05em; box-shadow: 0 2px 6px #0008; }
+  .vhs .back { background: #efe6d2; }
+  .vhs .top { background: #1a171a; }
+  .vhs .ledge { background: linear-gradient(#6b4a31, #3b2818); }
+  .vhs .stage { background: radial-gradient(120% 80% at 50% 0%, #2d2218 0%, #120d09 65%); }
+</style>
+</head>
+<body>
+<header class="lab">
+  <h1>Shelf lab</h1>
+  <p>After stripe.press. <b>A</b>: the title page takes its poster's colours. <b>B</b>: films as Blu-ray cases on a shelf. <b>C</b>: the same as VHS tapes. The films are alex's 32 most recently watched; colours are read from each poster here in the browser. On the shelves: hover (or ← →) to pull a case forward, click (or Enter) to take it out and turn it to the cover, Esc or click again to put it back.</p>
+</header>
+<nav class="tabs" role="tablist">
+  <button role="tab" data-v="a" aria-selected="true">A · Poster colours</button>
+  <button role="tab" data-v="b" aria-selected="false">B · Blu-ray shelf</button>
+  <button role="tab" data-v="c" aria-selected="false">C · VHS shelf</button>
+</nav>
+
+<section class="v on" id="a">
+  <h2>A · The title page in its poster's colours</h2>
+  <p class="why">Left: the title page as it is today, neutral dark under every film. Right: the same page, its background, text, chips and score taken from the poster (a dark ground from its main colour, the accent from its liveliest one, the text tinted toward it), the name set in a serif the way Stripe Press sets its titles. Pick a film; the colours cross-fade.</p>
+  <label class="toggle"><input type="checkbox" id="tintPlay"> Play in the film's accent too (instead of Roki orange)</label>
+  <div class="pick" id="pick"></div>
+  <div class="pair">
+    <div><p class="frame-label mono">[ now ]</p><div class="tp now" id="tpNow"></div></div>
+    <div><p class="frame-label mono">[ in its colours ]</p><div class="tp" id="tpTint"></div><div class="swatches mono" id="sw"></div></div>
+  </div>
+</section>
+
+<section class="v bd" id="b">
+  <h2>B · Blu-ray shelf</h2>
+  <p class="why">Each film a case standing spine-out: the blue Blu-ray cap, the title down a spine in the poster's own colour. Hover pulls one forward; a click takes it out and turns it to its cover, the page washing into its colour, with the details beside it. The serif marquee above lights the film under the pointer.</p>
+  <div class="opts"><label><input type="checkbox" class="byRating"> Height by your rating</label></div>
+  <div class="marquee"><div class="track"></div></div>
+  <div class="stage"><div class="shelf" tabindex="0" aria-label="Blu-ray shelf"></div><div class="ledge"></div><div class="detail"></div><div class="hint mono">← → move · enter take out · esc put back</div></div>
+</section>
+
+<section class="v vhs" id="c">
+  <h2>C · VHS shelf</h2>
+  <p class="why">The same shelf as a video shop's: thick worn sleeves, a cream paper label down the spine, a band in the poster's colour, your rating as a yellow price sticker — and a "Be kind, rewind" sticker on the cover of the ones you rated highest. Same pulling out and turning.</p>
+  <div class="opts"><label><input type="checkbox" class="byRating"> Height by your rating</label></div>
+  <div class="marquee"><div class="track"></div></div>
+  <div class="stage"><div class="shelf" tabindex="0" aria-label="VHS shelf"></div><div class="ledge"></div><div class="detail"></div><div class="hint mono">← → move · enter take out · esc put back</div></div>
+</section>
+
+<script>
+const small = (u) => u ? u.replace("/w500/", "/w342/") : u
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
+
+// ── colours from a poster ───────────────────────────────────────────────
+// Downsample to 24×36, bucket the pixels by hue/lightness, and pick: the main colour (most
+// pixels, ignoring near-black/white) for the ground, and the liveliest well-represented one for
+// the accent. Done in OKLCH so lightness can be set without the hue drifting.
+const pal = new Map()
+function toOklch([r, g, b]) {
+  const l = (c) => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  const [R, G, B] = [l(r), l(g), l(b)]
+  const L = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B)
+  const M = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B)
+  const S = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B)
+  const ok = [0.2104542553 * L + 0.793617785 * M - 0.0040720468 * S, 1.9779984951 * L - 2.428592205 * M + 0.4505937099 * S, 0.0259040371 * L + 0.7827717662 * M - 0.808675766 * S]
+  return { l: ok[0], c: Math.hypot(ok[1], ok[2]), h: (Math.atan2(ok[2], ok[1]) * 180 / Math.PI + 360) % 360 }
+}
+const css = (l, c, h) => `oklch(${(l * 100).toFixed(1)}% ${c.toFixed(3)} ${h.toFixed(0)})`
+function palette(item) {
+  if (pal.has(item.id)) return pal.get(item.id)
+  const p = new Promise((res) => {
+    const img = new Image(); img.crossOrigin = "anonymous"; img.src = small(item.poster)
+    img.onload = () => {
+      const cv = document.createElement("canvas"); cv.width = 24; cv.height = 36
+      const g = cv.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0, 24, 36)
+      const d = g.getImageData(0, 0, 24, 36).data, buckets = new Map()
+      for (let i = 0; i < d.length; i += 4) {
+        const o = toOklch([d[i], d[i + 1], d[i + 2]])
+        if (o.l < 0.12 || o.l > 0.95) continue
+        const k = o.c < 0.03 ? "grey" : Math.round(o.h / 30)
+        const b = buckets.get(k) || { n: 0, l: 0, c: 0, hx: 0, hy: 0 }
+        b.n++; b.l += o.l; b.c += o.c; b.hx += Math.cos(o.h * Math.PI / 180); b.hy += Math.sin(o.h * Math.PI / 180)
+        buckets.set(k, b)
+      }
+      const list = [...buckets.entries()].map(([k, b]) => ({ grey: k === "grey", n: b.n, l: b.l / b.n, c: b.c / b.n, h: (Math.atan2(b.hy, b.hx) * 180 / Math.PI + 360) % 360 }))
+      const coloured = list.filter((b) => !b.grey).sort((a, b) => b.n - a.n)
+      const main = coloured[0] || { h: 300, c: 0.02 }
+      const lively = coloured.filter((b) => b.n > 12).sort((a, b) => b.c - a.c)[0] || main
+      res({
+        bg: css(0.2, Math.min(main.c, 0.07), main.h),
+        bg2: css(0.27, Math.min(main.c, 0.09), main.h),
+        ink: css(0.95, Math.min(lively.c, 0.04), lively.h),
+        muted: css(0.8, Math.min(lively.c, 0.05), lively.h),
+        accent: css(0.8, Math.min(Math.max(lively.c, 0.1), 0.17), lively.h),
+        line: css(0.8, 0.04, main.h).replace(")", " / 0.28)"),
+        chip: css(0.9, 0.03, main.h).replace(")", " / 0.1)"),
+        spine: css(0.42, Math.min(Math.max(main.c, 0.04), 0.13), main.h),
+        spineInk: css(0.94, 0.03, main.h),
+        hue: main.h,
+      })
+    }
+    img.onerror = () => res(null)
+  })
+  pal.set(item.id, p); return p
+}
+
+let films = []
+fetch("shelf-data.json").then((r) => r.json()).then((list) => {
+  films = list
+  buildA(); buildShelf(document.getElementById("b"), "bd"); buildShelf(document.getElementById("c"), "vhs")
+})
+
+// ── tabs ────────────────────────────────────────────────────────────────
+document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("nav.tabs button").forEach((x) => x.setAttribute("aria-selected", x === b))
+  document.querySelectorAll("section.v").forEach((s) => s.classList.toggle("on", s.id === b.dataset.v))
+  history.replaceState(null, "", "#" + b.dataset.v)
+}))
+const start = location.hash.slice(1); if (["a", "b", "c"].includes(start)) document.querySelector(`nav.tabs [data-v=${start}]`).click()
+
+// ── A ──────────────────────────────────────────────────────────────────
+function page(f) {
+  return `<div class="art" style="background-image:url('${esc(f.backdrop || f.poster)}')"></div><div class="wash"></div>
+    <div class="body"><div class="kind mono">Film</div><h3>${esc(f.title)}</h3>
+    <div class="facts"><span class="score">★ ${f.score ?? "—"}</span><span>${esc(f.year)}</span>${f.minutes ? `<span>${f.minutes} min</span>` : ""}<span class="chip">Drama</span><span class="chip">Thriller</span></div>
+    <p class="ov">${esc(f.overview)}</p>
+    <div class="row"><span class="play">▶ Start</span><span class="pill"><span>＋</span><span>👁</span><span>☆</span><span>⋯</span></span></div></div>`
+}
+function buildA() {
+  const pick = document.getElementById("pick")
+  pick.innerHTML = films.slice(0, 18).map((f, i) => `<button aria-pressed="${i === 0}" data-i="${i}" title="${esc(f.title)}"><img src="${esc(small(f.poster))}" alt="" loading="lazy"></button>`).join("")
+  pick.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) showA(+b.dataset.i) })
+  document.getElementById("tintPlay").addEventListener("change", (e) => document.getElementById("tpTint").classList.toggle("tinted-play", e.target.checked))
+  showA(0)
+}
+async function showA(i) {
+  const f = films[i]
+  document.querySelectorAll("#pick button").forEach((b) => b.setAttribute("aria-pressed", +b.dataset.i === i))
+  document.getElementById("tpNow").innerHTML = page(f)
+  const t = document.getElementById("tpTint"); t.innerHTML = page(f)
+  const p = await palette(f); if (!p) return
+  for (const [k, v] of Object.entries({ bg: p.bg, ink: p.ink, muted: p.muted, accent: p.accent, line: p.line, chip: p.chip })) t.style.setProperty("--" + k, v)
+  document.getElementById("sw").innerHTML = ["bg", "bg2", "accent", "ink", "spine"].map((k) => `<i style="background:${p[k]}" title="${k}"></i>`).join("") + " ground · accent · ink · spine"
+}
+
+// ── B / C: the shelf ───────────────────────────────────────────────────
+function buildShelf(section, kind) {
+  const shelf = section.querySelector(".shelf"), detail = section.querySelector(".detail"), stage = section.querySelector(".stage")
+  const track = section.querySelector(".track")
+  track.innerHTML = [...films, ...films].map((f, i) => `<span data-i="${i % films.length}">${esc(f.title)}</span>`).join("")
+  const top = [...films].filter((f) => f.score).sort((a, b) => b.score - a.score).slice(0, 5).map((f) => f.id)
+
+  shelf.innerHTML = `<div class="row">` + films.map((f, i) => {
+    const spine = kind === "bd"
+      ? `<div class="cap"><b>BLU-RAY</b></div><div class="t">${esc(f.title)}</div><div class="y">${esc(f.year)}</div>`
+      : `<div class="band"></div><div class="label"><span>${esc(f.title)}</span></div><div class="sticker ${f.score ? "" : "none"}">${f.score ? "★" + f.score : ""}</div>`
+    const rent = kind === "vhs" && top.includes(f.id) ? `<div class="rent">BE KIND · REWIND</div>` : ""
+    return `<div class="case" tabindex="-1" data-i="${i}" role="button" aria-label="${esc(f.title)} (${esc(f.year)})">
+      <div class="f spine">${spine}</div><div class="f backspine"></div>
+      <div class="f front" data-src="${esc(small(f.poster))}">${rent}<div class="sheen"></div></div>
+      <div class="f back"></div><div class="f top"></div></div>`
+  }).join("") + `</div>`
+  const cases = [...shelf.querySelectorAll(".case")]
+
+  // Spine colours as the posters come in; posters only once a case is near the view.
+  cases.forEach(async (c) => {
+    const p = await palette(films[c.dataset.i]); if (!p) return
+    c.style.setProperty("--c1", p.spine); c.style.setProperty("--ink", p.spineInk)
+  })
+  const io = new IntersectionObserver((es) => es.forEach((e) => {
+    if (!e.isIntersecting) return
+    const fr = e.target.querySelector(".front"); fr.style.backgroundImage = `url('${fr.dataset.src}')`; io.unobserve(e.target)
+  }), { root: shelf, rootMargin: "0px 400px" })
+  cases.forEach((c) => io.observe(c))
+
+  section.querySelector(".byRating").addEventListener("change", (e) => {
+    cases.forEach((c) => {
+      const s = films[c.dataset.i].score
+      c.style.setProperty("--hh", e.target.checked && s ? `calc(var(--h) * ${(0.62 + s * 0.038).toFixed(3)})` : "var(--h)")
+    })
+  })
+
+  let cur = 0, out = null
+  const hot = (i) => {
+    track.querySelectorAll("span").forEach((s) => s.classList.toggle("hot", +s.dataset.i === i))
+  }
+  const peek = (i) => {
+    cur = Math.max(0, Math.min(cases.length - 1, i))
+    cases.forEach((c, j) => c.classList.toggle("peek", j === cur && !out))
+    hot(cur)
+  }
+  const center = (c) => shelf.scrollTo({ left: Math.max(0, c.offsetLeft - shelf.clientWidth / 2 + c.offsetWidth / 2), behavior: "smooth" })
+  const takeOut = async (i) => {
+    if (out) putBack()
+    out = cases[i]; cur = i
+    // Where the shelf will have scrolled to, and how far the case must still slide to stand in the
+    // middle (one near either end cannot be scrolled there).
+    const want = out.offsetLeft - shelf.clientWidth / 2 + out.offsetWidth / 2
+    const to = Math.max(0, Math.min(want, shelf.scrollWidth - shelf.clientWidth))
+    out.style.setProperty("--dx", `${Math.round(to - want)}px`)
+    center(out)
+    out.classList.add("out"); shelf.classList.add("has-out")
+    const f = films[i], p = await palette(f)
+    if (p && out === cases[i]) stage.style.background = `radial-gradient(120% 90% at 50% 10%, ${p.bg2} 0%, ${p.bg} 70%)`
+    detail.innerHTML = `<div class="mono" style="opacity:.7">[ ${kind === "bd" ? "Blu-ray" : "VHS"} · watched ]</div><h4>${esc(f.title)}</h4>
+      <div class="meta mono"><span>${esc(f.year)}</span>${f.minutes ? `<span>${f.minutes} min</span>` : ""}${f.score ? `<span>★ ${f.score}</span>` : ""}</div>
+      <p>${esc(f.overview)}</p><a class="mono" href="/title/movie/${f.id}">Open on Roki →</a>`
+    detail.classList.add("on")
+  }
+  const putBack = () => {
+    if (!out) return
+    out.classList.remove("out"); out.style.removeProperty("--dx"); shelf.classList.remove("has-out"); out = null
+    detail.classList.remove("on"); stage.style.background = ""
+  }
+
+  shelf.addEventListener("mouseover", (e) => { const c = e.target.closest(".case"); if (c && !out) hot(+c.dataset.i) })
+  shelf.addEventListener("click", (e) => {
+    const c = e.target.closest(".case")
+    if (!c) return putBack()
+    c === out ? putBack() : takeOut(+c.dataset.i)
+  })
+  shelf.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault()
+      const n = cur + (e.key === "ArrowRight" ? 1 : -1)
+      if (out) takeOut(Math.max(0, Math.min(cases.length - 1, n))); else { peek(n); center(cases[cur]) }
+    } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); out ? putBack() : takeOut(cur) }
+    else if (e.key === "Escape") putBack()
+  })
+  // The shelf turns a little toward the pointer, the way a real one does as you walk past it.
+  stage.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse") return
+    const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5
+    shelf.style.perspectiveOrigin = `${50 + x * 30}% 30%`
+  })
+  requestAnimationFrame(() => { peek(0); shelf.scrollLeft = 0 })
+}
+</script>
+</body>
+</html>
