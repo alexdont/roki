@@ -884,7 +884,19 @@ function candles(fx, api) {
   }
 }
 
+// The mix (2 + 4): hold still and time slows while the colour drains from round you; move and
+// both come back.
+// The slowing is the rain's; the draining runs on real time beside it.
+const stillMix = (fx) => {
+  const slow = slowMo(fx), d = drain(fx)
+  return {
+    busy: () => true,
+    step(dt, amount, active) { slow.step(dt, amount, active); d.step(dt, amount, active) },
+    draw(g, alpha) { slow.draw(g, alpha) },
+  }
+}
 Object.assign(EFFECTS, {
+  "cry-amix": stillMix,
   "cry-a1": plusWith(TEARS, cloud), "cry-a2": slowMo, "cry-a3": plusWith(TEARS, harder),
   "cry-a4": plusWith(TEARS, drain), "cry-a5": plusWith(TEARS, streetlight), "cry-a6": plusWith(TEARS, headlights),
   "cry-a7": plusWith(TEARS, boats), "cry-a8": plusWith(TEARS, petals), "cry-a9": plusWith(TEARS, candles),
