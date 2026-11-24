@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Profile 3D lab · Roki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* A mock of the profile page drawn with the WebGL cases (2026-11-24): alex's real favourites on
+     leaning shelves, the favourite of all time on a pedestal, the recently watched on a carousel,
+     and the watch history as a wall of covers by month. A snapshot (profile3d-data.json); nothing
+     on the real site reads this. */
+  :root { color-scheme: dark; --page: #0e0c10; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--page); color: #ece8ef; font: 15px/1.45 "Outfit", system-ui, sans-serif; }
+  a { color: inherit; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  .lab-note { position: fixed; right: 12px; bottom: 12px; z-index: 50; padding: 6px 10px; border-radius: 999px; background: #000a; border: 1px solid #ffffff22; color: #ffffffa0; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px; }
+  @media (max-width: 700px) { .wrap { padding: 0 14px; } }
+
+  /* the top: banner, name, numbers, and the pedestal at the right */
+  .top { position: relative; overflow: hidden; background: radial-gradient(90% 120% at 80% 0%, #3a1f2e 0%, #1a1220 45%, var(--page) 80%); }
+  .top .wrap { display: grid; grid-template-columns: 1fr 440px; gap: 24px; align-items: end; padding-top: 70px; padding-bottom: 26px; }
+  @media (max-width: 900px) { .top .wrap { grid-template-columns: 1fr; } }
+  .who { display: flex; gap: 18px; align-items: center; }
+  .who img, .who .ph { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffffcc; box-shadow: 0 8px 30px #0008; background: #ff6a13; display: grid; place-items: center; font: 800 40px "Outfit"; }
+  .who h1 { margin: 0; font: italic 400 64px/1 "Instrument Serif", serif; }
+  .nums { display: flex; gap: 26px; margin-top: 22px; flex-wrap: wrap; }
+  .nums b { display: block; font: 700 32px/1 "Outfit"; letter-spacing: -.02em; }
+  .nums span { color: #ffffff90; }
+  .nums a { text-decoration: none; }
+  .nums a:hover b { text-decoration: underline; text-underline-offset: 4px; }
+  .pedestal-box { position: relative; height: 380px; }
+  .pedestal-box .caption { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; pointer-events: none; }
+  .pedestal-box .caption b { display: block; font: italic 400 26px "Instrument Serif", serif; }
+  .chips { position: absolute; top: 4px; left: 0; right: 0; display: flex; gap: 6px; justify-content: center; z-index: 2; }
+  .chips button { font: 600 12px "Outfit"; color: #ddd; background: #ffffff12; border: 1px solid #ffffff26; border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  .chips button[aria-pressed="true"] { background: #fff; color: #111; }
+
+  /* sections */
+  section.shelf { margin: 28px 0 0; }
+  section.shelf h2 { margin: 0 0 2px; font: 700 22px "Outfit"; display: flex; align-items: baseline; gap: 10px; }
+  section.shelf h2 small { font: 500 11px "JetBrains Mono"; color: #ffffff70; letter-spacing: .06em; text-transform: uppercase; }
+  .stage { position: relative; height: 360px; border-radius: 18px; overflow: hidden; transition: background-color .8s; background: #ffffff05; }
+  .stage canvas, .wallstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
+  .stage.ring { height: 430px; }
+  @media (max-width: 700px) { .stage { height: 300px; } .stage.ring { height: 360px; } .who h1 { font-size: 48px; } }
+
+  /* the card of a case taken out */
+  .detail { position: absolute; right: 16px; top: 16px; z-index: 3; width: min(330px, calc(100% - 32px)); padding: 16px; border-radius: 14px; background: #000b; backdrop-filter: blur(14px); border: 1px solid #ffffff1f; opacity: 0; transform: translateY(8px); transition: .35s; pointer-events: none; }
+  .detail.on { opacity: 1; transform: none; pointer-events: auto; }
+  .detail h3 { margin: 2px 0 6px; font: italic 400 30px/1.02 "Instrument Serif", serif; }
+  .detail .meta { display: flex; gap: 10px; color: #ffffffa0; margin-bottom: 8px; }
+  .detail a { font-weight: 600; }
+  @media (max-width: 700px) { .detail { top: auto; bottom: 10px; } }
+
+  /* the watch history: the wall fixed behind a tall page that scrolls it */
+  #watched { display: none; }
+  body.watched #profile { display: none; }
+  body.watched #watched { display: block; }
+  .whead { position: sticky; top: 0; z-index: 6; background: linear-gradient(var(--page) 70%, #0e0c1000); }
+  .whead .wrap { display: flex; gap: 16px; align-items: center; padding-top: 18px; padding-bottom: 22px; flex-wrap: wrap; }
+  .whead h1 { margin: 0; font: italic 400 48px/1 "Instrument Serif", serif; }
+  .whead .count { color: #ffffff80; font: 600 18px "Outfit"; }
+  .whead button, .whead a.back { font: 600 13px "Outfit"; color: #ddd; background: #ffffff10; border: 1px solid #ffffff26; border-radius: 999px; padding: 6px 12px; cursor: pointer; text-decoration: none; }
+  .whead button[aria-pressed="true"] { background: #fff; color: #111; }
+  .wallstage { position: fixed; inset: 0; z-index: 1; }
+  #wallSpacer { position: relative; z-index: 2; pointer-events: none; }
+  .month { position: fixed; left: 0; top: 0; z-index: 3; pointer-events: none; font: italic 400 30px "Instrument Serif", serif; color: #fff; text-shadow: 0 2px 14px #000; white-space: nowrap; }
+  .month small { font: 500 11px "JetBrains Mono"; letter-spacing: .08em; color: #ffffff90; margin-left: 10px; font-style: normal; }
+  #wallDetail { position: fixed; z-index: 8; }
+  @media (max-width: 700px) { .whead .hint { display: none; } .whead h1 { font-size: 40px; } }
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                 "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div class="lab-note mono">Lab · a mock of alex's profile</div>
+
+<div id="profile">
+  <header class="top">
+    <div class="wrap">
+      <div>
+        <div class="who"><span id="avatar"></span><div><div class="mono" style="opacity:.7">Profile</div><h1 id="name">alex</h1></div></div>
+        <div class="nums" id="nums"></div>
+      </div>
+      <div class="pedestal-box">
+        <div class="chips" id="pedChips"></div>
+        <div class="stage" id="pedestal" style="height:100%;background:transparent"></div>
+        <div class="caption"><span class="mono" style="opacity:.7">Favourite of all time</span><b id="pedTitle"></b></div>
+      </div>
+    </div>
+  </header>
+  <main class="wrap" id="shelves"></main>
+  <div class="wrap" style="margin:34px auto 60px">
+    <section class="shelf">
+      <h2>Recently watched <small>trial · the carousel</small></h2>
+      <div class="stage ring" id="ring"></div>
+    </section>
+  </div>
+</div>
+
+<div id="watched">
+  <div class="whead"><div class="wrap">
+    <a class="back" href="#">← Profile</a>
+    <h1>Watched</h1><span class="count" id="wcount"></span>
+    <button id="byMonth" aria-pressed="true">By month</button>
+    <span class="mono hint" style="opacity:.6">hover a cover · click to take it out · esc put back</span>
+  </div></div>
+  <div class="wallstage" id="wall"></div>
+  <div id="wallSpacer"></div>
+</div>
+
+<script type="module">
+import * as THREE from "three"
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js"
+
+const W = 1.35, H = 1.9, D = 0.14, LID = 0.028
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+// ── colours from a poster (OKLCH buckets, as the other labs) ─────────────────────────────────
+function oklch(r, g, b) {
+  const l = (c) => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  const [R, G, B] = [l(r), l(g), l(b)]
+  const L = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B), M = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B), S = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B)
+  const a = 1.9779984951 * L - 2.428592205 * M + 0.4505937099 * S, bb = 0.0259040371 * L + 0.7827717662 * M - 0.808675766 * S
+  return { l: 0.2104542553 * L + 0.793617785 * M - 0.0040720468 * S, c: Math.hypot(a, bb), h: (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360 }
+}
+function paletteOf(img) {
+  try {
+    const cv = document.createElement("canvas"); cv.width = 24; cv.height = 36
+    const g = cv.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0, 24, 36)
+    const d = g.getImageData(0, 0, 24, 36).data, buckets = new Map()
+    for (let i = 0; i < d.length; i += 4) {
+      const o = oklch(d[i], d[i + 1], d[i + 2]); if (o.l < 0.12 || o.l > 0.95 || o.c < 0.03) continue
+      const k = Math.round(o.h / 30), b = buckets.get(k) || { n: 0, c: 0, x: 0, y: 0 }
+      b.n++; b.c += o.c; b.x += Math.cos(o.h * Math.PI / 180); b.y += Math.sin(o.h * Math.PI / 180); buckets.set(k, b)
+    }
+    const list = [...buckets.values()].map((b) => ({ n: b.n, c: b.c / b.n, h: (Math.atan2(b.y, b.x) * 180 / Math.PI + 360) % 360 })).sort((a, b) => b.n - a.n)
+    const main = list[0] || { h: 300, c: 0.02 }, lively = list.filter((b) => b.n > 12).sort((a, b) => b.c - a.c)[0] || main
+    return pal(main, lively)
+  } catch { return pal({ h: 300, c: 0.02 }, { h: 30, c: 0.12 }) }
+}
+function pal(main, lively) {
+  const css = (l, c, h) => `oklch(${l}% ${c} ${Math.round(h)})`
+  return { spine: css(42, Math.min(Math.max(main.c, 0.04), 0.13).toFixed(3), main.h), ink: css(95, 0.03, main.h),
+           light: css(78, Math.min(Math.max(lively.c, 0.08), 0.16).toFixed(3), lively.h), ground: css(20, Math.min(main.c, 0.06).toFixed(3), main.h) }
+}
+const toColor = (() => { const c = document.createElement("canvas").getContext("2d"); return (css) => { c.fillStyle = "#000"; c.fillStyle = css; c.fillRect(0, 0, 1, 1); const [r, g, b] = c.getImageData(0, 0, 1, 1).data; return new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace) } })()
+
+// One picture per address for the whole page: the image, its texture and its palette.
+const pictures = new Map()
+function picture(url) {
+  if (!url) return Promise.resolve(null)
+  if (!pictures.has(url)) pictures.set(url, new Promise((res) => {
+    const img = new Image(); img.crossOrigin = "anonymous"; img.decoding = "async"
+    img.onload = () => { const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; tex.needsUpdate = true; res({ img, tex, pal: paletteOf(img) }) }
+    img.onerror = () => res(null)
+    img.src = url
+  }))
+  return pictures.get(url)
+}
+function spineTexture(item, p) {
+  const c = document.createElement("canvas"); c.width = 72; c.height = 980
+  const g = c.getContext("2d")
+  g.fillStyle = p.spine; g.fillRect(0, 0, 72, 980)
+  g.fillStyle = "#ffffff18"; g.fillRect(4, 0, 2, 980); g.fillStyle = "#00000040"; g.fillRect(64, 0, 8, 980)
+  g.save(); g.translate(46, 900); g.rotate(-Math.PI / 2); g.fillStyle = p.ink; g.font = "600 34px Outfit"
+  let t = item.title || ""; while (g.measureText(t).width > 760 && t.length > 3) t = t.slice(0, -2)
+  if (t !== item.title) t = t.trimEnd() + "…"
+  g.fillText(t, 0, 0); g.restore()
+  if (item.year) { g.save(); g.translate(46, 960); g.rotate(-Math.PI / 2); g.globalAlpha = 0.75; g.font = "500 22px 'JetBrains Mono'"; g.fillStyle = p.ink; g.fillText(item.year, 0, 0); g.restore() }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4
+  return tex
+}
+
+// ── geometry and materials, shared by every stage ──────────────────────────────────────────
+const plastic = new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.32, metalness: 0.05 })
+const inner = new THREE.MeshStandardMaterial({ color: 0x1b1b20, roughness: 0.6 })
+const sleeveMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.06, transparent: true, opacity: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 })
+const hubMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, roughness: 0.25, metalness: 0.9 })
+const trayGeo = new RoundedBoxGeometry(W, H, D - LID, 2, 0.02), lidGeo = new RoundedBoxGeometry(W, H, LID, 2, 0.012)
+const slimGeo = new RoundedBoxGeometry(W, H, D, 2, 0.02)
+const faceGeo = new THREE.PlaneGeometry(W - 0.04, H - 0.04), spineGeo = new THREE.PlaneGeometry(D, H - 0.01)
+const discGeo = new THREE.CircleGeometry(0.6, 64), hubGeo = new THREE.RingGeometry(0.07, 0.17, 48)
+
+// A full case (opens): tray, a lid on the spine's hinge with the cover under a sleeve, a disc.
+function fullCase(item, idx) {
+  const g = new THREE.Group()
+  const tray = new THREE.Mesh(trayGeo, plastic); tray.position.z = -LID / 2; tray.castShadow = true; g.add(tray)
+  const trayFace = new THREE.Mesh(faceGeo, inner); trayFace.position.z = -LID / 2 + (D - LID) / 2 + 0.001; g.add(trayFace)
+  const disc = new THREE.Group(); disc.position.z = trayFace.position.z + 0.004
+  const discFace = new THREE.Mesh(discGeo, new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.3, metalness: 0.5 })); disc.add(discFace)
+  const hub = new THREE.Mesh(hubGeo, hubMat); hub.position.z = 0.002; disc.add(hub); g.add(disc)
+  const back = new THREE.Mesh(faceGeo, plastic.clone()); back.rotation.y = Math.PI; back.position.z = -D / 2 - 0.001; g.add(back)
+  const hinge = new THREE.Group(); hinge.position.set(-W / 2, 0, (D - LID) / 2); g.add(hinge)
+  const lid = new THREE.Mesh(lidGeo, plastic); lid.position.set(W / 2, 0, LID / 2); lid.castShadow = true; hinge.add(lid)
+  const cover = new THREE.Mesh(faceGeo, new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.55 })); cover.position.set(W / 2, 0, LID + 0.001); hinge.add(cover)
+  const sleeve = new THREE.Mesh(faceGeo, sleeveMat); sleeve.position.set(W / 2, 0, LID + 0.004); hinge.add(sleeve)
+  const lidIn = new THREE.Mesh(faceGeo, inner); lidIn.rotation.y = Math.PI; lidIn.position.set(W / 2, 0, -0.001); hinge.add(lidIn)
+  const spine = new THREE.Mesh(spineGeo, new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.45 })); spine.rotation.y = -Math.PI / 2; spine.position.x = -W / 2 - 0.0015; g.add(spine)
+  g.traverse((m) => { m.userData.idx = idx })
+  const c = { item, idx, g, hinge, disc, discFace, cover, spine, back, full: true }
+  dress(c)
+  return c
+}
+// A slim case for the wall: a body and the cover (hundreds of them; the full one is made when one is taken out).
+function slimCase(item, idx) {
+  const g = new THREE.Group()
+  const body = new THREE.Mesh(slimGeo, plastic); g.add(body)
+  const cover = new THREE.Mesh(faceGeo, new THREE.MeshStandardMaterial({ color: 0x232026, roughness: 0.55 })); cover.position.z = D / 2 + 0.002; g.add(cover)
+  const sleeve = new THREE.Mesh(faceGeo, sleeveMat); sleeve.position.z = D / 2 + 0.005; g.add(sleeve)
+  g.traverse((m) => { m.userData.idx = idx })
+  return { item, idx, g, cover, slim: true }
+}
+function dress(c) {
+  return picture(c.item.poster).then((p) => {
+    if (!p) return
+    c.pal = p.pal
+    c.cover.material = new THREE.MeshStandardMaterial({ map: p.tex, roughness: 0.5 })
+    if (c.spine) document.fonts.ready.then(() => { c.spine.material = new THREE.MeshStandardMaterial({ map: spineTexture(c.item, p.pal), roughness: 0.45 }) })
+    if (c.back) c.back.material.color = toColor(p.pal.spine).multiplyScalar(0.6)
+  })
+}
+function discArt(c) {
+  if (c.discLoaded) return; c.discLoaded = true
+  const url = c.item.backdrop || c.item.poster
+  picture(url).then((p) => {
+    if (!p) return
+    const tex = p.tex.clone(); tex.needsUpdate = true
+    const a = p.img.width / p.img.height
+    if (a > 1) { tex.repeat.set(1 / a, 1); tex.offset.set((1 - 1 / a) / 2, 0) } else { tex.repeat.set(1, a); tex.offset.set(0, (1 - a) / 2) }
+    c.discFace.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.25, metalness: 0.35 })
+  })
+}
+
+// ── springs ─────────────────────────────────────────────────────────────────────────────────
+function spring(x, v, t, dt, k = 140) { const c = 2 * Math.sqrt(k) * 0.62; v += ((t - x) * k - v * c) * dt; return [x + v * dt, v] }
+function motion(c) {
+  Object.assign(c, { pos: new THREE.Vector3(0, -8, 0), vel: new THREE.Vector3(), tpos: new THREE.Vector3(), rot: new THREE.Vector3(), rvel: new THREE.Vector3(), trot: new THREE.Vector3(), lid: 0, lvel: 0, tlid: 0, spin: 0, hover: 0, thover: 0 })
+  return c
+}
+function step(c, dt) {
+  for (const ax of ["x", "y", "z"]) { ;[c.pos[ax], c.vel[ax]] = spring(c.pos[ax], c.vel[ax], c.tpos[ax], dt); ;[c.rot[ax], c.rvel[ax]] = spring(c.rot[ax], c.rvel[ax], c.trot[ax], dt, 110) }
+  c.hover += (c.thover - c.hover) * (1 - Math.exp(-dt * 14))
+  c.g.position.copy(c.pos); c.g.rotation.set(c.rot.x, c.rot.y, c.rot.z, "YXZ")
+  if (c.full) { ;[c.lid, c.lvel] = spring(c.lid, c.lvel, c.tlid, dt, 70); c.hinge.rotation.y = c.lid; if (c.lid < -0.4) { c.spin += dt * 2.2; c.disc.rotation.z = -c.spin } }
+}
+
+// ── a stage: one canvas, its scene and lights, the cases in an arrangement ────────────────
+const stages = []
+class Stage {
+  constructor(el, opts) {
+    this.el = el; this.opts = opts; this.cases = []; this.out = null; this.pointer = { x: 0, y: 0, in: false }
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace; this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    el.appendChild(this.renderer.domElement)
+    this.scene = new THREE.Scene()
+    this.camera = new THREE.PerspectiveCamera(opts.fov || 32, 1, 0.1, 200)
+    this.scene.add(new THREE.HemisphereLight(0xcfd6ff, 0x1a1410, 0.6))
+    const key = new THREE.DirectionalLight(0xfff1de, 2.2); key.position.set(-4, 8, 6); key.castShadow = true
+    key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02
+    Object.assign(key.shadow.camera, { left: -10, right: 10, top: 8, bottom: -4, near: 1, far: 30 })
+    this.key = key; this.scene.add(key, key.target)
+    const rim = new THREE.DirectionalLight(0x8fb4ff, 0.6); rim.position.set(6, 3, -5); this.scene.add(rim)
+    this.tint = new THREE.PointLight(0xffffff, 0, 12, 1.6); this.scene.add(this.tint)
+    if (opts.floor !== false) {
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ opacity: 0.45 }))
+      floor.rotation.x = -Math.PI / 2; floor.position.y = opts.floorY ?? 0; floor.receiveShadow = true; this.scene.add(floor)
+    }
+    this.camPos = new THREE.Vector3(0, 2, 10); this.camLook = new THREE.Vector3(0, 1, 0); this.tPos = new THREE.Vector3(); this.tLook = new THREE.Vector3()
+    this.detail = opts.detail || Object.assign(document.createElement("div"), { className: "detail" })
+    if (!opts.detail) el.appendChild(this.detail)
+    this.visible = true
+    new IntersectionObserver(([e]) => { this.visible = e.isIntersecting }).observe(el)
+    new ResizeObserver(() => this.resize()).observe(el); this.resize()
+    this.bindInput()
+    stages.push(this)
+  }
+  resize() {
+    const w = this.el.clientWidth, h = this.el.clientHeight; if (!w || !h) return
+    this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix()
+  }
+  add(c) { motion(c); c.stage = this; this.scene.add(c.g); this.cases.push(c); return c }
+  pick(e) {
+    const r = this.renderer.domElement.getBoundingClientRect()
+    const p = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+    const ray = new THREE.Raycaster(); ray.setFromCamera(p, this.camera)
+    const hit = ray.intersectObjects(this.cases.filter((c) => c.g.visible).map((c) => c.g), true)[0]
+    return hit ? this.cases.find((c) => c.idx === hit.object.userData.idx) : null
+  }
+  bindInput() {
+    const cv = this.renderer.domElement
+    let down = null, dragged = false
+    cv.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, moved: 0 } })
+    cv.addEventListener("pointermove", (e) => {
+      const r = cv.getBoundingClientRect(); this.pointer = { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: ((e.clientY - r.top) / r.height) * 2 - 1, in: true }
+      if (down) { const dx = e.clientX - down.x; down.moved = Math.max(down.moved, Math.abs(dx)); this.opts.drag?.call(this, e.movementX || 0, dx) }
+      if (e.pointerType === "mouse" && (!down || down.moved < 6)) this.hover(this.pick(e))
+    })
+    cv.addEventListener("pointerup", () => { dragged = !!(down && down.moved > 6); down = null })
+    cv.addEventListener("pointerleave", () => { this.pointer.in = false; this.hover(null) })
+    cv.addEventListener("click", (e) => { if (dragged) { dragged = false; return } this.click(this.pick(e)) })
+    cv.addEventListener("wheel", (e) => { if (this.opts.wheel) { this.opts.wheel.call(this, e); } }, { passive: true })
+  }
+  hover(c) { for (const x of this.cases) x.thover = 0; if (c && c !== this.out) c.thover = 1; this.renderer.domElement.style.cursor = c ? "pointer" : "" }
+  click(c) {
+    if (this.opts.click && this.opts.click.call(this, c) === false) return
+    if (!c || c === this.out || c === this.outOf) return this.putBack()
+    this.takeOut(c)
+  }
+  takeOut(c) {
+    this.putBack(true)
+    // A slim case is swapped for a full one, which then opens.
+    if (c.slim) { this.outOf = c; c.g.visible = false; const f = this.add(fullCase(c.item, 100000 + c.idx)); f.pos.copy(c.pos); f.rot.copy(c.rot); c = f }
+    this.out = c; c.thover = 0
+    discArt(c); setTimeout(() => { if (this.out === c) c.tlid = -1.95 }, 420)
+    const show = () => { if (c.pal) { this.tintTo = toColor(c.pal.light); this.el.style.backgroundColor = c.pal.ground; this.opts.onTint?.(c.pal) } }
+    c.pal ? show() : picture(c.item.poster).then((p) => { if (p) { c.pal = p.pal; show() } })
+    const it = c.item, href = it.type === "movie" || it.type === "tv" ? `/title/${it.type}/${it.id}` : null
+    this.detail.innerHTML = `<div class="mono" style="opacity:.7">[ ${esc(this.opts.label || "on the shelf")} ]</div><h3>${esc(it.title)}</h3>
+      <div class="meta mono">${it.year ? `<span>${esc(it.year)}</span>` : ""}${it.score ? `<span>★ ${it.score}</span>` : ""}${it.at ? `<span>${new Date(it.at * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>` : ""}</div>
+      ${href ? `<a href="${href}">Open on Roki →</a>` : ""}`
+    this.detail.classList.add("on")
+  }
+  putBack(quiet) {
+    if (this.out) {
+      const c = this.out; c.tlid = 0
+      if (this.outOf) { const slim = this.outOf; setTimeout(() => { this.scene.remove(c.g); this.cases = this.cases.filter((x) => x !== c); slim.g.visible = true }, 450); c.tpos.copy(slim.tpos); c.trot.copy(slim.trot); this.outOf = null }
+      this.out = null
+    }
+    if (!quiet) { this.tintTo = null; this.el.style.backgroundColor = ""; this.detail.classList.remove("on"); this.opts.onTint?.(null) }
+  }
+  // Where a case taken out stands: in front of the camera, left of the card, turned so the lid opens away.
+  outPose(dist = 6) {
+    const dir = new THREE.Vector3().subVectors(this.tLook, this.tPos).normalize()
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize()
+    const wide = this.el.clientWidth > 700
+    const p = this.tPos.clone().addScaledVector(dir, dist).addScaledVector(right, wide ? -1.0 : 0)
+    if (!wide) p.y += 0.45
+    this.out.tpos.copy(p); this.out.trot.set(-Math.asin(dir.y) * 0.5, Math.atan2(-dir.x, -dir.z) + 0.62, 0)
+  }
+  frame(t, dt) {
+    if (!this.visible) return
+    this.opts.place.call(this, t)
+    if (this.out) this.outPose(this.opts.outDist)
+    for (const c of this.cases) step(c, dt)
+    const dx = this.pointer.in ? this.pointer.x * 0.35 : 0, dy = this.pointer.in ? -this.pointer.y * 0.18 : 0
+    this.camPos.lerp(new THREE.Vector3(this.tPos.x + dx, this.tPos.y + dy, this.tPos.z), 1 - Math.exp(-dt * 5))
+    this.camLook.lerp(this.tLook, 1 - Math.exp(-dt * 5))
+    this.camera.position.copy(this.camPos); this.camera.lookAt(this.camLook)
+    this.key.target.position.copy(this.camLook); this.key.position.set(this.camLook.x - 4, this.camLook.y + 8, 6)
+    this.tint.intensity += ((this.tintTo ? 8 : 0) - this.tint.intensity) * (1 - Math.exp(-dt * 3))
+    if (this.tintTo) this.tint.color.lerp(this.tintTo, 1 - Math.exp(-dt * 3))
+    if (this.out) this.tint.position.set(this.out.pos.x + 1.4, this.out.pos.y + 1.4, this.out.pos.z + 2.2)
+    this.renderer.render(this.scene, this.camera)
+  }
+}
+// Fit a camera so `width` world units across (and `height` up) fill the stage.
+function fit(stage, width, height) {
+  const v = THREE.MathUtils.degToRad(stage.camera.fov), a = stage.camera.aspect
+  const byH = height / 2 / Math.tan(v / 2), byW = width / 2 / (Math.tan(v / 2) * a)
+  return Math.max(byH, byW)
+}
+
+// ── the leaning shelf (favourites) ─────────────────────────────────────────────────────────
+function leaningShelf(el, items, label) {
+  const wood = new THREE.MeshStandardMaterial({ color: 0x3a2a1f, roughness: 0.7 })
+  const xs = []; let x = 0
+  // Every third face-out, leaning back; the rest spine-out.
+  const face = (i) => i % 3 === 0
+  items.forEach((_, i) => { const w = face(i) ? W * Math.cos(0.12) + 0.14 : D + 0.016; xs[i] = x + w / 2; x += w })
+  const len = x; xs.forEach((_, i) => xs[i] -= len / 2)
+  let pan = 0, panT = 0
+  const st = new Stage(el, {
+    label, floorY: 0,
+    place() {
+      const span = Math.max(0, len + 1.2 - (this.fitW || len)); pan += (panT - pan) * 0.12; panT = Math.max(-span / 2, Math.min(span / 2, panT))
+      this.cases.forEach((c, i) => {
+        if (c === this.out) return
+        const h = c.hover
+        if (face(i)) { const a = 0.12; c.tpos.set(xs[i], H / 2 * Math.cos(a) + 0.05 * h, -H / 2 * Math.sin(a) + 0.2 + 0.35 * h); c.trot.set(-a + 0.1 * h, 0, 0) }
+        else { c.tpos.set(xs[i], H / 2 + 0.06 * h, 0.35 * h); c.trot.set(0, Math.PI / 2 - 0.18 * h, 0) }
+      })
+      // Framed to the shelf; on a narrow stage it is walked by dragging.
+      const d = Math.min(fit(this, len + 1.0, H + 1.1), fit(this, 6.5, H + 1.1) * 1.0)
+      this.fitW = 2 * d * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * this.camera.aspect - 1.0
+      this.tPos.set(pan, 1.75, d + 0.2); this.tLook.set(pan, 0.95, 0)
+    },
+    drag(mx) { panT -= mx * 0.012 },
+    wheel(e) { if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) panT += e.deltaX * 0.006 },
+  })
+  const plank = new THREE.Mesh(new RoundedBoxGeometry(len + 1.0, 0.12, 1.7, 2, 0.03), wood)
+  plank.position.y = -0.06; plank.castShadow = plank.receiveShadow = true; st.scene.add(plank)
+  items.forEach((it, i) => st.add(fullCase(it, i)))
+  return st
+}
+
+// ── the pedestal (favourite of all time) ───────────────────────────────────────────────────
+function pedestalStage(el, picks, onPick) {
+  let hero = 0
+  const st = new Stage(el, {
+    label: "favourite of all time", floorY: 0, outDist: 5.2,
+    place(t) {
+      this.cases.forEach((c, i) => {
+        c.g.visible = i === hero
+        if (c === this.out || i !== hero) return
+        c.tpos.set(0, 1.2 + H / 2 + 0.06 + Math.sin(t * 1.3) * 0.04, 0); c.trot.set(0, Math.sin(t * 0.45) * 0.9 + c.hover * 0.3, 0)
+      })
+      this.tPos.set(0, 2.3, fit(this, 3.2, 4.2) + 1.5); this.tLook.set(0, 1.55, 0)
+    },
+  })
+  const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.05, 1.2, 64), new THREE.MeshStandardMaterial({ color: 0x1d1a21, roughness: 0.35, metalness: 0.3 }))
+  stand.position.y = 0.6; stand.castShadow = stand.receiveShadow = true; st.scene.add(stand)
+  picks.forEach((it, i) => st.add(fullCase(it, i)))
+  st.show = (i) => { st.putBack(); hero = i; onPick(i) }
+  return st
+}
+
+// ── the carousel (recently watched) ────────────────────────────────────────────────────────
+function carousel(el, items) {
+  let ring = 0, ringV = 0
+  const n = items.length, stepA = Math.PI * 2 / n, R = n * (W + 0.3) / (Math.PI * 2)
+  const st = new Stage(el, {
+    label: "recently watched", floorY: 0, outDist: 5.2,
+    place() {
+      ring += ringV; ringV *= 0.92
+      if (Math.abs(ringV) < 0.0008 && !this.pointer.in) ring += (Math.round(ring / stepA) * stepA - ring) * 0.06
+      if (!this.pointer.in && !this.out) ringV += 0.00012
+      this.cases.forEach((c, i) => {
+        if (c === this.out) return
+        const a = i * stepA + ring, r = R + 0.4 * c.hover
+        c.tpos.set(Math.sin(a) * r, H / 2 + 0.04, Math.cos(a) * r - R); c.trot.set(0, a, 0)
+      })
+      this.tPos.set(0, 1.5, fit(this, 9, H + 1) * 0.85); this.tLook.set(0, 1.0, -1)
+    },
+    drag(mx) { ringV = mx * 0.0025 },
+    wheel(e) { ringV += (e.deltaX || 0) * -0.0003 },
+  })
+  items.forEach((it, i) => st.add(fullCase(it, i)))
+  return st
+}
+
+// ── the wall of covers (watch history) ─────────────────────────────────────────────────────
+function wallStage(el, items, spacer) {
+  let byMonth = true, rows = [], heads = [], totalH = 0, cols = 8, unit = 1
+  const GAPX = 0.16, GAPY = 0.2, HEAD = 1.1
+  const month = (it) => it["dated?"] && it.at ? (() => { const d = new Date(it.at * 1000); return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}` })() : "No date"
+  const st = new Stage(el, {
+    label: "watched", floor: false, fov: 30, outDist: 7, detail: document.getElementById("wallDetail"),
+    place() {
+      const tiltX = this.pointer.in ? this.pointer.y * 0.06 : 0, tiltY = this.pointer.in ? this.pointer.x * 0.1 : 0
+      const e = new THREE.Euler(tiltX, tiltY, 0, "YXZ"), y0 = this.camLook.y
+      this.cases.forEach((c) => {
+        if (c === this.out || c.full) return
+        const p = c.home.clone(); p.y -= y0; p.applyEuler(e); p.y += y0
+        p.z += 0.5 * c.hover
+        c.tpos.copy(p); c.trot.set(tiltX, tiltY, 0)
+        // Covers near the view get their pictures; the rest wait.
+        if (!c.dressed && Math.abs(c.home.y - y0) < 14) { c.dressed = true; dress(c) }
+      })
+      const scroll = (window.scrollY || 0) * unit
+      // The wall starts under the page's header.
+      const headH = (document.querySelector(".whead")?.offsetHeight || 90) * unit
+      this.tLook.set(0, -scroll - this.view / 2 + headH, 0); this.tPos.set(0, this.tLook.y, this.dist)
+      // Month names follow their rows.
+      for (const h of heads) {
+        const v = new THREE.Vector3(-this.wallW / 2, h.y, 0).project(this.camera)
+        const top = (1 - v.y) / 2 * innerHeight
+        h.el.style.transform = `translate(${(v.x + 1) / 2 * innerWidth}px, ${top - 34}px)`
+        const below = (document.querySelector(".whead")?.getBoundingClientRect().bottom || 70) + 30
+        h.el.style.opacity = top > below && top < innerHeight + 40 ? 1 : 0
+      }
+    },
+  })
+  st.layout = () => {
+    cols = el.clientWidth < 700 ? 3 : el.clientWidth < 1100 ? 6 : 8
+    st.wallW = cols * (W + GAPX) - GAPX
+    st.dist = fit(st, st.wallW + 1.6, 1)
+    st.view = 2 * st.dist * Math.tan(THREE.MathUtils.degToRad(st.camera.fov) / 2)
+    unit = st.view / innerHeight
+    heads.forEach((h) => h.el.remove()); heads = []
+    const groups = []
+    for (const c of st.cases) { if (c.full) continue; const k = byMonth ? month(c.item) : "all"; if (!groups.length || groups[groups.length - 1].k !== k) groups.push({ k, list: [] }); groups[groups.length - 1].list.push(c) }
+    let y = -0.4
+    for (const g of groups) {
+      if (byMonth) {
+        y -= HEAD
+        const el2 = document.createElement("div"); el2.className = "month"; el2.innerHTML = `${esc(g.k)}<small>${g.list.length}</small>`
+        document.body.appendChild(el2); heads.push({ el: el2, y: y + 0.35 })
+      }
+      g.list.forEach((c, i) => {
+        const col = i % cols, row = Math.floor(i / cols)
+        c.home = new THREE.Vector3(-st.wallW / 2 + W / 2 + col * (W + GAPX), y - H / 2 - row * (H + GAPY), ((c.idx * 37) % 7) / 7 * 0.12)
+      })
+      y -= Math.ceil(g.list.length / cols) * (H + GAPY)
+    }
+    totalH = -y + 1
+    spacer.style.height = `${totalH / unit + 40}px`
+  }
+  st.setByMonth = (v) => { byMonth = v; st.layout() }
+  st.heads = () => heads
+  items.forEach((it, i) => { const c = st.add(slimCase(it, i)); c.pos.set(0, 0, -30) })
+  new ResizeObserver(() => st.layout()).observe(el)
+  st.layout()
+  return st
+}
+
+// ── the page ───────────────────────────────────────────────────────────────────────────────
+const data = await (await fetch("profile3d-data.json")).json()
+const P = data.profile
+document.getElementById("name").textContent = P.name
+const av = document.getElementById("avatar")
+av.outerHTML = P.avatar ? `<img src="${esc(P.avatar)}" alt="">` : `<span class="ph">${esc(P.name[0])}</span>`
+const fmt = (n) => Number(n).toLocaleString("en-US")
+document.getElementById("nums").innerHTML =
+  `<a href="#watched"><b>${fmt(P.watched)}</b><span class="mono">Watched →</span></a><div><b>${fmt(P.films)}</b><span class="mono">Films</span></div><div><b>${fmt(P.episodes)}</b><span class="mono">Episodes</span></div><div><b>${fmt(P.hours)}</b><span class="mono">Hours</span></div>`
+
+const KINDS = [["movie", "Favorite Movies"], ["tv", "Favorite Shows"], ["anime", "Favorite Anime"], ["manga", "Favorite Manga"]]
+const shelvesEl = document.getElementById("shelves")
+for (const [k, name] of KINDS) {
+  const items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
+  if (!items.length) continue
+  const sec = document.createElement("section"); sec.className = "shelf"
+  sec.innerHTML = `<h2>${name} <small>the leaning shelf</small></h2><div class="stage"></div>`
+  shelvesEl.appendChild(sec)
+  leaningShelf(sec.querySelector(".stage"), items, name.toLowerCase())
+}
+
+// The pedestal: the first of each shelf, chosen by the chips.
+const picks = KINDS.map(([k, name]) => ({ k, name, item: (data.favorites[k] || []).find((x) => x.position === 1) || (data.favorites[k] || [])[0] })).filter((p) => p.item)
+const chips = document.getElementById("pedChips"), pedTitle = document.getElementById("pedTitle")
+const ped = pedestalStage(document.getElementById("pedestal"), picks.map((p) => p.item), (i) => {
+  pedTitle.textContent = picks[i].item.title
+  for (const b of chips.children) b.setAttribute("aria-pressed", +b.dataset.i === i)
+})
+picks.forEach((p, i) => { const b = document.createElement("button"); b.textContent = p.name.replace("Favorite ", ""); b.dataset.i = i; b.onclick = () => ped.show(i); chips.appendChild(b) })
+ped.show(0)
+
+carousel(document.getElementById("ring"), data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24))
+
+// The watch history, on its own "page".
+let wall = null
+const wallDetail = Object.assign(document.createElement("div"), { className: "detail", id: "wallDetail" }); document.body.appendChild(wallDetail)
+function route() {
+  const w = location.hash === "#watched"
+  document.body.classList.toggle("watched", w)
+  if (w && !wall) {
+    document.getElementById("wcount").textContent = `${data.history.length} shown of ${fmt(P.watched)}`
+    wall = wallStage(document.getElementById("wall"), data.history, document.getElementById("wallSpacer"))
+  }
+  for (const h of wall ? wall.heads() : []) h.el.style.display = w ? "" : "none"
+  scrollTo(0, 0)
+}
+addEventListener("hashchange", route); route()
+document.getElementById("byMonth").addEventListener("click", (e) => { const on = e.target.getAttribute("aria-pressed") !== "true"; e.target.setAttribute("aria-pressed", on); wall.setByMonth(on) })
+document.querySelector(".whead a.back").addEventListener("click", (e) => { e.preventDefault(); history.pushState(null, "", location.pathname); route() })
+addEventListener("keydown", (e) => { if (e.key === "Escape") for (const s of stages) s.putBack() })
+
+let last = performance.now()
+function loop(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now
+  const onWall = document.body.classList.contains("watched")
+  for (const s of stages) { if ((s === wall) === onWall) s.frame(now / 1000, dt) }
+  requestAnimationFrame(loop)
+}
+requestAnimationFrame(loop)
+</script>
+</body>
+</html>
