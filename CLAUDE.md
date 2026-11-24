@@ -409,6 +409,19 @@ over the hero (`group-hover/hero`); the score stays a button that opens the Revi
 
 Under the poster (large, well away from Play): Save for later (`Laev.Watchlist`), Put on hold (`Laev.Holds`; an anime is held on MyAnimeList instead — `Watch.toggle_hold/2` sets its entries being watched `on_hold` through `Laev.MAL.set_status` + `Laev.Anime.set_status`, and `library/2`'s `held?` reads any entry `on_hold`; `hold?` says whether a hold is possible, false for anime without a MyAnimeList login; a hold forgets the shelf copy so the corner moves the title at once), and Mark watched / Mark all watched (`Laev.Position.set_watched`: a film's one mark, or every episode that is out for a series; the same button unmarks). Each episode row has its own mark/unmark toggle and the season header has Mark/Unmark season. All go through `Roki.Watch` (`library/2`, `toggle_saved/2`, `toggle_hold/2`, `set_watched/5`, `set_many_watched/4`, `set_series_watched/3`), clear the stats cache and push to the user's other devices. Above Play: the Browser / External player switch, and Play itself is the big button.
 
+### Episode ratings (seriesgraph-like, ALEX-160)
+
+A show's Reviews sheet (the ★ score in the hero) opens with **Episode ratings**: a column per season,
+a row per episode, each cell TMDB's score for that episode with the number written in it, the
+season's average over its column (`RokiWeb.TitleLive.episode_graph/1`). Data: `Roki.EpisodeScores.for_show/2`
+— one TMDB season read each (four at a time, specials and unaired episodes left out, newest 40
+seasons), kept three days (`Roki.Kept` `ep_scores`; read back under string *or* atom keys) and half a
+day in `TTLCache`. It runs with the viewer's TMDB access (`Roki.Laev.public`): there is no site-wide
+TMDB key at the moment, so a visitor sees it only for shows someone has already loaded. Colours are
+the site's score ramp stretched over 4–9.5 (`ep_color/1`), where episode averages actually fall — on
+the plain 1–10 ramp every episode was the same green; a legend sits under the grid. Fewer than ten
+votes: faded, and the note says so. A cell goes to that episode's sources.
+
 ### Rating on TMDB
 
 The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet. Under the slider, the **shelf**: the last five titles this account gave the score the slider stands at (`Roki.Profile.rated_like/4`, loaded when the sheet opens — `rate_open`, pushed by every rate button including the episodes page's season ones — and again after a rating, a season's too; `rokiScore` in app.js shows the row whose `data-score` is the slider's key). Newest first: a date where there is one (MyAnimeList, a rating made on the site), else `roki_ratings.seq`, the place in TMDB's rated list (it comes oldest-first, undated), per kind — films, shows and anime are separate shelves. Anime names come from the MAL list (no pictures there).

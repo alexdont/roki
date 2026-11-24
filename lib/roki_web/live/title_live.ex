@@ -85,6 +85,7 @@ defmodule RokiWeb.TitleLive do
         rate_mal: nil,
         rating_error: nil,
         reviews: nil,
+        ep_scores: nil,
         similar: [],
         similar_seen: MapSet.new(),
         friends: [],
@@ -505,6 +506,7 @@ defmodule RokiWeb.TitleLive do
     {:noreply,
      socket
      |> assign(:reviews, :loading)
+     |> load_ep_scores()
      |> start_async(:reviews, fn ->
        %{
          scores: Roki.Reviews.scores(title.type, title.id, anime?: title.anime?, uuid: uuid),
@@ -778,6 +780,11 @@ defmodule RokiWeb.TitleLive do
     do: {:noreply, assign(socket, :reviews, reviews)}
 
   def handle_async(:reviews, _other, socket), do: {:noreply, assign(socket, :reviews, :error)}
+
+  def handle_async(:ep_scores, {:ok, {:ok, seasons}}, socket),
+    do: {:noreply, assign(socket, :ep_scores, seasons)}
+
+  def handle_async(:ep_scores, _other, socket), do: {:noreply, assign(socket, :ep_scores, :error)}
 
   def handle_async(:rating_load, {:ok, rating}, socket),
     do: {:noreply, assign(socket, :rating, rating_state(rating))}
@@ -1060,7 +1067,7 @@ defmodule RokiWeb.TitleLive do
                 title={@title}
               />
               <.trailer_sheet :if={@trailer} key={@trailer} title={@title} />
-              <.reviews_sheet title={@title} reviews={@reviews} />
+              <.reviews_sheet title={@title} reviews={@reviews} ep_scores={@ep_scores} />
               <.study_sheet :if={@linked? and @study} title={@title} study={@study} eps={@study_eps} />
             </div>
 
@@ -1625,6 +1632,15 @@ defmodule RokiWeb.TitleLive do
     </section>
     """
   end
+
+  # A show's every episode, scored (the sheet's grid): read beside the reviews, not after them.
+  defp load_ep_scores(%{assigns: %{title: %{type: "tv", id: id}, uuid: uuid}} = socket) do
+    socket
+    |> assign(:ep_scores, :loading)
+    |> start_async(:ep_scores, fn -> Roki.EpisodeScores.for_show(id, uuid) end)
+  end
+
+  defp load_ep_scores(socket), do: socket
 
   defp hero_ctl,
     do:
@@ -3071,8 +3087,165 @@ defmodule RokiWeb.TitleLive do
     """
   end
 
+  attr :seasons, :any,
+    required: true,
+    doc: "nil / :loading / :error / [season] (Roki.EpisodeScores)"
+
+  attr :title_id, :integer, required: true
+
+  # Every episode's score, season by season, the way seriesgraph.com draws a show (ALEX-160): a
+  # column per season, a row per episode, each cell in the score's colour (`ScoreColor`, as the
+  # site's ratings) with the number written in it — so the grid is its own table and colour is
+  # never the only thing saying the score. The season's average heads its column. A score fewer
+  # than ten people gave is faded; a cell opens that episode's sources.
+  defp episode_graph(assigns) do
+    assigns =
+      case assigns.seasons do
+        list when is_list(list) and list != [] ->
+          rows = list |> Enum.map(&length(&1.episodes)) |> Enum.max()
+
+          assign(assigns,
+            rows: rows,
+            by: Map.new(list, fn s -> {s.number, Map.new(s.episodes, &{&1.number, &1})} end),
+            few?: Enum.any?(list, fn s -> Enum.any?(s.episodes, &(&1.score && &1.votes < 10)) end)
+          )
+
+        _ ->
+          assign(assigns, rows: 0, by: %{}, few?: false)
+      end
+
+    ~H"""
+    <section class="space-y-2" aria-label="Episode ratings">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+        Episode ratings
+      </h3>
+      <div :if={@seasons in [nil, :loading]} class="skeleton h-40 w-full rounded-box" aria-busy="true">
+      </div>
+      <p :if={@seasons == :error or @seasons == []} class="text-sm text-base-content/60">
+        No episode ratings to show just now.
+      </p>
+      <%= if is_list(@seasons) and @seasons != [] do %>
+        <div class="-mx-5 overflow-x-auto px-5 pb-1">
+          <table class="border-separate border-spacing-[2px] text-center text-xs tabular-nums">
+            <thead>
+              <tr>
+                <th class="sticky left-0 z-10 bg-base-100 pr-1"></th>
+                <th
+                  :for={s <- @seasons}
+                  scope="col"
+                  class="min-w-[2.5rem] px-0.5 pb-1 font-semibold text-base-content/70"
+                >
+                  S{s.number}
+                </th>
+              </tr>
+              <tr>
+                <th
+                  scope="row"
+                  class="sticky left-0 z-10 bg-base-100 pr-1 text-right font-normal text-base-content/50"
+                >
+                  Avg
+                </th>
+                <td :for={s <- @seasons} class="pb-1 font-semibold text-base-content/80">
+                  {if s.average, do: :erlang.float_to_binary(s.average / 1, decimals: 1), else: "–"}
+                </td>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={n <- 1..@rows}>
+                <th
+                  scope="row"
+                  class="sticky left-0 z-10 bg-base-100 pr-1 text-right font-normal text-base-content/50"
+                >
+                  E{n}
+                </th>
+                <td :for={s <- @seasons} class="p-0">
+                  <.ep_cell e={@by[s.number][n]} season={s.number} title_id={@title_id} />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div
+          class="flex items-center gap-2 text-[0.65rem] tabular-nums text-base-content/60"
+          aria-hidden="true"
+        >
+          <span>4</span>
+          <span
+            class="h-2 w-40 rounded-full"
+            style={"background: linear-gradient(to right, #{Enum.map_join([4, 5, 6, 7, 7.75, 8.5, 9.4], ", ", &ep_color/1)})"}
+          ></span>
+          <span>9.5</span>
+        </div>
+        <p class="text-xs text-base-content/50">
+          TMDB's score for each episode, season by season.<span :if={@few?}> Faded: fewer than ten votes.</span>
+          Tap an episode to play it.
+        </p>
+      <% end %>
+    </section>
+    """
+  end
+
+  # Episode scores sit between about 4 and 9.5 (TMDB's average of many votes), where the site's
+  # 1–10 ramp is nearly all one green. The same ramp, stretched over that range: 4 and under red,
+  # ~5.5 orange, ~7 yellow-green, 7.75 green, 9.4 and up the deepest green — the spread seriesgraph
+  # gives a show, in the site's own colours. A 10 stays gold.
+  @doc false
+  def ep_color(s) when is_number(s) do
+    v =
+      cond do
+        s >= 10 -> 10
+        s <= 7.75 -> 1 + (max(s, 4) - 4) * 1.6
+        true -> min(7 + (s - 7.75) * (2.5 / 1.65), 9.5)
+      end
+
+    RokiWeb.ScoreColor.color(v)
+  end
+
+  attr :e, :any, required: true
+  attr :season, :integer, required: true
+  attr :title_id, :integer, required: true
+
+  defp ep_cell(%{e: nil} = assigns), do: ~H""
+
+  defp ep_cell(assigns) do
+    s = assigns.e.score
+
+    assigns =
+      assign(assigns,
+        text: if(is_number(s), do: :erlang.float_to_binary(s / 1, decimals: 1), else: "–"),
+        color: if(is_number(s), do: ep_color(s)),
+        faded?: is_number(s) and assigns.e.votes < 10,
+        tip:
+          "S#{assigns.season}E#{assigns.e.number}" <>
+            if(assigns.e.name, do: " · #{assigns.e.name}", else: "") <>
+            if(is_number(s),
+              do:
+                " · #{:erlang.float_to_binary(s / 1, decimals: 1)} from #{assigns.e.votes} #{if assigns.e.votes == 1, do: "vote", else: "votes"}",
+              else: " · not rated yet"
+            )
+      )
+
+    ~H"""
+    <.link
+      navigate={~p"/sources/tv/#{@title_id}/#{@season}/#{@e.number}"}
+      title={@tip}
+      aria-label={@tip}
+      class={[
+        "flex h-7 min-w-[2.5rem] items-center justify-center rounded font-semibold transition hover:ring-2 hover:ring-base-content focus-visible:ring-2 focus-visible:ring-base-content",
+        @color && "text-neutral-950",
+        !@color && "bg-base-200 text-base-content/40",
+        @faded? && "opacity-45"
+      ]}
+      style={@color && "background: #{@color}"}
+    >
+      {@text}
+    </.link>
+    """
+  end
+
   attr :title, :map, required: true
   attr :reviews, :any, default: nil
+  attr :ep_scores, :any, default: nil
 
   # What the rating sites made of it, and how the critics took it. Opened from the score in the
   # hero; what it shows is fetched the first time (`Roki.Reviews`).
@@ -3115,6 +3288,8 @@ defmodule RokiWeb.TitleLive do
           <p :if={@reviews == :error} class="text-sm text-base-content/70">
             Couldn't reach the review sites just now. Close this and try again in a minute.
           </p>
+
+          <.episode_graph :if={@title.type == "tv"} seasons={@ep_scores} title_id={@title.id} />
 
           <%= if is_map(@reviews) do %>
             <section :if={@reviews.scores != []} class="space-y-2">
