@@ -31,8 +31,12 @@ defmodule RokiWeb.FeaturedLive do
       # The Seasonal row: what suits the time of year (`Roki.Seasonal`), twenty titles like the rest.
       |> Map.put(:seasonal, shelf)
       # "Recommended by Roki users" (`Roki.Recommendations`): what people here vouch for, first of
-      # all, for anyone signed in; it does not show while it has nothing.
-      |> Map.put(:recommended, %{shelf | loading?: false})
+      # all, for anyone signed in; it does not show while it has nothing. Loading (its ghost posters
+      # holding the place) only when there is something to come.
+      |> Map.put(:recommended, %{
+        shelf
+        | loading?: uuid(socket) != nil and Roki.Recommendations.any?()
+      })
 
     socket =
       socket
@@ -246,7 +250,10 @@ defmodule RokiWeb.FeaturedLive do
      })}
   end
 
-  def handle_async(:recommended, _other, socket), do: {:noreply, socket}
+  def handle_async(:recommended, _other, socket),
+    do:
+      {:noreply,
+       put_shelf(socket, :recommended, %{socket.assigns.shelves.recommended | loading?: false})}
 
   def handle_async(:seasonal, {:ok, {:ok, items, seen}}, socket) do
     uuid = socket.assigns.uuid
@@ -1074,7 +1081,7 @@ defmodule RokiWeb.FeaturedLive do
             ],
             else: []
           ) ++
-          if(recommended && recommended.items != [],
+          if(recommended && (recommended.items != [] or recommended.loading?),
             do: [{:recommended, "Recommended by Roki users", nil}],
             else: []
           )

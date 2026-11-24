@@ -45,6 +45,11 @@ defmodule Roki.Recommendations do
     end
   end
 
+  @doc "Has anyone recommended anything? (Whether the home page's row is coming at all.)"
+  def any? do
+    match?(%{rows: [_]}, Repo.query!("select 1 from roki_recommendations limit 1", []))
+  end
+
   @doc """
   The home page's row: titles recommended by anyone, the most recently vouched for first, each
   once with everyone who recommends it (`by`, usernames, the latest first) — `limit` titles.
