@@ -207,7 +207,47 @@ export function rain(fx, m) {
   // `m.weep`: what the finger wipes runs off the lower edge of its stroke as drops streaming down
   // (tears / a bleeding smear) instead of gathering into one bead. `m.palm`: a press leaves a
   // handprint that drips. (Both tried in /lab/moods.html.)
-  let pool = 0, palms = []
+  let pool = 0, palms = [], rateK = 1
+  // A handprint pressed into the glass at (x, y): `color` (else m.palm), `soft` (seen through the
+  // glass: bigger, blurred, fainter), `mirror` (a hand from the other side), `drip` (drops run from
+  // the heel and fingertips), `vy` (it slides down, dragging streaks), `life`.
+  const stamp = (x, y, o = {}) => {
+    const s = (fx.phone ? 0.8 : 1.1) * (o.scale || 1), tilt = o.tilt ?? rand(-0.35, 0.35)
+    // The print as dabs: the palm pressed hardest in its heel and below the fingers, the
+    // middle lighter; each finger a run of dabs, the tip the darkest; gaps here and there.
+    const dabs = []
+    for (let i = 0; i < 70; i++) {
+      const t = rand(0, Math.PI * 2), q = Math.sqrt(Math.random())
+      const dx = Math.cos(t) * 23 * q, dy = 10 + Math.sin(t) * 26 * q
+      const hard = 0.35 + 0.4 * Math.max(Math.abs(dy - 10) / 26, q)
+      if (Math.random() < 0.12) continue
+      dabs.push({x: dx, y: dy, r: rand(3, 7.5), sq: rand(0.6, 1), t: rand(0, 3), a: hard * rand(0.5, 1)})
+    }
+    const F = [[-21, -14, -0.35, 0.7], [-11, -22, -0.1, 0.95], [1, -24, 0, 1], [13, -21, 0.12, 0.92], [26, 4, 0.75, 0.6]]
+    const tips = []
+    for (const [x0, y0, ang, l] of F) {
+      const L = 30 * l * rand(0.85, 1.15), n = 9
+      tips.push({x: x0 + Math.sin(ang) * L, y: y0 - Math.cos(ang) * L})
+      for (let i = 0; i <= n; i++) {
+        if (Math.random() < 0.15) continue
+        const p = i / n
+        dabs.push({x: x0 + Math.sin(ang) * L * p + rand(-1.2, 1.2), y: y0 - Math.cos(ang) * L * p + rand(-1.2, 1.2), r: rand(4, 6), sq: rand(0.7, 1), t: ang, a: (0.45 + 0.45 * p) * rand(0.6, 1)})
+      }
+    }
+    const h = {x, y, y0: y, s, tilt, life: o.life || 7, age: 0, dabs, tips, color: o.color || m.palm, soft: !!o.soft, mirror: !!o.mirror, vy: o.vy || 0}
+    palms.push(h)
+    if (o.drip !== false) {
+      // It drips from the heel of the hand and the fingertips' undersides.
+      const c = Math.cos(tilt), sn = Math.sin(tilt)
+      for (const [ox, oy] of [[-14, 30], [0, 34], [13, 30], [-24, -6], [22, -2]]) {
+        const px = x + (ox * c - oy * sn) * s, py = y + (ox * sn + oy * c) * s
+        const d = drop(px, py, rand(3.2, 5.2), rand(...m.still) + 6)
+        d.sliding = Math.random() < 0.75; d.stall = rand(0.3, 1.6)
+        drops.push(d)
+      }
+    }
+    return h
+  }
   const max = () => Math.round((fx.phone ? 130 : 340) * Math.min(1, fx.amount() / 1.5))
   // Each drop its own shape, kept for its life: tail length, how full it stays before narrowing,
   // how wide its neck, a lean to one side, an uneven edge, a slightly squashed head.
@@ -228,11 +268,19 @@ export function rain(fx, m) {
 
   return {
     busy: () => streaks.length + drops.length + bits.length + ghosts.length > 0,
+    // For what is laid over the rain (the scared lab's extras): its drops, a new drop, a print, the
+    // rain's strength (0 stops it), one streak falling at x.
+    api: {
+      drops: () => drops,
+      spawn: (x, y, r, sliding = false) => { const d = drop(x, y, r, rand(...m.still) + 4); d.sliding = sliding; drops.push(d); return d },
+      stamp, rate: (k) => { rateK = k },
+      streak: (x) => { const v = rand(...m.speed); streaks.push({x, y: -20, v, vx: v * 0.06, len: rand(...m.len), hitY: rand(fx.carTop + 80, fx.carBottom - 20)}) },
+    },
     // For the console (`fxStats.effects.cry`): what the wipe holds.
     stats: () => ({drops: drops.length, tailPoints: wipes.length, strokes: new Set(wipes.map((w) => w.s)).size, bead: gather ? Math.round(gather.r * 10) / 10 : 0}),
     step(dt, amount, active) {
       if (active) {
-        acc += m.rate * (fx.W / 1000) * (amount / 1.5) * dt
+        acc += m.rate * rateK * (fx.W / 1000) * (amount / 1.5) * dt
         while (acc >= 1) {
           acc -= 1
           const v = rand(...m.speed)
@@ -346,39 +394,13 @@ export function rain(fx, m) {
       // The film the finger leaves lasts LIFE seconds wherever it was laid: the tail is what the
       // last second of movement left, long after a fast sweep, short after a slow one, and dries
       // from its far end in once the finger has stopped.
-      if (m.palm) {
-        for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
-          const s = fx.phone ? 0.8 : 1.1, tilt = rand(-0.35, 0.35)
-          // The print as dabs: the palm pressed hardest in its heel and below the fingers, the
-          // middle lighter; each finger a run of dabs, the tip the darkest; gaps here and there.
-          const dabs = []
-          for (let i = 0; i < 70; i++) {
-            const t = rand(0, Math.PI * 2), q = Math.sqrt(Math.random())
-            const x = Math.cos(t) * 23 * q, y = 10 + Math.sin(t) * 26 * q
-            const hard = 0.35 + 0.4 * Math.max(Math.abs(y - 10) / 26, q)
-            if (Math.random() < 0.12) continue
-            dabs.push({x, y, r: rand(3, 7.5), sq: rand(0.6, 1), t: rand(0, 3), a: hard * rand(0.5, 1)})
-          }
-          const F = [[-21, -14, -0.35, 0.7], [-11, -22, -0.1, 0.95], [1, -24, 0, 1], [13, -21, 0.12, 0.92], [26, 4, 0.75, 0.6]]
-          for (const [x0, y0, ang, l] of F) {
-            const L = 30 * l * rand(0.85, 1.15), n = 9
-            for (let i = 0; i <= n; i++) {
-              if (Math.random() < 0.15) continue
-              const p = i / n
-              dabs.push({x: x0 + Math.sin(ang) * L * p + rand(-1.2, 1.2), y: y0 - Math.cos(ang) * L * p + rand(-1.2, 1.2), r: rand(4, 6), sq: rand(0.7, 1), t: ang, a: (0.45 + 0.45 * p) * rand(0.6, 1)})
-            }
-          }
-          palms.push({x: k.x, y: k.y, s, tilt, life: 7, age: 0, dabs})
-          // It drips from the heel of the hand and the fingertips' undersides.
-          const c = Math.cos(tilt), sn = Math.sin(tilt)
-          for (const [ox, oy] of [[-14, 30], [0, 34], [13, 30], [-24, -6], [22, -2]]) {
-            const x = k.x + (ox * c - oy * sn) * s, y = k.y + (ox * sn + oy * c) * s
-            const d = drop(x, y, rand(3.2, 5.2), rand(...m.still) + 6)
-            d.sliding = Math.random() < 0.75; d.stall = rand(0.3, 1.6)
-            drops.push(d)
-          }
+      if (m.palm) for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) stamp(k.x, k.y)
+      if (palms.length) {
+        for (const h of palms) {
+          h.age += dt; h.life -= dt
+          // A print sliding down the glass (from inside, unprompted) drags five streaks after it.
+          if (h.vy) { h.y += h.vy * dt; h.vy = Math.max(4, h.vy - dt * 3) }
         }
-        for (const h of palms) { h.age += dt; h.life -= dt }
         palms = palms.filter((h) => h.life > 0)
       }
       for (const w of wipes) w.life -= dt
@@ -452,9 +474,25 @@ export function rain(fx, m) {
       // fingers dabbed in, patchy where the hand did not press, fading.
       for (const h of palms) {
         const a = Math.min(1, h.age * 8) * Math.min(1, h.life / 3) * alpha
-        g.save(); g.translate(h.x, h.y); g.rotate(h.tilt); g.scale(h.s, h.s)
-        g.fillStyle = m.palm
-        for (const d of h.dabs) { g.globalAlpha = a * d.a; g.beginPath(); g.ellipse(d.x, d.y, d.r, d.r * d.sq, d.t, 0, Math.PI * 2); g.fill() }
+        // The streaks a sliding print leaves above it, from the fingertips.
+        if (h.vy && h.y > h.y0 + 2) {
+          g.save(); g.translate(h.x, 0); g.strokeStyle = h.color; g.lineCap = "round"
+          for (const tp of h.tips) {
+            g.globalAlpha = a * 0.4; g.lineWidth = 7 * h.s
+            g.beginPath(); g.moveTo(tp.x * h.s, h.y0 + tp.y * h.s); g.lineTo(tp.x * h.s, h.y + tp.y * h.s); g.stroke()
+          }
+          g.restore()
+        }
+        g.save(); g.translate(h.x, h.y); g.rotate(h.tilt); g.scale(h.s * (h.mirror ? -1 : 1), h.s)
+        g.fillStyle = h.color
+        if (h.soft) {
+          // Seen through the glass: every dab a soft blot, wider, its edge gone.
+          for (const d of h.dabs) {
+            const R = d.r * 2.4, gr = g.createRadialGradient(d.x, d.y, 0, d.x, d.y, R)
+            gr.addColorStop(0, h.color); gr.addColorStop(1, "rgba(0,0,0,0)")
+            g.globalAlpha = a * d.a * 0.55; g.fillStyle = gr; g.beginPath(); g.arc(d.x, d.y, R, 0, Math.PI * 2); g.fill()
+          }
+        } else for (const d of h.dabs) { g.globalAlpha = a * d.a; g.beginPath(); g.ellipse(d.x, d.y, d.r, d.r * d.sq, d.t, 0, Math.PI * 2); g.fill() }
         g.restore()
       }
       g.lineCap = "round"

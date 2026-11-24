@@ -376,6 +376,285 @@ function reach(fx) {
   }
 }
 
+// ══ Be scared, more: the new hand plus one thing more ══════════════════════════════════════════
+// Each is the reworked red rain (a weeping smear, a dripping handprint on a press) with an extra
+// laid on it, which reaches into the rain through `rain(...).api`.
+const BLOOD = {...RAIN.scared, weep: 0.08, smearLife: 2.6, palm: "rgba(118,0,10,0.92)"}
+function plus(extra) {
+  return (fx) => {
+    const base = rain(fx, BLOOD), x = extra(fx, base.api)
+    return {
+      busy: () => true, stats: base.stats,
+      step(dt, amount, active) { base.step(dt, amount, active); x.step(dt, amount, active) },
+      draw(g, alpha) { g.save(); x.under?.(g, alpha); g.restore(); base.draw(g, alpha); g.save(); x.over?.(g, alpha); g.restore() },
+    }
+  }
+}
+// Strokes: when a wipe ends (the hand stops, or leaves), where it went — for what answers a wipe.
+function strokes(fx) {
+  let cur = null
+  return (dt, active, done) => {
+    const P = fx.pointer
+    if (active && P.on && P.speed > 40) {
+      cur ||= {pts: [], still: 0}
+      cur.pts.push({x: P.x, y: P.y}); cur.still = 0
+    } else if (cur) {
+      cur.still += dt
+      if (cur.still > 0.25 || !P.on) { if (cur.pts.length > 4) done(cur.pts); cur = null }
+    }
+  }
+}
+
+// 1 · Something on the other side: wipe a clear patch and, now and then, a pale face is right
+// behind the glass there for a moment. Rare on purpose (one wipe in four here, to test it).
+function otherSide(fx) {
+  const L = layer(fx, 3)
+  let face = null, last = 0
+  const track = strokes(fx)
+  return {
+    step(dt, amount, active) {
+      last += dt
+      track(dt, active, (pts) => {
+        if (face || last < 4 || Math.random() > 0.25) return
+        const c = pts[Math.floor(pts.length / 2)]
+        face = {x: c.x, y: c.y + 10, t: 0, dur: 1.3, s: rand(0.9, 1.2)}; last = 0
+      })
+      if (face) { face.t += dt; if (face.t > face.dur) face = null }
+    },
+    under(g, alpha) {
+      if (!face) return
+      const p = face.t / face.dur, a = (p < 0.12 ? p / 0.12 : Math.max(0, 1 - (p - 0.35) / 0.65)) * alpha
+      L.fit(); const h = L.g, k = L.k
+      h.setTransform(1 / k, 0, 0, 1 / k, 0, 0); h.clearRect(0, 0, fx.W, fx.H)
+      h.save(); h.translate(face.x, face.y); h.scale(face.s, face.s)
+      const skin = h.createRadialGradient(0, -6, 6, 0, 0, 62)
+      skin.addColorStop(0, "rgba(232,226,220,0.95)"); skin.addColorStop(0.7, "rgba(170,164,160,0.7)"); skin.addColorStop(1, "rgba(120,115,112,0)")
+      h.fillStyle = skin; h.beginPath(); h.ellipse(0, 0, 44, 60, 0, 0, Math.PI * 2); h.fill()
+      h.fillStyle = "rgba(10,6,8,0.95)"
+      for (const ex of [-16, 16]) { h.beginPath(); h.ellipse(ex, -10, 9, 12, 0, 0, Math.PI * 2); h.fill() }
+      h.beginPath(); h.ellipse(0, 30, 8, 12, 0, 0, Math.PI * 2); h.fill()
+      h.restore()
+      g.globalAlpha = a; g.imageSmoothingEnabled = true; g.drawImage(L.c, 0, 0, fx.W, fx.H)
+    },
+  }
+}
+
+// 2 · A hand presses back: a beat after your click, a pale hand slaps the glass from the other
+// side, mirrored, a little off from yours, blurred by the glass between.
+function pressBack(fx, api) {
+  const due = []
+  return {
+    step(dt, amount, active) {
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) due.push({x: k.x + rand(-34, 34), y: k.y + rand(-22, 18), t: rand(0.3, 0.55)})
+      for (const d of due) d.t -= dt
+      for (const d of due.filter((d) => d.t <= 0)) api.stamp(d.x, d.y, {color: "rgba(214,206,200,0.6)", soft: true, mirror: true, drip: false, life: 3.5, scale: 1.08})
+      for (let i = due.length - 1; i >= 0; i--) if (due[i].t <= 0) due.splice(i, 1)
+    },
+  }
+}
+
+// 3 · Writing in the blood: hold still after a wipe and words run into the blood near your finger,
+// a letter at a time, then drip apart.
+function writing(fx, api) {
+  const WORDS = ["GET OUT", "BEHIND YOU", "IT SEES YOU", "DON'T LOOK", "LET ME IN", "TOO LATE"]
+  let text = null, wiped = 0, still = 0, cool = 0
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      cool -= dt
+      if (active && P.on && P.speed > 40) { wiped = 1.5; still = 0 }
+      else if (P.on) { still += dt; wiped -= dt * 0.3 }
+      if (!text && wiped > 0 && still > 0.6 && cool < 0) {
+        const w = WORDS[Math.floor(Math.random() * WORDS.length)]
+        text = {w, x: Math.max(20, Math.min(fx.W - 300, P.x - 60)), y: Math.max(60, P.y - 40), t: 0, dripped: false}
+        cool = 4; still = 0
+      }
+      if (text) {
+        text.t += dt
+        const per = 0.13, done = text.w.length * per
+        if (!text.dripped && text.t > done + 0.4) {
+          text.dripped = true
+          for (let i = 0; i < text.w.length; i++) if (text.w[i] !== " " && Math.random() < 0.6) api.spawn(text.x + (text.at?.[i] || i * 34) + 12 + rand(-4, 4), text.y + 8, rand(2.6, 4.4), true)
+        }
+        if (text.t > done + 4.5) text = null
+      }
+    },
+    over(g, alpha) {
+      if (!text) return
+      const per = 0.13, shown = Math.min(text.w.length, Math.floor(text.t / per) + 1), done = text.w.length * per
+      const a = (text.t > done + 2.5 ? Math.max(0, 1 - (text.t - done - 2.5) / 2) : 1) * alpha
+      g.font = "58px Creepster, 'Oswald', sans-serif"; g.textBaseline = "alphabetic"
+      // Each letter where the typeface puts it (measured once), so the word reads as a word.
+      text.at ||= [...text.w].map((_, i) => g.measureText(text.w.slice(0, i)).width)
+      g.fillStyle = "rgba(185,12,24,0.95)"; g.shadowColor = "rgba(40,0,3,0.8)"; g.shadowBlur = 6
+      for (let i = 0; i < shown; i++) {
+        const age = text.t - i * per, run = Math.min(1, age * 3)
+        g.globalAlpha = a * run
+        g.fillText(text.w[i], text.x + text.at[i], text.y + (1 - run) * 6)
+      }
+    },
+  }
+}
+
+// 4 · The drops crawl to you: still drops near the pointer slide toward it, like something drawn
+// to warmth, and pool under it; move off, and the pool runs.
+function crawl(fx, api) {
+  let poolDrop = null
+  return {
+    step(dt, amount, active) {
+      const P = fx.pointer
+      if (!active || !P.on) { if (poolDrop) { poolDrop.sliding = true; poolDrop = null } return }
+      if (P.speed > 60) { if (poolDrop) { poolDrop.sliding = true; poolDrop = null } return }
+      for (const d of api.drops()) {
+        if (d.dead || d.sliding || d === poolDrop) continue
+        const dx = P.x - d.x, dy = P.y - d.y, dist = Math.hypot(dx, dy)
+        if (dist > 240) continue
+        const v = 40 * (1 - dist / 240) + 6
+        d.x += dx / dist * v * dt; d.y += dy / dist * v * dt; d.life = Math.max(d.life, 2)
+        if (dist < 12) {
+          poolDrop ||= api.spawn(P.x, P.y, 2.5, false)
+          poolDrop.r = Math.min(13, Math.hypot(poolDrop.r, d.r)); d.dead = true
+        }
+      }
+      if (poolDrop) { poolDrop.x = P.x; poolDrop.y = P.y; poolDrop.life = Math.max(poolDrop.life, 3); poolDrop.sliding = false }
+    },
+  }
+}
+
+// 5 · Your touch cracks the glass: a click leaves a spiderweb crack that blood seeps into and runs
+// from; a click near a crack spreads it.
+function cracks(fx, api) {
+  const all = []
+  const arms = (x, y, n, len) => {
+    const out = []
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * Math.PI * 2 + rand(-0.2, 0.2), pts = [{x, y}]
+      let px = x, py = y, L = len * rand(0.6, 1.2)
+      for (let s = 0; s < 6; s++) { const step = L / 6; const a2 = ang + rand(-0.35, 0.35); px += Math.cos(a2) * step; py += Math.sin(a2) * step; pts.push({x: px, y: py}) }
+      out.push(pts)
+    }
+    return out
+  }
+  return {
+    step(dt, amount, active) {
+      for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
+        const nearC = all.find((c) => Math.hypot(c.x - k.x, c.y - k.y) < 90)
+        if (nearC) { nearC.lines.push(...arms(k.x, k.y, 6, 110)); nearC.life = 20; nearC.seep = Math.min(nearC.seep, 0.4) }
+        else all.push({x: k.x, y: k.y, lines: arms(k.x, k.y, rand(9, 13) | 0, rand(80, 140)), rings: [rand(16, 24), rand(34, 48)], life: 20, seep: 0, dripped: 0})
+      }
+      for (const c of all) {
+        c.life -= dt; c.seep = Math.min(1, c.seep + dt / 3)
+        // Blood runs from the crack's lower ends as it seeps in.
+        if (c.seep > 0.5 && c.dripped < 4 && Math.random() < dt * 1.5) {
+          const down = c.lines.map((l) => l[l.length - 1]).filter((p) => p.y > c.y)
+          const p = down[Math.floor(Math.random() * down.length)]
+          if (p) { api.spawn(p.x, p.y, rand(2.6, 4), true); c.dripped++ }
+        }
+      }
+      for (let i = all.length - 1; i >= 0; i--) if (all[i].life <= 0) all.splice(i, 1)
+    },
+    over(g, alpha) {
+      for (const c of all) {
+        const a = Math.min(1, c.life / 3) * alpha
+        g.lineCap = "round"; g.lineJoin = "round"
+        const path = (l) => { g.beginPath(); g.moveTo(l[0].x, l[0].y); for (const p of l.slice(1)) g.lineTo(p.x, p.y); g.stroke() }
+        // Blood in the crack, spreading from the middle out.
+        g.strokeStyle = "rgba(120,0,10,0.85)"; g.lineWidth = 3
+        for (const l of c.lines) { const n = Math.max(2, Math.round(l.length * c.seep)); g.globalAlpha = a * 0.8; path(l.slice(0, n)) }
+        // The crack itself: a bright hairline with a dark edge.
+        g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 2.2; g.globalAlpha = a; for (const l of c.lines) path(l)
+        g.strokeStyle = "rgba(235,235,245,0.7)"; g.lineWidth = 0.9; for (const l of c.lines) path(l)
+        for (const r of c.rings) {
+          g.beginPath()
+          for (let i = 0; i <= 14; i++) { const ang = (i / 14) * Math.PI * 2, rr = r * (0.85 + ((i * 7) % 5) / 15); i ? g.lineTo(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr) : g.moveTo(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr) }
+          g.globalAlpha = a * 0.6; g.stroke()
+        }
+        g.globalAlpha = a * 0.9; g.fillStyle = "rgba(235,235,245,0.8)"; g.beginPath(); g.arc(c.x, c.y, 2.5, 0, Math.PI * 2); g.fill()
+      }
+    },
+  }
+}
+
+// 6 · A handprint from inside: now and then, by itself, a bloody hand slaps onto the glass
+// somewhere and slowly slides down, dragging five streaks.
+function inside(fx, api) {
+  let next = rand(2.5, 4)
+  return {
+    step(dt, amount, active) {
+      if (!active) return
+      next -= dt
+      if (next < 0) { next = rand(6, 11); api.stamp(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + 60, fx.carTop + (fx.carBottom - fx.carTop) * 0.4), {vy: rand(16, 26), life: 13, tilt: rand(-0.2, 0.2)}) }
+    },
+  }
+}
+
+// 7 · The rain stops: all at once it stops and it is quiet; then one drop; then it comes back harder.
+function hush(fx, api) {
+  let next = rand(5, 8), phase = null, t = 0
+  return {
+    step(dt, amount, active) {
+      if (!active) return
+      t += dt; next -= dt
+      if (!phase && next < 0) { phase = "quiet"; t = 0; api.rate(0) }
+      if (phase === "quiet" && t > 2.8) { phase = "one"; t = 0; api.streak(fx.W * rand(0.35, 0.65)) }
+      if (phase === "one" && t > 1.1) { phase = "hard"; t = 0; api.rate(2.2) }
+      if (phase === "hard" && t > 4) { phase = null; api.rate(1); next = rand(12, 18) }
+    },
+    over(g, alpha) {
+      // While it is quiet, the room seems to hold its breath: a little darker.
+      if (phase === "quiet" || phase === "one") { g.globalAlpha = 0.22 * alpha * Math.min(1, t * 2); g.fillStyle = "#000"; g.fillRect(0, 0, fx.W, fx.H) }
+    },
+  }
+}
+
+// 8 · Lightning: a double flash, and in the first a figure stands behind the rain — not there in
+// the second.
+function lightning(fx) {
+  const L = layer(fx, 2)
+  let next = rand(3, 5), t = -1, fig = null
+  return {
+    step(dt, amount, active) {
+      if (!active) return
+      next -= dt
+      if (next < 0 && t < 0) { t = 0; next = rand(9, 15); fig = {x: rand(fx.W * 0.25, fx.W * 0.75), h: (fx.carBottom - fx.carTop) * rand(0.55, 0.75)} }
+      if (t >= 0) { t += dt; if (t > 0.9) t = -1 }
+    },
+    under(g, alpha) {
+      if (t < 0) return
+      const f1 = t < 0.18 ? 1 - t / 0.18 : 0, f2 = t > 0.32 && t < 0.62 ? 1 - (t - 0.32) / 0.3 : 0
+      const f = Math.max(f1, f2)
+      if (f <= 0) return
+      g.globalAlpha = f * 0.55 * alpha; g.fillStyle = "rgb(225,230,255)"; g.fillRect(0, 0, fx.W, fx.H)
+      if (f1 > 0 && fig) {
+        // A person standing still, arms down, a little soft at the edges (rain between).
+        L.fit(); const h = L.g, k = L.k
+        h.setTransform(1 / k, 0, 0, 1 / k, 0, 0); h.clearRect(0, 0, fx.W, fx.H)
+        const H = fig.h, x = fig.x, foot = fx.carBottom - 10, u = H / 100
+        const P = (dx, dy) => [x + dx * u, foot - dy * u]
+        h.fillStyle = "rgb(6,6,12)"
+        h.beginPath(); h.ellipse(...P(0, 92), 6.2 * u, 7.6 * u, 0, 0, Math.PI * 2); h.fill()
+        h.beginPath()
+        h.moveTo(...P(-3, 84)); h.lineTo(...P(3, 84))
+        h.quadraticCurveTo(...P(14, 82), ...P(15, 76))      // shoulder
+        h.lineTo(...P(17, 46)); h.lineTo(...P(13, 44))      // arm, hand
+        h.lineTo(...P(11, 70)); h.lineTo(...P(9, 50))       // inside of the arm, hip
+        h.lineTo(...P(8, 2)); h.lineTo(...P(2, 2)); h.lineTo(...P(0.5, 44))   // leg
+        h.lineTo(...P(-0.5, 44)); h.lineTo(...P(-2, 2)); h.lineTo(...P(-8, 2))
+        h.lineTo(...P(-9, 50)); h.lineTo(...P(-11, 70)); h.lineTo(...P(-13, 44)); h.lineTo(...P(-17, 46))
+        h.lineTo(...P(-15, 76)); h.quadraticCurveTo(...P(-14, 82), ...P(-3, 84))
+        h.fill()
+        g.globalAlpha = f1 * 0.9 * alpha; g.imageSmoothingEnabled = true; g.drawImage(L.c, 0, 0, fx.W, fx.H)
+      }
+    },
+  }
+}
+
+Object.assign(EFFECTS, {
+  "scared-face": plus(otherSide), "scared-pressback": plus(pressBack), "scared-writing": plus(writing),
+  "scared-crawl": plus(crawl), "scared-crack": plus(cracks), "scared-inside": plus(inside),
+  "scared-hush": plus(hush), "scared-lightning": plus(lightning),
+})
+
 // The hand, reworked: what the finger wipes weeps down the glass (tears; a bleeding smear that
 // lasts longer); a press on the scared one leaves a handprint that drips.
 Object.assign(EFFECTS, {
