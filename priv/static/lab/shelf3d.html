@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Shelf 3D lab · Roki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* A WebGL lab (2026-11-24) for the profile: films as real DVD cases (three.js) — lit, shadowed,
+     springy, opening on their hinge with the disc inside — in six arrangements to feel out: a
+     leaning shelf, a fanned hand, a pedestal, a carousel, a wall of covers, stacks by year.
+     Data: alex's 32 most recently watched films (shelf-data.json). */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0e0c10; color: #ece8ef; font: 15px/1.45 "Outfit", system-ui, sans-serif; overflow: hidden; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+  canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 14px 18px; background: linear-gradient(#0e0c10e6, #0e0c1000); }
+  .bar h1 { font: 700 18px "Outfit"; margin: 0 10px 0 0; }
+  .bar button { font: 600 13px "Outfit"; color: #ddd; background: #ffffff10; border: 1px solid #ffffff26; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .bar button[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
+  .opts { position: fixed; left: 18px; bottom: 14px; z-index: 5; display: flex; gap: 14px; flex-wrap: wrap; color: #ffffffa0; }
+  .opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .hint { position: fixed; right: 18px; bottom: 14px; z-index: 5; color: #ffffff80; text-align: right; }
+  .why { position: fixed; left: 18px; top: 60px; z-index: 5; max-width: 520px; color: #ffffffb0; font-size: 14px; pointer-events: none; transition: opacity .4s; }
+  .detail { position: fixed; right: 22px; top: 70px; z-index: 6; width: min(360px, calc(100% - 44px)); padding: 18px; border-radius: 14px; background: #000a; backdrop-filter: blur(14px); border: 1px solid #ffffff1f; opacity: 0; transform: translateY(8px); transition: .4s; pointer-events: none; }
+  .detail.on { opacity: 1; transform: none; pointer-events: auto; }
+  .detail h2 { margin: 4px 0 6px; font: italic 400 34px/1.02 "Instrument Serif", serif; }
+  .detail p { margin: 0 0 12px; color: #ffffffbb; font-size: 14px; }
+  .detail .meta { display: flex; gap: 12px; color: #ffffffa0; margin-bottom: 10px; }
+  .detail a { color: #fff; }
+  .label { position: fixed; z-index: 4; transform: translate(-50%, 0); pointer-events: none; font: italic 400 26px "Instrument Serif", serif; color: #ffffffd0; text-shadow: 0 2px 10px #000; white-space: nowrap; }
+  .label small { display: block; text-align: center; font: 500 10px "JetBrains Mono"; letter-spacing: .08em; color: #ffffff90; font-style: normal; }
+  .loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 3; color: #ffffff90; }
+  .nogl { position: fixed; inset: 0; display: none; place-items: center; z-index: 9; padding: 24px; text-align: center; }
+  @media (max-width: 700px) { .why { display: none; } .detail { top: auto; bottom: 54px; } .hint { display: none; } }
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                 "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="bar" id="bar"><h1>Shelf 3D</h1></div>
+<p class="why" id="why"></p>
+<div class="opts">
+  <label><input type="checkbox" id="optShadows" checked> Shadows</label>
+  <label><input type="checkbox" id="optDust" checked> Dust</label>
+  <label><input type="checkbox" id="optDrift" checked> Camera drift</label>
+  <label><input type="checkbox" id="optSpring" checked> Springy</label>
+</div>
+<div class="hint mono" id="hint"></div>
+<div class="detail" id="detail"></div>
+<div class="loading mono" id="loading">Loading cases…</div>
+<div class="nogl" id="nogl">This lab needs WebGL, which this browser has switched off.</div>
+
+<script type="module">
+import * as THREE from "three"
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js"
+
+// ── the case: a DVD keep case, 190 × 135 × 14 mm (units: dm) ─────────────────────────────────
+const W = 1.35, H = 1.9, D = 0.14, LID = 0.028
+const small = (u) => u ? u.replace("/w500/", "/w342/") : u
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
+
+// ── renderer, scene, lights ─────────────────────────────────────────────────────────────────
+const canvas = document.getElementById("gl")
+let renderer
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }) } catch { document.getElementById("nogl").style.display = "grid"; throw new Error("no webgl") }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.outputColorSpace = THREE.SRGBColorSpace
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.05
+
+const scene = new THREE.Scene()
+const BG = new THREE.Color("#0e0c10")
+scene.background = BG.clone()
+scene.fog = new THREE.Fog(BG.clone(), 9, 26)
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100)
+
+scene.add(new THREE.HemisphereLight(0xcfd6ff, 0x1a1410, 0.55))
+const key = new THREE.DirectionalLight(0xfff1de, 2.2)
+key.position.set(-4, 8, 6); key.castShadow = true
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02
+Object.assign(key.shadow.camera, { left: -14, right: 14, top: 10, bottom: -6, near: 1, far: 30 })
+scene.add(key, key.target)
+const rim = new THREE.DirectionalLight(0x8fb4ff, 0.7); rim.position.set(6, 3, -5); scene.add(rim)
+// The film's own light: off until a case is taken out, then its poster's colour.
+const tint = new THREE.PointLight(0xffffff, 0, 12, 1.6); tint.position.set(0, 3, 3.5); scene.add(tint)
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x141116, roughness: 0.55, metalness: 0.1 }))
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.62; floor.receiveShadow = true; scene.add(floor)
+
+const wood = new THREE.MeshStandardMaterial({ color: 0x3a2a1f, roughness: 0.7 })
+const plank = new THREE.Mesh(new RoundedBoxGeometry(1, 0.12, 1.7, 2, 0.03), wood)
+plank.castShadow = plank.receiveShadow = true; plank.position.y = -0.06; scene.add(plank)
+const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.05, 1.2, 64), new THREE.MeshStandardMaterial({ color: 0x1d1a21, roughness: 0.35, metalness: 0.3 }))
+pedestal.position.set(0, -0.02, 0); pedestal.castShadow = pedestal.receiveShadow = true; scene.add(pedestal)
+
+// Dust in the light: slow drifting points, additive.
+const dustN = 500, dustPos = new Float32Array(dustN * 3), dustVel = new Float32Array(dustN * 3)
+for (let i = 0; i < dustN; i++) {
+  dustPos.set([(Math.random() - 0.5) * 16, Math.random() * 5 - 0.4, (Math.random() - 0.5) * 6 + 1], i * 3)
+  dustVel.set([(Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.02, (Math.random() - 0.5) * 0.03], i * 3)
+}
+const dustGeo = new THREE.BufferGeometry(); dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3))
+const dot = (() => { const c = document.createElement("canvas"); c.width = c.height = 32; const g = c.getContext("2d"); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, "#fff"); gr.addColorStop(1, "#fff0"); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c) })()
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ size: 0.05, map: dot, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe8cc }))
+scene.add(dust)
+
+// ── colours from a poster (the shelf lab's rule, OKLCH buckets) ──────────────────────────────
+function oklch([r, g, b]) {
+  const l = (c) => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  const [R, G, B] = [l(r), l(g), l(b)]
+  const L = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B), M = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B), S = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B)
+  const a = 1.9779984951 * L - 2.428592205 * M + 0.4505937099 * S, bb = 0.0259040371 * L + 0.7827717662 * M - 0.808675766 * S
+  return { l: 0.2104542553 * L + 0.793617785 * M - 0.0040720468 * S, c: Math.hypot(a, bb), h: (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360 }
+}
+function paletteOf(img) {
+  const cv = document.createElement("canvas"); cv.width = 24; cv.height = 36
+  const g = cv.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0, 24, 36)
+  const d = g.getImageData(0, 0, 24, 36).data, buckets = new Map()
+  for (let i = 0; i < d.length; i += 4) {
+    const o = oklch([d[i], d[i + 1], d[i + 2]]); if (o.l < 0.12 || o.l > 0.95 || o.c < 0.03) continue
+    const k = Math.round(o.h / 30), b = buckets.get(k) || { n: 0, c: 0, x: 0, y: 0 }
+    b.n++; b.c += o.c; b.x += Math.cos(o.h * Math.PI / 180); b.y += Math.sin(o.h * Math.PI / 180); buckets.set(k, b)
+  }
+  const list = [...buckets.values()].map((b) => ({ n: b.n, c: b.c / b.n, h: (Math.atan2(b.y, b.x) * 180 / Math.PI + 360) % 360 })).sort((a, b) => b.n - a.n)
+  const main = list[0] || { h: 300, c: 0.02 }, lively = list.filter((b) => b.n > 12).sort((a, b) => b.c - a.c)[0] || main
+  const css = (l, c, h) => `oklch(${l}% ${c} ${h})`
+  return { spine: css(42, Math.min(Math.max(main.c, 0.04), 0.13).toFixed(3), main.h.toFixed(0)), ink: css(95, 0.03, main.h.toFixed(0)),
+           light: css(78, Math.min(Math.max(lively.c, 0.08), 0.16).toFixed(3), lively.h.toFixed(0)), ground: css(17, Math.min(main.c, 0.06).toFixed(3), main.h.toFixed(0)) }
+}
+// A CSS colour (oklch included) as a THREE.Color, through the canvas.
+const cssToColor = (() => { const c = document.createElement("canvas").getContext("2d"); return (css) => { c.fillStyle = "#000"; c.fillStyle = css; c.fillRect(0, 0, 1, 1); const [r, g, b] = c.getImageData(0, 0, 1, 1).data; return new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace) } })()
+
+function spineTexture(film, pal) {
+  const c = document.createElement("canvas"); c.width = 72; c.height = 980
+  const g = c.getContext("2d")
+  g.fillStyle = pal.spine; g.fillRect(0, 0, 72, 980)
+  g.fillStyle = "#ffffff18"; g.fillRect(4, 0, 2, 980); g.fillStyle = "#00000040"; g.fillRect(64, 0, 8, 980)
+  g.save(); g.translate(46, 900); g.rotate(-Math.PI / 2)
+  g.fillStyle = pal.ink; g.font = "600 34px Outfit"
+  let t = film.title; while (g.measureText(t).width > 760 && t.length > 3) t = t.slice(0, -2)
+  if (t !== film.title) t = t.trimEnd() + "…"
+  g.fillText(t, 0, 0); g.restore()
+  g.save(); g.translate(46, 960); g.rotate(-Math.PI / 2); g.globalAlpha = 0.75; g.font = "500 22px 'JetBrains Mono'"; g.fillStyle = pal.ink; g.fillText(film.year || "", 0, 0); g.restore()
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4
+  return tex
+}
+
+const loader = new THREE.TextureLoader(); loader.setCrossOrigin("anonymous")
+const loadImage = (src) => new Promise((res, rej) => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => res(i); i.onerror = rej; i.src = src })
+
+// ── a case: tray, a lid on a hinge at the spine, the cover under a clear sleeve, a disc ─────
+const plastic = new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.32, metalness: 0.05 })
+const inner = new THREE.MeshStandardMaterial({ color: 0x1b1b20, roughness: 0.6 })
+const sleeveMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 })
+const hubMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, roughness: 0.25, metalness: 0.9 })
+const trayGeo = new RoundedBoxGeometry(W, H, D - LID, 2, 0.02), lidGeo = new RoundedBoxGeometry(W, H, LID, 2, 0.012)
+const faceGeo = new THREE.PlaneGeometry(W - 0.04, H - 0.04), spineGeo = new THREE.PlaneGeometry(D, H - 0.01)
+const discGeo = new THREE.CircleGeometry(0.6, 64), hubGeo = new THREE.RingGeometry(0.07, 0.17, 48)
+
+function makeCase(film, i) {
+  const g = new THREE.Group()
+  const tray = new THREE.Mesh(trayGeo, plastic); tray.position.z = -LID / 2; tray.castShadow = tray.receiveShadow = true; g.add(tray)
+  const trayFace = new THREE.Mesh(faceGeo, inner); trayFace.position.z = -LID / 2 + (D - LID) / 2 + 0.001; g.add(trayFace)
+  const disc = new THREE.Group(); disc.position.z = trayFace.position.z + 0.004
+  const discFace = new THREE.Mesh(discGeo, new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.3, metalness: 0.5 })); disc.add(discFace)
+  const hub = new THREE.Mesh(hubGeo, hubMat); hub.position.z = 0.002; disc.add(hub)
+  g.add(disc)
+  const back = new THREE.Mesh(faceGeo, plastic.clone()); back.rotation.y = Math.PI; back.position.z = -LID / 2 - (D - LID) / 2 - 0.001; g.add(back)
+  const hinge = new THREE.Group(); hinge.position.set(-W / 2, 0, (D - LID) / 2 + LID / 2 - LID / 2); g.add(hinge)
+  const lid = new THREE.Mesh(lidGeo, plastic); lid.position.set(W / 2, 0, LID / 2); lid.castShadow = true; hinge.add(lid)
+  const cover = new THREE.Mesh(faceGeo, new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.55 })); cover.position.set(W / 2, 0, LID + 0.001); hinge.add(cover)
+  const sleeve = new THREE.Mesh(faceGeo, sleeveMat); sleeve.position.set(W / 2, 0, LID + 0.004); hinge.add(sleeve)
+  const lidIn = new THREE.Mesh(faceGeo, inner); lidIn.rotation.y = Math.PI; lidIn.position.set(W / 2, 0, -0.001); hinge.add(lidIn)
+  const spine = new THREE.Mesh(spineGeo, new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.45 })); spine.rotation.y = -Math.PI / 2; spine.position.x = -W / 2 - 0.0015; g.add(spine)
+  for (const m of [tray, lid, cover, spine, sleeve, back]) m.userData.idx = i
+  scene.add(g)
+  const c = { film, i, g, hinge, disc, discFace, cover, spine, back,
+    pos: new THREE.Vector3(0, -6, 0), vel: new THREE.Vector3(), tpos: new THREE.Vector3(),
+    rot: new THREE.Vector3(), rvel: new THREE.Vector3(), trot: new THREE.Vector3(),
+    lid: 0, lvel: 0, tlid: 0, spin: 0, pal: null, visible: true, hover: 0, thover: 0 }
+  // Poster: the cover's picture and the spine's colour.
+  loadImage(small(film.poster)).then((img) => {
+    c.pal = paletteOf(img)
+    const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; tex.needsUpdate = true
+    cover.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 })
+    document.fonts.ready.then(() => { spine.material = new THREE.MeshStandardMaterial({ map: spineTexture(film, c.pal), roughness: 0.45 }) })
+    back.material.color = cssToColor(c.pal.spine).multiplyScalar(0.6)
+  }).catch(() => {})
+  return c
+}
+function discArt(c) {
+  if (c.discLoaded || !c.film.backdrop) return
+  c.discLoaded = true
+  loader.load(c.film.backdrop.replace("/w1280/", "/w780/"), (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace
+    // The middle of the backdrop, square, on the disc.
+    const a = tex.image.width / tex.image.height; tex.repeat.set(1 / a, 1); tex.offset.set((1 - 1 / a) / 2, 0)
+    c.discFace.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.25, metalness: 0.35 })
+  })
+}
+
+// ── springs ─────────────────────────────────────────────────────────────────────────────────
+let springy = true
+function spring(x, v, t, dt, k = 140) {
+  if (!springy) return [x + (t - x) * (1 - Math.exp(-dt * 12)), 0]
+  const c = 2 * Math.sqrt(k) * 0.62
+  v += ((t - x) * k - v * c) * dt
+  return [x + v * dt, v]
+}
+function stepCase(c, dt) {
+  for (const ax of ["x", "y", "z"]) {
+    ;[c.pos[ax], c.vel[ax]] = spring(c.pos[ax], c.vel[ax], c.tpos[ax], dt)
+    ;[c.rot[ax], c.rvel[ax]] = spring(c.rot[ax], c.rvel[ax], c.trot[ax], dt, 110)
+  }
+  ;[c.lid, c.lvel] = spring(c.lid, c.lvel, c.tlid, dt, 70)
+  c.hover += (c.thover - c.hover) * (1 - Math.exp(-dt * 14))
+  c.g.position.copy(c.pos); c.g.rotation.set(c.rot.x, c.rot.y, c.rot.z, "YXZ")
+  c.hinge.rotation.y = c.lid
+  if (c.lid < -0.4) { c.spin += dt * 2.2; c.disc.rotation.z = -c.spin }
+  c.g.visible = c.visible
+}
+
+// ── layouts: each sets the cases' targets (every frame) and where the camera looks ─────────
+const R2 = Math.PI / 2
+const LAYOUTS = [
+  { id: "lean", name: "Leaning shelf", why: "Most films spine-out, every seventh turned face-out and leaning back, the way a good shop shelves the ones it wants you to see. Drag or scroll to walk along it; hover lifts a case into the light; click takes it out and opens it.", hint: "drag / scroll / ← → walk · click take out · esc put back" },
+  { id: "fan", name: "Fanned hand", why: "Your seven best-rated, fanned like a hand of cards. Hover spreads the hand and raises the one under the pointer.", hint: "hover · click take out · esc put back" },
+  { id: "pedestal", name: "Pedestal", why: "One film on a stand, turning slowly, the shelf behind it. Click a case on the shelf to put it on the stand; click the one on the stand to open it.", hint: "← → change film · click open · esc back" },
+  { id: "ring", name: "Carousel", why: "Every film face-out on a ring you spin. Drag or scroll to turn it; it settles with the nearest case facing you.", hint: "drag / scroll / ← → spin · click take out · esc put back" },
+  { id: "wall", name: "Wall of covers", why: "Covers on a wall at slightly different depths; the wall tilts toward the pointer and the cover under it lifts out.", hint: "hover · click take out · esc put back" },
+  { id: "stacks", name: "Stacks by rating", why: "Cases lying flat in piles by the score you gave them — the height of a pile is how many. Click a pile to fan it open, then a case to take it out.", hint: "click a pile · click a case · esc back" },
+]
+let layout = "lean", films = [], cases = [], out = null, hot = -1
+let pan = 0, panT = 0, ring = 0, ringV = 0, heroIdx = 0, openPile = null
+const pointer = new THREE.Vector2(0, 0), pointerN = { x: 0, y: 0 }
+const camPos = new THREE.Vector3(0, 2, 8), camLook = new THREE.Vector3(0, 1, 0), camTPos = new THREE.Vector3(), camTLook = new THREE.Vector3()
+let drift = true
+const labels = []
+
+const leanX = [] // x of each case on the leaning shelf
+function shelfPlan() {
+  let x = 0
+  cases.forEach((c, i) => {
+    const face = i % 7 === 3
+    c.face = face
+    const w = face ? W * Math.cos(0.12) + 0.12 : D + 0.016
+    leanX[i] = x + w / 2; x += w
+  })
+  const shift = x / 2
+  for (let i = 0; i < leanX.length; i++) leanX[i] -= shift
+  return x
+}
+let shelfLen = 0
+// Piles by your rating (the release years of a recent list are nearly all one year).
+const pileOf = (f) => !f.score ? "Not rated" : f.score >= 9 ? "★ 9–10" : f.score <= 5 ? "★ 5 and under" : `★ ${Math.floor(f.score)}`
+const pileOrder = ["★ 9–10", "★ 8", "★ 7", "★ 6", "★ 5 and under", "Not rated"]
+let piles = []
+
+function place(t) {
+  const lift = (c, amt) => c.hover * amt
+  for (const c of cases) c.visible = true
+  plank.visible = layout === "lean" || layout === "pedestal"; pedestal.visible = layout === "pedestal"
+  if (layout === "lean") {
+    plank.scale.x = shelfLen + 1.2; plank.position.set(0, -0.06, 0)
+    pan += (panT - pan) * 0.12
+    cases.forEach((c, i) => {
+      if (c === out) return
+      const h = lift(c, 1)
+      if (c.face) {
+        const a = 0.12; c.tpos.set(leanX[i], H / 2 * Math.cos(a) + 0.05 * h, -H / 2 * Math.sin(a) + 0.25 + 0.35 * h); c.trot.set(-a + 0.1 * h, 0, 0)
+      } else { c.tpos.set(leanX[i], H / 2 + 0.06 * h, 0.35 * h); c.trot.set(0, R2 - 0.18 * h, 0) }
+    })
+    camTPos.set(pan, 2.0, 8.4); camTLook.set(pan, 0.95, 0)
+  } else if (layout === "fan") {
+    const top = [...cases].filter((c) => c.film.score).sort((a, b) => b.film.score - a.film.score).slice(0, 7)
+    const spread = top.some((c) => c.thover > 0) ? 1.35 : 1
+    cases.forEach((c) => { if (!top.includes(c)) c.visible = false })
+    top.forEach((c, k) => {
+      if (c === out) return
+      const a = (k - (top.length - 1) / 2) * 0.17 * spread, r = 3.2
+      c.tpos.set(Math.sin(a) * r, -2.0 + Math.cos(a) * r + 0.45 * c.hover, k * 0.03 + 0.4 * c.hover); c.trot.set(0, 0, -a)
+    })
+    camTPos.set(0, 1.6, 9.4); camTLook.set(0, 1.15, 0)
+  } else if (layout === "pedestal") {
+    plank.scale.x = 9; plank.position.set(0, -0.06, -3.2)
+    const hero = cases[heroIdx]
+    cases.forEach((c, i) => {
+      if (c === out) return
+      if (c === hero) { c.tpos.set(0, 0.6 + H / 2 + 0.06 + Math.sin(t * 1.3) * 0.04, 0); c.trot.set(0, Math.sin(t * 0.45) * 0.9, 0); return }
+      const k = i - (i > heroIdx ? 1 : 0), n = cases.length - 1
+      c.tpos.set((k - (n - 1) / 2) * (D + 0.03) * 1.6, H / 2 + 0.06 * c.hover, -3.2 + 0.3 * c.hover); c.trot.set(0, R2, 0)
+    })
+    camTPos.set(0, 1.9, 6); camTLook.set(0, 1.25, -0.5)
+  } else if (layout === "ring") {
+    ring += ringV; ringV *= 0.92
+    const n = cases.length, step = (Math.PI * 2) / n
+    if (Math.abs(ringV) < 0.0008) ring += (Math.round(ring / step) * step - ring) * 0.08
+    const R = n * (W + 0.3) / (Math.PI * 2)
+    cases.forEach((c, i) => {
+      if (c === out) return
+      const a = i * step + ring
+      const r = R + 0.4 * c.hover
+      c.tpos.set(Math.sin(a) * r, H / 2 + 0.05, Math.cos(a) * r - R); c.trot.set(0, a, 0)
+    })
+    camTPos.set(0, 1.5, 5.2); camTLook.set(0, 1.0, 0)
+  } else if (layout === "wall") {
+    const cols = 8, rows = Math.ceil(cases.length / cols), sx = W + 0.16, sy = H + 0.16
+    const tiltX = pointerN.y * 0.14, tiltY = pointerN.x * 0.22, e = new THREE.Euler(tiltX, tiltY, 0, "YXZ")
+    cases.forEach((c, i) => {
+      if (c === out) return
+      const col = i % cols, row = Math.floor(i / cols)
+      const p = new THREE.Vector3((col - (cols - 1) / 2) * sx, ((rows - 1) / 2 - row) * sy, ((i * 37) % 7) / 7 * 0.18 + 0.6 * c.hover).applyEuler(e)
+      c.tpos.set(p.x, p.y + 3.2, p.z); c.trot.set(tiltX, tiltY, 0)
+    })
+    camTPos.set(0, 3.2, 17.5); camTLook.set(0, 3.2, 0)
+  } else if (layout === "stacks") {
+    piles.forEach((p, k) => {
+      const px = (k - (piles.length - 1) / 2) * 2.0
+      p.x = px
+      p.items.forEach((c, j) => {
+        if (c === out) return
+        // A case out of the pile: the rest of the fan settles back onto the pile meanwhile.
+        if (openPile === p && !out) {
+          const a = (j - (p.items.length - 1) / 2) * Math.min(0.16, 1.1 / p.items.length), r = 3.4
+          c.tpos.set(Math.sin(a) * r, -2.0 + Math.cos(a) * r + 0.4 * c.hover, 2.4 + j * 0.02 + 0.3 * c.hover); c.trot.set(-0.25, 0, -a)
+        } else {
+          const up = p === hotPile ? j * 0.03 : 0
+          c.tpos.set(px, D / 2 - 0.6 + j * (D + 0.004) + up, 0); c.trot.set(-R2, 0, ((c.i * 53) % 11 - 5) * 0.012)
+        }
+      })
+    })
+    camTPos.set(0, 3.4, 8.5); camTLook.set(0, 0.2, 0)
+  }
+  if (out) {
+    // Out in front of the camera, a little to the left (the details are on the right), turned
+    // slightly toward the room, the lid swung open.
+    const dir = new THREE.Vector3().subVectors(camTLook, camTPos).normalize()
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize()
+    const p = camTPos.clone().addScaledVector(dir, 5.6).addScaledVector(right, innerWidth > 700 ? -0.9 : 0)
+    p.y += 0.05
+    out.tpos.copy(p)
+    const yaw = Math.atan2(-dir.x, -dir.z)
+    // Turned so the lid, swinging on the left, opens away from the camera rather than at it.
+    out.trot.set(Math.asin(dir.y) * -1 * 0.5, yaw + 0.62, 0)
+  }
+}
+
+// ── picking, input ──────────────────────────────────────────────────────────────────────────
+const ray = new THREE.Raycaster()
+function pick(clientX, clientY) {
+  const r = canvas.getBoundingClientRect()
+  pointer.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
+  ray.setFromCamera(pointer, camera)
+  const hits = ray.intersectObjects(cases.filter((c) => c.visible).map((c) => c.g), true)
+  return hits.length ? cases[hits[0].object.userData.idx] : null
+}
+let hotPile = null
+function hover(c) {
+  for (const x of cases) x.thover = 0
+  hot = c ? c.i : -1
+  if (c && c !== out && !(layout === "pedestal" && c.i === heroIdx)) c.thover = 1
+  hotPile = layout === "stacks" && c && !openPile ? piles.find((p) => p.items.includes(c)) : null
+  canvas.style.cursor = c ? "pointer" : (layout === "lean" || layout === "ring" ? "grab" : "default")
+}
+let drag = null
+canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, moved: 0, pan: panT }; canvas.setPointerCapture(e.pointerId) })
+canvas.addEventListener("pointermove", (e) => {
+  pointerN.x = (e.clientX / innerWidth) * 2 - 1; pointerN.y = (e.clientY / innerHeight) * 2 - 1
+  if (drag) {
+    const dx = e.clientX - drag.x; drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(e.clientY - drag.y))
+    if (layout === "lean") panT = clampPan(drag.pan - dx * 0.012)
+    if (layout === "ring") { ringV = (e.movementX || 0) * 0.0025 }
+  }
+  if (!drag || drag.moved < 6) hover(pick(e.clientX, e.clientY))
+})
+// A press that moved is a drag (walking the shelf, spinning the ring), not a pick.
+let dragged = false
+canvas.addEventListener("pointerup", () => { dragged = !!(drag && drag.moved > 6); drag = null })
+canvas.addEventListener("pointercancel", () => { drag = null })
+canvas.addEventListener("click", (e) => { if (dragged) { dragged = false; return } click(pick(e.clientX, e.clientY)) })
+canvas.addEventListener("pointerleave", () => { pointerN.x = pointerN.y = 0; hover(null) })
+addEventListener("wheel", (e) => {
+  if (layout === "lean") panT = clampPan(panT + (e.deltaY + e.deltaX) * 0.004)
+  if (layout === "ring") ringV += (e.deltaY + e.deltaX) * -0.00025
+}, { passive: true })
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape") return putBack()
+  const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0
+  if (!d) return
+  if (layout === "lean") panT = clampPan(panT + d * 1.2)
+  if (layout === "ring") ringV -= d * 0.03
+  if (layout === "pedestal") { putBack(); heroIdx = (heroIdx + d + cases.length) % cases.length }
+})
+const clampPan = (v) => Math.max(-shelfLen / 2, Math.min(shelfLen / 2, v))
+
+function click(c) {
+  if (!c) { if (openPile && !out) { openPile = null; return } return putBack() }
+  if (c === out) return putBack()
+  if (layout === "pedestal" && c.i !== heroIdx) { putBack(); heroIdx = c.i; return }
+  if (layout === "stacks" && !openPile) { openPile = piles.find((p) => p.items.includes(c)); return }
+  takeOut(c)
+}
+const detail = document.getElementById("detail")
+function takeOut(c) {
+  putBack(true)
+  out = c; c.thover = 0; c.tlid = 0
+  discArt(c)
+  setTimeout(() => { if (out === c) c.tlid = -1.95 }, 420)
+  if (c.pal) { tintTo = cssToColor(c.pal.light); groundTo = cssToColor(c.pal.ground) }
+  const f = c.film
+  detail.innerHTML = `<div class="mono" style="opacity:.7">[ on the shelf · watched ]</div><h2>${esc(f.title)}</h2>
+    <div class="meta mono"><span>${esc(f.year)}</span>${f.minutes ? `<span>${f.minutes} min</span>` : ""}${f.score ? `<span>★ ${f.score}</span>` : ""}</div>
+    <p>${esc(f.overview)}</p><a class="mono" href="/title/movie/${f.id}">Open on Roki →</a>`
+  detail.classList.add("on"); document.getElementById("why").style.opacity = 0
+}
+function putBack(quiet) {
+  if (out) { out.tlid = 0; out = null }
+  if (!quiet) { tintTo = null; groundTo = null; detail.classList.remove("on"); document.getElementById("why").style.opacity = "" }
+}
+let tintTo = null, groundTo = null
+
+// ── the page around it ──────────────────────────────────────────────────────────────────────
+const bar = document.getElementById("bar")
+for (const l of LAYOUTS) {
+  const b = document.createElement("button"); b.textContent = l.name; b.dataset.l = l.id
+  b.addEventListener("click", () => setLayout(l.id)); bar.appendChild(b)
+}
+function setLayout(id) {
+  putBack(); openPile = null; layout = id
+  for (const b of bar.querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.l === id)
+  const l = LAYOUTS.find((x) => x.id === id)
+  document.getElementById("why").textContent = l.why; document.getElementById("hint").textContent = l.hint
+  history.replaceState(null, "", "#" + id)
+  labels.forEach((el) => el.remove()); labels.length = 0
+  if (id === "stacks") for (const p of piles) { const el = document.createElement("div"); el.className = "label"; el.innerHTML = `${esc(p.name)}<small>${p.items.length} films</small>`; document.body.appendChild(el); labels.push(el); p.label = el }
+}
+document.getElementById("optShadows").addEventListener("change", (e) => { renderer.shadowMap.enabled = e.target.checked; scene.traverse((o) => { if (o.material) o.material.needsUpdate = true }) })
+document.getElementById("optDust").addEventListener("change", (e) => { dust.visible = e.target.checked })
+document.getElementById("optDrift").addEventListener("change", (e) => { drift = e.target.checked })
+document.getElementById("optSpring").addEventListener("change", (e) => { springy = e.target.checked })
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false)
+  camera.aspect = innerWidth / innerHeight
+  // A narrow screen sees more by standing back.
+  camera.fov = innerWidth < 700 ? 52 : 35
+  camera.updateProjectionMatrix()
+}
+addEventListener("resize", resize); resize()
+
+// ── frame loop ──────────────────────────────────────────────────────────────────────────────
+let last = performance.now()
+const tintNow = new THREE.Color(0xffffff), groundNow = BG.clone()
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now
+  const t = now / 1000
+  place(t)
+  for (const c of cases) stepCase(c, dt)
+  // Camera: toward the layout's, plus a little drift after the pointer.
+  const dx = drift ? pointerN.x * 0.45 : 0, dy = drift ? -pointerN.y * 0.25 : 0
+  camPos.lerp(new THREE.Vector3(camTPos.x + dx, camTPos.y + dy, camTPos.z), 1 - Math.exp(-dt * 5))
+  camLook.lerp(camTLook, 1 - Math.exp(-dt * 5))
+  camera.position.copy(camPos); camera.lookAt(camLook)
+  // Fog from just past what is looked at, however far back the layout stands.
+  const dist = camPos.distanceTo(camLook); scene.fog.near = dist + 2; scene.fog.far = dist + 18
+  key.target.position.copy(camLook); key.position.set(camLook.x - 4, 8, 6)
+  // The film's light and the room's colour.
+  tint.intensity += ((tintTo ? 9 : 0) - tint.intensity) * (1 - Math.exp(-dt * 3))
+  if (tintTo) tintNow.lerp(tintTo, 1 - Math.exp(-dt * 3)); tint.color.copy(tintNow)
+  if (out) tint.position.set(out.pos.x + 1.4, out.pos.y + 1.4, out.pos.z + 2.2)
+  groundNow.lerp(groundTo || BG, 1 - Math.exp(-dt * 2.5)); scene.background.copy(groundNow); scene.fog.color.copy(groundNow)
+  if (dust.visible) {
+    for (let i = 0; i < dustN; i++) for (let a = 0; a < 3; a++) {
+      const k = i * 3 + a; dustPos[k] += dustVel[k] * dt * 3
+      const lim = a === 0 ? 8 : a === 1 ? 5 : 4
+      if (dustPos[k] > lim) dustPos[k] = -lim * (a === 1 ? 0.1 : 1); if (dustPos[k] < (a === 1 ? -0.5 : -lim)) dustPos[k] = lim
+    }
+    dust.position.x = camLook.x; dustGeo.attributes.position.needsUpdate = true
+  }
+  if (layout === "stacks") for (const p of piles) {
+    if (!p.label) continue
+    const v = new THREE.Vector3(p.x, -0.62, 0.9).project(camera)
+    p.label.style.left = `${(v.x + 1) / 2 * innerWidth}px`; p.label.style.top = `${(1 - v.y) / 2 * innerHeight}px`
+    p.label.style.opacity = openPile && openPile !== p ? 0.25 : 1
+  }
+  renderer.render(scene, camera)
+  requestAnimationFrame(frame)
+}
+
+fetch("shelf-data.json").then((r) => r.json()).then((list) => {
+  films = list
+  cases = films.map(makeCase)
+  shelfLen = shelfPlan()
+  // Piles by when the films came out, oldest left.
+  const by = new Map(); for (const c of cases) { const k = pileOf(c.film); by.set(k, [...(by.get(k) || []), c]) }
+  piles = [...by.entries()].sort((a, b) => pileOrder.indexOf(a[0]) - pileOrder.indexOf(b[0])).map(([name, items]) => ({ name, items }))
+  const start = location.hash.slice(1)
+  setLayout(LAYOUTS.some((l) => l.id === start) ? start : "lean")
+  document.getElementById("loading").remove()
+  requestAnimationFrame(frame)
+})
+</script>
+</body>
+</html>
