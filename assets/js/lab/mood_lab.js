@@ -578,12 +578,17 @@ function cracks(fx, api) {
 // 6 · A handprint from inside: now and then, by itself, a bloody hand slaps onto the glass
 // somewhere and slowly slides down, dragging five streaks.
 function inside(fx, api) {
-  let next = rand(2.5, 4)
+  let next = rand(2.5, 4), left = Math.random() < 0.5
   return {
     step(dt, amount, active) {
       if (!active) return
       next -= dt
-      if (next < 0) { next = rand(6, 11); api.stamp(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + 60, fx.carTop + (fx.carBottom - fx.carTop) * 0.4), {vy: rand(16, 26), life: 13, tilt: rand(-0.2, 0.2)}) }
+      if (next < 0) {
+        // Left hand, right hand, in turn; each a hand of its own, bigger or smaller.
+        next = rand(6, 11); left = !left
+        api.stamp(rand(fx.W * 0.1, fx.W * 0.9), rand(fx.carTop + 60, fx.carTop + (fx.carBottom - fx.carTop) * 0.4),
+          {vy: rand(14, 28), life: 13, tilt: rand(-0.25, 0.25), mirror: left, vary: true, scale: rand(0.78, 1.32)})
+      }
     },
   }
 }
@@ -649,7 +654,20 @@ function lightning(fx) {
   }
 }
 
+// The chosen mix: the red rain without the wipe; the drops crawl to the pointer and pool; hands
+// slap the glass from inside and slide down, left and right in turn, each its own.
+function plusWith(m, ...extras) {
+  return (fx) => {
+    const base = rain(fx, m), xs = extras.map((e) => e(fx, base.api))
+    return {
+      busy: () => true, stats: base.stats,
+      step(dt, amount, active) { base.step(dt, amount, active); for (const x of xs) x.step(dt, amount, active) },
+      draw(g, alpha) { for (const x of xs) { g.save(); x.under?.(g, alpha); g.restore() } base.draw(g, alpha); for (const x of xs) { g.save(); x.over?.(g, alpha); g.restore() } },
+    }
+  }
+}
 Object.assign(EFFECTS, {
+  "scared-final": plusWith({...RAIN.scared, noWipe: true, palm: "rgba(118,0,10,0.92)"}, crawl, inside),
   "scared-face": plus(otherSide), "scared-pressback": plus(pressBack), "scared-writing": plus(writing),
   "scared-crawl": plus(crawl), "scared-crack": plus(cracks), "scared-inside": plus(inside),
   "scared-hush": plus(hush), "scared-lightning": plus(lightning),

@@ -213,20 +213,25 @@ export function rain(fx, m) {
   // the heel and fingertips), `vy` (it slides down, dragging streaks), `life`.
   const stamp = (x, y, o = {}) => {
     const s = (fx.phone ? 0.8 : 1.1) * (o.scale || 1), tilt = o.tilt ?? rand(-0.35, 0.35)
+    // `o.vary`: a hand of its own — a wider or narrower palm, longer or shorter fingers each, spread
+    // more or less, the thumb out or in.
+    const v = o.vary ? 1 : 0, pw = 1 + v * rand(-0.15, 0.18), ph = 1 + v * rand(-0.12, 0.15)
+    const spread = 1 + v * rand(-0.3, 0.45), fl = () => v ? rand(0.72, 1.3) : rand(0.85, 1.15)
     // The print as dabs: the palm pressed hardest in its heel and below the fingers, the
     // middle lighter; each finger a run of dabs, the tip the darkest; gaps here and there.
     const dabs = []
     for (let i = 0; i < 70; i++) {
       const t = rand(0, Math.PI * 2), q = Math.sqrt(Math.random())
-      const dx = Math.cos(t) * 23 * q, dy = 10 + Math.sin(t) * 26 * q
+      const dx = Math.cos(t) * 23 * pw * q, dy = 10 + Math.sin(t) * 26 * ph * q
       const hard = 0.35 + 0.4 * Math.max(Math.abs(dy - 10) / 26, q)
       if (Math.random() < 0.12) continue
       dabs.push({x: dx, y: dy, r: rand(3, 7.5), sq: rand(0.6, 1), t: rand(0, 3), a: hard * rand(0.5, 1)})
     }
     const F = [[-21, -14, -0.35, 0.7], [-11, -22, -0.1, 0.95], [1, -24, 0, 1], [13, -21, 0.12, 0.92], [26, 4, 0.75, 0.6]]
     const tips = []
-    for (const [x0, y0, ang, l] of F) {
-      const L = 30 * l * rand(0.85, 1.15), n = 9
+    for (const [fx0, y0, a0, l] of F) {
+      const x0 = fx0 * pw, ang = a0 * spread + (fx0 > 20 ? v * rand(-0.25, 0.25) : 0)
+      const L = 30 * l * fl(), n = 9
       tips.push({x: x0 + Math.sin(ang) * L, y: y0 - Math.cos(ang) * L})
       for (let i = 0; i <= n; i++) {
         if (Math.random() < 0.15) continue
@@ -300,7 +305,8 @@ export function rain(fx, m) {
       // leaks a little behind it once it is big. Let go (the finger stops, or lifts), it runs down
       // the glass as one drop with all it gathered. A faint smear is left, drying. New rain lands.
       const P = fx.pointer
-      const wiping = active && P.on && P.speed > 40
+      // `m.noWipe`: the pointer does not wipe the glass (something else answers it).
+      const wiping = active && P.on && P.speed > 40 && !m.noWipe
       if (wiping) {
         // The finger's width is what it is; what it leaves is thick where it moved slowly and thin
         // where it went fast (`k`, the share of the width the film has at that point).
@@ -477,9 +483,17 @@ export function rain(fx, m) {
         // The streaks a sliding print leaves above it, from the fingertips.
         if (h.vy && h.y > h.y0 + 2) {
           g.save(); g.translate(h.x, 0); g.strokeStyle = h.color; g.lineCap = "round"
-          for (const tp of h.tips) {
-            g.globalAlpha = a * 0.4; g.lineWidth = 7 * h.s
-            g.beginPath(); g.moveTo(tp.x * h.s, h.y0 + tp.y * h.s); g.lineTo(tp.x * h.s, h.y + tp.y * h.s); g.stroke()
+          // Each a smear: full where the fingertip is now, thinning and paling up to where it
+          // first touched, the edges wavering.
+          const sx = h.mirror ? -1 : 1
+          for (const [ti, tp] of h.tips.entries()) {
+            const x = tp.x * h.s * sx, top = h.y0 + tp.y * h.s, bot = h.y + tp.y * h.s, n = 10
+            for (let i = 0; i < n; i++) {
+              const p0 = i / n, p1 = (i + 1) / n
+              g.globalAlpha = a * (0.12 + 0.38 * p1)
+              g.lineWidth = (2 + 6 * p1) * h.s * (0.85 + 0.3 * Math.sin(ti * 3 + i * 1.7))
+              g.beginPath(); g.moveTo(x + Math.sin(i * 2.1 + ti) * 0.8, top + (bot - top) * p0); g.lineTo(x, top + (bot - top) * p1); g.stroke()
+            }
           }
           g.restore()
         }
