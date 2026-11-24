@@ -149,7 +149,7 @@ const grainSprite = () => sprite(128, (g) => {
 // Rain on glass (cry) and red rain (scared): streaks fall from the top of the page, some land on
 // the carousel as drops that sit, swell, run down in fits leaving a trail, pull into each other's
 // wet paths and merge, cross onto the first row and thin away.
-const RAIN = {
+export const RAIN = {
   cry: {
     streak: "rgba(205,222,255,0.42)", width: 1.3, speed: [1250, 1650], len: [18, 34], rate: 85,
     stick: 0.32, sprite: "water", trail: "rgba(235,242,255,0.07)", splash: "rgba(225,236,255,0.55)",
@@ -197,13 +197,17 @@ const lump = (sh, t) => {
   return k
 }
 
-function rain(fx, m) {
+export function rain(fx, m) {
   const img = fx.sprites[m.sprite]
   let streaks = [], drops = [], bits = [], ghosts = [], acc = 0, wipes = [], lastWipe = null
   // What the wipe gathers: the water (or blood) of the drops it goes through collects under the
   // finger as one growing bead that rides along with it, and runs down as a drop when let go.
   let gather = null, stillFor = 0, strokeId = 0
-  const LIFE = 1.1 // s: how long the film the finger leaves lasts before it has dried
+  const LIFE = m.smearLife || 1.1 // s: how long the film the finger leaves lasts before it has dried
+  // `m.weep`: what the finger wipes runs off the lower edge of its stroke as drops streaming down
+  // (tears / a bleeding smear) instead of gathering into one bead. `m.palm`: a press leaves a
+  // handprint that drips. (Both tried in /lab/moods.html.)
+  let pool = 0, palms = []
   const max = () => Math.round((fx.phone ? 130 : 340) * Math.min(1, fx.amount() / 1.5))
   // Each drop its own shape, kept for its life: tail length, how full it stays before narrowing,
   // how wide its neck, a lean to one side, an uneven edge, a slightly squashed head.
@@ -264,7 +268,7 @@ function rain(fx, m) {
         const way = [from, ...P.path.filter((q) => Math.hypot(q.x - from.x, q.y - from.y) > 0.5), {x: P.x, y: P.y}]
         const inside = (w, p) => Math.hypot(p.x - w.x, p.y - w.y) < w.r
         const cut = (pts, w) => { let i = pts.length - 1; while (i >= 0 && !inside(w, pts[i])) i--; return i < 0 ? pts : pts.slice(i + 1) }
-        if (!gather) gather = {x: P.x, y: P.y, vol: 0, trail: [], shape: makeShape(), wob: rand(0, 6)}
+        if (!gather && !m.weep) gather = {x: P.x, y: P.y, vol: 0, trail: [], shape: makeShape(), wob: rand(0, 6)}
         stillFor = 0
         const sp = Math.max(1, P.speed), fwx = P.vx / sp, fwy = P.vy / sp
         const laid = []
@@ -279,7 +283,8 @@ function rain(fx, m) {
             if (d.dead) continue
             if (Math.hypot(d.x - w.x, d.y - w.y) < w.r + d.r * 0.5) {
               if (d.sliding && d.trail.length > 1) ghosts.push({pts: d.trail, r: d.r, life: 0.7})
-              gather.vol += d.r * d.r
+              if (gather) gather.vol += d.r * d.r
+              else pool += d.r * d.r
               d.dead = true
               continue
             }
@@ -294,6 +299,24 @@ function rain(fx, m) {
           }
         }
         ghosts = ghosts.filter((t) => t.pts.length > 1)
+        // Weeping: the stroke's lower edge lets go of runners as it goes — small ones of the film
+        // itself, now and then, and bigger ones out of the water it took from the drops it crossed.
+        if (m.weep) {
+          for (const w of laid) {
+            if (drops.length >= max() * 1.4) break
+            const big = pool > 14 && Math.random() < 0.18
+            if (!big && Math.random() > m.weep) continue
+            const rr = big ? Math.min(6.5, Math.sqrt(pool) * 0.55) : rand(2.4, 3.8)
+            if (big) pool -= rr * rr
+            const d = drop(w.x + rand(-0.6, 0.6) * r, w.y + r * 0.7, rr, rand(...m.still) + 4)
+            d.sliding = true; d.vy = rand(10, 40); d.stall = rand(0, 0.5)
+            drops.push(d)
+          }
+          lastWipe = {x: P.x, y: P.y, t: P.t}
+        }
+      }
+      if (wiping && !m.weep) {
+        const sp = Math.max(1, P.speed)
         // The bead rides just behind the finger, on the side it came from.
         const R = gather.r = Math.min(14, Math.sqrt(gather.vol) * 0.95)
         gather.x = P.x - (P.vx / sp) * R * 0.6
@@ -303,7 +326,7 @@ function rain(fx, m) {
           gather.vol = Math.max(0, gather.vol - 3)
         }
         lastWipe = {x: P.x, y: P.y, t: P.t}
-      } else {
+      } else if (!wiping) {
         lastWipe = null
         if (gather) stillFor += dt
         // Let go: what was gathered becomes a drop, running from where the finger left it.
@@ -323,6 +346,41 @@ function rain(fx, m) {
       // The film the finger leaves lasts LIFE seconds wherever it was laid: the tail is what the
       // last second of movement left, long after a fast sweep, short after a slow one, and dries
       // from its far end in once the finger has stopped.
+      if (m.palm) {
+        for (const k of active ? fx.pokes.filter((q) => q.fresh) : []) {
+          const s = fx.phone ? 0.8 : 1.1, tilt = rand(-0.35, 0.35)
+          // The print as dabs: the palm pressed hardest in its heel and below the fingers, the
+          // middle lighter; each finger a run of dabs, the tip the darkest; gaps here and there.
+          const dabs = []
+          for (let i = 0; i < 70; i++) {
+            const t = rand(0, Math.PI * 2), q = Math.sqrt(Math.random())
+            const x = Math.cos(t) * 23 * q, y = 10 + Math.sin(t) * 26 * q
+            const hard = 0.35 + 0.4 * Math.max(Math.abs(y - 10) / 26, q)
+            if (Math.random() < 0.12) continue
+            dabs.push({x, y, r: rand(3, 7.5), sq: rand(0.6, 1), t: rand(0, 3), a: hard * rand(0.5, 1)})
+          }
+          const F = [[-21, -14, -0.35, 0.7], [-11, -22, -0.1, 0.95], [1, -24, 0, 1], [13, -21, 0.12, 0.92], [26, 4, 0.75, 0.6]]
+          for (const [x0, y0, ang, l] of F) {
+            const L = 30 * l * rand(0.85, 1.15), n = 9
+            for (let i = 0; i <= n; i++) {
+              if (Math.random() < 0.15) continue
+              const p = i / n
+              dabs.push({x: x0 + Math.sin(ang) * L * p + rand(-1.2, 1.2), y: y0 - Math.cos(ang) * L * p + rand(-1.2, 1.2), r: rand(4, 6), sq: rand(0.7, 1), t: ang, a: (0.45 + 0.45 * p) * rand(0.6, 1)})
+            }
+          }
+          palms.push({x: k.x, y: k.y, s, tilt, life: 7, age: 0, dabs})
+          // It drips from the heel of the hand and the fingertips' undersides.
+          const c = Math.cos(tilt), sn = Math.sin(tilt)
+          for (const [ox, oy] of [[-14, 30], [0, 34], [13, 30], [-24, -6], [22, -2]]) {
+            const x = k.x + (ox * c - oy * sn) * s, y = k.y + (ox * sn + oy * c) * s
+            const d = drop(x, y, rand(3.2, 5.2), rand(...m.still) + 6)
+            d.sliding = Math.random() < 0.75; d.stall = rand(0.3, 1.6)
+            drops.push(d)
+          }
+        }
+        for (const h of palms) { h.age += dt; h.life -= dt }
+        palms = palms.filter((h) => h.life > 0)
+      }
       for (const w of wipes) w.life -= dt
       wipes = wipes.filter((w) => w.life > 0)
       drops = drops.filter((d) => !d.dead)
@@ -390,6 +448,15 @@ function rain(fx, m) {
       ghosts = ghosts.filter((t) => t.life > 0)
     },
     draw(g, alpha) {
+      // Handprints (m.palm) under everything else: a print, not a drawing — the palm and five
+      // fingers dabbed in, patchy where the hand did not press, fading.
+      for (const h of palms) {
+        const a = Math.min(1, h.age * 8) * Math.min(1, h.life / 3) * alpha
+        g.save(); g.translate(h.x, h.y); g.rotate(h.tilt); g.scale(h.s, h.s)
+        g.fillStyle = m.palm
+        for (const d of h.dabs) { g.globalAlpha = a * d.a; g.beginPath(); g.ellipse(d.x, d.y, d.r, d.r * d.sq, d.t, 0, Math.PI * 2); g.fill() }
+        g.restore()
+      }
       g.lineCap = "round"
       g.globalAlpha = alpha
       g.strokeStyle = m.streak

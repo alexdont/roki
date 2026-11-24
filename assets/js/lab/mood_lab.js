@@ -5,7 +5,7 @@
 // `fx.sprites`), so the one chosen moves into mood_fx.js as it is.
 //
 // Built on its own (esbuild → priv/static/lab/mood-lab.js), never part of app.js.
-import {MoodFx, EFFECTS} from "../mood_fx"
+import {MoodFx, EFFECTS, rain, RAIN} from "../mood_fx"
 
 const rand = (a, b) => a + Math.random() * (b - a)
 const near = (P, x, y, R) => { if (!P.on) return 0; const d = Math.hypot(x - P.x, y - P.y); return d < R ? 1 - d / R : 0 }
@@ -376,7 +376,12 @@ function reach(fx) {
   }
 }
 
+// The hand, reworked: what the finger wipes weeps down the glass (tears; a bleeding smear that
+// lasts longer); a press on the scared one leaves a handprint that drips.
 Object.assign(EFFECTS, {
+  "cry-weep": (fx) => rain(fx, {...RAIN.cry, weep: 0.05}),
+  "scared-weep": (fx) => rain(fx, {...RAIN.scared, weep: 0.08, smearLife: 2.6, palm: "rgba(118,0,10,0.92)"}),
+
   "cry-mist": mist, "cry-drizzle": drizzle, "cry-ripples": ripples,
   "scared-flashlight": flashlight, "scared-bulb": bulb, "scared-tape": tape, "scared-reach": reach,
 })
