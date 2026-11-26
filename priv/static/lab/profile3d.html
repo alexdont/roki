@@ -34,7 +34,38 @@
   .top { position: relative; overflow: hidden; background: radial-gradient(90% 120% at 80% 0%, #3a1f2e 0%, #1a1220 45%, var(--page) 80%) center / cover no-repeat; min-height: 440px; display: flex; align-items: flex-end; }
   .top::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, var(--page) 0%, #0e0c10b3 35%, #0e0c1040 70%, #0e0c1066 100%), linear-gradient(to right, #0e0c10b3, transparent 60%); pointer-events: none; }
   .top .wrap { position: relative; z-index: 1; width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; padding-top: 90px; padding-bottom: 26px; }
-  .cards { display: flex; gap: 12px; align-items: flex-end; }
+  .cards { display: flex; gap: 40px; align-items: flex-end; }
+  /* The two cards, editorial: no boxes — words in the page's type on the banner, the numbers in the
+     serif, labels in the small capitals, the bars hairlines, the map in dots (or, in 3D, objects). */
+  .cards .card { background: none; border: 0; backdrop-filter: none; padding: 0; text-shadow: 0 1px 12px #000c; }
+  .cards .card h3 { font: 500 11px "JetBrains Mono", monospace; letter-spacing: .12em; color: #ffffffb3; display: flex; gap: 10px; align-items: baseline; }
+  .cards .card h3 span { color: #ffffff80; }
+  .cards .avg { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 0; }
+  .cards .avg b { font: italic 400 56px/0.95 "Instrument Serif", serif; letter-spacing: -.01em; }
+  .cards .avg .mono { color: #ffffff99; }
+  .cards .bars { height: 92px; gap: 0; }
+  .cards .bars li { align-items: center; }
+  .cards .bars li i { width: 3px; border-radius: 3px; background: var(--c); box-shadow: 0 0 10px var(--c), 0 0 2px var(--c); }
+  .cards .bars li span.n { font: 500 9.5px "JetBrains Mono", monospace; color: #ffffff99; }
+  .cards .ticks li { font: 500 9.5px "JetBrains Mono", monospace; color: #ffffff70; }
+  .cards .rtabs { background: none; gap: 4px; padding: 0; }
+  .cards .rtabs button { font: 500 10.5px "JetBrains Mono", monospace; letter-spacing: .08em; text-transform: uppercase; color: #ffffff80; padding: 3px 6px; border-radius: 0; border-bottom: 1px solid transparent; }
+  .cards .rtabs button[aria-pressed="true"] { background: none; color: #fff; border-bottom-color: #fff; }
+  .cards .top3 { font-size: 12.5px; color: #ffffffa6; } .cards .top3 b { font: italic 400 16px "Instrument Serif", serif; color: #fff; margin-left: 2px; }
+  .card .map { position: relative; } .card .map canvas { display: block; width: 100%; }
+  .maptip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; white-space: nowrap; padding: 5px 10px; border-radius: 8px; background: #000d; border: 1px solid #ffffff26; font-size: 12.5px; color: #fff; z-index: 3; }
+  .maptip b { font: italic 400 16px "Instrument Serif", serif; margin-left: 4px; color: #ffb37a; }
+  .maptip[hidden] { display: none; }
+  /* 3D: the globe and the piles of cases */
+  .cards.objects .card .map.globe { width: 270px; height: 270px; aspect-ratio: auto; }
+  .cards.objects .card .map.globe canvas { width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  .cards.objects .card:last-child { width: 470px; }
+  .stacks { position: relative; height: 270px; margin-top: 6px; }
+  .stacks canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .slabels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .slabels span { position: absolute; left: 0; top: 0; margin-left: -12px; width: 24px; text-align: center; font: 500 10px "JetBrains Mono", monospace; transition: opacity .2s; }
+  .slabels .sn { color: #fff; font: italic 400 16px "Instrument Serif", serif; }
+  .slabels .ss { color: #ffffff80; }
   .card { border-radius: 16px; border: 1px solid #ffffff26; background: #00000059; backdrop-filter: blur(12px); padding: 14px; }
   .card h3 { margin: 0; font: 600 13px "Outfit"; letter-spacing: .06em; text-transform: uppercase; color: #ffffffb3; }
   .card h3 span { font-weight: 400; text-transform: none; letter-spacing: 0; color: #ffffff80; }
@@ -53,7 +84,7 @@
   .bars li span.n { text-align: center; font-size: 9.5px; color: #ffffffb3; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
   .bars li i { display: block; border-radius: 3px 3px 0 0; transition: height .4s; }
   .ticks { list-style: none; margin: 3px 0 0; padding: 0; display: flex; gap: 3px; } .ticks li { flex: 1; text-align: center; font-size: 9.5px; color: #ffffff8c; }
-  @media (max-width: 1100px) { .cards { flex-direction: column-reverse; align-items: stretch; } .card:last-child, .card .map, .card .top3 { width: auto; max-width: none; } }
+  @media (max-width: 1100px) { .cards { flex-direction: column-reverse; align-items: stretch; gap: 26px; } .card:last-child, .card .map, .card .top3 { width: auto; max-width: none; } .cards.objects .card .map.globe { width: 100%; height: 300px; } .cards.objects .card:last-child { width: auto; } }
   @media (max-width: 900px) {
     .top .wrap { grid-template-columns: minmax(0, 1fr); }
     .cards { flex-direction: column-reverse; min-width: 0; }
@@ -85,13 +116,14 @@
   .stage.ring { height: 430px; }
   .stage.ring.two { height: 600px; }
   .stage.ring.inside { height: 460px; }
-  .duo { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; }
+  .duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 0; }
+  .duo section.shelf { min-width: 0; }
   .duo .stage.bleed { margin: 0; }
   .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -16px; }
   @media (min-width: 640px) { .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -24px; } .duo section.shelf:nth-child(even) .stage.bleed { margin-right: -24px; } }
   @media (min-width: 1024px) { .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -48px; } .duo section.shelf:nth-child(even) .stage.bleed { margin-right: -48px; } }
   @media (min-width: 1280px) { .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -64px; } .duo section.shelf:nth-child(even) .stage.bleed { margin-right: -64px; } }
-  @media (max-width: 900px) { .duo { grid-template-columns: 1fr; } .duo section.shelf .stage.bleed { margin: 0 -16px !important; } }
+  @media (max-width: 900px) { .duo { grid-template-columns: minmax(0, 1fr); } .duo section.shelf .stage.bleed { margin: 0 -16px !important; } }
   /* A phone: the stage only as tall as the ring needs, so a column of four does not leave a band
      of empty dark under each ring. */
   @media (max-width: 700px) { .duo .stage.ring { height: 250px; } .duo section.shelf { margin-top: 4px; } }
@@ -972,36 +1004,253 @@ for (const [k, name] of KINDS) {
 // The banner the user set.
 if (P.banner) document.querySelector(".top").style.backgroundImage = `url('${P.banner}')`
 
-// The ratings card: average, the kind tabs, a bar per score in the score's colour.
+// ── the ratings and the map: hairlines and dots in the simple view, objects in the 3D one ────
 const R = data.ratings || {}
 const KIND = [["all", "All"], ["movie", "Films"], ["tv", "Shows"], ["mal", "Anime"]].filter(([k]) => R[k])
+let stacks = null
 function ratings(k) {
   const b = R[k]; if (!b) return
-  document.getElementById("avg").innerHTML = `<b>${esc(b.avg_text)}</b> average · ${fmt(b.total)} rated`
+  document.getElementById("avg").innerHTML = `<b>${esc(b.avg_text)}</b><span class="mono">average · ${fmt(b.total)} rated</span>`
   const max = Math.max(...b.bars.map((x) => x.n), 1)
-  document.getElementById("bars").innerHTML = b.bars.map((x) =>
-    `<li title="${x.score}: ${x.n}"><span class="n">${x.n || ""}</span><i style="height:${x.n ? Math.max(3, x.n / max * 100) : 1}%;background:${x.color};${x.n ? "" : "opacity:.25"}"></i></li>`).join("")
-  document.getElementById("ticks").innerHTML = b.bars.map((x) => `<li>${Number.isInteger(x.score) ? x.score : ""}</li>`).join("")
+  const barsEl = document.getElementById("bars"), ticksEl = document.getElementById("ticks")
+  if (barsEl) barsEl.innerHTML = b.bars.map((x) =>
+    `<li title="${x.score}: ${x.n}"><span class="n">${x.n || ""}</span><i style="height:${x.n ? Math.max(2, x.n / max * 100) : 0}%;--c:${x.color}"></i></li>`).join("")
+  if (ticksEl) ticksEl.innerHTML = b.bars.map((x) => `<li>${Number.isInteger(x.score) ? x.score : ""}</li>`).join("")
   for (const t of document.querySelectorAll("#rtabs button")) t.setAttribute("aria-pressed", t.dataset.k === k)
+  stacks?.setKind(k)
 }
 document.getElementById("rtabs").innerHTML = KIND.map(([k, l]) => `<button data-k="${k}">${l}</button>`).join("")
 document.getElementById("rtabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) ratings(b.dataset.k) })
-ratings("all")
 
-// The map card: the site's own outlines, each country darker the more was made there.
 const C = data.countries || {counts: {}, names: {}}, cmax = Math.max(1, ...Object.values(C.counts))
-document.getElementById("ncountries").textContent = `· ${Object.keys(C.counts).length} countries`
+document.getElementById("ncountries").textContent = `${Object.keys(C.counts).length} countries`
 document.getElementById("top3").innerHTML = Object.entries(C.counts).sort((a, b) => b[1] - a[1]).slice(0, 3)
   .map(([c, n]) => `${esc(C.names[c] || c)} <b>${n}</b>`).join(" · ")
-fetch("/data/world-110m.svg").then((r) => r.text()).then((svg) => {
-  const el = document.getElementById("map"); el.innerHTML = svg
-  for (const p of el.querySelectorAll("path[data-c]")) {
-    const n = C.counts[p.dataset.c] || 0
-    p.setAttribute("stroke-width", "0.5")
-    if (n) { const k = 0.25 + 0.75 * Math.log(n + 1) / Math.log(cmax + 1); p.setAttribute("fill", `color-mix(in oklab, #ff6a13 ${Math.round(k * 100)}%, transparent)`); p.setAttribute("stroke", "rgb(255 255 255 / .35)") }
-    else { p.setAttribute("fill", "rgb(255 255 255 / .08)"); p.setAttribute("stroke", "rgb(255 255 255 / .18)") }
+const heat = (n) => n ? 0.25 + 0.75 * Math.log(n + 1) / Math.log(cmax + 1) : 0
+const watchedIn = (code) => `/u/${encodeURIComponent(P.name)}/watched?country=${code}`
+
+// Simple: the world in dots, a halftone — every few pixels a dot where there is land, orange where
+// something was watched; hovering one names its country.
+async function dotMap(el) {
+  const svg = await (await fetch("/data/world-110m.svg")).text()
+  const shapes = [...svg.matchAll(/data-c="([A-Z]{2})" d="([^"]+)"><title>([^<]*)</g)].map(([, c, d, name]) => ({ c, name, path: new Path2D(d) }))
+  const W0 = 960, H0 = 470, step = 7
+  const id = document.createElement("canvas"); id.width = W0; id.height = H0
+  const ig = id.getContext("2d", { willReadFrequently: true })
+  shapes.forEach((sh, i) => { ig.fillStyle = `rgb(${(i + 1) & 255},${(i + 1) >> 8},0)`; ig.fill(sh.path) })
+  const px = ig.getImageData(0, 0, W0, H0).data
+  // The country at a point: the id picture's guess, checked against the shape itself (the picture
+  // blends colours along borders), else found among them all.
+  const at = (x, y) => {
+    const k = (Math.floor(y) * W0 + Math.floor(x)) * 4
+    if (!px[k + 3]) return null
+    const guess = shapes[px[k] + px[k + 1] * 256 - 1]
+    if (guess && ig.isPointInPath(guess.path, x, y)) return guess
+    return shapes.find((sh) => ig.isPointInPath(sh.path, x, y)) || null
   }
-})
+  const dots = []
+  for (let y = step / 2; y < H0; y += step) for (let x = step / 2; x < W0; x += step) { const sh = at(x, y); if (sh) dots.push({ x, y, sh }) }
+  const cv = document.createElement("canvas"); el.innerHTML = ""; el.appendChild(cv)
+  const tip = Object.assign(document.createElement("div"), { className: "maptip" }); el.appendChild(tip)
+  let hot = null
+  const draw = () => {
+    const w = el.clientWidth, h = w * H0 / W0, dpr = Math.min(devicePixelRatio, 2)
+    cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px"
+    const g = cv.getContext("2d"), k = w / W0; g.setTransform(dpr * k, 0, 0, dpr * k, 0, 0)
+    for (const d of dots) {
+      const n = C.counts[d.sh.c] || 0, on = hot === d.sh.c
+      g.fillStyle = n ? `rgba(255,${Math.round(150 - 60 * heat(n))},40,${0.35 + 0.65 * heat(n)})` : "rgba(255,255,255,.16)"
+      g.beginPath(); g.arc(d.x, d.y, (on ? 3.2 : 2.3) * (n ? 1 : 0.8), 0, Math.PI * 2); g.fill()
+    }
+  }
+  new ResizeObserver(draw).observe(el)
+  cv.addEventListener("pointermove", (e) => {
+    const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W0, y = (e.clientY - r.top) / r.height * H0
+    const sh = at(x, y), c = sh?.c || null
+    if (c !== hot) { hot = c; draw() }
+    tip.hidden = !sh; if (sh) { tip.innerHTML = `${esc(sh.name)} <b>${C.counts[c] || 0}</b>`; tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px` }
+    cv.style.cursor = sh && C.counts[c] ? "pointer" : ""
+  })
+  cv.addEventListener("pointerleave", () => { hot = null; tip.hidden = true; draw() })
+  cv.addEventListener("click", () => { if (hot && C.counts[hot]) location.href = watchedIn(hot) })
+}
+
+// 3D: the world as a globe, slowly turning — what was watched lit in orange, the rest dark; drag to
+// turn it, hover a country for its name and count, click to see what was watched from there.
+async function globe(el) {
+  const [{ feature }, d3] = await Promise.all([
+    import("https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm"),
+    import("https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/+esm"),
+  ])
+  const [topo, svg] = await Promise.all([
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json").then((r) => r.json()),
+    fetch("/data/world-110m.svg").then((r) => r.text()),
+  ])
+  // Countries by name → the site's codes (its map was made from the same atlas).
+  const code = {}; for (const [, c, name] of svg.matchAll(/data-c="([A-Z]{2})"[^>]*><title>([^<]*)</g)) code[name] = c
+  const feats = feature(topo, topo.objects.countries).features
+  const TW = 2048, TH = 1024
+  const proj = d3.geoEquirectangular().scale(TW / (2 * Math.PI)).translate([TW / 2, TH / 2])
+  const tex = document.createElement("canvas"); tex.width = TW; tex.height = TH
+  const tg = tex.getContext("2d"), path = d3.geoPath(proj, tg)
+  tg.fillStyle = "#0b0a12"; tg.fillRect(0, 0, TW, TH)
+  const ids = document.createElement("canvas"); ids.width = TW; ids.height = TH
+  const ig = ids.getContext("2d", { willReadFrequently: true }), ipath = d3.geoPath(proj, ig)
+  feats.forEach((f, i) => {
+    const c = code[f.properties.name], n = c ? C.counts[c] || 0 : 0
+    tg.beginPath(); path(f); tg.fillStyle = n ? `rgb(255,${Math.round(150 - 70 * heat(n))},40)` : "#2b2836"
+    tg.globalAlpha = n ? 0.45 + 0.55 * heat(n) : 1; tg.fill(); tg.globalAlpha = 1
+    tg.strokeStyle = "rgba(255,255,255,.18)"; tg.lineWidth = 1; tg.stroke()
+    ig.beginPath(); ipath(f); ig.fillStyle = `rgb(${(i + 1) & 255},${(i + 1) >> 8},0)`; ig.fill()
+  })
+  const idpx = ig.getImageData(0, 0, TW, TH).data
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  r.setPixelRatio(Math.min(devicePixelRatio, 2)); r.outputColorSpace = THREE.SRGBColorSpace
+  el.appendChild(r.domElement)
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50); cam.position.set(0, 0.35, 4.2); cam.lookAt(0, 0, 0)
+  const map = new THREE.CanvasTexture(tex); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.85 }))
+  scene.add(ball)
+  // A soft rim of light round it.
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(1.08, 64, 48), new THREE.ShaderMaterial({
+    transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: "varying vec3 n; void main(){ n = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: "varying vec3 n; void main(){ float i = pow(0.75 - dot(n, vec3(0,0,1.0)), 3.0); gl_FragColor = vec4(1.0,0.55,0.25,1.0) * i; }",
+  }))
+  scene.add(halo)
+  scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x221a14, 0.9))
+  const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(-3, 2, 4); scene.add(sun)
+  const tip = Object.assign(document.createElement("div"), { className: "maptip", hidden: true }); el.appendChild(tip)
+  // Start looking at the country most was watched from.
+  let yaw = -Math.PI / 2, pitch = 0.35, vy = 0, drag = null, hover = null, idle = 0
+  const fit = () => { const w = el.clientWidth, h = el.clientHeight; if (w && h) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix() } }
+  new ResizeObserver(fit).observe(el); fit()
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2()
+  const pickAt = (e) => {
+    const b = r.domElement.getBoundingClientRect(); ndc.set((e.clientX - b.left) / b.width * 2 - 1, -(e.clientY - b.top) / b.height * 2 + 1)
+    ray.setFromCamera(ndc, cam); const hit = ray.intersectObject(ball)[0]; if (!hit) return null
+    const u = hit.uv.x, v = hit.uv.y, k = (Math.floor((1 - v) * TH) * TW + Math.floor(u * TW)) * 4, i = idpx[k] + idpx[k + 1] * 256 - 1
+    const f = i >= 0 ? feats[i] : null, c = f && code[f.properties.name]
+    return f ? { name: f.properties.name, c, n: c ? C.counts[c] || 0 : 0 } : null
+  }
+  r.domElement.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, yaw, pitch, moved: 0 } })
+  addEventListener("pointerup", () => { setTimeout(() => { drag = null }, 0) })
+  r.domElement.addEventListener("pointermove", (e) => {
+    if (drag && e.buttons) { drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY); yaw = drag.yaw + (e.clientX - drag.x) * 0.008; pitch = Math.max(-1.1, Math.min(1.1, drag.pitch + (e.clientY - drag.y) * 0.006)); idle = 0 }
+    hover = pickAt(e); const b = r.domElement.getBoundingClientRect()
+    tip.hidden = !hover; if (hover) { tip.innerHTML = `${esc(hover.name)} <b>${hover.n}</b>`; tip.style.left = `${e.clientX - b.left}px`; tip.style.top = `${e.clientY - b.top}px` }
+    r.domElement.style.cursor = drag && e.buttons ? "grabbing" : hover?.n ? "pointer" : "grab"
+  })
+  r.domElement.addEventListener("pointerleave", () => { hover = null; tip.hidden = true })
+  r.domElement.addEventListener("click", () => { if (hover?.n && hover.c && !(drag && drag.moved > 6)) location.href = watchedIn(hover.c) })
+  const st = { visible: true, frame(t, dt) {
+    idle += dt
+    if (!hover && !(drag && drag.moved) && idle > 0.5) yaw += dt * 0.12
+    ball.rotation.set(pitch, yaw, 0, "XYZ"); r.render(scene, cam)
+  } }
+  new IntersectionObserver(([e]) => { st.visible = e.isIntersecting }).observe(el)
+  const f0 = st.frame; st.frame = (t, dt) => { if (st.visible) f0(t, dt) }
+  stages.push(st)
+}
+
+// 3D: the ratings as piles of cases lying flat, one pile per score, as high as how many got it, in
+// the score's colour (the 10s gold); the top of each pile the best-known title at that score.
+// Hovering a pile fans its titles out above it; a click on one opens it.
+function caseStacks(el) {
+  const MAXH = 24, GAP = 1.75
+  const piles = []
+  let kind = "all", fan = []
+  const flat = new THREE.BoxGeometry(W * 0.92, D * 0.9, H * 0.92)
+  const labels = Object.assign(document.createElement("div"), { className: "slabels" }); el.appendChild(labels)
+  const st = new Stage(el, {
+    label: "ratings", floorY: 0, fov: 28, outDist: 6,
+    place() {
+      // Which pile is under the pointer (the fan above counts as its pile).
+      const P = this.pointer
+      let hot = null
+      if (P.in) {
+        const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(P.x, -P.y), this.camera)
+        const hit = ray.intersectObjects(piles.flatMap((p) => p.meshes))[0]
+        hot = hit ? piles.find((p) => p.meshes.includes(hit.object)) : null
+        if (!hot && this.cases.some((c) => c.thover > 0)) hot = this.fanOf
+      }
+      if (hot !== this.fanOf) setFan(hot)
+      piles.forEach((p) => {
+        const lift = p === hot ? 0.18 : 0
+        p.meshes.forEach((m, j) => { m.position.y += ((j + 0.5) * D * 0.95 + lift - m.position.y) * 0.25 })
+      })
+      // The fan: up to five titles standing over the pile, spread like a hand.
+      fan.forEach((c, k) => {
+        const n = fan.length, a = (k - (n - 1) / 2) * 0.22
+        const base = this.fanOf ? this.fanOf.x : 0, top = this.fanOf ? this.fanOf.meshes.length * D * 0.95 : 0
+        // In front of the piles and a little above the tallest, so it is never cut by the frame.
+        const x = Math.max(-6, Math.min(6, base))
+        c.tpos.set(x + Math.sin(a) * 2.4, 2.6 + Math.cos(a) * 0.5 + 0.3 * c.hover, 3.2 + k * 0.03); c.trot.set(-0.2, 0, -a)
+      })
+      const span = piles.length * GAP
+      this.tPos.set(0, 6.5, fit(this, span + 1.5, 7) * 0.95); this.tLook.set(0, 1.6, 0)
+      // The numbers: the count over each pile, the score under it.
+      for (const p of piles) {
+        const top = new THREE.Vector3(p.x, p.meshes.length * D * 0.95 + 0.4, 0).project(this.camera)
+        const bot = new THREE.Vector3(p.x, 0, H * 0.6).project(this.camera)
+        const w = el.clientWidth, h = el.clientHeight
+        p.n.style.transform = `translate(${(top.x + 1) / 2 * w}px, ${(1 - top.y) / 2 * h - 18}px)`
+        p.s.style.transform = `translate(${(bot.x + 1) / 2 * w}px, ${(1 - bot.y) / 2 * h + 4}px)`
+        p.n.style.opacity = p === hot || !hot ? 1 : 0.35
+      }
+    },
+  })
+  const titlesAt = (score) => data.history.filter((h) => h.score && Math.floor(h.score) === score && (kind === "all" || h.type === kind)).slice(0, 5)
+  function setFan(p) {
+    for (const c of fan) { st.scene.remove(c.g); st.cases = st.cases.filter((x) => x !== c) }
+    fan = []; st.fanOf = p
+    if (!p) return
+    fan = titlesAt(p.score).map((it, k) => { const c = st.add(fullCase(it, 500 + k)); c.pos.set(p.x, 0.2, 0); c.rot.set(-1.4, 0, 0); return c })
+  }
+  function build() {
+    for (const p of piles) { for (const m of p.meshes) st.scene.remove(m); p.n.remove(); p.s.remove() }
+    piles.length = 0; setFan(null)
+    const b = R[kind]; if (!b) return
+    // Whole scores: a half score goes with the score below it.
+    const by = new Map(); for (const x of b.bars) { const k = Math.max(1, Math.floor(x.score)); by.set(k, (by.get(k) || 0) + x.n) }
+    const max = Math.max(1, ...by.values())
+    for (let sc = 1; sc <= 10; sc++) {
+      const n = by.get(sc) || 0, count = n ? Math.max(1, Math.round(n / max * MAXH)) : 0
+      const color = (b.bars.find((x) => Math.floor(x.score) === sc && Number.isInteger(x.score)) || {}).color || "#888"
+      const col = sc === 10 ? new THREE.Color(0xf4c430) : toColor(color)
+      const x = (sc - 5.5) * GAP
+      const top = titlesAt(sc)[0]
+      const meshes = []
+      for (let j = 0; j < count; j++) {
+        const mats = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.55 + 0.25 * ((j * 7) % 3) / 2), roughness: 0.4, metalness: sc === 10 ? 0.5 : 0.05 })
+        const m = new THREE.Mesh(flat, mats); m.position.set(x + ((j * 37) % 5 - 2) * 0.02, 0, ((j * 53) % 5 - 2) * 0.02); m.rotation.y = ((j * 29) % 7 - 3) * 0.02
+        m.castShadow = m.receiveShadow = true; st.scene.add(m); meshes.push(m)
+      }
+      // The pile's top case wears the poster of a title at that score.
+      if (meshes.length && top) picture(top.poster).then((pp) => {
+        if (!pp) return
+        const t = pp.tex.clone(); t.needsUpdate = true; t.center.set(0.5, 0.5); t.rotation = Math.PI
+        const m = meshes.at(-1), mats = Array(6).fill(m.material); mats[2] = new THREE.MeshStandardMaterial({ map: t, roughness: 0.5 }); m.material = mats
+      })
+      const nEl = Object.assign(document.createElement("span"), { className: "sn", textContent: n || "" })
+      const sEl = Object.assign(document.createElement("span"), { className: "ss", textContent: sc })
+      labels.append(nEl, sEl)
+      piles.push({ score: sc, x, meshes, n: nEl, s: sEl })
+    }
+  }
+  build()
+  return { setKind(k) { kind = k; build() } }
+}
+
+ratings("all")
+if (VIEW === "3d") {
+  document.querySelector(".cards").classList.add("objects")
+  const mapEl = document.getElementById("map"); mapEl.innerHTML = ""; mapEl.classList.add("globe")
+  globe(mapEl).catch((e) => { console.warn("globe", e); dotMap(mapEl) })
+  const barsEl = document.getElementById("bars"), stackEl = document.createElement("div"); stackEl.className = "stacks"
+  barsEl.replaceWith(stackEl); document.getElementById("ticks").remove()
+  stacks = caseStacks(stackEl); ratings("all")
+} else dotMap(document.getElementById("map"))
 
 const recent = data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24)
 if (VIEW === "simple") document.getElementById("ring").replaceWith(simpleRow(recent, "recently watched"))
