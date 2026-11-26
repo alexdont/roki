@@ -101,6 +101,9 @@ export const ProfileShowcase = {
     const vw = document.createElement("div")
     vw.className = "showcase-viewer"
     vw.innerHTML = `<div class="vstage"></div><aside class="vinfo"></aside><button type="button" class="vclose" aria-label="Close">×</button>`
+    // The site's logo, top left, as in the header it covers: the way home from here too.
+    const logo = document.querySelector('header a[href="/"]')
+    if (logo) { const home = logo.cloneNode(true); home.classList.add("vhome"); home.removeAttribute("id"); vw.appendChild(home) }
     document.body.appendChild(vw); document.body.classList.add("showcase-open")
     this.vw = vw
     const stage = vw.querySelector(".vstage"), info = vw.querySelector(".vinfo")
