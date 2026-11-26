@@ -96,12 +96,52 @@
      of empty dark under each ring. */
   @media (max-width: 700px) { .duo .stage.ring { height: 250px; } .duo section.shelf { margin-top: 4px; } }
   section.shelf h2.under { margin: -18px 0 0; position: relative; z-index: 2; }
-  @media (max-width: 700px) { .duo section.shelf h2.under { margin: -40px 0 0; } .duo .stage.ring { height: 220px; } .duo section.shelf { margin-top: 0; } }
+  @media (max-width: 700px) { .duo section.shelf h2.under { margin: -14px 0 0; } .duo .stage.ring { height: 220px; } .duo section.shelf { margin-top: 0; } }
   .shelfswitch { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 26px 0 0; }
   .shelfswitch a { font: 600 13px "Outfit"; color: #ddd; text-decoration: none; border: 1px solid #ffffff26; border-radius: 999px; padding: 6px 12px; }
   .shelfswitch a[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
   @media (max-width: 700px) { .stage { height: 300px; } .stage.ring { height: 360px; } .who h1 { font-size: 48px; } }
 
+  /* the viewer: a case (or poster) opened full screen, what it is on the right */
+  .viewer { position: fixed; inset: 0; z-index: 40; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); align-items: center;
+            background: radial-gradient(120% 120% at 30% 40%, color-mix(in oklab, var(--ground, #1a1420) 85%, #000), #050406 75%); animation: vin .35s ease; }
+  .viewer[hidden] { display: none; }
+  @keyframes vin { from { opacity: 0; } }
+  body.viewing { overflow: hidden; }
+  .vstage { position: relative; height: 100%; display: grid; place-items: center; }
+  .vstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .vstage img { max-height: 78vh; max-width: 80%; border-radius: 14px; box-shadow: 0 30px 80px #000c; }
+  .vinfo { padding: 40px 56px 40px 8px; max-width: 520px; }
+  .vinfo h2 { margin: 6px 0 12px; font: italic 400 clamp(40px, 5vw, 72px)/1 "Instrument Serif", serif; }
+  .vmeta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: #ffffffb3; font-size: 15px; margin-bottom: 26px; }
+  .vgo { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 24px; border-radius: 999px; background: #fff; color: #111; font: 700 16px "Outfit"; text-decoration: none; }
+  .vgo:hover { background: var(--accent, #ff8a3d); color: #111; }
+  .vnote { color: #ffffff80; }
+  .vclose { position: absolute; top: 18px; right: 22px; width: 44px; height: 44px; border-radius: 999px; border: 1px solid #ffffff33; background: #0006; color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+  @media (max-width: 800px) {
+    .viewer { grid-template-columns: 1fr; grid-template-rows: 58svh auto; align-items: start; overflow-y: auto; }
+    .vinfo { padding: 8px 22px 40px; } .vstage img { max-height: 50svh; }
+  }
+  .viewswitch { position: fixed; top: 12px; right: 12px; z-index: 30; display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: #000a; border: 1px solid #ffffff26; backdrop-filter: blur(10px); }
+  .viewswitch a { font: 600 12px "Outfit"; color: #ddd; text-decoration: none; padding: 5px 12px; border-radius: 999px; }
+  .viewswitch a[aria-pressed="true"] { background: #fff; color: #111; }
+  body.viewing .viewswitch { display: none; }
+  /* simple view: plain posters */
+  .prow { display: flex; gap: 12px; overflow-x: auto; padding: 16px 0 8px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+  .duo .prow { padding-inline: 0; }
+  .ptile { flex: none; width: 128px; padding: 0; border: 0; background: none; color: #ffffffcc; text-align: left; cursor: pointer; scroll-snap-align: start; }
+  .ptile img { width: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: 10px; background: #ffffff10; display: block; transition: transform .2s; }
+  .ptile:hover img { transform: translateY(-3px); }
+  .ptile span { display: block; margin-top: 6px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ptile.extra { opacity: .5; }
+  section.shelf h2.under.simple { margin: 4px 0 0; }
+  body[data-view="simple"] .shelfswitch { display: none; }
+  .pwall { position: relative; z-index: 2; padding-bottom: 60px; }
+  .pwall h3 { margin: 26px 0 10px; font: italic 400 30px "Instrument Serif", serif; } .pwall h3 small { font: 500 12px "JetBrains Mono"; color: #ffffff80; font-style: normal; margin-left: 8px; }
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; }
+  .pgrid .ptile { width: auto; }
+  body[data-view="simple"] .whead .hint { display: none; }
+  body[data-view="simple"] .wallstage { position: static; }
   /* the card of a case taken out */
   .detail { position: absolute; right: 16px; top: 16px; z-index: 3; width: min(330px, calc(100% - 32px)); padding: 16px; border-radius: 14px; background: #000b; backdrop-filter: blur(14px); border: 1px solid #ffffff1f; opacity: 0; transform: translateY(8px); transition: .35s; pointer-events: none; }
   .detail.on { opacity: 1; transform: none; pointer-events: auto; }
@@ -176,8 +216,20 @@
 </div>
 
 <script type="module">
-import * as THREE from "three"
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js"
+// ── 3D or simple ────────────────────────────────────────────────────────────────────────────
+// Simple: the same page with plain posters — no WebGL, and three.js is not even downloaded. Chosen
+// by the switch (kept per device), else by the device: no WebGL, reduced motion, or a small one.
+const VIEW = (() => {
+  const asked = new URLSearchParams(location.search).get("view")
+  if (asked === "3d" || asked === "simple") { try { localStorage.setItem("roki:lab:view", asked) } catch {} return asked }
+  try { const kept = localStorage.getItem("roki:lab:view"); if (kept) return kept } catch {}
+  const gl = (() => { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")) } catch { return false } })()
+  const weak = (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2)
+  return !gl || weak || matchMedia("(prefers-reduced-motion: reduce)").matches ? "simple" : "3d"
+})()
+document.body.dataset.view = VIEW
+const THREE = VIEW === "3d" ? await import("three") : null
+const { RoundedBoxGeometry } = VIEW === "3d" ? await import("three/addons/geometries/RoundedBoxGeometry.js") : {}
 
 const W = 1.35, H = 1.9, D = 0.14, LID = 0.028
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
@@ -219,7 +271,11 @@ function picture(url) {
   if (!url) return Promise.resolve(null)
   if (!pictures.has(url)) pictures.set(url, new Promise((res) => {
     const img = new Image(); img.crossOrigin = "anonymous"; img.decoding = "async"
-    img.onload = () => { const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; tex.needsUpdate = true; res({ img, tex, pal: paletteOf(img) }) }
+    img.onload = () => {
+      let tex = null
+      if (THREE) { tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; tex.needsUpdate = true }
+      res({ img, tex, pal: paletteOf(img) })
+    }
     img.onerror = () => res(null)
     img.src = url
   }))
@@ -240,14 +296,17 @@ function spineTexture(item, p) {
 }
 
 // ── geometry and materials, shared by every stage ──────────────────────────────────────────
-const plastic = new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.32, metalness: 0.05 })
-const inner = new THREE.MeshStandardMaterial({ color: 0x1b1b20, roughness: 0.6 })
-const sleeveMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.06, transparent: true, opacity: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 })
-const hubMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, roughness: 0.25, metalness: 0.9 })
-const trayGeo = new RoundedBoxGeometry(W, H, D - LID, 2, 0.02), lidGeo = new RoundedBoxGeometry(W, H, LID, 2, 0.012)
-const slimGeo = new RoundedBoxGeometry(W, H, D, 2, 0.02)
-const faceGeo = new THREE.PlaneGeometry(W - 0.04, H - 0.04), spineGeo = new THREE.PlaneGeometry(D, H - 0.01)
-const discGeo = new THREE.CircleGeometry(0.6, 64), hubGeo = new THREE.RingGeometry(0.07, 0.17, 48)
+let plastic, inner, sleeveMat, hubMat, trayGeo, lidGeo, slimGeo, faceGeo, spineGeo, discGeo, hubGeo
+if (THREE) {
+  plastic = new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.32, metalness: 0.05 })
+  inner = new THREE.MeshStandardMaterial({ color: 0x1b1b20, roughness: 0.6 })
+  sleeveMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.06, transparent: true, opacity: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 })
+  hubMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, roughness: 0.25, metalness: 0.9 })
+  trayGeo = new RoundedBoxGeometry(W, H, D - LID, 2, 0.02), lidGeo = new RoundedBoxGeometry(W, H, LID, 2, 0.012)
+  slimGeo = new RoundedBoxGeometry(W, H, D, 2, 0.02)
+  faceGeo = new THREE.PlaneGeometry(W - 0.04, H - 0.04), spineGeo = new THREE.PlaneGeometry(D, H - 0.01)
+  discGeo = new THREE.CircleGeometry(0.6, 64), hubGeo = new THREE.RingGeometry(0.07, 0.17, 48)
+}
 
 // A full case (opens): tray, a lid on the spine's hinge with the cover under a sleeve, a disc.
 function fullCase(item, idx) {
@@ -373,8 +432,7 @@ class Stage {
   hover(c) { for (const x of this.cases) x.thover = 0; if (c && c !== this.out) c.thover = 1; this.renderer.domElement.style.cursor = c ? "pointer" : "" }
   click(c) {
     if (this.opts.click && this.opts.click.call(this, c) === false) return
-    if (!c || c === this.out || c === this.outOf) return this.putBack()
-    this.takeOut(c)
+    if (c) openViewer(c.item, this.opts.label)
   }
   takeOut(c) {
     this.putBack(true)
@@ -410,6 +468,9 @@ class Stage {
   frame(t, dt) {
     if (!this.visible) return
     this.opts.place.call(this, t)
+    // The first frame it is seen: everything where it belongs at once (cases began below the floor,
+    // and a stage off screen does not move them, so they rose into view as it was scrolled to).
+    if (!this.placed) { this.placed = true; this.camPos.copy(this.tPos); this.camLook.copy(this.tLook); for (const c of this.cases) { c.pos.copy(c.tpos); c.rot.copy(c.trot) } }
     if (this.out) this.outPose(this.opts.outDist)
     for (const c of this.cases) step(c, dt)
     const dx = this.pointer.in ? this.pointer.x * 0.35 : 0, dy = this.pointer.in ? -this.pointer.y * 0.18 : 0
@@ -550,7 +611,7 @@ function carousel(el, items, label = "recently watched", mode = "ring", wide = f
       this.tPos.set(0, mode === "two" ? 2.4 : wide ? 2.2 : 1.45, fit(this, span, tall) * (wide ? 0.62 : 0.8) + 0.3); this.tLook.set(0, mode === "two" ? 2.0 : 1.0, wide ? -R * 0.55 : -Math.min(1, R * 0.35))
       // A narrow stage (a phone's column): looked at a little lower, so the ring sits at the top
       // of its box instead of floating in the middle of empty space.
-      if (!wide && mode === "ring" && this.el.clientWidth < 700) this.tLook.y += 0.45
+      if (!wide && mode === "ring" && this.el.clientWidth < 700) this.tLook.y -= 0.3
     },
     drag(mx) { if (mode === "arc") slideV = -mx * 0.02; else ringV = mx * (mode === "inside" ? -0.0015 : 0.0025) },
     wheel(e) { if (mode === "arc") slideV += (e.deltaX || 0) * 0.002; else ringV += (e.deltaX || 0) * -0.0003 },
@@ -628,6 +689,122 @@ function wallStage(el, items, spacer) {
   return st
 }
 
+// ── the viewer: a case opened full screen, what it is on the right ──────────────────────────
+// 3D: the case flies in, turns to face you, opens on its hinge, the disc spinning, the room in the
+// film's colours; drag to turn it. Simple: the poster, large. Esc, ×, or a click outside closes.
+const vw = document.createElement("div"); vw.className = "viewer"; vw.hidden = true
+vw.innerHTML = `<div class="vstage"></div><aside class="vinfo"></aside><button class="vclose" aria-label="Close">×</button>`
+document.body.appendChild(vw)
+const vstage = vw.querySelector(".vstage"), vinfo = vw.querySelector(".vinfo")
+let V = null // the 3D viewer, made on first use
+function viewer3d() {
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  r.setPixelRatio(Math.min(devicePixelRatio, 2)); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping
+  vstage.appendChild(r.domElement)
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100)
+  camera.position.set(0, 0, 6.4); camera.lookAt(0, 0, 0)
+  scene.add(new THREE.HemisphereLight(0xcfd6ff, 0x1a1410, 0.7))
+  const key = new THREE.DirectionalLight(0xfff1de, 2.4); key.position.set(-3, 4, 6); scene.add(key)
+  const rim = new THREE.DirectionalLight(0x8fb4ff, 0.8); rim.position.set(4, 2, -4); scene.add(rim)
+  const tint = new THREE.PointLight(0xffffff, 0, 14, 1.4); tint.position.set(2.5, 2, 4); scene.add(tint)
+  const st = { r, scene, camera, tint, c: null, yaw: 0, yawT: 0, drag: null, t: 0, raf: 0 }
+  const size = () => { const w = vstage.clientWidth, h = vstage.clientHeight; if (!w || !h) return; r.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix() }
+  new ResizeObserver(size).observe(vstage); size()
+  r.domElement.addEventListener("pointerdown", (e) => { st.drag = { x: e.clientX, yaw: st.yawT } })
+  addEventListener("pointermove", (e) => { if (st.drag) st.yawT = st.drag.yaw + (e.clientX - st.drag.x) * 0.008 })
+  addEventListener("pointerup", () => { st.drag = null })
+  st.loop = (now) => {
+    const dt = Math.min(0.033, (now - (st.last || now)) / 1000); st.last = now; st.t += dt
+    if (st.c) {
+      const c = st.c
+      // Facing you, a little turned so the open lid shows; a slow sway when left alone.
+      const sway = st.drag ? 0 : Math.sin(st.t * 0.6) * 0.1
+      // Closed it stands in the middle; open, it moves right by half a case so the open pair (lid
+      // left, disc right) is centred.
+      const open = Math.min(1, -c.lid / 2.5)
+      c.tpos.set(open * W * 0.5, 0.02 + Math.sin(st.t * 1.1) * 0.03, 0); c.trot.set(0.03, 0.12 + st.yawT + sway, 0)
+      step(c, dt)
+    }
+    tint.intensity += ((st.c ? 7 : 0) - tint.intensity) * (1 - Math.exp(-dt * 3))
+    r.render(scene, camera)
+    st.raf = requestAnimationFrame(st.loop)
+  }
+  return st
+}
+function openViewer(it, label) {
+  vw.hidden = false; document.body.classList.add("viewing")
+  vw.style.removeProperty("--ground")
+  const href = it.type === "movie" || it.type === "tv" ? `/title/${it.type}/${it.id}` : null
+  const kind = { movie: "Film", tv: "Show", manga: "Manga" }[it.type] || "Title"
+  vinfo.innerHTML = `<div class="mono" style="opacity:.7">${esc(label || "")}</div>
+    <h2>${esc(it.title)}</h2>
+    <div class="vmeta">${[kind, it.year, it.score ? `★ ${it.score}` : null, it.at ? `watched ${new Date(it.at * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : null].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("")}</div>
+    ${href ? `<a class="vgo" href="${href}">Open on Roki →</a>` : `<p class="vnote">Not on Roki's title pages.</p>`}`
+  picture(it.poster).then((p) => { if (p && !vw.hidden) { vw.style.setProperty("--ground", p.pal.ground); vw.style.setProperty("--accent", p.pal.light) } })
+  if (VIEW === "simple") {
+    vstage.innerHTML = it.poster ? `<img src="${esc(it.poster.replace("/w342/", "/w500/"))}" alt="">` : ""
+    return
+  }
+  V ||= viewer3d()
+  if (V.c) { V.scene.remove(V.c.g); V.c = null }
+  const c = motion(fullCase(it, 0)); V.scene.add(c.g)
+  // In from below and turned away, then it settles and opens.
+  c.pos.set(0.4, -2.6, -1.5); c.rot.set(0.3, -1.6, 0.1); V.yawT = 0; V.c = c
+  discArt(c); setTimeout(() => { if (V.c === c) c.tlid = -2.55 }, 1300)
+  picture(it.poster).then((p) => {
+    if (!p || V.c !== c) return
+    V.tint.color.copy(toColor(p.pal.light))
+    // The inside of the lid: the poster, as the insert a real case holds.
+    const lidIn = c.hinge.children.find((m) => m.material === inner)
+    if (lidIn) { const t = p.tex.clone(); t.needsUpdate = true; lidIn.material = new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, color: 0xbbbbbb }) }
+  })
+  cancelAnimationFrame(V.raf); V.last = 0; V.raf = requestAnimationFrame(V.loop)
+}
+function closeViewer() {
+  if (vw.hidden) return
+  vw.hidden = true; document.body.classList.remove("viewing")
+  if (V) { cancelAnimationFrame(V.raf); if (V.c) { V.scene.remove(V.c.g); V.c = null } }
+}
+vw.querySelector(".vclose").addEventListener("click", closeViewer)
+vw.addEventListener("click", (e) => { if (e.target === vw) closeViewer() })
+
+// ── the simple view's pieces: plain posters, the same order, the same viewer ────────────────
+function posterTile(it, label) {
+  const b = document.createElement("button"); b.className = "ptile" + (it.extra ? " extra" : "")
+  b.innerHTML = `<img src="${esc(it.poster || "")}" alt="" loading="lazy" decoding="async"><span>${esc(it.title)}</span>`
+  b.addEventListener("click", () => openViewer(it, label))
+  return b
+}
+function simpleRow(items, label) {
+  const row = document.createElement("div"); row.className = "prow"
+  for (const it of items) row.appendChild(posterTile(it, label))
+  return row
+}
+function simpleShelf(items, name) {
+  const sec = document.createElement("section"); sec.className = "shelf"
+  sec.appendChild(simpleRow(items, name.toLowerCase()))
+  const h = document.createElement("h2"); h.className = "under simple"; h.textContent = name; sec.appendChild(h)
+  return sec
+}
+function simpleWall(items) {
+  const el = document.getElementById("wall"); el.className = "pwall wrap"
+  let byMonth = true
+  const month = (it) => it["dated?"] && it.at ? (() => { const d = new Date(it.at * 1000); return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}` })() : "No date"
+  const draw = () => {
+    el.innerHTML = ""
+    const groups = []
+    for (const it of items) { const k = byMonth ? month(it) : ""; if (!groups.length || groups.at(-1).k !== k) groups.push({ k, list: [] }); groups.at(-1).list.push(it) }
+    for (const g of groups) {
+      if (byMonth) { const h = document.createElement("h3"); h.innerHTML = `${esc(g.k)} <small>${g.list.length}</small>`; el.appendChild(h) }
+      const grid = document.createElement("div"); grid.className = "pgrid"
+      for (const it of g.list) grid.appendChild(posterTile(it, "watched"))
+      el.appendChild(grid)
+    }
+  }
+  draw()
+  return { setByMonth(v) { byMonth = v; draw() } }
+}
+
 // ── the page ───────────────────────────────────────────────────────────────────────────────
 const data = await (await fetch("profile3d-data.json")).json()
 const P = data.profile
@@ -652,6 +829,7 @@ shelvesEl.appendChild(grid)
 for (const [k, name] of KINDS) {
   let items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
   if (!items.length) continue
+  if (VIEW === "simple") { grid.appendChild(simpleShelf(items, name)); continue }
   // Ring + more: the next best-rated of the same kind from the watch history, dimmed (films and
   // shows only: the history here does not tell anime apart, and holds no manga).
   if ((SHELF === "more" || SHELF === "two") && (k === "movie" || k === "tv")) {
@@ -700,7 +878,9 @@ fetch("/data/world-110m.svg").then((r) => r.text()).then((svg) => {
   }
 })
 
-carousel(document.getElementById("ring"), data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24), "recently watched", "ring", true)
+const recent = data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24)
+if (VIEW === "simple") document.getElementById("ring").replaceWith(simpleRow(recent, "recently watched"))
+else carousel(document.getElementById("ring"), recent, "recently watched", "ring", true)
 
 // The watch history, on its own "page".
 let wall = null
@@ -710,15 +890,19 @@ function route() {
   document.body.classList.toggle("watched", w)
   if (w && !wall) {
     document.getElementById("wcount").textContent = `${data.history.length} shown of ${fmt(P.watched)}`
-    wall = wallStage(document.getElementById("wall"), data.history, document.getElementById("wallSpacer"))
+    wall = VIEW === "simple" ? simpleWall(data.history) : wallStage(document.getElementById("wall"), data.history, document.getElementById("wallSpacer"))
   }
-  for (const h of wall ? wall.heads() : []) h.el.style.display = w ? "" : "none"
+  for (const h of wall && wall.heads ? wall.heads() : []) h.el.style.display = w ? "" : "none"
   scrollTo(0, 0)
 }
 addEventListener("hashchange", route); route()
 document.getElementById("byMonth").addEventListener("click", (e) => { const on = e.target.getAttribute("aria-pressed") !== "true"; e.target.setAttribute("aria-pressed", on); wall.setByMonth(on) })
+// The 3D / Simple switch, top right.
+const vs = document.createElement("nav"); vs.className = "viewswitch"
+vs.innerHTML = [["3d", "3D"], ["simple", "Simple"]].map(([k, l]) => `<a href="?view=${k}${location.hash}" aria-pressed="${k === VIEW}">${l}</a>`).join("")
+document.body.appendChild(vs)
 document.querySelector(".whead a.back").addEventListener("click", (e) => { e.preventDefault(); history.pushState(null, "", location.pathname); route() })
-addEventListener("keydown", (e) => { if (e.key === "Escape") for (const s of stages) s.putBack() })
+addEventListener("keydown", (e) => { if (e.key === "Escape") closeViewer() })
 
 let last = performance.now()
 function loop(now) {
@@ -727,7 +911,7 @@ function loop(now) {
   for (const s of stages) { if ((s === wall) === onWall) s.frame(now / 1000, dt) }
   requestAnimationFrame(loop)
 }
-requestAnimationFrame(loop)
+if (VIEW === "3d") requestAnimationFrame(loop)
 </script>
 </body>
 </html>
