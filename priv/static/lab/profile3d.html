@@ -658,10 +658,12 @@ function carousel(el, items, label = "recently watched", mode = "ring", wide = f
         this.tPos.set(0, 1.4, fit(this, Math.min(n * (W + 0.25), 15), H + 0.8)); this.tLook.set(0, 1.0, -0.6)
         return
       }
-      ring += ringV; ringV *= 0.92
-      const main = ringOf(rows[0].length)
-      if (Math.abs(ringV) < 0.0008 && !this.pointer.in) ring += (Math.round(ring / main.stepA) * main.stepA - ring) * 0.06
-      if (!this.pointer.in && !this.out) ringV += 0.00012
+      // It turns by itself at a steady pace (by time, not per frame), pausing only while a case
+      // is hovered or the ring is being dragged, and for a moment after; a drag's fling coasts.
+      const now = performance.now(), dtR = Math.min(0.05, (now - (this.lastT || now)) / 1000); this.lastT = now
+      const held = this.cases.some((c) => c.thover > 0) || this.dragging || now - (this.touched || 0) < 1500
+      ring += ringV; ringV *= Math.pow(0.92, dtR * 60)
+      if (!held && !this.out) ring += 0.16 * dtR
       if (mode === "inside") {
         // A big ring with the camera at its middle: the cases face in, round you.
         const stepA = Math.PI * 2 / n
@@ -694,8 +696,8 @@ function carousel(el, items, label = "recently watched", mode = "ring", wide = f
       // of its box instead of floating in the middle of empty space.
       if (!wide && mode === "ring" && this.el.clientWidth < 700) this.tLook.y -= 0.3
     },
-    drag(mx) { if (mode === "arc") slideV = -mx * 0.02; else ringV = mx * (mode === "inside" ? -0.0015 : 0.0025) },
-    wheel(e) { if (mode === "arc") slideV += (e.deltaX || 0) * 0.002; else ringV += (e.deltaX || 0) * -0.0003 },
+    drag(mx) { this.touched = performance.now(); if (mode === "arc") slideV = -mx * 0.02; else ringV = mx * (mode === "inside" ? -0.0015 : 0.0025) },
+    wheel(e) { if (!e.deltaX) return; this.touched = performance.now(); if (mode === "arc") slideV += e.deltaX * 0.002; else ringV += e.deltaX * -0.0003 },
   })
   const order = mode === "two" ? [...rows[0], ...rows[1]] : items
   order.forEach((it, i) => {
