@@ -734,7 +734,7 @@ function viewer3d() {
 function openViewer(it, label) {
   vw.hidden = false; document.body.classList.add("viewing")
   vw.style.removeProperty("--ground")
-  const href = it.type === "movie" || it.type === "tv" ? `/title/${it.type}/${it.id}` : null
+  const href = it.href || (it.type === "movie" || it.type === "tv" ? `/title/${it.type}/${it.id}` : null)
   const kind = { movie: "Film", tv: "Show", manga: "Manga" }[it.type] || "Title"
   vinfo.innerHTML = `<div class="mono" style="opacity:.7">${esc(label || "")}</div>
     <h2>${esc(it.title)}</h2>
@@ -822,7 +822,7 @@ const SHELF = new URLSearchParams(location.search).get("shelf") || "pairs"
 const STYLES = [["pairs", "Two by two"], ["ring", "One per row"], ["arc", "Wide arc"], ["inside", "Inside the ring"], ["more", "Ring + more"], ["two", "Two rows"]]
 const sw = document.createElement("nav"); sw.className = "shelfswitch"
 sw.innerHTML = STYLES.map(([k, l]) => `<a href="?shelf=${k}" aria-pressed="${k === SHELF}">${l}</a>`).join("")
-shelvesEl.appendChild(sw)
+// (The layout switch stays hidden: two by two is the page. ?shelf= still picks another.)
 // Two by two: Movies and Shows side by side, Anime and Manga under them (one column on a phone).
 const grid = document.createElement("div"); grid.className = SHELF === "pairs" ? "duo" : ""
 shelvesEl.appendChild(grid)
