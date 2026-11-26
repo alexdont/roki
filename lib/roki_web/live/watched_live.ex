@@ -194,6 +194,28 @@ defmodule RokiWeb.WatchedLive do
 
   defp country_param(_), do: nil
 
+  # Anything narrowing the list (the order is not a filter).
+  defp filtered?(a),
+    do:
+      a.kind != :all or a.rating != nil or a.status != nil or a.genre != nil or a.country != nil or
+        a.undated? or a.q != ""
+
+  # The same list with every filter off: what "of N" counts.
+  defp unfiltered(a),
+    do:
+      arranged(%{
+        assigns: %{
+          a
+          | kind: :all,
+            rating: nil,
+            status: nil,
+            genre: nil,
+            country: nil,
+            undated?: false,
+            q: ""
+        }
+      })
+
   defp filters_on(status, rating, genre, undated?),
     do: Enum.count([status, rating, genre, undated? || nil], &(&1 != nil))
 
@@ -788,6 +810,8 @@ defmodule RokiWeb.WatchedLive do
     assigns =
       assign(assigns,
         items: items,
+        # With a filter on, the header says how many of how many (ALEX-159).
+        total: if(filtered?(assigns), do: title_count(unfiltered(assigns))),
         groups: groups(shown, assigns.sort, assigns.months?),
         month_counts: month_counts(items, assigns.sort, assigns.months?),
         today: Date.utc_today() |> Date.to_iso8601(),
@@ -832,7 +856,7 @@ defmodule RokiWeb.WatchedLive do
               Watched
             </h1>
             <span :if={is_list(@history)} class="text-lg tabular-nums text-white/70">
-              {title_count(@items)}
+              {title_count(@items)}<span :if={@total} class="text-white/45"> of {@total}</span>
             </span>
           </div>
         </div>
