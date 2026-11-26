@@ -111,16 +111,28 @@
   .vstage { position: relative; height: 100%; display: grid; place-items: center; }
   .vstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
   .vstage img { max-height: 78vh; max-width: 80%; border-radius: 14px; box-shadow: 0 30px 80px #000c; }
-  .vinfo { padding: 40px 56px 40px 8px; max-width: 520px; }
+  .vinfo { padding: 40px 56px 40px 8px; max-width: 560px; max-height: 100svh; overflow-y: auto; scrollbar-width: thin; }
+  .vtag { margin: -4px 0 14px; font: italic 400 20px "Instrument Serif", serif; color: #ffffffb3; }
+  .vgenres { display: flex; flex-wrap: wrap; gap: 6px; margin: -12px 0 18px; }
+  .vgenres span { border: 1px solid #ffffff33; border-radius: 999px; padding: 2px 11px; font-size: 13px; color: #ffffffcc; }
+  .vscores { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 16px; font: 600 16px "Outfit"; }
+  .vscores small { font: 500 11px "JetBrains Mono"; letter-spacing: .05em; color: #ffffff80; text-transform: uppercase; margin-left: 2px; }
+  .vscores .you { color: var(--accent, #ffb648); }
+  .vover { margin: 0 0 18px; color: #ffffffd0; font-size: 15px; line-height: 1.55; }
+  .vfacts { margin: 0 0 24px; display: grid; gap: 6px; font-size: 14px; }
+  .vrow { display: grid; grid-template-columns: 96px 1fr; gap: 10px; } .vrow dt { color: #ffffff80; } .vrow dd { margin: 0; color: #ffffffd9; }
   .vinfo h2 { margin: 6px 0 12px; font: italic 400 clamp(40px, 5vw, 72px)/1 "Instrument Serif", serif; }
-  .vmeta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: #ffffffb3; font-size: 15px; margin-bottom: 26px; }
+  .vmeta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: #ffffffb3; font-size: 15px; margin-bottom: 20px; }
+  .vmeta span + span::before { content: "·"; margin-right: 14px; color: #ffffff55; }
   .vgo { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 24px; border-radius: 999px; background: #fff; color: #111; font: 700 16px "Outfit"; text-decoration: none; }
   .vgo:hover { background: var(--accent, #ff8a3d); color: #111; }
   .vnote { color: #ffffff80; }
   .vclose { position: absolute; top: 18px; right: 22px; width: 44px; height: 44px; border-radius: 999px; border: 1px solid #ffffff33; background: #0006; color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
   @media (max-width: 800px) {
-    .viewer { grid-template-columns: 1fr; grid-template-rows: 58svh auto; align-items: start; overflow-y: auto; }
-    .vinfo { padding: 8px 22px 40px; } .vstage img { max-height: 50svh; }
+    .viewer { grid-template-columns: minmax(0, 100vw); width: 100vw; grid-template-rows: 52svh auto; align-items: start; overflow-y: auto; overflow-x: hidden; }
+    .vinfo *, .vstage { min-width: 0; max-width: 100%; } .vover, .vrow dd { overflow-wrap: anywhere; }
+    .vinfo { padding: 8px 22px 40px; max-width: none; max-height: none; overflow: visible; min-width: 0; }
+    .vinfo h2 { font-size: 44px; } .vrow { grid-template-columns: 84px minmax(0, 1fr); } .vstage img { max-height: 50svh; }
   }
   .viewswitch { position: fixed; top: 12px; right: 12px; z-index: 30; display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: #000a; border: 1px solid #ffffff26; backdrop-filter: blur(10px); }
   .viewswitch a { font: 600 12px "Outfit"; color: #ddd; text-decoration: none; padding: 5px 12px; border-radius: 999px; }
@@ -736,9 +748,36 @@ function openViewer(it, label) {
   vw.style.removeProperty("--ground")
   const href = it.href || (it.type === "movie" || it.type === "tv" ? `/title/${it.type}/${it.id}` : null)
   const kind = { movie: "Film", tv: "Show", manga: "Manga" }[it.type] || "Title"
+  // Everything the site knows of it (the details kept with the lab's data).
+  const d = tidy((data.details || {})[`${it.type}:${it.id}`] || {})
+  const hm = (m) => m ? (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`) : null
+  const facts = [
+    kind, d.year || it.year,
+    it.type === "movie" ? hm(d.minutes) : null,
+    d.seasons ? `${d.seasons} season${d.seasons === 1 ? "" : "s"}` : null,
+    d.episodes ? `${d.episodes} episodes` : null,
+    d.status && !["Released"].includes(d.status) ? d.status : null,
+  ].filter(Boolean)
+  const scores = [
+    it.score ? `<span class="you">★ ${it.score} <small>yours</small></span>` : "",
+    d.vote ? `<span>★ ${Number(d.vote).toFixed(1)} <small>TMDB</small></span>` : "",
+    it.at ? `<span><small>watched</small> ${new Date(it.at * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>` : "",
+  ].join("")
+  const row = (label, list) => list && list.length ? `<div class="vrow"><dt>${label}</dt><dd>${list.map(esc).join(", ")}</dd></div>` : ""
   vinfo.innerHTML = `<div class="mono" style="opacity:.7">${esc(label || "")}</div>
     <h2>${esc(it.title)}</h2>
-    <div class="vmeta">${[kind, it.year, it.score ? `★ ${it.score}` : null, it.at ? `watched ${new Date(it.at * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : null].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("")}</div>
+    ${d.tagline ? `<p class="vtag">${esc(d.tagline)}</p>` : ""}
+    <div class="vmeta">${facts.map((x) => `<span>${esc(x)}</span>`).join("")}</div>
+    ${d.genres && d.genres.length ? `<div class="vgenres">${d.genres.map((g) => `<span>${esc(g)}</span>`).join("")}</div>` : ""}
+    ${scores ? `<div class="vscores">${scores}</div>` : ""}
+    ${d.overview ? `<p class="vover">${esc(d.overview)}</p>` : ""}
+    <dl class="vfacts">
+      ${row(it.type === "tv" ? "Created by" : "Directed by", d.directors)}
+      ${row("Starring", d.cast)}
+      ${row("Written by", d.authors)}
+      ${row(it.type === "tv" ? "On" : "Studio", it.type === "tv" ? d.networks : d.studios)}
+      ${row("From", d.countries)}
+    </dl>
     ${href ? `<a class="vgo" href="${href}">Open on Roki →</a>` : `<p class="vnote">Not on Roki's title pages.</p>`}`
   picture(it.poster).then((p) => { if (p && !vw.hidden) { vw.style.setProperty("--ground", p.pal.ground); vw.style.setProperty("--accent", p.pal.light) } })
   if (VIEW === "simple") {
@@ -767,6 +806,20 @@ function closeViewer() {
 }
 vw.querySelector(".vclose").addEventListener("click", closeViewer)
 vw.addEventListener("click", (e) => { if (e.target === vw) closeViewer() })
+
+// Manga sources hand their facts over with their own labels ("Year Published: 2018", "This is
+// ON-GOING series", "Written By: X, Illustrated By: Y"): cleaned to the plain facts.
+function tidy(d) {
+  const o = {...d}
+  if (o.year && !/\d{4}/.test(o.year)) o.year = null
+  else if (o.year) o.year = String(o.year).match(/\d{4}/)[0]
+  if (o.status) {
+    const st = String(o.status).toLowerCase()
+    o.status = /on-?going|publishing|releasing/.test(st) ? "Ongoing" : /complete|finished|ended/.test(st) ? (o.status === "Ended" ? "Ended" : "Completed") : /hiatus/.test(st) ? "On hiatus" : o.status
+  }
+  if (o.authors) o.authors = [...new Set(o.authors.flatMap((a) => String(a).split(/,|;|\band\b/)).map((a) => a.replace(/^\s*(written|illustrated|art|story)\s*by\s*:?\s*/i, "").trim()).filter(Boolean))]
+  return o
+}
 
 // ── the simple view's pieces: plain posters, the same order, the same viewer ────────────────
 function posterTile(it, label) {
