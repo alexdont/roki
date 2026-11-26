@@ -1539,3 +1539,114 @@ html[data-tint] body { transition: background-color .7s; }
   font-weight: 400;
   letter-spacing: -0.01em;
 }
+
+/* ── The profile's showcase (ProfileLive, ProfileShowcase; the profile lab's design) ──────────── */
+#showcase { --serif: "Instrument Serif", ui-serif, Georgia, serif; --mono: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+#showcase h1 { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+.showcase-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgb(0 0 0 / .35); border: 1px solid rgb(255 255 255 / .25); backdrop-filter: blur(10px); }
+.showcase-switch button { font-size: 12px; font-weight: 600; color: rgb(255 255 255 / .85); padding: 4px 12px; border-radius: 999px; }
+.showcase-switch button[aria-pressed="true"] { background: #fff; color: #111; }
+
+/* the numbers by weight */
+.showcase-numbers { display: flex; flex-direction: column; gap: 14px; max-width: 560px; text-shadow: 0 1px 12px rgb(0 0 0 / .7); }
+.showcase-numbers .hero-num b { display: block; font: italic 400 clamp(44px, 6vw, 64px)/0.95 var(--serif); letter-spacing: -0.01em; }
+.showcase-numbers .hero-num span { display: block; margin-top: 6px; font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: rgb(255 255 255 / .65); }
+.showcase-numbers .tally p { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; color: rgb(255 255 255 / .75); font-size: 14px; }
+.showcase-numbers .tally p b { font-size: 20px; font-weight: 600; color: #fff; letter-spacing: -0.01em; margin-right: 4px; }
+.showcase-numbers .tally p span { display: inline-flex; align-items: center; gap: 6px; }
+.showcase-numbers .tally p i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.showcase-numbers .tally p .eps { color: rgb(255 255 255 / .55); }
+.showcase-numbers .tally p .eps::before { content: "·"; margin-right: 8px; color: rgb(255 255 255 / .35); }
+.showcase-numbers .mix { display: flex; gap: 2px; height: 4px; margin-top: 10px; border-radius: 4px; overflow: hidden; max-width: 460px; }
+.showcase-numbers .mix i { display: block; }
+.showcase-numbers .seeall { display: inline-block; margin-top: 12px; font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: #fff; border-bottom: 1px solid rgb(255 255 255 / .45); padding-bottom: 2px; }
+.showcase-numbers .seeall:hover { border-bottom-color: #fff; }
+
+/* the two cards on the banner, editorial: no boxes, the page's type, hairline bars */
+#showcase section[aria-label="Where it was made"], #showcase section[aria-label="Ratings"] { background: none; border: 0; backdrop-filter: none; padding: 0; text-shadow: 0 1px 12px rgb(0 0 0 / .7); }
+#showcase section[aria-label="Where it was made"] h2, #showcase section[aria-label="Ratings"] h2 { font: 500 11px var(--mono); letter-spacing: .12em; color: rgb(255 255 255 / .7); }
+#showcase section[aria-label="Ratings"] p .text-2xl { font: italic 400 52px/0.95 var(--serif); margin-right: 6px; }
+#showcase section[aria-label="Ratings"] .showcase-bars ol:first-child li a > span:last-child,
+#showcase section[aria-label="Ratings"] .showcase-bars ol:first-child li > span:last-child { width: 3px; margin: 0 auto; border-radius: 3px; filter: drop-shadow(0 0 4px rgb(255 255 255 / .35)); }
+#showcase section[aria-label="Ratings"] .showcase-bars ol:first-child li a:hover > span:last-child { width: 5px; }
+#showcase section[aria-label="Ratings"] .showcase-bars span { font-family: var(--mono); }
+
+/* 3D: the globe and the piles take the map's and the bars' place */
+.showcase-globe, .showcase-piles { display: none; position: relative; overflow: hidden; }
+#showcase.is-3d .showcase-globe { display: block; width: 100%; height: 220px; }
+#showcase.is-3d .showcase-piles { display: block; height: 190px; margin-top: 6px; }
+/* The banner grows a little in 3D, so the objects on its right never reach the name's row. */
+#showcase.is-3d > section:first-child { min-height: clamp(30rem, 66svh, 42rem); }
+#showcase.is-3d section[aria-label="Where it was made"] > button, #showcase.is-3d .showcase-bars { display: none; }
+#showcase.is-3d section[aria-label="Where it was made"] { width: min(260px, 100%); }
+#showcase.is-3d section[aria-label="Ratings"] { width: min(26rem, 100%); }
+.showcase-globe canvas, .showcase-piles canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.showcase-globe .maptip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; white-space: nowrap; padding: 5px 10px; border-radius: 8px; background: rgb(0 0 0 / .85); border: 1px solid rgb(255 255 255 / .15); font-size: 12.5px; color: #fff; z-index: 3; }
+.showcase-globe .maptip b { font: italic 400 16px var(--serif); margin-left: 4px; color: #ffb37a; }
+.showcase-globe .maptip[hidden] { display: none; }
+.showcase-piles .slabels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.showcase-piles .slabels span { position: absolute; left: 0; top: 0; margin-left: -12px; width: 24px; text-align: center; font: 500 10px var(--mono); color: rgb(255 255 255 / .55); }
+.showcase-piles .slabels .sn { color: #fff; font: italic 400 16px var(--serif); }
+.showcase-piles .detail, .showcase-stage .detail { display: none; }
+
+/* the shelves: two by two (one column on a phone), each a panel; the one being edited spans the row */
+.showcase-shelves { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 900px) { .showcase-shelves { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.showcase-shelf { min-width: 0; border-radius: 18px; background: color-mix(in oklab, var(--color-base-content) 4%, transparent); border: 1px solid color-mix(in oklab, var(--color-base-content) 9%, transparent); padding: 16px 0 14px; overflow: hidden; }
+.showcase-shelf.is-editing { grid-column: 1 / -1; padding: 16px; overflow: visible; }
+.showcase-shelf-head { padding: 0 18px; }
+.showcase-shelf.is-editing .showcase-shelf-head { padding: 0; }
+.showcase-shelf-head h2 { font-size: 18px; }
+.showcase-row { display: flex; gap: 10px; overflow-x: auto; padding: 4px 18px 4px; scroll-snap-type: x proximity; scrollbar-width: thin; mask-image: linear-gradient(to right, #000 88%, transparent); -webkit-mask-image: linear-gradient(to right, #000 88%, transparent); }
+.showcase-recent .showcase-row { padding-inline: 0; }
+.showcase-tile { flex: none; width: 112px; scroll-snap-align: start; color: color-mix(in oklab, var(--color-base-content) 80%, transparent); }
+.showcase-tile .pic { position: relative; display: block; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background: color-mix(in oklab, var(--color-base-content) 8%, transparent); transition: transform .2s; }
+.showcase-tile:hover .pic { transform: translateY(-3px); }
+.showcase-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.showcase-tile .rank { position: absolute; right: 6px; top: 6px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--color-primary); color: var(--color-primary-content); }
+.showcase-tile .t { display: block; margin-top: 6px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.showcase-stage { display: none; position: relative; }
+.showcase-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; }
+
+/* 3D: the rings in place of the rows; the panels give way to the open stage, the name under it */
+#showcase.is-3d .showcase-stage { display: block; height: 400px; margin: 0 -16px; }
+#showcase.is-3d .showcase-recent .showcase-stage { height: 430px; }
+#showcase.is-3d .showcase-shelf:not(.is-editing) { background: none; border: 0; padding: 0; overflow: visible; display: flex; flex-direction: column-reverse; }
+#showcase.is-3d .showcase-shelf:not(.is-editing) .showcase-shelf-head { justify-content: center; margin-top: -24px; position: relative; z-index: 2; }
+#showcase.is-3d .showcase-shelf:not(.is-editing) .showcase-row, #showcase.is-3d .showcase-recent .showcase-row { display: none; }
+#showcase.is-3d .showcase-recent h2 { text-align: center; }
+@media (max-width: 700px) { #showcase.is-3d .showcase-stage, #showcase.is-3d .showcase-recent .showcase-stage { height: 250px; } }
+
+/* the opened view */
+.showcase-viewer { position: fixed; inset: 0; z-index: 80; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); align-items: center; color: #fff;
+  background: radial-gradient(120% 120% at 30% 40%, #1a1420, #050406 75%); animation: showcase-in .3s ease; }
+@keyframes showcase-in { from { opacity: 0; } }
+body.showcase-open { overflow: hidden; }
+.showcase-viewer .vstage { position: relative; height: 100%; display: grid; place-items: center; }
+.showcase-viewer .vstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.showcase-viewer .vstage img { max-height: 78vh; max-width: 80%; border-radius: 14px; box-shadow: 0 30px 80px rgb(0 0 0 / .8); }
+.showcase-viewer .vinfo { padding: 40px 56px 40px 8px; max-width: 560px; max-height: 100svh; overflow-y: auto; }
+.showcase-viewer .vlabel { font: 500 11px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: rgb(255 255 255 / .6); }
+.showcase-viewer h2 { margin: 6px 0 12px; font: italic 400 clamp(40px, 5vw, 72px)/1 "Instrument Serif", serif; }
+.showcase-viewer .vtag { margin: -4px 0 14px; font: italic 400 20px "Instrument Serif", serif; color: rgb(255 255 255 / .7); }
+.showcase-viewer .vmeta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: rgb(255 255 255 / .7); font-size: 15px; margin-bottom: 18px; }
+.showcase-viewer .vmeta span + span::before { content: "·"; margin-right: 14px; color: rgb(255 255 255 / .35); }
+.showcase-viewer .vgenres { display: flex; flex-wrap: wrap; gap: 6px; margin: -8px 0 18px; }
+.showcase-viewer .vgenres span { border: 1px solid rgb(255 255 255 / .2); border-radius: 999px; padding: 2px 11px; font-size: 13px; color: rgb(255 255 255 / .8); }
+.showcase-viewer .vscores { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 16px; font-size: 16px; font-weight: 600; }
+.showcase-viewer .vscores small { font: 500 11px ui-monospace, Menlo, monospace; letter-spacing: .05em; color: rgb(255 255 255 / .5); text-transform: uppercase; margin-left: 2px; }
+.showcase-viewer .vscores .you { color: #ffb648; }
+.showcase-viewer .vover { margin: 0 0 18px; color: rgb(255 255 255 / .82); font-size: 15px; line-height: 1.55; }
+.showcase-viewer .vwait { opacity: .5; }
+.showcase-viewer .vfacts { margin: 0 0 24px; display: grid; gap: 6px; font-size: 14px; }
+.showcase-viewer .vrow { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+.showcase-viewer .vrow dt { color: rgb(255 255 255 / .5); } .showcase-viewer .vrow dd { margin: 0; color: rgb(255 255 255 / .85); }
+.showcase-viewer .vgo { display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border-radius: 999px; background: #fff; color: #111; font-weight: 700; font-size: 16px; }
+.showcase-viewer .vgo:hover { background: var(--color-primary); color: var(--color-primary-content); }
+.showcase-viewer .vclose { position: absolute; top: 18px; right: 22px; width: 44px; height: 44px; border-radius: 999px; border: 1px solid rgb(255 255 255 / .2); background: rgb(0 0 0 / .4); color: #fff; font-size: 26px; line-height: 1; }
+@media (max-width: 800px) {
+  .showcase-viewer { grid-template-columns: minmax(0, 100vw); width: 100vw; grid-template-rows: 52svh auto; align-items: start; overflow-y: auto; overflow-x: hidden; }
+  .showcase-viewer .vinfo { padding: 8px 22px 40px; max-width: none; max-height: none; overflow: visible; }
+  .showcase-viewer .vinfo * { min-width: 0; max-width: 100%; } .showcase-viewer .vover, .showcase-viewer .vrow dd { overflow-wrap: anywhere; }
+  .showcase-viewer h2 { font-size: 44px; } .showcase-viewer .vstage img { max-height: 50svh; }
+}

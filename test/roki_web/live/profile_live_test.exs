@@ -28,7 +28,7 @@ defmodule RokiWeb.ProfileLiveTest do
     assert html =~ "quietone"
     assert html =~ "written anything here yet"
     # Empty shelves are the owner's to see, not a visitor's.
-    refute render_async(view) =~ "Favorite Movies"
+    refute render_async(view, 3000) =~ "Favorite Movies"
   end
 
   test "the owner writes the words where they go, and the rest from the banner's button", %{
@@ -60,7 +60,7 @@ defmodule RokiWeb.ProfileLiveTest do
     # A visitor sees it all, and the watched page with its controls.
     {:ok, _view, html} = live(conn, "/u/ownerone/profile")
     assert html =~ "Mostly anime, some films."
-    assert html =~ "Watched →"
+    assert html =~ "See everything watched →"
 
     {:ok, _view, html} = live(conn, "/u/ownerone/watched")
     assert html =~ "By rating"
@@ -70,7 +70,7 @@ defmodule RokiWeb.ProfileLiveTest do
   test "the shelves are the owner's to fill, ten a shelf, from what they watched", %{conn: conn} do
     user = register("shelfowner")
     {:ok, view, _html} = live(signed_in(user), "/u/shelfowner/profile")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Favorite Movies"
     assert html =~ "Nothing on this shelf yet"
 
@@ -136,7 +136,7 @@ defmodule RokiWeb.ProfileLiveTest do
     assert Enum.map(favs.manga, & &1.title) == ["Berserk"]
 
     {:ok, view, _} = live(signed_in(user), "/u/mangafan/profile")
-    html = render_async(view)
+    html = render_async(view, 3000)
 
     assert html =~ "Favorite Manga"
     refute html =~ "Coming soon"
@@ -160,12 +160,12 @@ defmodule RokiWeb.ProfileLiveTest do
     assert Enum.all?(list, &String.starts_with?(&1.key, "manga:"))
 
     {:ok, view, _} = live(signed_in(user), "/u/mangapick/profile")
-    render_async(view)
+    render_async(view, 3000)
     html = render_click(view, "pick_open", %{"kind" => "manga"})
 
     assert html =~ "Choose your favorite manga"
     assert html =~ "Your read manga, best rated first"
-    assert render_async(view) =~ "Vagabond"
+    assert render_async(view, 3000) =~ "Vagabond"
   end
 
   test "a visitor who is not signed in is not shown someone's manga shelf", %{conn: conn} do
@@ -175,7 +175,7 @@ defmodule RokiWeb.ProfileLiveTest do
 
     {:ok, view, _} = live(conn, "/u/mangafan2/profile")
     # The covers are fetched from the sources by this site, and only for someone signed in.
-    refute render_async(view) =~ "Favorite Manga"
+    refute render_async(view, 3000) =~ "Favorite Manga"
   end
 
   # Rendered HTML line-wraps wherever the template happens to wrap, which `mix format` may change
@@ -194,7 +194,7 @@ defmodule RokiWeb.ProfileLiveTest do
     end
 
     {:ok, view, _} = live(signed_in(user), "/u/shelfedit/profile")
-    render_async(view)
+    render_async(view, 3000)
     view |> element("button[phx-click=shelf_edit][phx-value-kind=movie]") |> render_click()
 
     # Ten empty places, each one opens the picker; the grid is the drag hook's.
@@ -207,7 +207,7 @@ defmodule RokiWeb.ProfileLiveTest do
 
     assert view |> render() |> String.split(~s(phx-click="pick_open")) |> length() == 12
     render_click(view, "pick_open", %{"kind" => "movie"})
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Choose your favorite movies"
     assert html =~ "First Film"
 
@@ -258,7 +258,7 @@ defmodule RokiWeb.ProfileLiveTest do
     # In the picker what is on the shelf is ticked, not greyed out: unticking it and ticking
     # another swaps them on save.
     render_click(view, "pick_open", %{"kind" => "movie"})
-    render_async(view)
+    render_async(view, 3000)
 
     assert has_element?(
              view,
@@ -292,21 +292,21 @@ defmodule RokiWeb.ProfileLiveTest do
     assert Roki.Profile.history_all(user.uuid) |> length() == 3
 
     {:ok, view, _} = live(signed_in(user), "/u/halfway/watched")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Half Show"
     assert html =~ "In progress"
     assert html =~ "Up to date"
 
     # The count follows the status filter.
     {:ok, view, _} = live(signed_in(user), "/u/halfway/watched?status=progress")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Half Show"
     refute html =~ "Done Film"
     refute html =~ "Current Show"
 
     # Select mode only takes finished titles.
     {:ok, view, _} = live(signed_in(user), "/u/halfway/watched")
-    render_async(view)
+    render_async(view, 3000)
     view |> element("button[phx-click=select_mode]") |> render_click()
     assert has_element?(view, "button[phx-click=select_toggle][phx-value-key='movie:1']")
     refute has_element?(view, "button[phx-click=select_toggle][phx-value-key='tv:2']")
@@ -344,31 +344,31 @@ defmodule RokiWeb.ProfileLiveTest do
     )
 
     {:ok, view, _} = live(signed_in(user), "/u/genrefan/watched?genre=horror")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Scary Film"
     refute html =~ "Funny Film"
     refute html =~ "Action Show"
 
     # A film's Action is not a show's Action: each kind is matched by its own ids.
     {:ok, view, _} = live(signed_in(user), "/u/genrefan/watched?genre=action")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Action Show"
     refute html =~ "Scary Film"
 
     # A title whose genres are not read yet is not guessed at.
     {:ok, view, _} = live(signed_in(user), "/u/genrefan/watched?genre=comedy")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Funny Film"
     refute html =~ "Unread Film"
     assert html =~ "Still reading the genres of 1 titles"
 
     # A genre that is not on the list is no filter.
     {:ok, view, _} = live(signed_in(user), "/u/genrefan/watched?genre=nonsense")
-    assert render_async(view) =~ "Scary Film"
+    assert render_async(view, 3000) =~ "Scary Film"
 
     # "Not rated yet": only what has no rating.
     {:ok, view, _} = live(signed_in(user), "/u/genrefan/watched?rating=none")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Funny Film"
     assert html =~ "Action Show"
     refute html =~ "Scary Film"
@@ -413,7 +413,7 @@ defmodule RokiWeb.ProfileLiveTest do
 
     # The owner: the list view carries the details, the three dots turn on select mode.
     {:ok, view, _} = live(signed_in(user), "/u/historian/watched?view=rows")
-    html = render_async(view)
+    html = render_async(view, 3000)
     assert html =~ "Forgotten Film"
     assert html =~ "not rated"
     assert has_element?(view, "button[phx-click=select_mode]", "Select")

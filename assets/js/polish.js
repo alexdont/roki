@@ -31,6 +31,11 @@ export function keep(from, to) {
   // `#study-ui`, which is `phx-update="ignore"`. For such an element LiveView still sets the ones the
   // server sends and REMOVES every other `data-*`: so any re-render of the page (a track arriving, the
   // address updating) wiped `data-peek`, and Peek was off until it was switched off and on again.
+  // The profile's showcase: the view this device chose and whether its 3D is drawn (ProfileShowcase).
+  if (from.id === "showcase") {
+    if (from.dataset.view) to.dataset.view = from.dataset.view
+    if (from.classList.contains("is-3d")) to.classList.add("is-3d")
+  }
   if (from.id === "study-ui") {
     for (const a of ["data-peek", "data-theater", "data-panel", "data-sheet"]) {
       if (from.hasAttribute(a)) to.setAttribute(a, from.getAttribute(a))

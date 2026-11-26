@@ -226,7 +226,20 @@ defmodule Roki.Profile do
   """
   def counts(uuid) when is_binary(uuid) do
     items = history(uuid)
-    %{watched: length(items), films: Enum.count(items, &(&1.type == "movie"))}
+
+    %{
+      watched: length(items),
+      films: Enum.count(items, &(&1.type == "movie")),
+      # What the total is made of, adding up to it (an anime film counts as anime).
+      kinds:
+        Enum.frequencies_by(items, fn i ->
+          cond do
+            i[:anime] -> :anime
+            i.type == "movie" -> :films
+            true -> :shows
+          end
+        end)
+    }
   end
 
   @doc """

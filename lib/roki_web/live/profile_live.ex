@@ -64,6 +64,9 @@ defmodule RokiWeb.ProfileLive do
           country_counts: nil,
           rating_kind: "all",
           films: nil,
+          kinds: nil,
+          recent: nil,
+          scores: %{},
           favorites: nil,
           shelf: nil,
           shelf_error: nil,
@@ -99,6 +102,10 @@ defmodule RokiWeb.ProfileLive do
     |> start_async(:watched, fn -> Profile.counts(uuid) end)
     |> start_async(:ratings, fn -> Profile.rating_counts(uuid) end)
     |> start_async(:countries, fn -> Profile.country_counts(uuid) end)
+    |> start_async(:recent, fn ->
+      scores = Profile.ratings(uuid)
+      {scores, Roki.Showcase.recent(uuid, scores)}
+    end)
     |> then(fn s ->
       if Roki.Laev.connected?(uuid),
         do: start_async(s, :stats, fn -> Profile.hours(uuid) end),
@@ -108,7 +115,24 @@ defmodule RokiWeb.ProfileLive do
 
   # ── events: the profile ─────────────────────────────────────────────
 
+  # The opened view asks what a title is (`Roki.Showcase.details/3`): one title at a time, when
+  # it is opened, so the page does not carry the descriptions of everything on it.
   @impl true
+  def handle_event("item_details", %{"type" => "manga", "href" => href}, socket),
+    do: {:reply, Roki.Showcase.details("manga", href), socket}
+
+  def handle_event("item_details", %{"type" => type, "id" => id}, socket)
+      when type in ["movie", "tv"] do
+    viewer = socket.assigns[:viewer] && socket.assigns.viewer.uuid
+
+    case Integer.parse(to_string(id)) do
+      {n, ""} -> {:reply, Roki.Showcase.details(type, n, viewer), socket}
+      _ -> {:reply, %{}, socket}
+    end
+  end
+
+  def handle_event("item_details", _params, socket), do: {:reply, %{}, socket}
+
   def handle_event("edit", _params, %{assigns: %{owner?: true}} = socket),
     do: {:noreply, assign(socket, editing?: not socket.assigns.editing?, error: nil)}
 
@@ -427,8 +451,13 @@ defmodule RokiWeb.ProfileLive do
 
   def handle_async(:favorites, _other, socket), do: {:noreply, assign(socket, :favorites, %{})}
 
-  def handle_async(:watched, {:ok, %{watched: n, films: f}}, socket),
-    do: {:noreply, assign(socket, watched: n, films: f)}
+  def handle_async(:watched, {:ok, %{watched: n, films: f} = c}, socket),
+    do: {:noreply, assign(socket, watched: n, films: f, kinds: c[:kinds])}
+
+  def handle_async(:recent, {:ok, {scores, recent}}, socket),
+    do: {:noreply, assign(socket, scores: scores, recent: recent)}
+
+  def handle_async(:recent, _other, socket), do: {:noreply, assign(socket, :recent, [])}
 
   def handle_async(:watched, _other, socket), do: {:noreply, socket}
 
@@ -470,7 +499,6 @@ defmodule RokiWeb.ProfileLive do
 
   # One of the numbers, with thousands separated; a dash while they are not known.
   defp stat(%{episodes: n}, :episodes), do: thousands(n)
-  defp stat(%{hours: n}, :hours), do: thousands(n)
   defp stat(_stats, _), do: "…"
 
   defp thousands(n) when is_integer(n),
@@ -509,7 +537,19 @@ defmodule RokiWeb.ProfileLive do
         There is no one called <strong>{@username}</strong> here.
       </p>
 
-      <div :if={@visible?}>
+      <%!-- The showcase (ProfileShowcase): a title opens full screen; 3D or Simple, chosen per device
+            (`roki:profile:view`), the 3D drawn by /vendor/profile3d.js (loaded only for 3D) from
+            what the server lays here as data. --%>
+      <div
+        :if={@visible?}
+        id="showcase"
+        phx-hook="ProfileShowcase"
+        data-name={@username}
+        data-favorites={Jason.encode!(Roki.Showcase.favorites(@favorites || %{}, @scores))}
+        data-recent={Jason.encode!(@recent || [])}
+        data-ratings={Jason.encode!(Roki.Showcase.ratings(@rating_counts || %{}))}
+        data-countries={Jason.encode!(@country_counts || %{})}
+      >
         <%!-- The top: the banner across the window under the floating header, the person on it. --%>
         <section class="relative z-20 flex min-h-[clamp(22rem,52svh,34rem)] flex-col justify-end text-white [--color-base-content:#fff]">
           <div class="absolute inset-0 -z-10 overflow-hidden bg-neutral-900">
@@ -551,6 +591,17 @@ defmodule RokiWeb.ProfileLive do
                   count={@friend_count}
                   pending={@pending_count}
                 />
+                <%!-- How this device shows profiles: 3D or Simple (kept per device, every profile). --%>
+                <div
+                  id="showcase-switch"
+                  phx-update="ignore"
+                  class="showcase-switch"
+                  role="group"
+                  aria-label="View"
+                >
+                  <button type="button" data-view="3d">3D</button>
+                  <button type="button" data-view="simple">Simple</button>
+                </div>
                 <button
                   :if={@owner?}
                   type="button"
@@ -582,41 +633,15 @@ defmodule RokiWeb.ProfileLive do
               {@username} hasn't written anything here yet.
             </p>
 
-            <%!-- The numbers, as the thing they are: big, with a word under each. --%>
-            <div class="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:gap-x-10 sm:gap-y-3">
-              <.link navigate={"/u/#{@username}/watched"} class="group">
-                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                  {if @watched, do: thousands(@watched), else: "…"}
-                </div>
-                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs group-hover:text-white">
-                  Watched →
-                </div>
-              </.link>
-              <div>
-                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                  {if @films, do: thousands(@films), else: "…"}
-                </div>
-                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
-                  Films
-                </div>
-              </div>
-              <div>
-                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                  {stat(@stats, :episodes)}
-                </div>
-                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
-                  Episodes
-                </div>
-              </div>
-              <div>
-                <div class="text-2xl font-bold tabular-nums tracking-tight sm:text-4xl">
-                  {stat(@stats, :hours)}
-                </div>
-                <div class="text-[0.65rem] font-medium uppercase tracking-wide text-white/60 sm:text-xs">
-                  Hours<span class="hidden sm:inline"> watched</span>
-                </div>
-              </div>
-            </div>
+            <%!-- The numbers by weight: the time it took as the headline, then one line of what
+                  was watched — the total, what it is made of (adding up), the episodes — with a bar
+                  of the mix, and the way to the whole history said in words. --%>
+            <.numbers
+              username={@username}
+              stats={@stats}
+              watched={@watched}
+              kinds={@kinds}
+            />
             <%!-- On a wide screen it sits on the banner's right, level with the numbers; below that
                   it follows them. --%>
             <%!-- On a wide screen the two cards sit on the banner's right, level with the numbers
@@ -673,144 +698,161 @@ defmodule RokiWeb.ProfileLive do
             user={@user}
           />
 
-          <%!-- The shelves. A visitor sees the ones with something on them. --%>
-          <section
-            :for={{kind, label} <- Profile.shelves()}
-            :if={show_shelf?(kind, @owner?, @viewer, @favorites)}
-            class="space-y-3"
-          >
-            <div class="flex flex-wrap items-center gap-2">
-              <h2 class="text-2xl font-semibold tracking-tight">
-                {shelf_title(@profile, kind, label)}
-              </h2>
-              <button
-                :if={@owner? and @favorites != nil}
-                type="button"
-                phx-click="shelf_edit"
-                phx-value-kind={kind}
-                class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}
-              >
-                <.icon
-                  name={if @shelf == kind, do: "hero-check", else: "hero-pencil-square"}
-                  class="h-3.5 w-3.5"
-                />
-                {if @shelf == kind, do: "Done", else: "Edit"}
-              </button>
-            </div>
-
-            <ul
-              :if={@favorites == nil}
-              class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
-              aria-busy="true"
+          <%!-- The shelves, two by two (one column on a phone): each a panel, its name under it,
+                its posters (Simple) or a turning ring of cases and books (3D, drawn by the
+                ProfileShowcase hook into `[data-stage]`). A shelf being edited spans the row. A
+                visitor sees the ones with something on them. --%>
+          <div class="showcase-shelves">
+            <section
+              :for={{kind, label} <- Profile.shelves()}
+              :if={show_shelf?(kind, @owner?, @viewer, @favorites)}
+              class={["showcase-shelf space-y-3", @shelf == kind && "is-editing"]}
+              data-kind={kind}
             >
-              <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
-            </ul>
-
-            <%!-- Looking: the posters as they are, each a link to its page. --%>
-            <ul
-              :if={@shelf != kind and (@favorites[kind] || []) != []}
-              class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
-            >
-              <RokiWeb.FeaturedLive.tile
-                :for={i <- @favorites[kind]}
-                item={if Profile.ranked?(@profile, kind), do: i, else: Map.put(i, :badge, nil)}
-                kind={kind}
-                keep_colour?
-              />
-            </ul>
-            <p
-              :if={@shelf != kind and @favorites != nil and (@favorites[kind] || []) == []}
-              class="text-sm text-base-content/50"
-            >
-              {if @owner?,
-                do: "Nothing on this shelf yet. Press Edit to add what you loved.",
-                else: "Nothing here yet."}
-            </p>
-
-            <%!-- Editing: a cross in a corner takes one off, the grip along the bottom drags it to
-                a new place, and the empty places open the picker. --%>
-            <div :if={@owner? and @shelf == kind and @favorites != nil} class="space-y-2">
-              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    class="toggle toggle-primary toggle-sm"
-                    checked={Profile.ranked?(@profile, kind)}
-                    phx-click="shelf_ranked"
-                    phx-value-kind={kind}
-                  /> Rank them 1 to {Profile.top()}
-                </label>
+              <div class="showcase-shelf-head flex flex-wrap items-center gap-2">
+                <h2 class="text-2xl font-semibold tracking-tight">
+                  {shelf_title(@profile, kind, label)}
+                </h2>
                 <button
+                  :if={@owner? and @favorites != nil}
                   type="button"
-                  phx-click="pick_open"
+                  phx-click="shelf_edit"
                   phx-value-kind={kind}
-                  class="btn btn-sm btn-outline btn-primary rounded-full"
+                  class={["btn btn-xs ml-auto", @shelf == kind && "btn-primary"]}
                 >
-                  <.icon name="hero-squares-plus" class="h-4 w-4" />
-                  {if kind == :manga, do: "Choose from read", else: "Choose from watched"}
+                  <.icon
+                    name={if @shelf == kind, do: "hero-check", else: "hero-pencil-square"}
+                    class="h-3.5 w-3.5"
+                  />
+                  {if @shelf == kind, do: "Done", else: "Edit"}
                 </button>
-                <p class="text-sm text-base-content/60">
-                  {if Profile.ranked?(@profile, kind),
-                    do: "The numbers show: the order matters. Drag a poster to reorder.",
-                    else:
-                      "Just your favourites, none above another. Drag to arrange them as you like."} × takes one off; an empty place adds more.
-                </p>
               </div>
+
               <ul
-                id={"shelf-#{kind}"}
-                phx-hook="SortableGrid"
-                data-sortable-event="shelf_reorder"
-                data-sortable-scope-kind={kind}
+                :if={@favorites == nil}
                 class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
+                aria-busy="true"
               >
-                <li
-                  :for={i <- @favorites[kind]}
-                  id={"fav-#{kind}-#{i.type || "mal"}-#{i.id || i.mal_id}"}
-                  data-id={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                  class="sortable-item cursor-grab touch-none select-none space-y-1 active:cursor-grabbing"
-                >
-                  <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
-                    <img
-                      :if={i.poster}
-                      src={Roki.Images.local(i.poster)}
-                      alt={i.title}
-                      class="h-full w-full object-cover"
-                      draggable="false"
-                    />
-                    <span
-                      :if={!i.poster}
-                      class="flex h-full items-center justify-center p-2 text-center text-xs"
-                    >{i.title}</span>
-                    <span
-                      :if={Profile.ranked?(@profile, kind)}
-                      class="badge badge-primary badge-xs absolute bottom-1 right-1 shadow sm:badge-sm sm:bottom-auto sm:right-1.5 sm:top-1.5"
-                    >#{i.position}</span>
-                    <button
-                      type="button"
-                      phx-click="shelf_remove"
-                      phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
-                      class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-6 min-h-0 w-6 p-0 shadow sm:left-1.5 sm:top-1.5"
-                      aria-label={"Take #{i.title} off the shelf"}
-                    >
-                      <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </li>
-                <%!-- Not "sortable-ignore": that filter makes SortableJS cancel the touch, and the
-                    tap never becomes a click on a phone. Only .sortable-item is draggable anyway. --%>
-                <li :for={_ <- 1..places_left(@favorites, kind)//1}>
+                <li :for={_ <- 1..5} class="skeleton aspect-[2/3] rounded-box"></li>
+              </ul>
+
+              <%!-- Looking: the posters in a row (each opens full screen), or in 3D the ring. --%>
+              <div
+                :if={@shelf != kind and (@favorites[kind] || []) != []}
+                id={"stage-#{kind}"}
+                class="showcase-stage"
+                data-stage={kind}
+                phx-update="ignore"
+              >
+              </div>
+              <.poster_row
+                :if={@shelf != kind and (@favorites[kind] || []) != []}
+                items={Roki.Showcase.favorites(%{kind => @favorites[kind]}, @scores)[kind]}
+                label={shelf_title(@profile, kind, label)}
+                ranked?={Profile.ranked?(@profile, kind)}
+              />
+              <p
+                :if={@shelf != kind and @favorites != nil and (@favorites[kind] || []) == []}
+                class="text-sm text-base-content/50"
+              >
+                {if @owner?,
+                  do: "Nothing on this shelf yet. Press Edit to add what you loved.",
+                  else: "Nothing here yet."}
+              </p>
+
+              <%!-- Editing: a cross in a corner takes one off, the grip along the bottom drags it to
+                a new place, and the empty places open the picker. --%>
+              <div :if={@owner? and @shelf == kind and @favorites != nil} class="space-y-2">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <label class="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      class="toggle toggle-primary toggle-sm"
+                      checked={Profile.ranked?(@profile, kind)}
+                      phx-click="shelf_ranked"
+                      phx-value-kind={kind}
+                    /> Rank them 1 to {Profile.top()}
+                  </label>
                   <button
                     type="button"
                     phx-click="pick_open"
                     phx-value-kind={kind}
-                    class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-1 rounded-box border-2 border-dashed border-primary/50 text-primary transition hover:border-primary hover:bg-primary/10"
+                    class="btn btn-sm btn-outline btn-primary rounded-full"
                   >
-                    <.icon name="hero-plus" class="h-5 w-5 sm:h-6 sm:w-6" />
-                    <span class="hidden text-xs font-medium sm:block">Add</span>
+                    <.icon name="hero-squares-plus" class="h-4 w-4" />
+                    {if kind == :manga, do: "Choose from read", else: "Choose from watched"}
                   </button>
-                </li>
-              </ul>
+                  <p class="text-sm text-base-content/60">
+                    {if Profile.ranked?(@profile, kind),
+                      do: "The numbers show: the order matters. Drag a poster to reorder.",
+                      else:
+                        "Just your favourites, none above another. Drag to arrange them as you like."} × takes one off; an empty place adds more.
+                  </p>
+                </div>
+                <ul
+                  id={"shelf-#{kind}"}
+                  phx-hook="SortableGrid"
+                  data-sortable-event="shelf_reorder"
+                  data-sortable-scope-kind={kind}
+                  class="grid grid-cols-5 gap-2 sm:gap-3 lg:grid-cols-10"
+                >
+                  <li
+                    :for={i <- @favorites[kind]}
+                    id={"fav-#{kind}-#{i.type || "mal"}-#{i.id || i.mal_id}"}
+                    data-id={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
+                    class="sortable-item cursor-grab touch-none select-none space-y-1 active:cursor-grabbing"
+                  >
+                    <div class="relative aspect-[2/3] overflow-hidden rounded-box bg-base-300 shadow">
+                      <img
+                        :if={i.poster}
+                        src={Roki.Images.local(i.poster)}
+                        alt={i.title}
+                        class="h-full w-full object-cover"
+                        draggable="false"
+                      />
+                      <span
+                        :if={!i.poster}
+                        class="flex h-full items-center justify-center p-2 text-center text-xs"
+                      >{i.title}</span>
+                      <span
+                        :if={Profile.ranked?(@profile, kind)}
+                        class="badge badge-primary badge-xs absolute bottom-1 right-1 shadow sm:badge-sm sm:bottom-auto sm:right-1.5 sm:top-1.5"
+                      >#{i.position}</span>
+                      <button
+                        type="button"
+                        phx-click="shelf_remove"
+                        phx-value-key={"#{i.type || "mal"}:#{i.id || i.mal_id}"}
+                        class="btn btn-circle btn-error absolute left-0.5 top-0.5 h-6 min-h-0 w-6 p-0 shadow sm:left-1.5 sm:top-1.5"
+                        aria-label={"Take #{i.title} off the shelf"}
+                      >
+                        <.icon name="hero-x-mark-micro" class="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </li>
+                  <%!-- Not "sortable-ignore": that filter makes SortableJS cancel the touch, and the
+                    tap never becomes a click on a phone. Only .sortable-item is draggable anyway. --%>
+                  <li :for={_ <- 1..places_left(@favorites, kind)//1}>
+                    <button
+                      type="button"
+                      phx-click="pick_open"
+                      phx-value-kind={kind}
+                      class="flex aspect-[2/3] w-full flex-col items-center justify-center gap-1 rounded-box border-2 border-dashed border-primary/50 text-primary transition hover:border-primary hover:bg-primary/10"
+                    >
+                      <.icon name="hero-plus" class="h-5 w-5 sm:h-6 sm:w-6" />
+                      <span class="hidden text-xs font-medium sm:block">Add</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </section>
+          </div>
+
+          <%!-- What they watched last: a row of posters (Simple) or a wide ring (3D). --%>
+          <section :if={(@recent || []) != []} class="showcase-recent space-y-3">
+            <h2 class="text-2xl font-semibold tracking-tight">Recently watched</h2>
+            <div id="stage-recent" class="showcase-stage" data-stage="recent" phx-update="ignore">
             </div>
+            <.poster_row items={@recent} label="Recently watched" />
           </section>
 
           <%!-- Whatever anyone wants to say to them: comments, a thread of replies. Plain text, so it
@@ -845,6 +887,93 @@ defmodule RokiWeb.ProfileLive do
         username={@username}
       />
     </Layouts.app>
+    """
+  end
+
+  attr :username, :string, required: true
+  attr :stats, :any, default: nil
+  attr :watched, :any, default: nil
+  attr :kinds, :any, default: nil
+
+  # The numbers by weight (the profile lab's): the hours as the headline in the serif, the days
+  # under it; then the titles, what they are made of with a dot of each kind's colour, the
+  # episodes; a thin bar of the mix; "See everything watched →".
+  defp numbers(assigns) do
+    kinds = assigns.kinds || %{}
+
+    parts =
+      for {k, label, color} <- [
+            {:films, "films", "#ff6a13"},
+            {:shows, "shows", "#3b82f6"},
+            {:anime, "anime", "#d946ef"}
+          ],
+          (kinds[k] || 0) > 0,
+          do: {k, label, color, kinds[k]}
+
+    hours = assigns.stats && assigns.stats[:hours]
+    assigns = assign(assigns, parts: parts, hours: hours, days: hours && round(hours / 24))
+
+    ~H"""
+    <div class="showcase-numbers">
+      <div class="hero-num">
+        <b>{if @hours, do: "#{thousands(@hours)} hours", else: "…"}</b>
+        <span :if={@days}>of watching · {thousands(@days)} days</span>
+      </div>
+      <div class="tally">
+        <p>
+          <b>{if @watched, do: "#{thousands(@watched)} titles", else: "…"}</b>
+          <span :for={{_k, label, color, n} <- @parts}>
+            <i style={"background: #{color}"}></i>{thousands(n)} {label}
+          </span>
+          <span :if={stat(@stats, :episodes) != "…"} class="eps">
+            {stat(@stats, :episodes)} episodes
+          </span>
+        </p>
+        <div
+          :if={@parts != []}
+          class="mix"
+          role="img"
+          aria-label={Enum.map_join(@parts, ", ", fn {_, l, _, n} -> "#{n} #{l}" end)}
+        >
+          <i :for={{_k, _l, color, n} <- @parts} style={"flex: #{n}; background: #{color}"}></i>
+        </div>
+        <.link navigate={"/u/#{@username}/watched"} class="seeall">See everything watched →</.link>
+      </div>
+    </div>
+    """
+  end
+
+  attr :items, :list, required: true
+  attr :label, :string, required: true
+  attr :ranked?, :boolean, default: false
+
+  # A shelf (or the recently watched) as posters in a row; each opens full screen
+  # (ProfileShowcase reads `data-item`). Without script, each still leads to its page.
+  defp poster_row(assigns) do
+    ~H"""
+    <div class="showcase-row">
+      <a
+        :for={it <- @items}
+        href={it[:href] || "/title/#{it.type}/#{it.id}"}
+        class="showcase-tile"
+        data-item={Jason.encode!(it)}
+        data-label={@label}
+      >
+        <span class="pic">
+          <img
+            :if={it.poster}
+            src={Roki.Images.local(it.poster)}
+            srcset={Roki.Images.srcset(it.poster)}
+            sizes="128px"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+          <b :if={@ranked? and it[:position]} class="rank">#{it.position}</b>
+        </span>
+        <span class="t">{it.title}</span>
+      </a>
+    </div>
     """
   end
 
@@ -904,6 +1033,8 @@ defmodule RokiWeb.ProfileLive do
         >
         </div>
       </button>
+      <%!-- 3D: the globe is drawn here (ProfileShowcase); hidden in Simple. --%>
+      <div :if={!@loading?} id="globe-slot" class="showcase-globe" data-globe phx-update="ignore"></div>
       <p :if={@loading?} class="flex h-4 items-center" aria-hidden="true">
         <span class="h-2.5 w-2/3 animate-pulse rounded-full bg-white/15"></span>
       </p>
@@ -1111,7 +1242,9 @@ defmodule RokiWeb.ProfileLive do
         </div>
       </div>
 
-      <div :if={@b}>
+      <%!-- 3D: the piles of cases are drawn here (ProfileShowcase); hidden in Simple. --%>
+      <div :if={@b} id="piles-slot" class="showcase-piles" data-piles data-kind={@kind} phx-update="ignore"></div>
+      <div :if={@b} class="showcase-bars">
         <ol class="flex h-20 items-end gap-0.5 sm:h-28 sm:gap-1">
           <li
             :for={{score, n} <- @b.bars}

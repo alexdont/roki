@@ -426,6 +426,30 @@ votes: faded, and the note says so. A cell goes to that episode's sources.
 
 The title and episodes pages are drawn in their poster's colours. `Roki.Palette` reads the poster at TMDB's w92, shrinks it to 24×36 with `magick`, buckets the pixels by OKLCH hue and keeps (for good, `Roki.Kept` `palette`) the main colour (`h`/`c`) and the liveliest well-represented one (`ah`/`ac`); ~60 ms, worked out on a title's first connected visit (`load_palette/1`), read for every later first paint. The page's wrapper (`#title-tint`) carries `--th --tc --ah --ac` and `data-tint`; `[data-tint]` in app.css sets the lightnesses per theme (dark: a deep ground of the main colour, text toward the accent; light: a pale wash, ink from the main colour) by overriding `--color-base-100/200/300/content`, plus `--tint-ground` (the hero's washes) and `--tint-star` (the ★). The `TitleTint` hook copies them to `<html>` (header, page behind, sheets) and takes them off when the page is left. Play stays Roki orange. A name with no TMDB logo is set in Instrument Serif italic (`.title-serif`).
 
+### The profile showcase: 3D or Simple (2026-11-26, the profile lab's design made real)
+
+`ProfileLive` is drawn as `/lab/profile3d.html` worked it out, the server drawing everything Simple
+needs (works without script) and `ProfileShowcase` (assets/js/profile_showcase.js) adding the rest:
+- **Top:** the name in the serif; the numbers by weight (`numbers/1`): *hours* as the headline (days
+  under), then "N titles" with films · shows · anime by kind (`Profile.counts/1` `kinds`, adding up;
+  an anime film counts as anime) and the episodes, a bar of the mix, "See everything watched →" (the
+  current `/u/:name/watched`). The map and ratings cards lose their boxes (CSS under `#showcase`),
+  the bars hairlines; they keep their links, the world sheet and their placeholders.
+- **Shelves:** two by two (one column on a phone), each a panel of posters (`poster_row/1`); the
+  shelf being edited spans the row and keeps the old editor. **Recently watched** (the last 24,
+  `Roki.Showcase.recent/3`) under them.
+- **Opened view:** a poster/case click opens it full screen; what it is comes from the server when
+  opened (`handle_event("item_details")` → `Roki.Showcase.details/3`: the stored title, credits —
+  the one thing that may ask TMDB — or the manga library). Away from it, Esc or × closes.
+- **3D or Simple** per device, every profile (`localStorage["roki:profile:view"]`; unset → Simple
+  without WebGL, with reduced motion or ≤2 GB/≤2 cores). 3D loads **/vendor/profile3d.js** (~700 KB:
+  three.js, d3-geo, topojson-client; only for 3D), built from `assets/js/profile3d/index.js` with
+  `cd assets/js/profile3d && npm install && npm run build` (also copies the atlas to
+  `priv/static/data/countries-110m.json`). It draws rings into `[data-stage]`, the globe into
+  `[data-globe]`, piles of cases into `[data-piles]` (all `phx-update="ignore"` slots), from the
+  `#showcase` data attributes (favorites, recent, ratings, countries). `polish.js` `keep` carries
+  `data-view`/`is-3d` over patches.
+
 ### Rating on TMDB
 
 The title page's fourth button (`Roki.Watch.my_rating/2`, `rate/3`, `clear_rating/2`, through laev's TMDB session; a series is rated as a whole): TMDB's average in orange and, once rated, "You 7.5" under it in blue. Needs the user's TMDB account linked in laev (`Laev.Tmdb.account?`); otherwise the sheet says so. Episode ratings (`Laev.Tmdb.rate_episode`) are not wired yet. Under the slider, the **shelf**: the last five titles this account gave the score the slider stands at (`Roki.Profile.rated_like/4`, loaded when the sheet opens — `rate_open`, pushed by every rate button including the episodes page's season ones — and again after a rating, a season's too; `rokiScore` in app.js shows the row whose `data-score` is the slider's key). Newest first: a date where there is one (MyAnimeList, a rating made on the site), else `roki_ratings.seq`, the place in TMDB's rated list (it comes oldest-first, undated), per kind — films, shows and anime are separate shelves. Anime names come from the MAL list (no pictures there).
