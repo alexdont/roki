@@ -8,10 +8,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* A mock of the profile page drawn with the WebGL cases (2026-11-24): alex's real favourites on
-     leaning shelves, the favourite of all time on a pedestal, the recently watched on a carousel,
+     carousels, the map and ratings cards on the banner, the recently watched on a carousel,
      and the watch history as a wall of covers by month. A snapshot (profile3d-data.json); nothing
      on the real site reads this. */
-  :root { color-scheme: dark; --page: #0e0c10; }
+  :root { color-scheme: dark; --page: #0e0c10; --gold: #f4c430; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--page); color: #ece8ef; font: 15px/1.45 "Outfit", system-ui, sans-serif; }
   a { color: inherit; }
@@ -29,9 +29,38 @@
   @media (min-width: 1280px) { .bleed { margin: 0 -64px; } }
 
   /* the top: banner, name, numbers, and the pedestal at the right */
-  .top { position: relative; overflow: hidden; background: radial-gradient(90% 120% at 80% 0%, #3a1f2e 0%, #1a1220 45%, var(--page) 80%); }
-  .top .wrap { display: grid; grid-template-columns: 1fr 440px; gap: 24px; align-items: end; padding-top: 70px; padding-bottom: 26px; }
-  @media (max-width: 900px) { .top .wrap { grid-template-columns: 1fr; } }
+  /* The banner the user set, under a dark wash so the words and cards read over it (as on the
+     real profile); a gradient when there is none. */
+  .top { position: relative; overflow: hidden; background: radial-gradient(90% 120% at 80% 0%, #3a1f2e 0%, #1a1220 45%, var(--page) 80%) center / cover no-repeat; min-height: 440px; display: flex; align-items: flex-end; }
+  .top::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, var(--page) 0%, #0e0c10b3 35%, #0e0c1040 70%, #0e0c1066 100%), linear-gradient(to right, #0e0c10b3, transparent 60%); pointer-events: none; }
+  .top .wrap { position: relative; z-index: 1; width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; padding-top: 90px; padding-bottom: 26px; }
+  .cards { display: flex; gap: 12px; align-items: flex-end; }
+  .card { border-radius: 16px; border: 1px solid #ffffff26; background: #00000059; backdrop-filter: blur(12px); padding: 14px; }
+  .card h3 { margin: 0; font: 600 13px "Outfit"; letter-spacing: .06em; text-transform: uppercase; color: #ffffffb3; }
+  .card h3 span { font-weight: 400; text-transform: none; letter-spacing: 0; color: #ffffff80; }
+  .card .map { width: 290px; aspect-ratio: 960/470; margin-top: 8px; }
+  .card .map svg { width: 100%; height: 100%; }
+  .card .top3 { margin: 6px 0 0; font-size: 12px; color: #ffffff99; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 290px; }
+  .card .top3 b { color: #ffffffcc; font-weight: 500; }
+  .card:last-child { width: 400px; }
+  .rhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+  .avg { margin: 2px 0 0; color: #ffffffb3; font-size: 14px; } .avg b { font: 700 24px "Outfit"; color: #fff; }
+  .rtabs { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: #ffffff1a; }
+  .rtabs button { font: 600 11px "Outfit"; color: #ffffffcc; background: none; border: 0; padding: 4px 9px; border-radius: 8px; cursor: pointer; }
+  .rtabs button[aria-pressed="true"] { background: #fff; color: #111; }
+  .bars { list-style: none; margin: 10px 0 0; padding: 0; display: flex; align-items: flex-end; gap: 3px; height: 112px; }
+  .bars li { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+  .bars li span.n { text-align: center; font-size: 9.5px; color: #ffffffb3; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+  .bars li i { display: block; border-radius: 3px 3px 0 0; transition: height .4s; }
+  .ticks { list-style: none; margin: 3px 0 0; padding: 0; display: flex; gap: 3px; } .ticks li { flex: 1; text-align: center; font-size: 9.5px; color: #ffffff8c; }
+  @media (max-width: 1100px) { .cards { flex-direction: column-reverse; align-items: stretch; } .card:last-child, .card .map, .card .top3 { width: auto; max-width: none; } }
+  @media (max-width: 900px) {
+    .top .wrap { grid-template-columns: minmax(0, 1fr); }
+    .cards { flex-direction: column-reverse; min-width: 0; }
+    .card, .card:last-child { width: auto; min-width: 0; }
+    .card .map, .card .top3 { width: auto; max-width: none; }
+    .top .nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; } .top .nums b { font-size: 22px; } .top .nums span { font-size: 9.5px; }
+  }
   .who { display: flex; gap: 18px; align-items: center; }
   .who img, .who .ph { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffffcc; box-shadow: 0 8px 30px #0008; background: #ff6a13; display: grid; place-items: center; font: 800 40px "Outfit"; }
   .who h1 { margin: 0; font: italic 400 64px/1 "Instrument Serif", serif; }
@@ -96,10 +125,16 @@
         <div class="who"><span id="avatar"></span><div><div class="mono" style="opacity:.7">Profile</div><h1 id="name">alex</h1></div></div>
         <div class="nums" id="nums"></div>
       </div>
-      <div class="pedestal-box">
-        <div class="chips" id="pedChips"></div>
-        <div class="stage" id="pedestal" style="height:100%;background:transparent"></div>
-        <div class="caption"><span class="mono" style="opacity:.7">Favourite of all time</span><b id="pedTitle"></b></div>
+      <div class="cards">
+        <section class="card" aria-label="Around the world">
+          <h3>Around the world <span id="ncountries"></span></h3>
+          <div class="map" id="map"></div>
+          <p class="top3" id="top3"></p>
+        </section>
+        <section class="card" aria-label="Ratings">
+          <div class="rhead"><div><h3>Ratings</h3><p class="avg" id="avg"></p></div><div class="rtabs" id="rtabs"></div></div>
+          <ol class="bars" id="bars"></ol><ol class="ticks" id="ticks"></ol>
+        </section>
       </div>
     </div>
   </header>
@@ -543,15 +578,39 @@ for (const [k, name] of KINDS) {
   carousel(sec.querySelector(".stage"), items, name.toLowerCase())
 }
 
-// The pedestal: the first of each shelf, chosen by the chips.
-const picks = KINDS.map(([k, name]) => ({ k, name, item: (data.favorites[k] || []).find((x) => x.position === 1) || (data.favorites[k] || [])[0] })).filter((p) => p.item)
-const chips = document.getElementById("pedChips"), pedTitle = document.getElementById("pedTitle")
-const ped = pedestalStage(document.getElementById("pedestal"), picks.map((p) => p.item), (i) => {
-  pedTitle.textContent = picks[i].item.title
-  for (const b of chips.children) b.setAttribute("aria-pressed", +b.dataset.i === i)
+// The banner the user set.
+if (P.banner) document.querySelector(".top").style.backgroundImage = `url('${P.banner}')`
+
+// The ratings card: average, the kind tabs, a bar per score in the score's colour.
+const R = data.ratings || {}
+const KIND = [["all", "All"], ["movie", "Films"], ["tv", "Shows"], ["mal", "Anime"]].filter(([k]) => R[k])
+function ratings(k) {
+  const b = R[k]; if (!b) return
+  document.getElementById("avg").innerHTML = `<b>${esc(b.avg_text)}</b> average · ${fmt(b.total)} rated`
+  const max = Math.max(...b.bars.map((x) => x.n), 1)
+  document.getElementById("bars").innerHTML = b.bars.map((x) =>
+    `<li title="${x.score}: ${x.n}"><span class="n">${x.n || ""}</span><i style="height:${x.n ? Math.max(3, x.n / max * 100) : 1}%;background:${x.color};${x.n ? "" : "opacity:.25"}"></i></li>`).join("")
+  document.getElementById("ticks").innerHTML = b.bars.map((x) => `<li>${Number.isInteger(x.score) ? x.score : ""}</li>`).join("")
+  for (const t of document.querySelectorAll("#rtabs button")) t.setAttribute("aria-pressed", t.dataset.k === k)
+}
+document.getElementById("rtabs").innerHTML = KIND.map(([k, l]) => `<button data-k="${k}">${l}</button>`).join("")
+document.getElementById("rtabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) ratings(b.dataset.k) })
+ratings("all")
+
+// The map card: the site's own outlines, each country darker the more was made there.
+const C = data.countries || {counts: {}, names: {}}, cmax = Math.max(1, ...Object.values(C.counts))
+document.getElementById("ncountries").textContent = `· ${Object.keys(C.counts).length} countries`
+document.getElementById("top3").innerHTML = Object.entries(C.counts).sort((a, b) => b[1] - a[1]).slice(0, 3)
+  .map(([c, n]) => `${esc(C.names[c] || c)} <b>${n}</b>`).join(" · ")
+fetch("/data/world-110m.svg").then((r) => r.text()).then((svg) => {
+  const el = document.getElementById("map"); el.innerHTML = svg
+  for (const p of el.querySelectorAll("path[data-c]")) {
+    const n = C.counts[p.dataset.c] || 0
+    p.setAttribute("stroke-width", "0.5")
+    if (n) { const k = 0.25 + 0.75 * Math.log(n + 1) / Math.log(cmax + 1); p.setAttribute("fill", `color-mix(in oklab, #ff6a13 ${Math.round(k * 100)}%, transparent)`); p.setAttribute("stroke", "rgb(255 255 255 / .35)") }
+    else { p.setAttribute("fill", "rgb(255 255 255 / .08)"); p.setAttribute("stroke", "rgb(255 255 255 / .18)") }
+  }
 })
-picks.forEach((p, i) => { const b = document.createElement("button"); b.textContent = p.name.replace("Favorite ", ""); b.dataset.i = i; b.onclick = () => ped.show(i); chips.appendChild(b) })
-ped.show(0)
 
 carousel(document.getElementById("ring"), data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24))
 
