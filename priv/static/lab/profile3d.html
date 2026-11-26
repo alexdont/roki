@@ -83,6 +83,11 @@
   .stage { position: relative; height: 360px; overflow: hidden; transition: background-color .8s; background: transparent; }
   .stage canvas, .wallstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
   .stage.ring { height: 430px; }
+  .stage.ring.two { height: 600px; }
+  .stage.ring.inside { height: 460px; }
+  .shelfswitch { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 26px 0 0; }
+  .shelfswitch a { font: 600 13px "Outfit"; color: #ddd; text-decoration: none; border: 1px solid #ffffff26; border-radius: 999px; padding: 6px 12px; }
+  .shelfswitch a[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
   @media (max-width: 700px) { .stage { height: 300px; } .stage.ring { height: 360px; } .who h1 { font-size: 48px; } }
 
   /* the card of a case taken out */
@@ -468,27 +473,76 @@ function pedestalStage(el, picks, onPick) {
 }
 
 // ── the carousel (recently watched) ────────────────────────────────────────────────────────
-function carousel(el, items, label = "recently watched") {
-  let ring = 0, ringV = 0
-  const n = items.length, stepA = Math.PI * 2 / n, R = n * (W + 0.3) / (Math.PI * 2)
+// `mode`: "ring" (a closed ring, as before), "arc" (the cases spread across the page in a shallow
+// curve, the middle one facing you), "inside" (a big ring seen from its middle, wrapping round you),
+// "two" (two rings, one above the other, turning opposite ways). Items marked `extra` are drawn
+// dimmed (Ring + more's fillers).
+function carousel(el, items, label = "recently watched", mode = "ring") {
+  let ring = 0, ringV = 0, slide = 0, slideV = 0
+  const n = items.length
+  const rows = mode === "two" ? [items.filter((_, i) => i % 2 === 0), items.filter((_, i) => i % 2 === 1)] : [items]
+  const ringOf = (cnt) => ({stepA: Math.PI * 2 / cnt, R: cnt * (W + 0.3) / (Math.PI * 2)})
+  // Inside: as tight as the cases allow, so they stand side by side round you.
+  const bigR = Math.max(3.2, n * (W + 0.12) / (Math.PI * 2))
   const st = new Stage(el, {
     label, floorY: 0, outDist: 5.2,
     place() {
+      if (mode === "arc") {
+        // Cases at even steps along a gentle curve; `slide` moves them along it, settling on one.
+        slide += slideV; slideV *= 0.9
+        if (Math.abs(slideV) < 0.002 && !this.pointer.in) slide += (Math.round(slide) - slide) * 0.08
+        if (!this.pointer.in && !this.out) slideV += 0.0006
+        const gap = W + 0.25
+        const viewW = 2 * this.tPos.z * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * this.camera.aspect
+        this.cases.forEach((c, i) => {
+          if (c === this.out) return
+          let k = i - slide; k = ((k % n) + n * 1.5) % n - n / 2          // wraps round, centred
+          const x = k * gap, z = -Math.pow(Math.abs(k), 1.6) * 0.18 + c.hover * 0.5
+          c.tpos.set(x, H / 2 + 0.04, z); c.trot.set(0, -Math.sign(k) * Math.min(0.9, Math.abs(k) * 0.16), 0)
+          c.g.visible = Math.abs(x) < viewW / 2 + gap * 1.5
+        })
+        this.tPos.set(0, 1.4, fit(this, Math.min(n * (W + 0.25), 15), H + 0.8)); this.tLook.set(0, 1.0, -0.6)
+        return
+      }
       ring += ringV; ringV *= 0.92
-      if (Math.abs(ringV) < 0.0008 && !this.pointer.in) ring += (Math.round(ring / stepA) * stepA - ring) * 0.06
+      const main = ringOf(rows[0].length)
+      if (Math.abs(ringV) < 0.0008 && !this.pointer.in) ring += (Math.round(ring / main.stepA) * main.stepA - ring) * 0.06
       if (!this.pointer.in && !this.out) ringV += 0.00012
-      this.cases.forEach((c, i) => {
-        if (c === this.out) return
-        const a = i * stepA + ring, r = R + 0.4 * c.hover
-        c.tpos.set(Math.sin(a) * r, H / 2 + 0.04, Math.cos(a) * r - R); c.trot.set(0, a, 0)
+      if (mode === "inside") {
+        // A big ring with the camera at its middle: the cases face in, round you.
+        const stepA = Math.PI * 2 / n
+        this.cases.forEach((c, i) => {
+          if (c === this.out) return
+          const a = i * stepA + ring, r = bigR - 0.5 * c.hover
+          c.tpos.set(Math.sin(a) * r, H / 2 + 0.04, -Math.cos(a) * r); c.trot.set(0, -a, 0)
+          c.g.visible = Math.cos(a) > -0.2
+        })
+        // Standing back toward the far side, so a wide sweep of the ring is in front.
+        this.tPos.set(0, 1.2, bigR * 0.55); this.tLook.set(0, 1.0, -bigR)
+        return
+      }
+      let idx = 0
+      rows.forEach((row, ri) => {
+        const {stepA, R} = ringOf(row.length), dir = ri === 0 ? 1 : -1, y = mode === "two" ? (ri === 0 ? H + 0.35 : 0) : 0
+        row.forEach((_, j) => {
+          const c = this.cases[idx++]
+          if (c === this.out) return
+          const a = j * stepA + ring * dir + (ri ? stepA / 2 : 0), r = R + 0.4 * c.hover
+          c.tpos.set(Math.sin(a) * r, H / 2 + 0.04 + y, Math.cos(a) * r - R); c.trot.set(0, a, 0)
+        })
       })
-      // Framed to the ring's front half: a small ring comes closer instead of floating in the middle.
-      this.tPos.set(0, 1.45, fit(this, Math.min(9, 2 * R + W * 0.6), H + 0.7) * 0.8 + 0.3); this.tLook.set(0, 1.0, -Math.min(1, R * 0.35))
+      const R = ringOf(rows[0].length).R
+      const tall = mode === "two" ? 2 * H + 1.0 : H + 0.7
+      this.tPos.set(0, mode === "two" ? 2.4 : 1.45, fit(this, Math.min(9, 2 * R + W * 0.6), tall) * 0.8 + 0.3); this.tLook.set(0, mode === "two" ? 2.0 : 1.0, -Math.min(1, R * 0.35))
     },
-    drag(mx) { ringV = mx * 0.0025 },
-    wheel(e) { ringV += (e.deltaX || 0) * -0.0003 },
+    drag(mx) { if (mode === "arc") slideV = -mx * 0.02; else ringV = mx * (mode === "inside" ? -0.0015 : 0.0025) },
+    wheel(e) { if (mode === "arc") slideV += (e.deltaX || 0) * 0.002; else ringV += (e.deltaX || 0) * -0.0003 },
   })
-  items.forEach((it, i) => st.add(fullCase(it, i)))
+  const order = mode === "two" ? [...rows[0], ...rows[1]] : items
+  order.forEach((it, i) => {
+    const c = st.add(fullCase(it, i))
+    if (it.extra) dress(c).then(() => { c.cover.material.color?.setScalar(0.45); if (c.spine.material.color) c.spine.material.color.setScalar(0.5) })
+  })
   return st
 }
 
@@ -569,13 +623,27 @@ document.getElementById("nums").innerHTML =
 
 const KINDS = [["movie", "Favorite Movies"], ["tv", "Favorite Shows"], ["anime", "Favorite Anime"], ["manga", "Favorite Manga"]]
 const shelvesEl = document.getElementById("shelves")
+// How the favourites are shown: ?shelf=ring|arc|inside|more|two (the switch above the shelves).
+const SHELF = new URLSearchParams(location.search).get("shelf") || "ring"
+const STYLES = [["ring", "Ring (now)"], ["arc", "Wide arc"], ["inside", "Inside the ring"], ["more", "Ring + more"], ["two", "Two rows"]]
+const sw = document.createElement("nav"); sw.className = "shelfswitch"
+sw.innerHTML = STYLES.map(([k, l]) => `<a href="?shelf=${k}" aria-pressed="${k === SHELF}">${l}</a>`).join("")
+shelvesEl.appendChild(sw)
 for (const [k, name] of KINDS) {
-  const items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
+  let items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
   if (!items.length) continue
+  // Ring + more: the next best-rated of the same kind from the watch history, dimmed (films and
+  // shows only: the history here does not tell anime apart, and holds no manga).
+  if ((SHELF === "more" || SHELF === "two") && (k === "movie" || k === "tv")) {
+    const have = new Set(items.map((x) => `${x.type}:${x.id}`))
+    const more = data.history.filter((h) => h.type === k && h.score && !have.has(`${h.type}:${h.id}`))
+      .sort((a, b) => b.score - a.score).slice(0, 14).map((h) => ({...h, extra: true}))
+    items = [...items, ...more]
+  }
   const sec = document.createElement("section"); sec.className = "shelf"
-  sec.innerHTML = `<h2>${name} <small>the carousel</small></h2><div class="stage ring bleed"></div>`
+  sec.innerHTML = `<h2>${name}</h2><div class="stage ring bleed ${SHELF}"></div>`
   shelvesEl.appendChild(sec)
-  carousel(sec.querySelector(".stage"), items, name.toLowerCase())
+  carousel(sec.querySelector(".stage"), items, name.toLowerCase(), SHELF === "more" ? "ring" : SHELF)
 }
 
 // The banner the user set.
