@@ -290,11 +290,11 @@ defmodule RokiWeb.Layouts do
               <div class="my-2 border-t border-base-300/70"></div>
 
               <.menu_row
-                href={~p"/u/#{@username}/history"}
+                href={~p"/u/#{@username}/watched"}
                 icon="hero-clock"
-                active={active?(@current_path, ~p"/u/#{@username}/history")}
+                active={active?(@current_path, ~p"/u/#{@username}/watched")}
               >
-                History
+                Watch history
               </.menu_row>
               <.menu_row
                 href={~p"/u/#{@username}/tierlist"}
