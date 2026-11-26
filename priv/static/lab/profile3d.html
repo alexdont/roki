@@ -45,6 +45,8 @@
   .cards .avg .mono { color: #ffffff99; }
   .cards .bars { height: 92px; gap: 0; }
   .cards .bars li { align-items: center; }
+  .cards .bars li a { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; width: 100%; text-decoration: none; border-radius: 4px; }
+  .cards .bars li a:hover { background: #ffffff12; } .cards .bars li a:hover i { width: 5px; } .cards .bars li a:hover .n { color: #fff; }
   .cards .bars li i { width: 3px; border-radius: 3px; background: var(--c); box-shadow: 0 0 10px var(--c), 0 0 2px var(--c); }
   .cards .bars li span.n { font: 500 9.5px "JetBrains Mono", monospace; color: #ffffff99; }
   .cards .ticks li { font: 500 9.5px "JetBrains Mono", monospace; color: #ffffff70; }
@@ -1050,14 +1052,20 @@ if (P.banner) document.querySelector(".top").style.backgroundImage = `url('${P.b
 // ── the ratings and the map: hairlines and dots in the simple view, objects in the 3D one ────
 const R = data.ratings || {}
 const KIND = [["all", "All"], ["movie", "Films"], ["tv", "Shows"], ["mal", "Anime"]].filter(([k]) => R[k])
-let stacks = null
+let stacks = null, ratingKind = "all"
+// The watch history at a score (the whole number: a 7 holds 7 to 7.9), of the kind shown — as the
+// real profile's bars link.
+const atRating = (score, k = ratingKind) => `/u/${encodeURIComponent(P.name)}/watched?rating=${Math.trunc(score)}` + ({ movie: "&kind=movie", tv: "&kind=tv", mal: "&kind=anime" }[k] || "")
 function ratings(k) {
+  ratingKind = k
   const b = R[k]; if (!b) return
   document.getElementById("avg").innerHTML = `<b>${esc(b.avg_text)}</b><span class="mono">average · ${fmt(b.total)} rated</span>`
   const max = Math.max(...b.bars.map((x) => x.n), 1)
   const barsEl = document.getElementById("bars"), ticksEl = document.getElementById("ticks")
   if (barsEl) barsEl.innerHTML = b.bars.map((x) =>
-    `<li title="${x.score}: ${x.n}"><span class="n">${x.n || ""}</span><i style="height:${x.n ? Math.max(2, x.n / max * 100) : 0}%;--c:${x.color}"></i></li>`).join("")
+    x.n && x.score >= 1
+      ? `<li><a href="${atRating(x.score)}" title="Rated ${x.score}: ${x.n} — see them"><span class="n">${x.n}</span><i style="height:${Math.max(2, x.n / max * 100)}%;--c:${x.color}"></i></a></li>`
+      : `<li title="${x.score}: ${x.n}"><span class="n">${x.n || ""}</span><i style="height:${x.n ? Math.max(2, x.n / max * 100) : 0}%;--c:${x.color}"></i></li>`).join("")
   if (ticksEl) ticksEl.innerHTML = b.bars.map((x) => `<li>${Number.isInteger(x.score) ? x.score : ""}</li>`).join("")
   for (const t of document.querySelectorAll("#rtabs button")) t.setAttribute("aria-pressed", t.dataset.k === k)
   stacks?.setKind(k)
@@ -1207,6 +1215,7 @@ function caseStacks(el) {
   const labels = Object.assign(document.createElement("div"), { className: "slabels" }); el.appendChild(labels)
   const st = new Stage(el, {
     label: "ratings", floorY: 0, fov: 28, outDist: 6,
+    click(c) { if (!c && this.fanOf) { location.href = atRating(this.fanOf.score, kind); return false } },
     place() {
       // Which pile is under the pointer (the fan above counts as its pile).
       const P = this.pointer
@@ -1218,6 +1227,7 @@ function caseStacks(el) {
         if (!hot && this.cases.some((c) => c.thover > 0)) hot = this.fanOf
       }
       if (hot !== this.fanOf) setFan(hot)
+      if (hot) this.renderer.domElement.style.cursor = "pointer"
       piles.forEach((p) => {
         const lift = p === hot ? 0.18 : 0
         p.meshes.forEach((m, j) => { m.position.y += ((j + 0.5) * D * 0.95 + lift - m.position.y) * 0.25 })
