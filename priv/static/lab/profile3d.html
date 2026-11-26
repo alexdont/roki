@@ -985,7 +985,7 @@ const fmt = (n) => Number(n).toLocaleString("en-US")
   const days = Math.round(P.hours / 24)
   const tot = parts.reduce((a, [k]) => a + K[k], 0) || P.watched
   document.getElementById("nums").innerHTML = `
-    <div class="hero-num"><b>${fmt(days)} days</b><span class="mono">of watching · ${fmt(P.hours)} hours</span></div>
+    <div class="hero-num"><b>${fmt(P.hours)} hours</b><span class="mono">of watching · ${fmt(days)} days</span></div>
     <div class="tally">
       <p><b>${fmt(P.watched)} titles</b>${parts.map(([k, l]) => `<span><i style="background:${parts.find((x) => x[0] === k)[2]}"></i>${fmt(K[k])} ${l}</span>`).join("")}<span class="eps">${fmt(P.episodes)} episodes</span></p>
       <div class="mix" role="img" aria-label="${parts.map(([k, l]) => `${K[k]} ${l}`).join(", ")}">${parts.map(([k, , c]) => `<i style="flex:${K[k]};background:${c}"></i>`).join("")}</div>
