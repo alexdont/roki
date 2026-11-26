@@ -85,6 +85,16 @@
   .stage.ring { height: 430px; }
   .stage.ring.two { height: 600px; }
   .stage.ring.inside { height: 460px; }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0; }
+  .duo .stage.bleed { margin: 0; }
+  .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -16px; }
+  @media (min-width: 640px) { .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -24px; } .duo section.shelf:nth-child(even) .stage.bleed { margin-right: -24px; } }
+  @media (min-width: 1024px) { .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -48px; } .duo section.shelf:nth-child(even) .stage.bleed { margin-right: -48px; } }
+  @media (min-width: 1280px) { .duo section.shelf:nth-child(odd) .stage.bleed { margin-left: -64px; } .duo section.shelf:nth-child(even) .stage.bleed { margin-right: -64px; } }
+  @media (max-width: 900px) { .duo { grid-template-columns: 1fr; } .duo section.shelf .stage.bleed { margin: 0 -16px !important; } }
+  /* A phone: the stage only as tall as the ring needs, so a column of four does not leave a band
+     of empty dark under each ring. */
+  @media (max-width: 700px) { .duo .stage.ring { height: 250px; } .duo section.shelf { margin-top: 4px; } .duo section.shelf h2 { margin-bottom: -28px; position: relative; z-index: 2; } }
   .shelfswitch { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 26px 0 0; }
   .shelfswitch a { font: 600 13px "Outfit"; color: #ddd; text-decoration: none; border: 1px solid #ffffff26; border-radius: 999px; padding: 6px 12px; }
   .shelfswitch a[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
@@ -624,11 +634,14 @@ document.getElementById("nums").innerHTML =
 const KINDS = [["movie", "Favorite Movies"], ["tv", "Favorite Shows"], ["anime", "Favorite Anime"], ["manga", "Favorite Manga"]]
 const shelvesEl = document.getElementById("shelves")
 // How the favourites are shown: ?shelf=ring|arc|inside|more|two (the switch above the shelves).
-const SHELF = new URLSearchParams(location.search).get("shelf") || "ring"
-const STYLES = [["ring", "Ring (now)"], ["arc", "Wide arc"], ["inside", "Inside the ring"], ["more", "Ring + more"], ["two", "Two rows"]]
+const SHELF = new URLSearchParams(location.search).get("shelf") || "pairs"
+const STYLES = [["pairs", "Two by two"], ["ring", "One per row"], ["arc", "Wide arc"], ["inside", "Inside the ring"], ["more", "Ring + more"], ["two", "Two rows"]]
 const sw = document.createElement("nav"); sw.className = "shelfswitch"
 sw.innerHTML = STYLES.map(([k, l]) => `<a href="?shelf=${k}" aria-pressed="${k === SHELF}">${l}</a>`).join("")
 shelvesEl.appendChild(sw)
+// Two by two: Movies and Shows side by side, Anime and Manga under them (one column on a phone).
+const grid = document.createElement("div"); grid.className = SHELF === "pairs" ? "duo" : ""
+shelvesEl.appendChild(grid)
 for (const [k, name] of KINDS) {
   let items = (data.favorites[k] || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0))
   if (!items.length) continue
@@ -642,8 +655,8 @@ for (const [k, name] of KINDS) {
   }
   const sec = document.createElement("section"); sec.className = "shelf"
   sec.innerHTML = `<h2>${name}</h2><div class="stage ring bleed ${SHELF}"></div>`
-  shelvesEl.appendChild(sec)
-  carousel(sec.querySelector(".stage"), items, name.toLowerCase(), SHELF === "more" ? "ring" : SHELF)
+  grid.appendChild(sec)
+  carousel(sec.querySelector(".stage"), items, name.toLowerCase(), SHELF === "more" || SHELF === "pairs" ? "ring" : SHELF)
 }
 
 // The banner the user set.
