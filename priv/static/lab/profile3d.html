@@ -321,7 +321,70 @@ if (THREE) {
 }
 
 // A full case (opens): tray, a lid on the spine's hinge with the cover under a sleeve, a disc.
+// A manga is a book, not a disc case: a tankōbon (≈ 13 × 18 cm, the page block cream, a soft cover
+// that opens like a book's), the same shape of object as a case (`hinge`, `cover`, `spine`, `back`)
+// so the shelves and the viewer move it the same way. Open, the inside of the cover is the cover
+// art again (a jacket's flap) and the first page carries the title, set like a title page.
+const BW = 1.3, BH = 1.84, BD = 0.22, BC = 0.012
+let paper, pageEdge
+function book(item, idx) {
+  paper ||= new THREE.MeshStandardMaterial({ color: 0xf1ead8, roughness: 0.9 })
+  pageEdge ||= new THREE.MeshStandardMaterial({ map: edgeTexture(), roughness: 0.95 })
+  const g = new THREE.Group()
+  // The page block, a little inside the cover on three sides.
+  const block = new THREE.Mesh(new THREE.BoxGeometry(BW - 0.03, BH - 0.04, BD - 2 * BC), [pageEdge, paper, pageEdge, pageEdge, paper, paper])
+  block.position.x = 0.012; block.castShadow = true; g.add(block)
+  // The first page, its title set on it (made when the book is dressed).
+  const first = new THREE.Mesh(new THREE.PlaneGeometry(BW - 0.07, BH - 0.08), paper.clone())
+  first.position.set(0.012, 0, (BD - 2 * BC) / 2 + 0.001); g.add(first)
+  // The back cover and the spine (the spine flat against the block's left side).
+  const backC = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BC), new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6 }))
+  backC.position.z = -BD / 2 + BC / 2; backC.castShadow = true; g.add(backC)
+  const spine = new THREE.Mesh(new THREE.PlaneGeometry(BD, BH), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.55 }))
+  spine.rotation.y = -Math.PI / 2; spine.position.x = -BW / 2 - 0.001; g.add(spine)
+  // The front cover on a hinge at the spine.
+  const hinge = new THREE.Group(); hinge.position.set(-BW / 2, 0, BD / 2 - BC); g.add(hinge)
+  const board = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BC), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 }))
+  board.position.set(BW / 2, 0, BC / 2); board.castShadow = true; hinge.add(board)
+  const cover = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.55 }))
+  cover.position.set(BW / 2, 0, BC + 0.001); hinge.add(cover)
+  const flap = new THREE.Mesh(new THREE.PlaneGeometry(BW - 0.02, BH - 0.02), paper.clone())
+  flap.rotation.y = Math.PI; flap.position.set(BW / 2, 0, -0.001); hinge.add(flap)
+  g.traverse((m) => { m.userData.idx = idx })
+  const c = { item, idx, g, hinge, cover, spine, back: backC, first, flap, full: true, book: true, disc: null }
+  dress(c)
+  return c
+}
+// The page edges: fine lines of paper.
+function edgeTexture() {
+  const c = document.createElement("canvas"); c.width = 8; c.height = 128
+  const g = c.getContext("2d"); g.fillStyle = "#eee6d2"; g.fillRect(0, 0, 8, 128)
+  for (let y = 0; y < 128; y += 2) { g.fillStyle = `rgba(150,135,110,${0.12 + Math.random() * 0.12})`; g.fillRect(0, y, 8, 1) }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 6); t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+// The first page: the title and its authors, set quietly on cream paper.
+function titlePage(item, pal) {
+  const c = document.createElement("canvas"); c.width = 520; c.height = 736
+  const g = c.getContext("2d")
+  g.fillStyle = "#f3ecdb"; g.fillRect(0, 0, 520, 736)
+  g.fillStyle = pal ? pal.spine : "#333"; g.fillRect(60, 210, 400, 3)
+  g.fillStyle = "#2a2622"; g.textAlign = "center"
+  let size = 52; g.font = `italic 400 ${size}px "Instrument Serif", serif`
+  const words = (item.title || "").split(" "), lines = []; let line = ""
+  for (const w of words) { const t = line ? line + " " + w : w; if (g.measureText(t).width > 400 && line) { lines.push(line); line = w } else line = t }
+  if (line) lines.push(line)
+  lines.slice(0, 4).forEach((l, i) => g.fillText(l, 260, 290 + i * 60))
+  const d = (data.details || {})[`manga:${item.id}`]
+  const au = d && tidy(d).authors
+  if (au && au.length) { g.font = '500 20px "Outfit"'; g.fillStyle = "#6b625a"; g.fillText(au.join(" · "), 260, 300 + lines.length * 60 + 30) }
+  g.fillStyle = pal ? pal.spine : "#333"; g.fillRect(230, 640, 60, 3)
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4
+  return t
+}
+
 function fullCase(item, idx) {
+  if (item.type === "manga") return book(item, idx)
   const g = new THREE.Group()
   const tray = new THREE.Mesh(trayGeo, plastic); tray.position.z = -LID / 2; tray.castShadow = true; g.add(tray)
   const trayFace = new THREE.Mesh(faceGeo, inner); trayFace.position.z = -LID / 2 + (D - LID) / 2 + 0.001; g.add(trayFace)
@@ -356,10 +419,16 @@ function dress(c) {
     c.cover.material = new THREE.MeshStandardMaterial({ map: p.tex, roughness: 0.5 })
     if (c.spine) document.fonts.ready.then(() => { c.spine.material = new THREE.MeshStandardMaterial({ map: spineTexture(c.item, p.pal), roughness: 0.45 }) })
     if (c.back) c.back.material.color = toColor(p.pal.spine).multiplyScalar(0.6)
+    if (c.book) {
+      c.back.material.color = toColor(p.pal.spine)
+      document.fonts.ready.then(() => { c.first.material = new THREE.MeshStandardMaterial({ map: titlePage(c.item, p.pal), roughness: 0.9 }) })
+      const t = p.tex.clone(); t.needsUpdate = true
+      c.flap.material = new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, color: 0x9a9a9a })
+    }
   })
 }
 function discArt(c) {
-  if (c.discLoaded) return; c.discLoaded = true
+  if (c.discLoaded || c.book) return; c.discLoaded = true
   const url = c.item.backdrop || c.item.poster
   picture(url).then((p) => {
     if (!p) return
@@ -380,7 +449,7 @@ function step(c, dt) {
   for (const ax of ["x", "y", "z"]) { ;[c.pos[ax], c.vel[ax]] = spring(c.pos[ax], c.vel[ax], c.tpos[ax], dt); ;[c.rot[ax], c.rvel[ax]] = spring(c.rot[ax], c.rvel[ax], c.trot[ax], dt, 110) }
   c.hover += (c.thover - c.hover) * (1 - Math.exp(-dt * 14))
   c.g.position.copy(c.pos); c.g.rotation.set(c.rot.x, c.rot.y, c.rot.z, "YXZ")
-  if (c.full) { ;[c.lid, c.lvel] = spring(c.lid, c.lvel, c.tlid, dt, 70); c.hinge.rotation.y = c.lid; if (c.lid < -0.4) { c.spin += dt * 2.2; c.disc.rotation.z = -c.spin } }
+  if (c.full) { ;[c.lid, c.lvel] = spring(c.lid, c.lvel, c.tlid, dt, 70); c.hinge.rotation.y = c.lid; if (c.disc && c.lid < -0.4) { c.spin += dt * 2.2; c.disc.rotation.z = -c.spin } }
 }
 
 // ── a stage: one canvas, its scene and lights, the cases in an arrangement ────────────────
@@ -789,10 +858,11 @@ function openViewer(it, label) {
   const c = motion(fullCase(it, 0)); V.scene.add(c.g)
   // In from below and turned away, then it settles and opens.
   c.pos.set(0.4, -2.6, -1.5); c.rot.set(0.3, -1.6, 0.1); V.yawT = 0; V.c = c
-  discArt(c); setTimeout(() => { if (V.c === c) c.tlid = -2.55 }, 1300)
+  discArt(c); setTimeout(() => { if (V.c === c) c.tlid = c.book ? -2.75 : -2.55 }, 1300)
   picture(it.poster).then((p) => {
     if (!p || V.c !== c) return
     V.tint.color.copy(toColor(p.pal.light))
+    if (c.book) return
     // The inside of the lid: the poster, as the insert a real case holds.
     const lidIn = c.hinge.children.find((m) => m.material === inner)
     if (lidIn) { const t = p.tex.clone(); t.needsUpdate = true; lidIn.material = new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, color: 0xbbbbbb }) }
