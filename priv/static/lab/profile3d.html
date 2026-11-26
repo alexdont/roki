@@ -90,16 +90,24 @@
     .cards { flex-direction: column-reverse; min-width: 0; }
     .card, .card:last-child { width: auto; min-width: 0; }
     .card .map, .card .top3 { width: auto; max-width: none; }
-    .top .nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; } .top .nums b { font-size: 22px; } .top .nums span { font-size: 9.5px; }
+    .hero-num b { font-size: 52px; }
   }
   .who { display: flex; gap: 18px; align-items: center; }
   .who img, .who .ph { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffffcc; box-shadow: 0 8px 30px #0008; background: #ff6a13; display: grid; place-items: center; font: 800 40px "Outfit"; }
   .who h1 { margin: 0; font: italic 400 64px/1 "Instrument Serif", serif; }
-  .nums { display: flex; gap: 26px; margin-top: 22px; flex-wrap: wrap; }
-  .nums b { display: block; font: 700 32px/1 "Outfit"; letter-spacing: -.02em; }
-  .nums span { color: #ffffff90; }
-  .nums a { text-decoration: none; }
-  .nums a:hover b { text-decoration: underline; text-underline-offset: 4px; }
+  .nums { margin-top: 22px; display: flex; flex-direction: column; gap: 16px; max-width: 560px; text-shadow: 0 1px 12px #000c; }
+  .hero-num b { display: block; font: italic 400 64px/0.95 "Instrument Serif", serif; letter-spacing: -.01em; }
+  .hero-num span { display: block; margin-top: 6px; color: #ffffffa6; }
+  .tally p { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; color: #ffffffb3; font-size: 14px; }
+  .tally p b { font: 600 20px "Outfit"; color: #fff; letter-spacing: -.01em; margin-right: 4px; }
+  .tally p span { display: inline-flex; align-items: center; gap: 6px; }
+  .tally p i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .tally p .eps { color: #ffffff80; }
+  .tally p .eps::before { content: "·"; margin-right: 8px; color: #ffffff55; }
+  .mix { display: flex; gap: 2px; height: 4px; margin-top: 10px; border-radius: 4px; overflow: hidden; max-width: 460px; }
+  .mix i { display: block; }
+  .seeall { display: inline-block; margin-top: 12px; font: 500 11px "JetBrains Mono", monospace; letter-spacing: .1em; text-transform: uppercase; color: #fff; text-decoration: none; border-bottom: 1px solid #ffffff66; padding-bottom: 2px; }
+  .seeall:hover { border-bottom-color: #fff; }
   .pedestal-box { position: relative; height: 380px; }
   .pedestal-box .caption { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; pointer-events: none; }
   .pedestal-box .caption b { display: block; font: italic 400 26px "Instrument Serif", serif; }
@@ -969,8 +977,22 @@ document.getElementById("name").textContent = P.name
 const av = document.getElementById("avatar")
 av.outerHTML = P.avatar ? `<img src="${esc(P.avatar)}" alt="">` : `<span class="ph">${esc(P.name[0])}</span>`
 const fmt = (n) => Number(n).toLocaleString("en-US")
-document.getElementById("nums").innerHTML =
-  `<a href="#watched"><b>${fmt(P.watched)}</b><span class="mono">Watched →</span></a><div><b>${fmt(P.films)}</b><span class="mono">Films</span></div><div><b>${fmt(P.episodes)}</b><span class="mono">Episodes</span></div><div><b>${fmt(P.hours)}</b><span class="mono">Hours</span></div>`
+// The numbers, in order of weight: the time it all took as the headline (days, which a person
+// feels, with the hours under it), then what was watched as one line — the total, and what it is
+// made of — with a bar showing the mix, and the way to the history said in words.
+{
+  const K = P.kinds || {}, parts = [["films", "films", "#ff6a13"], ["shows", "shows", "#3b82f6"], ["anime", "anime", "#d946ef"]].filter(([k]) => K[k])
+  const days = Math.round(P.hours / 24)
+  const tot = parts.reduce((a, [k]) => a + K[k], 0) || P.watched
+  document.getElementById("nums").innerHTML = `
+    <div class="hero-num"><b>${fmt(days)} days</b><span class="mono">of watching · ${fmt(P.hours)} hours</span></div>
+    <div class="tally">
+      <p><b>${fmt(P.watched)} titles</b>${parts.map(([k, l]) => `<span><i style="background:${parts.find((x) => x[0] === k)[2]}"></i>${fmt(K[k])} ${l}</span>`).join("")}<span class="eps">${fmt(P.episodes)} episodes</span></p>
+      <div class="mix" role="img" aria-label="${parts.map(([k, l]) => `${K[k]} ${l}`).join(", ")}">${parts.map(([k, , c]) => `<i style="flex:${K[k]};background:${c}"></i>`).join("")}</div>
+      <a class="seeall" href="#watched">See everything watched →</a>
+    </div>`
+  void tot
+}
 
 const KINDS = [["movie", "Favorite Movies"], ["tv", "Favorite Shows"], ["anime", "Favorite Anime"], ["manga", "Favorite Manga"]]
 const shelvesEl = document.getElementById("shelves")
