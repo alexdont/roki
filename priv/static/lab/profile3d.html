@@ -94,7 +94,9 @@
   @media (max-width: 900px) { .duo { grid-template-columns: 1fr; } .duo section.shelf .stage.bleed { margin: 0 -16px !important; } }
   /* A phone: the stage only as tall as the ring needs, so a column of four does not leave a band
      of empty dark under each ring. */
-  @media (max-width: 700px) { .duo .stage.ring { height: 250px; } .duo section.shelf { margin-top: 4px; } .duo section.shelf h2 { margin-bottom: -28px; position: relative; z-index: 2; } }
+  @media (max-width: 700px) { .duo .stage.ring { height: 250px; } .duo section.shelf { margin-top: 4px; } }
+  section.shelf h2.under { margin: -18px 0 0; position: relative; z-index: 2; }
+  @media (max-width: 700px) { .duo section.shelf h2.under { margin: -40px 0 0; } .duo .stage.ring { height: 220px; } .duo section.shelf { margin-top: 0; } }
   .shelfswitch { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 26px 0 0; }
   .shelfswitch a { font: 600 13px "Outfit"; color: #ddd; text-decoration: none; border: 1px solid #ffffff26; border-radius: 999px; padding: 6px 12px; }
   .shelfswitch a[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
@@ -156,7 +158,7 @@
   <main class="wrap" id="shelves"></main>
   <div class="wrap" style="margin:34px auto 60px">
     <section class="shelf">
-      <h2>Recently watched <small>the carousel</small></h2>
+      <h2>Recently watched</h2>
       <div class="stage ring bleed" id="ring"></div>
     </section>
   </div>
@@ -487,7 +489,7 @@ function pedestalStage(el, picks, onPick) {
 // curve, the middle one facing you), "inside" (a big ring seen from its middle, wrapping round you),
 // "two" (two rings, one above the other, turning opposite ways). Items marked `extra` are drawn
 // dimmed (Ring + more's fillers).
-function carousel(el, items, label = "recently watched", mode = "ring") {
+function carousel(el, items, label = "recently watched", mode = "ring", wide = false) {
   let ring = 0, ringV = 0, slide = 0, slideV = 0
   const n = items.length
   const rows = mode === "two" ? [items.filter((_, i) => i % 2 === 0), items.filter((_, i) => i % 2 === 1)] : [items]
@@ -543,7 +545,12 @@ function carousel(el, items, label = "recently watched", mode = "ring") {
       })
       const R = ringOf(rows[0].length).R
       const tall = mode === "two" ? 2 * H + 1.0 : H + 0.7
-      this.tPos.set(0, mode === "two" ? 2.4 : 1.45, fit(this, Math.min(9, 2 * R + W * 0.6), tall) * 0.8 + 0.3); this.tLook.set(0, mode === "two" ? 2.0 : 1.0, -Math.min(1, R * 0.35))
+      // `wide`: framed to the whole ring, so a big one runs edge to edge.
+      const span = wide ? 2 * R + W : Math.min(9, 2 * R + W * 0.6)
+      this.tPos.set(0, mode === "two" ? 2.4 : wide ? 2.2 : 1.45, fit(this, span, tall) * (wide ? 0.62 : 0.8) + 0.3); this.tLook.set(0, mode === "two" ? 2.0 : 1.0, wide ? -R * 0.55 : -Math.min(1, R * 0.35))
+      // A narrow stage (a phone's column): looked at a little lower, so the ring sits at the top
+      // of its box instead of floating in the middle of empty space.
+      if (!wide && mode === "ring" && this.el.clientWidth < 700) this.tLook.y += 0.45
     },
     drag(mx) { if (mode === "arc") slideV = -mx * 0.02; else ringV = mx * (mode === "inside" ? -0.0015 : 0.0025) },
     wheel(e) { if (mode === "arc") slideV += (e.deltaX || 0) * 0.002; else ringV += (e.deltaX || 0) * -0.0003 },
@@ -654,7 +661,7 @@ for (const [k, name] of KINDS) {
     items = [...items, ...more]
   }
   const sec = document.createElement("section"); sec.className = "shelf"
-  sec.innerHTML = `<h2>${name}</h2><div class="stage ring bleed ${SHELF}"></div>`
+  sec.innerHTML = `<div class="stage ring bleed ${SHELF}"></div><h2 class="under">${name}</h2>`
   grid.appendChild(sec)
   carousel(sec.querySelector(".stage"), items, name.toLowerCase(), SHELF === "more" || SHELF === "pairs" ? "ring" : SHELF)
 }
@@ -693,7 +700,7 @@ fetch("/data/world-110m.svg").then((r) => r.text()).then((svg) => {
   }
 })
 
-carousel(document.getElementById("ring"), data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24))
+carousel(document.getElementById("ring"), data.history.filter((h) => h.type === "movie" || h.type === "tv").slice(0, 24), "recently watched", "ring", true)
 
 // The watch history, on its own "page".
 let wall = null
