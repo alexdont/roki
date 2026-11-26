@@ -149,7 +149,7 @@
   @keyframes vin { from { opacity: 0; } }
   body.viewing { overflow: hidden; }
   .vstage { position: relative; height: 100%; display: grid; place-items: center; }
-  .vstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .vstage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
   .vstage img { max-height: 78vh; max-width: 80%; border-radius: 14px; box-shadow: 0 30px 80px #000c; }
   .vinfo { padding: 40px 56px 40px 8px; max-width: 560px; max-height: 100svh; overflow-y: auto; scrollbar-width: thin; }
   .vtag { margin: -4px 0 14px; font: italic 400 20px "Instrument Serif", serif; color: #ffffffb3; }
@@ -833,9 +833,21 @@ function viewer3d() {
   const st = { r, scene, camera, tint, c: null, yaw: 0, yawT: 0, drag: null, t: 0, raf: 0 }
   const size = () => { const w = vstage.clientWidth, h = vstage.clientHeight; if (!w || !h) return; r.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix() }
   new ResizeObserver(size).observe(vstage); size()
-  r.domElement.addEventListener("pointerdown", (e) => { st.drag = { x: e.clientX, yaw: st.yawT } })
-  addEventListener("pointermove", (e) => { if (st.drag) st.yawT = st.drag.yaw + (e.clientX - st.drag.x) * 0.008 })
-  addEventListener("pointerup", () => { st.drag = null })
+  // Only the case itself can be held and turned; anywhere else is "away", which closes.
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2()
+  st.onCase = (e) => {
+    if (!st.c) return false
+    const b = r.domElement.getBoundingClientRect()
+    ndc.set((e.clientX - b.left) / b.width * 2 - 1, -(e.clientY - b.top) / b.height * 2 + 1)
+    ray.setFromCamera(ndc, camera)
+    return ray.intersectObject(st.c.g, true).length > 0
+  }
+  r.domElement.addEventListener("pointerdown", (e) => { if (st.onCase(e)) { st.drag = { x: e.clientX, yaw: st.yawT, moved: 0 }; r.domElement.setPointerCapture(e.pointerId) } })
+  r.domElement.addEventListener("pointermove", (e) => {
+    if (st.drag) { st.drag.moved += Math.abs(e.movementX); st.yawT = st.drag.yaw + (e.clientX - st.drag.x) * 0.008 }
+    r.domElement.style.cursor = st.drag ? "grabbing" : st.onCase(e) ? "grab" : "default"
+  })
+  r.domElement.addEventListener("pointerup", () => { st.wasDrag = !!(st.drag && st.drag.moved > 4); st.drag = null })
   st.loop = (now) => {
     const dt = Math.min(0.033, (now - (st.last || now)) / 1000); st.last = now; st.t += dt
     if (st.c) {
@@ -917,7 +929,16 @@ function closeViewer() {
   if (V) { cancelAnimationFrame(V.raf); if (V.c) { V.scene.remove(V.c.g); V.c = null } }
 }
 vw.querySelector(".vclose").addEventListener("click", closeViewer)
-vw.addEventListener("click", (e) => { if (e.target === vw) closeViewer() })
+// A click anywhere away from the title closes: not on the case or the poster, not on a link or
+// button, not on the words of the panel (text can be selected); everywhere else, it closes.
+vw.addEventListener("click", (e) => {
+  const t = e.target
+  if (t.closest("a, button")) return
+  if (t.closest(".vinfo") && t !== vinfo) return
+  if (t.tagName === "IMG" && t.closest(".vstage")) return
+  if (t.tagName === "CANVAS" && V) { if (V.wasDrag) { V.wasDrag = false; return } if (V.onCase(e)) return }
+  closeViewer()
+})
 
 // Manga sources hand their facts over with their own labels ("Year Published: 2018", "This is
 // ON-GOING series", "Written By: X, Illustrated By: Y"): cleaned to the plain facts.
